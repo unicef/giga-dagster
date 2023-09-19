@@ -1,0 +1,28 @@
+x-common-config: &common-config
+  init: true
+  restart: unless-stopped
+
+services:
+  dagster-storage:
+    <<: *common-config
+    image: bitnami/postgresql:14
+    env_file: .env
+    volumes:
+      - dagster-data:/bitnami/postgresql
+
+  dagster:
+    <<: *common-config
+    build: .
+    image: unicef/giga-dataops-platform/dagster
+    env_file: .env
+    environment:
+      DAGSTER_HOME: /app
+    volumes:
+      - .:/app
+    ports:
+      - "3001:3001"
+    depends_on:
+      - dagster-storage
+
+volumes:
+  dagster-data:

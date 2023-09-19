@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "giga-dataops-platform"
+version = "0.1.0"
+description = ""
+authors = ["Thinking Machines <hello@thinkingmachin.es>"]
+readme = 'docs/README.md'
+
+[tool.poetry.dependencies]
+python = "^3.11"
+azure-identity = "^1.14.0"
+azure-storage-blob = "^12.17.0"
+dagster = "^1.4.11"
+dagster-ge = "^0.20.11"
+dagster-postgres = "^0.20.11"
+dagster-pyspark = "^0.20.12"
+dagster-webserver = "^1.4.11"
+deltalake = "^0.10.2"
+delta-sharing = "^0.7.5"
+great-expectations = { version = "<0.17.12", extras = ["azure"] }
+lakefs-client = "^0.108.0"
+
+[tool.poetry.group.dev.dependencies]
+autopep8 = "2.0.2"
+black = "^23.7.0"
+flake8 = "^6.1.0"
+ipython = "^8.15.0"
+isort = "^5.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.dagster]
+module_name = "src"

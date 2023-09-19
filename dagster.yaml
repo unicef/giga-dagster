@@ -1,0 +1,36 @@
+telemetry:
+  enabled: false
+
+storage:
+  postgres:
+    postgres_db:
+      username:
+        env: POSTGRESQL_USERNAME
+      password:
+        env: POSTGRESQL_PASSWORD
+      db_name:
+        env: POSTGRESQL_DATABASE
+      hostname:
+        env: PG_HOST
+      port:
+        env: PG_PORT
+
+run_launcher:
+  module: dagster.core.launcher
+  class: DefaultRunLauncher
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: DefaultRunCoordinator
+
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /app/storage
+
+local_artifact_storage:
+  module: dagster.core.storage.root
+  class: LocalArtifactStorage
+  config:
+    base_dir: /app/artifacts

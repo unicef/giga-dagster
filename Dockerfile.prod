@@ -1,0 +1,29 @@
+FROM python:3.11-slim AS base
+
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
+
+ARG POETRY_VERSION=1.6.1
+
+FROM base AS deps
+
+RUN pip install "poetry==$POETRY_VERSION" && \
+    poetry config virtualenvs.create false \
+
+WORKDIR /tmp
+
+COPY pyproject.toml poetry.lock ./
+
+RUN poetry export -f requirements.txt --without-hashes --without dev > requirements.txt
+
+FROM base AS prod
+
+COPY --from=deps /tmp/requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+WORKDIR /app
+
+ENV PORT 3000
+
+CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]

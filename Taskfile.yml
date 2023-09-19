@@ -1,0 +1,76 @@
+version: '3'
+
+dotenv:
+  - .env
+
+vars:
+  PROJECT_NAME: giga-dataops-platform_dagster
+  SHORT_SHA:
+    sh: git rev-parse --short HEAD
+
+tasks:
+  default:
+    desc: Build and start Docker containers
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
+
+  setup:
+    desc: Run first-time setup tasks
+    cmds:
+      - pip install pre-commit
+      - pre-commit install
+      - poetry env use 3.11
+      - poetry install
+
+  logs:
+    desc: Attach to Docker logs
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} logs --follow {{.CLI_ARGS}}
+
+  stop:
+    desc: Stop containers
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} stop {{.CLI_ARGS}}
+
+  restart:
+    desc: Restart containers
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} restart {{.CLI_ARGS}}
+
+  exec:
+    desc: Run a command in the specified container
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} exec {{.CLI_ARGS}}
+
+  clean:
+    desc: Remove containers
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
+
+  build-acr:
+    desc: Build Docker image
+    cmds:
+      - docker build --tag {{.DAGSTER_USER_DEPLOYMENT_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
+
+  helm-up:
+    desc: Install/upgrade Helm chart
+    dir: infra/helm
+    cmds:
+      - |
+        helm upgrade --install dagster dagster/dagster \
+        -f values.yaml \
+        --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_USER_DEPLOYMENT_IMAGE_REPOSITORY}} \
+        --set pipelineRun.image.repository={{.DAGSTER_USER_DEPLOYMENT_IMAGE_REPOSITORY}}
+        --set pipelineRun.image.tag={{.SHORT_SHA}}
+      - |
+        helm upgrade --install dagster-user-code dagster/dagster-user-deployments \
+        -f user-code-values.yaml \
+        --set deployments[0].image.repository={{.DAGSTER_USER_DEPLOYMENT_IMAGE_REPOSITORY}} \
+        --set deployments[0].image.tag={{.SHORT_SHA}}
+
+  helm-down:
+    desc: Uninstall Helm chart
+    dir: infra/helm
+    cmds:
+      - helm uninstall dagster
+      - helm uninstall dagster-user-code
