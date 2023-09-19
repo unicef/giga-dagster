@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "giga-dataops-platform"
+name = "giga-dagster"
 version = "0.1.0"
 description = ""
 authors = ["Thinking Machines <hello@thinkingmachin.es>"]

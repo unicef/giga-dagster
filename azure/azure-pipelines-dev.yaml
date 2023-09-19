@@ -1,0 +1,58 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
+  kubernetesNamespace: $(KUBERNETES_NAMESPACE)
+  dagsterImageRepository: $(DAGSTER_IMAGE_REPOSITORY)
+  system.debug: true
+
+steps:
+  - task: Bash@3
+    displayName: Get short commit hash
+    inputs:
+      targetType: inline
+      script: "export SHORT_SHA=$(git rev-parse --short HEAD)"
+
+  - task: HelmDeploy@0
+    displayName: Add Dagster Helm Repo
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: repo
+      arguments: dagster https://dagster-io.github.io/helm
+      namespace: $(kubernetesNamespace)
+
+  - task: HelmDeploy@0
+    displayName: Helm deploy Dagster core
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: upgrade
+      chartType: Name
+      chartName: dagster/dagster
+      releaseName: dagster
+      namespace: $(kubernetesNamespace)
+      arguments: |
+        --values infra/helm/values.yaml \
+        --set dagster-user-deployments.deployments[0].image.repository=$(dagsterImageRepository) \
+        --set pipelineRun.image.repository=$(dagsterImageRepository) \
+        --set pipelineRun.image.tag=$SHORT_SHA
+
+  - task: HelmDeploy@0
+    displayName: Helm deploy Dagster user code
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: upgrade
+      chartType: Name
+      chartName: dagster/dagster-user-deployments
+      releaseName: dagster-user-code
+      namespace: $(kubernetesNamespace)
+      arguments: |
+        --values infra/helm/user-code-values.yaml \
+        --set deployments[0].image.repository=$(dagsterImageRepository) \
+        --set deployments[0].image.tag=$SHORT_SHA
