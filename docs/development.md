@@ -2,7 +2,7 @@
 
 ## Trunk Based Development
 
-![Trunk Based Development](https://trunkbaseddevelopment.com/trunk1b.png)
+![Trunk-Based Development](images/trunk-dev.png)
 
 The giga-dagster project follows the concept of Trunk-based Development,
 wherein User Stories are worked on PRs. PRs then get merged to `main` once approved by
@@ -10,11 +10,10 @@ the team.
 
 The main branch serves as the most up-to-date version of the code base.
 
-### Naming Format
+### Naming Conventions
 
-**Branch Names:**
-
-Refer to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+**Branch Names:** Refer
+to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 **PR Title:** `[<Feature/Fix/Release/Hotfix>](<issue-id>) <Short desc>`
 
@@ -28,11 +27,23 @@ Refer to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
   as much as possible.
 - Push your commits, open a PR and fill in the PR template.
 - Request a review from 1 other developer.
-- Once approved, rebase/squash your commits into `main`.
+- Once approved, rebase/squash your commits into `main`. Rule of thumb:
+    - If the PR contains 1 or 2 commits, perform a **Rebase**.
+    - If the PR contains several commits that build toward a larger feature, perform a
+      **Squash**.
+    - If the PR contains several commits that are relatively unrelated (e.g., an
+      assortment of bug fixes), perform a **Rebase**.
 
 ## Local Development
 
-### Install Prerequisites
+### File Structure Walkthrough
+
+- `azure/` - Contains all configuration for Azure DevOps pipelines.
+- `docs/` - This folder contains all Markdown files for creating Backstage TechDocs.
+- `infra/` - Contains all Kubernetes & Helm configuration.
+- `src/` - Contains all custom Dagster code.
+
+### Pre-requisites
 
 - [ ] [Docker](https://docs.docker.com/engine/)
 - [ ] [Kubernetes](https://kubernetes.io/docs/tasks/tools/)
@@ -41,36 +52,30 @@ Refer to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 - [ ] [Poetry](https://python-poetry.org/docs/#installation)
 - [ ] [Task](https://taskfile.dev/installation/#install-script)
 
-### Install Python & dependencies
-
-```shell
-pyenv install 3.11
-poetry install
-```
-
-### Install pre-commit
-
-```shell
-pip install pre-commit
-pre-commit install
-```
-
-### File Structure Walkthrough
-
-- `docs/` - This folder contains all Markdown files for creating Backstage TechDocs.
-
-### Pre-requisites
-
-``` @TODO: Fill with pre-reqs such as access to Cloud Platform, Bitwarden Collection, Github etc ```
-
 ### Cloning and Installation
 
-``` @TODO: Fill with set-up/installation guide. Feel free to subdivide to sections or multiple MD files through mkdocs.yml ```
+1. `git clone` the repository to your workstation.
+2. Run initial setup:
+    ```shell
+    task setup
+    ```
 
 ### Environment Setup
 
-``` @TODO: Fill with instructions for exporting local env variables. Distinguish variables being used in local vs dev vs prod ```
+Get contents of `.env` from Bitwarden.
+
+Ensure that the Pre-requisites have already been set up and all the necessary
+command-line executables are in your `PATH`.
 
 ### Running the Application
 
-``` @TODO: Fill with steps on running the app locally. Feel free to subdivide to sections or multiple MD files through mkdocs.yml ```
+```shell
+# spin up Docker containers
+task
+
+# Follow Docker logs
+task logs
+
+# List all tasks (inspect Taskfile.yml to see the actual commands being run)
+task -l
+```
