@@ -1,6 +1,9 @@
 import os
+from pathlib import Path
 
 PYTHON_ENV = os.environ.get("PYTHON_ENV", "production")
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
 AZURE_BLOB_SAS_HOST = os.environ.get("AZURE_BLOB_SAS_HOST")

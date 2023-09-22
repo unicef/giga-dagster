@@ -5,6 +5,7 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
+  containerRegistryServiceConnection: uniappsoigiga
   kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
   dagsterImageRepository: $(DAGSTER_IMAGE_REPOSITORY)
@@ -15,7 +16,24 @@ steps:
     displayName: Get short commit hash
     inputs:
       targetType: inline
-      script: "export SHORT_SHA=$(git rev-parse --short HEAD)"
+      script: "SHORT_SHA=`git rev-parse --short HEAD`"
+      workingDirectory: $(Build.SourcesDirectory)
+
+  - task: Docker@2
+    displayName: Login to container Registry
+    inputs:
+      command: login
+      containerRegistry: $(containerRegistryServiceConnection)
+
+  - task: Docker@2
+    displayName: Build and push image to container registry
+    inputs:
+      command: buildAndPush
+      repository: giga-dagster
+      dockerfile: $(Build.SourcesDirectory)/Dockerfile.prod
+      containerRegistry: $(containerRegistryServiceConnection)
+      tags: |
+        $(Build.SourceVersion)
 
   - task: HelmDeploy@0
     displayName: Add Dagster Helm Repo
@@ -38,8 +56,9 @@ steps:
       namespace: $(kubernetesNamespace)
       arguments: |
         --values infra/helm/values.yaml \
-        --set dagster-user-deployments.deployments[0].image.repository=$(dagsterImageRepository) \
-        --set pipelineRun.image.repository=$(dagsterImageRepository) \
+        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io" \
+        --set dagster-user-deployments.deployments[0].image.tag=$SHORT_SHA \
+        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io" \
         --set pipelineRun.image.tag=$SHORT_SHA
 
   - task: HelmDeploy@0
@@ -54,5 +73,5 @@ steps:
       namespace: $(kubernetesNamespace)
       arguments: |
         --values infra/helm/user-code-values.yaml \
-        --set deployments[0].image.repository=$(dagsterImageRepository) \
+        --set deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io" \
         --set deployments[0].image.tag=$SHORT_SHA
