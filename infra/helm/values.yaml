@@ -61,7 +61,7 @@ dagsterWebserver:
     # List of servers to include in the workflow file. When set,
     # `externalConfigmap` must be empty.
     servers:
-      - host: "k8s-example-user-code-1"
+      - host: "k8s-dagster-user-code-1"
         port: 3030
         name: "user-code"
 
@@ -316,7 +316,7 @@ dagster-user-deployments:
       # needing to restart the user code deployment pod.
       dagsterApiGrpcArgs:
         - "--python-file"
-        - "/src/__init__.py"
+        - "/src/repository.py"
       port: 3030
 
       # Whether or not to include configuration specified for this user code deployment in the pods
@@ -775,14 +775,14 @@ postgresql:
   # set this PostgreSQL hostname when using an external PostgreSQL database
   postgresqlHost: ""
 
-  postgresqlUsername: test
+  postgresqlUsername: ""
 
   # Note when changing this password (e.g. in test) that credentials will
   # persist as long as the PVCs do -- see:
   # https://github.com/helm/charts/issues/12836#issuecomment-524552358
-  postgresqlPassword: test
+  postgresqlPassword: ""
 
-  postgresqlDatabase: test
+  postgresqlDatabase: dagster
 
   # set postgresql parameter keywords for the connection string.
   # see: https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-PARAMKEYWORDS

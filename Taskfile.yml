@@ -62,7 +62,9 @@ tasks:
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
         --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}} \
         --set pipelineRun.image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
-        --set pipelineRun.image.tag={{.SHORT_SHA}}
+        --set pipelineRun.image.tag={{.SHORT_SHA}} \
+        --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}} \
+        --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
       - |
         helm upgrade --install dagster-user-code dagster/dagster-user-deployments \
         --values user-code-values.yaml \

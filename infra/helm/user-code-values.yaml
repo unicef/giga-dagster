@@ -42,7 +42,7 @@ deployments:
     #   - "define_demo_execution_repo"
     dagsterApiGrpcArgs:
       - "--python-file"
-      - "/src/__init__.py"
+      - "/src/repository.py"
     port: 3030
 
     # Whether or not to include configuration specified for this user code deployment in the pods
