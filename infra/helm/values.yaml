@@ -45,10 +45,10 @@ dagsterWebserver:
   pathPrefix: ~
 
   service:
-    type: ClusterIP
+    type: LoadBalancer
     # Defines the port where the webserver will serve requests; if changed, don't forget to update the
     # livenessProbe and startupProbe entries below as well.
-    port: 3000
+    port: 3001
     annotations: { }
 
   # Defines a workspace for the webserver. This should only be set if user deployments are enabled, but
@@ -56,14 +56,14 @@ dagsterWebserver:
   # In this case, the webserver will need the addresses of the code servers in order to load the user code,
   # or the name of an existing configmap to mount as the workspace file.
   workspace:
-    enabled: true
+    enabled: false
 
     # List of servers to include in the workflow file. When set,
     # `externalConfigmap` must be empty.
     servers:
-      - host: "k8s-dagster-user-code-1"
+      - host: "k8s-example-user-code-1"
         port: 3030
-        name: "user-code"
+        name: "user-code-example"
 
     # Defines the name of a configmap provisioned outside of the
     # Helm release to use as workspace file. When set, `servers`
@@ -113,10 +113,7 @@ dagsterWebserver:
   #
   # envSecrets:
   #   - name: secret
-  envSecrets:
-    - name: postgresql-username
-    - name: postgresql-password
-    - name: postgresql-database
+  envSecrets: [ ]
 
   # Additional labels that should be included on the deployment. See:
   # https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
@@ -183,7 +180,7 @@ dagsterWebserver:
   readinessProbe:
     httpGet:
       path: "/server_info"
-      port: 80
+      port: 3001
     periodSeconds: 20
     timeoutSeconds: 10
     successThreshold: 1
@@ -212,43 +209,44 @@ computeLogManager:
   #   S3ComputeLogManager,
   #   CustomComputeLogManager,
   # ]
-  type: NoOpComputeLogManager
-  config: { }
-  ##  Uncomment this configuration if the AzureBlobComputeLogManager is selected
-  #   azureBlobComputeLogManager:
-  #     storageAccount: ~
-  #     container: ~
-  #     secretKey: ~
-  #     defaultAzureCredential: ~
-  #     localDir: ~
-  #     prefix: ~
-  #     uploadInterval: ~
-  ##  Uncomment this configuration if the GCSComputeLogManager is selected
-  #   gcsComputeLogManager:
-  #     bucket: ~
-  #     localDir: ~
-  #     prefix: ~
-  #     jsonCredentialsEnvvar: ~
-  #     uploadInterval: ~
-  ##  Uncomment this configuration if the S3ComputeLogManager is selected
-  #   s3ComputeLogManager:
-  #     bucket: ~
-  #     localDir: ~
-  #     prefix: ~
-  #     useSsl: ~
-  #     verify: ~
-  #     verifyCertPath: ~
-  #     endpointUrl: ~
-  #     skipEmptyFiles: ~
-  #     uploadInterval: ~
-  #     uploadExtraArgs: {}
-  ##  Uncomment this configuration if the CustomComputeLogManager is selected.
-  ##  Using this setting requires a custom webserver image that defines the user specified
-  ##  compute log manager in an installed python module.
-  #   customComputeLogManager:
-  #     module: ~
-  #     class: ~
-  #     config: {}
+  type: CustomComputeLogManager
+  config:
+    ##  Uncomment this configuration if the AzureBlobComputeLogManager is selected
+    #   azureBlobComputeLogManager:
+    #     storageAccount: ~
+    #     container: ~
+    #     secretKey: ~
+    #     defaultAzureCredential: ~
+    #     localDir: ~
+    #     prefix: ~
+    #     uploadInterval: ~
+    ##  Uncomment this configuration if the GCSComputeLogManager is selected
+    #   gcsComputeLogManager:
+    #     bucket: ~
+    #     localDir: ~
+    #     prefix: ~
+    #     jsonCredentialsEnvvar: ~
+    #     uploadInterval: ~
+    ##  Uncomment this configuration if the S3ComputeLogManager is selected
+    #   s3ComputeLogManager:
+    #     bucket: ~
+    #     localDir: ~
+    #     prefix: ~
+    #     useSsl: ~
+    #     verify: ~
+    #     verifyCertPath: ~
+    #     endpointUrl: ~
+    #     skipEmptyFiles: ~
+    #     uploadInterval: ~
+    #     uploadExtraArgs: {}
+    ##  Uncomment this configuration if the CustomComputeLogManager is selected.
+    ##  Using this setting requires a custom webserver image that defines the user specified
+    ##  compute log manager in an installed python module.
+    customComputeLogManager:
+      module: dagster.core.storage.local_compute_log_manager
+      class: LocalComputeLogManager
+      config:
+        base_dir: /opt/dagster/dagster_home/logs
 
 pythonLogs: { }
 ## The names of python loggers that will be captured as Dagster logs
@@ -282,7 +280,7 @@ dagster-user-deployments:
   enabled: true
 
   # If you plan on deploying user code in a separate Helm release, set this to false.
-  enableSubchart: false
+  enableSubchart: true
 
   # Specify secrets to run user code server containers based on images in private registries. See:
   # https://kubernetes.io/docs/concepts/containers/images/#referring-to-an-imagepullsecrets-on-a-pod
@@ -290,10 +288,10 @@ dagster-user-deployments:
 
   # List of unique deployments
   deployments:
-    - name: "k8s-dagster-user-code-1"
+    - name: "k8s-user-code-1"
       image:
         # When a tag is not supplied, it will default as the Helm chart version.
-        repository: ""
+        repository: ~
         tag: ~
 
         # Change with caution! If you're using a fixed tag for pipeline run images, changing the
@@ -316,7 +314,7 @@ dagster-user-deployments:
       # needing to restart the user code deployment pod.
       dagsterApiGrpcArgs:
         - "--python-file"
-        - "/src/repository.py"
+        - "/app/src/repository.py"
       port: 3030
 
       # Whether or not to include configuration specified for this user code deployment in the pods
@@ -344,7 +342,8 @@ dagster-user-deployments:
       #
       # envConfigMaps:
       #   - name: config-map
-      envConfigMaps: [ ]
+      envConfigMaps:
+        - name: dagster
 
       # Additional environment variables can be retrieved and set from Secrets. See:
       # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
@@ -353,7 +352,8 @@ dagster-user-deployments:
       #
       # envSecrets:
       #   - name: secret
-      envSecrets: [ ]
+      envSecrets:
+        - name: dagster
 
       # Additional labels that should be included. See:
       # https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
@@ -429,8 +429,8 @@ pipelineRun:
   image:
     # When a tag is not supplied for a Dagster provided image,
     # it will default as the Helm chart version.
-    repository: ""
-    tag: ""
+    repository: "docker.io/dagster/user-code-example"
+    tag: ~
     pullPolicy: Always
 
   # Additional environment variables to set.
@@ -775,12 +775,12 @@ postgresql:
   # set this PostgreSQL hostname when using an external PostgreSQL database
   postgresqlHost: ""
 
-  postgresqlUsername: ""
+  postgresqlUsername: ~
 
   # Note when changing this password (e.g. in test) that credentials will
   # persist as long as the PVCs do -- see:
   # https://github.com/helm/charts/issues/12836#issuecomment-524552358
-  postgresqlPassword: ""
+  postgresqlPassword: ~
 
   postgresqlDatabase: dagster
 
@@ -812,7 +812,7 @@ generateCeleryConfigSecret: true
 # RabbitMQ: Configuration values for rabbitmq. Only one of RabbitMQ / Redis should be enabled.
 ####################################################################################################
 rabbitmq:
-  enabled: true
+  enabled: false
 
   image:
     repository: "bitnami/rabbitmq"
@@ -928,7 +928,7 @@ flower:
 # Ingress: (Optional) Create ingresses for the Dagster webserver and Flower
 ####################################################################################################
 ingress:
-  enabled: true
+  enabled: false
 
   annotations: { }
   labels: { }
@@ -1121,17 +1121,17 @@ dagsterDaemon:
     freeSlotsAfterRunEndSeconds: 0
 
   runRetries:
-    enabled: false
+    enabled: true
     maxRetries: 0
 
   sensors:
     # Whether to evaluate sensors using an asynchronous thread pool, allowing sensprs
     # to execute in parallel,
-    useThreads: false
+    useThreads: true
     # The max number of worker threads to use when evaluating sensors. Can be tuned
     # to allow more sensors to run in parallel, but may require allocating more resources to the
     # daemon.
-    numWorkers: ~
+    numWorkers: 4
     # Uncomment to use a threadpool to submit runs from a single sensor tick in parallel. Can be
     # used to decrease latency when a sensor emits multiple run requests within a single tick.
     # numSubmitWorkers: 4
@@ -1139,11 +1139,11 @@ dagsterDaemon:
   schedules:
     # Whether to evaluate schedules using an asynchronous thread pool, allowing schedules
     # to execute in parallel
-    useThreads: false
+    useThreads: true
     # The max number of worker threads to use when evaluating sensors. Can be tuned
     # to allow more schedules to run in parallel, but may require allocating more resources to the
     # daemon.
-    numWorkers: ~
+    numWorkers: 4
     # Uncomment to use a threadpool to submit runs from a single schedule tick in parallel. Can be
     # used to decrease latency when a schedule emits multiple run requests within a single tick.
     # numSubmitWorkers: 4
@@ -1340,3 +1340,4 @@ retention:
 #     run_tags:
 #       key: value
 additionalInstanceConfig: { }
+

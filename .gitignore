@@ -166,3 +166,6 @@ logs/
 storage/
 artifacts/
 .nux/
+
+# Kubernetes/Helm
+secrets.yaml

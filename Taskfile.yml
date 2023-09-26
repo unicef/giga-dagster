@@ -47,33 +47,36 @@ tasks:
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
 
-  build-acr:
+  build-cr:
     desc: Build Docker image
     cmds:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
 
+  push-cr:
+    desc: Build Docker image
+    cmds:
+      - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
+
   helm-up:
     desc: Install/upgrade Helm chart
-    dir: infra/helm
+    dir: infra
     cmds:
+      - kubectl apply -f k8s/secrets.yaml
+      - kubectl apply -f k8s/configmap.yaml
       - |
         helm upgrade --install dagster dagster/dagster \
-        --values values.yaml \
+        --values helm/values.yaml \
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
         --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}} \
         --set pipelineRun.image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
         --set pipelineRun.image.tag={{.SHORT_SHA}} \
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}} \
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
-      - |
-        helm upgrade --install dagster-user-code dagster/dagster-user-deployments \
-        --values user-code-values.yaml \
-        --set deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
-        --set deployments[0].image.tag={{.SHORT_SHA}}
 
   helm-down:
     desc: Uninstall Helm chart
-    dir: infra/helm
+    dir: infra
     cmds:
       - helm uninstall dagster
-      - helm uninstall dagster-user-code
+      - kubectl delete -f k8s/configmap.yaml
+      - kubectl delete -f k8s/secrets.yaml

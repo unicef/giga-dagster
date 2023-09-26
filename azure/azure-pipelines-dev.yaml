@@ -9,6 +9,8 @@ variables:
   kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
   dagsterImageRepository: $(DAGSTER_IMAGE_REPOSITORY)
+  postgresqlUsername: $(POSTGRESQL_USERNAME)
+  postgresqlPassword: $(POSTGRESQL_PASSWORD)
   system.debug: true
 
 steps:
@@ -41,11 +43,11 @@ steps:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
       command: repo
-      arguments: dagster https://dagster-io.github.io/helm
+      arguments: add dagster https://dagster-io.github.io/helm
       namespace: $(kubernetesNamespace)
 
   - task: HelmDeploy@0
-    displayName: Helm deploy Dagster core
+    displayName: Helm deploy Dagster
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
@@ -59,19 +61,6 @@ steps:
         --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io" \
         --set dagster-user-deployments.deployments[0].image.tag=$SHORT_SHA \
         --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io" \
-        --set pipelineRun.image.tag=$SHORT_SHA
-
-  - task: HelmDeploy@0
-    displayName: Helm deploy Dagster user code
-    inputs:
-      connectionType: Kubernetes Service Connection
-      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-      command: upgrade
-      chartType: Name
-      chartName: dagster/dagster-user-deployments
-      releaseName: dagster-user-code
-      namespace: $(kubernetesNamespace)
-      arguments: |
-        --values infra/helm/user-code-values.yaml \
-        --set deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io" \
-        --set deployments[0].image.tag=$SHORT_SHA
+        --set pipelineRun.image.tag=$SHORT_SHA \
+        --set postgresql.postgresqlUsername=$(postgresqlUsername) \
+        --set postgresql.postgresqlPassword=$(postgresqlPassword)

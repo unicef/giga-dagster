@@ -10,7 +10,7 @@ FROM base AS deps
 
 # Install Poetry and don't create a virtualenv (we are already in a container)
 RUN pip install "poetry==$POETRY_VERSION" && \
-    poetry config virtualenvs.create false \
+    poetry config virtualenvs.create false
 
 WORKDIR /tmp
 
