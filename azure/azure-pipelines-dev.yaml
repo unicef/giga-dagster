@@ -11,6 +11,7 @@ variables:
   dagsterImageRepository: $(DAGSTER_IMAGE_REPOSITORY)
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
+  azureSasToken: $(AZURE_SAS_TOKEN)
   system.debug: true
 
 steps:
@@ -36,6 +37,32 @@ steps:
       containerRegistry: $(containerRegistryServiceConnection)
       tags: |
         $(Build.SourceVersion)
+
+  - task: Kubernetes@1
+    displayName: Create configmap
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      configurationType: configuration
+      command: apply
+      configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
+
+  - task: Kubernetes@1
+    displayName: Create secret
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      configurationType: inline
+      command: apply
+      inline: |
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: dagster
+          labels:
+            app: dagster
+        stringData:
+          AZURE_SAS_TOKEN: "$(azureSasToken)"
 
   - task: HelmDeploy@0
     displayName: Add Dagster Helm Repo

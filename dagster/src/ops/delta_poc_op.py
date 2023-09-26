@@ -1,7 +1,6 @@
 import pandas as pd
-from deltalake.writer import write_deltalake
-
 from dagster import op
+from deltalake.writer import write_deltalake
 from src.settings import AZURE_BLOB_CONTAINER_NAME, AZURE_BLOB_SAS_HOST, AZURE_SAS_TOKEN
 
 

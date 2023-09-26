@@ -6,23 +6,31 @@ services:
   dagster-storage:
     <<: *common-config
     image: bitnami/postgresql:14
-    env_file: .env
+    env_file: ./dagster/.env
     volumes:
       - dagster-data:/bitnami/postgresql
 
   dagster:
     <<: *common-config
-    build: .
+    build: ./dagster
     image: unicef/giga-dataops-platform/dagster
-    env_file: .env
+    env_file: ./dagster/.env
     environment:
       DAGSTER_HOME: /app
     volumes:
-      - .:/app
-    ports:
-      - "3001:3001"
+      - ./dagster:/app
     depends_on:
       - dagster-storage
+
+  authproxy:
+    <<: *common-config
+    build: ./authproxy
+    image: unicef/giga-dataops-platform/dagster-authproxy
+    env_file: ./authproxy/.env
+    volumes:
+      - ./authproxy:/app
+    ports:
+      - "3001:3001"
 
 volumes:
   dagster-data:

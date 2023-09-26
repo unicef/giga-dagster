@@ -15,10 +15,24 @@ tasks:
       - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
 
   setup:
-    desc: Run first-time setup tasks
+    desc: Run all first-time setup tasks
     cmds:
       - pip install -U pre-commit
       - pre-commit install
+      - task setup-dagster
+      - task setup-authproxy
+
+  setup-dagster:
+    desc: Run first-time setup tasks for Dagster
+    dir: dagster
+    cmds:
+      - poetry env use 3.11
+      - poetry install
+
+  setup-authproxy:
+    desc: Run first-time setup tasks for authproxy
+    dir: authproxy
+    cmds:
       - poetry env use 3.11
       - poetry install
 
@@ -51,11 +65,13 @@ tasks:
     desc: Build Docker image
     cmds:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
 
   push-cr:
     desc: Build Docker image
     cmds:
       - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
+      - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
 
   helm-up:
     desc: Install/upgrade Helm chart
