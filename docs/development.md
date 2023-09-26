@@ -38,10 +38,11 @@ to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ### File Structure Walkthrough
 
+- `authproxy/` - Contains all custom auth proxy code.
 - `azure/` - Contains all configuration for Azure DevOps pipelines.
+- `dagster/` - Contains all custom Dagster code.
 - `docs/` - This folder contains all Markdown files for creating Backstage TechDocs.
 - `infra/` - Contains all Kubernetes & Helm configuration.
-- `src/` - Contains all custom Dagster code.
 
 ### Pre-requisites
 
