@@ -1,19 +1,19 @@
 from datetime import timedelta
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from starlette.background import BackgroundTask
 from starlette.middleware.sessions import SessionMiddleware
 
+from authproxy.routers import auth
 from authproxy.settings import settings
 
 app = FastAPI(
-    title="Ingestion Portal",
+    title="Dagster",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
 )
@@ -32,12 +32,14 @@ app.add_middleware(
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
-    session_cookie="session",
     max_age=int(timedelta(days=7).total_seconds()),
     same_site="lax",
+    path="/",
 )
 
 client = httpx.AsyncClient(base_url="http://dagster-webserver:3002/")
+
+app.include_router(auth.router)
 
 app.mount(
     "/static",
@@ -45,29 +47,27 @@ app.mount(
     name="static",
 )
 
-templates = Jinja2Templates(directory=settings.BASE_DIR / "authproxy" / "templates")
-
 
 @app.get("/health")
-async def health():
-    return PlainTextResponse("ok")
+async def health() -> str:
+    return "ok"
 
 
-@app.get("/login", response_class=HTMLResponse)
-async def login(request: Request):
-    return templates.TemplateResponse(
-        "login.html.j2",
-        {"request": request},
-    )
-
-
+@app.head("/{path:path}")
+@app.options("/{path:path}")
+@app.get("/{path:path}")
+@app.post("/{path:path}")
 async def reverse_proxy(request: Request):
+    if not request.session.get("user"):
+        return RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
+
     url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
     upstream_req = client.build_request(
         request.method,
         url,
         headers=request.headers.raw,
         content=request.stream(),
+        cookies=request.cookies,
     )
     upstream_res = await client.send(upstream_req, stream=True)
     return StreamingResponse(
@@ -76,10 +76,3 @@ async def reverse_proxy(request: Request):
         headers=upstream_res.headers,
         background=BackgroundTask(upstream_res.aclose),
     )
-
-
-app.add_route(
-    "/{path:path}",
-    reverse_proxy,
-    ["GET", "POST"],
-)
