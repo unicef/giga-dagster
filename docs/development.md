@@ -63,7 +63,9 @@ to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ### Environment Setup
 
-Get contents of `.env` from Bitwarden.
+Get contents of `.env` from Bitwarden for the following:
+- Create a `dagster/.env` file.
+- Create an `authproxy/.env` file.
 
 Ensure that the Pre-requisites have already been set up and all the necessary
 command-line executables are in your `PATH`.
