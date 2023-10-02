@@ -1,0 +1,85 @@
+x-common-config: &common-config
+  init: true
+  restart: unless-stopped
+  networks:
+    - dagster-network
+
+services:
+  dagster-storage:
+    <<: *common-config
+    image: bitnami/postgresql:14
+    env_file: 
+      - ./dagster/.env
+    volumes:
+      - dagster-storage:/bitnami/postgresql
+    environment:
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+
+  dagster-webserver:
+    <<: *common-config
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    build:
+      context: .
+      dockerfile: ./dagster/Dockerfile.dev
+    env_file: 
+      - ./dagster/.env
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    depends_on:
+      - dagster-storage
+      - dagster-pipelines
+  
+  dagster-pipelines:
+    <<: *common-config
+    build:
+      context: .
+      dockerfile: ./dagster/Dockerfile.dev
+    env_file: 
+      - ./dagster/.env
+    expose:
+      - 4000
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+    depends_on:
+      - dagster-storage
+  
+  dagster-daemon:
+    <<: *common-config
+    build:
+      context: .
+      dockerfile: ./dagster/Dockerfile.dev
+    env_file: 
+      - ./dagster/.env
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    depends_on:
+      - dagster-storage
+      - dagster-pipelines
+
+  authproxy:
+    <<: *common-config
+    build: ./authproxy
+    image: unicef/giga-dataops-platform/dagster-authproxy
+    env_file:
+      - ./dagster/.env
+    volumes:
+      - ./authproxy:/app
+    ports:
+      - "3001:3001"
+
+networks:
+  dagster-network:
+    name: dagster-network
+    driver: bridge
+  
+volumes:
+  dagster-storage:
+    driver: local
