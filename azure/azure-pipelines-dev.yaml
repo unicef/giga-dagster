@@ -87,11 +87,11 @@ steps:
       chartName: dagster/dagster
       releaseName: dagster
       namespace: $(kubernetesNamespace)
-      valuesFile: $(Build.SourcesDirectory)/infra/helm/values.yaml
-      arguments: |
-        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster" \
-        --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion) \
-        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster" \
-        --set pipelineRun.image.tag=$(Build.SourceVersion) \
-        --set postgresql.postgresqlUsername=$(postgresqlUsername) \
+      arguments: >
+        --values $(Build.SourcesDirectory)/infra/helm/values.yaml
+        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
+        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set pipelineRun.image.tag=$(Build.SourceVersion)
+        --set postgresql.postgresqlUsername=$(postgresqlUsername)
         --set postgresql.postgresqlPassword=$(postgresqlPassword)
