@@ -40,6 +40,7 @@ steps:
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
       configurationType: configuration
       command: apply
       useConfigurationFile: true
@@ -50,6 +51,7 @@ steps:
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
       configurationType: inline
       command: apply
       inline: |
