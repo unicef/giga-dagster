@@ -1,1 +1,1 @@
-from .repository import giga_dataops_platform
+from .definitions import giga_dataops_platform

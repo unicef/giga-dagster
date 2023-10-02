@@ -1,36 +1,70 @@
-telemetry:
-  enabled: false
-
-storage:
-  postgres:
-    postgres_db:
-      username:
-        env: POSTGRESQL_USERNAME
-      password:
-        env: POSTGRESQL_PASSWORD
-      db_name:
-        env: POSTGRESQL_DATABASE
-      hostname:
-        env: PG_HOST
-      port:
-        env: PG_PORT
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
 
 run_launcher:
-  module: dagster.core.launcher
-  class: DefaultRunLauncher
+  module: dagster_docker
+  class: DockerRunLauncher
+  config:
+    env_vars:
+      # Make sure to use the same environment vars as the dagster_pipelines service
+      - ENVIRONMENT
+    network: dagster-network
+    container_kwargs:
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /tmp/io_manager_storage:/tmp/io_manager_storage
 
 run_coordinator:
   module: dagster.core.run_coordinator
-  class: DefaultRunCoordinator
-
-compute_logs:
-  module: dagster.core.storage.local_compute_log_manager
-  class: LocalComputeLogManager
+  class: QueuedRunCoordinator
   config:
-    base_dir: /app/storage
+    max_concurrent_runs: 10
 
-local_artifact_storage:
-  module: dagster.core.storage.root
-  class: LocalArtifactStorage
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
   config:
-    base_dir: /app/artifacts
+    postgres_db:
+      hostname:
+        env: DAGSTER_POSTGRES_HOST
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+      
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname:
+        env: DAGSTER_POSTGRES_HOST
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname: 
+        env: DAGSTER_POSTGRES_HOST
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+telemetry:
+  enabled: false
