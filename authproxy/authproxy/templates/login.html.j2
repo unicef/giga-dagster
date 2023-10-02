@@ -1,0 +1,16 @@
+{% extends "base.html.j2" %}
+
+{% block body %}
+  <div
+    class="h-screen flex flex-col items-center justify-center bg-gradient-to-b from-sky-600 to-sky-800 text-white gap-4">
+    {% if error %}
+      <p>An error occurred. Please try again.</p>
+    {% endif %}
+    <a
+      href="/auth/login"
+      class="cursor-pointer text-white bg-sky-900 shadow-lg px-12 py-4 rounded-2xl hover:bg-sky-800 active:bg-sky-950 transition-colors"
+    >
+      Login
+    </a>
+  </div>
+{% endblock %}

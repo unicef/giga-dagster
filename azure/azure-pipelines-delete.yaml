@@ -19,9 +19,9 @@ steps:
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
       command: uninstall
       arguments: dagster
-      namespace: $(kubernetesNamespace)
 
   - task: Kubernetes@1
     displayName: Delete resources in namespace
