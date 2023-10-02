@@ -9,7 +9,7 @@ services:
     <<: *common-config
     image: bitnami/postgresql:14
     env_file: 
-      - ./dagster/.env
+      - .env
     volumes:
       - dagster-storage:/bitnami/postgresql
     environment:
@@ -22,9 +22,9 @@ services:
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
     build:
       context: .
-      dockerfile: ./dagster/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     env_file: 
-      - ./dagster/.env
+      - .env
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
     volumes:
@@ -38,9 +38,9 @@ services:
     <<: *common-config
     build:
       context: .
-      dockerfile: ./dagster/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     env_file: 
-      - ./dagster/.env
+      - .env
     expose:
       - 4000
     environment:
@@ -52,9 +52,9 @@ services:
     <<: *common-config
     build:
       context: .
-      dockerfile: ./dagster/Dockerfile.dev
+      dockerfile: Dockerfile.dev
     env_file: 
-      - ./dagster/.env
+      - .env
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
     volumes:
@@ -69,7 +69,7 @@ services:
     build: ./authproxy
     image: unicef/giga-dataops-platform/dagster-authproxy
     env_file:
-      - ./dagster/.env
+      - .env
     volumes:
       - ./authproxy:/app
     ports:
