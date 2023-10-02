@@ -71,7 +71,7 @@ dagsterWebserver:
     externalConfigmap: ~
 
   # Deploy a separate instance of the webserver in --read-only mode (can't launch runs, disable schedules, etc.)
-  enableReadOnly: false
+  enableReadOnly: true
 
   # The timeout in milliseconds to set on database statements sent to the Dagster instance.
   dbStatementTimeout: ~

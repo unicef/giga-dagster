@@ -1,14 +1,16 @@
 from datetime import timedelta
 
 import httpx
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 from starlette.middleware.sessions import SessionMiddleware
 
+from authproxy.lib.auth import get_auth
+from authproxy.lib.templates import templates
 from authproxy.routers import auth
 from authproxy.settings import settings
 
@@ -57,19 +59,25 @@ async def health() -> str:
 @app.options("/{path:path}")
 @app.get("/{path:path}")
 @app.post("/{path:path}")
+@app.put("/{path:path}")
+@app.patch("/{path:path}")
+@app.delete("/{path:path}")
 async def reverse_proxy(request: Request):
-    if not request.session.get("user"):
-        return RedirectResponse("/auth/login", status_code=status.HTTP_303_SEE_OTHER)
+    if not get_auth(request.session).get_user():
+        return templates.TemplateResponse(
+            "login.html.j2", {"request": request, "error": False}
+        )
 
+    upstream = httpx.AsyncClient(base_url="http://dagster:3002/")
     url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
-    upstream_req = client.build_request(
+    upstream_req = upstream.build_request(
         request.method,
         url,
         headers=request.headers.raw,
         content=request.stream(),
         cookies=request.cookies,
     )
-    upstream_res = await client.send(upstream_req, stream=True)
+    upstream_res = await upstream.send(upstream_req, stream=True)
     return StreamingResponse(
         upstream_res.aiter_raw(),
         status_code=upstream_res.status_code,

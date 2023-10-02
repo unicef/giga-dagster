@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -6,7 +7,6 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     PYTHON_ENV: Literal["development", "staging", "production"] = "production"
-    IN_PRODUCTION: bool = PYTHON_ENV == "production"
     BASE_DIR: Path = Path(__file__).parent.parent
     ALLOWED_HOSTS: list[str] = ["*"]
     CORS_ALLOWED_ORIGINS: list[str] = ["*"]
@@ -21,6 +21,19 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         extra = "ignore"
+
+    @property
+    def IN_PRODUCTION(self):
+        return self.PYTHON_ENV == "production"
+
+    @property
+    def SESSION_COOKIE_PARAMS(self):
+        return dict(
+            max_age=int(timedelta(days=7).total_seconds()),
+            same_site="strict",
+            path="/",
+            https_only=self.IN_PRODUCTION,
+        )
 
 
 settings = Settings()

@@ -27,8 +27,8 @@ tasks:
     cmds:
       - pip install -U pre-commit
       - pre-commit install
-      - task setup-dagster
-      - task setup-authproxy
+      - task: setup-dagster
+      - task: setup-authproxy
 
   setup-dagster:
     desc: Run first-time setup tasks for Dagster
