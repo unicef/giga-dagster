@@ -1,5 +1,9 @@
 trigger:
-  - main
+  branches:
+    include:
+      - main
+
+pr: none
 
 pool:
   vmImage: ubuntu-latest
@@ -33,7 +37,7 @@ steps:
     inputs:
       command: buildAndPush
       repository: giga-dagster
-      dockerfile: $(Build.SourcesDirectory)/Dockerfile.prod
+      dockerfile: $(Build.SourcesDirectory)/dagster/Dockerfile.prod
       containerRegistry: $(containerRegistryServiceConnection)
       tags: |
         $(Build.SourceVersion)
