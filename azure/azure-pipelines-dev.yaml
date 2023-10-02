@@ -54,6 +54,7 @@ steps:
       namespace: $(kubernetesNamespace)
       configurationType: inline
       command: apply
+      useConfigurationFile: true
       inline: |
         apiVersion: v1
         kind: Secret
