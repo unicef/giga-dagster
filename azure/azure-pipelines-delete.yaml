@@ -1,0 +1,39 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
+  kubernetesNamespace: $(KUBERNETES_NAMESPACE)
+  system.debug: true
+
+steps:
+  - task: HelmDeploy@0
+    displayName: Helm uninstall Dagster
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: uninstall
+      arguments: dagster
+      namespace: $(kubernetesNamespace)
+
+  - task: Kubernetes@1
+    displayName: Delete resources in namespace
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: delete
+      arguments: all --all
+      namespace: $(kubernetesNamespace)
+
+  - task: Kubernetes@1
+    displayName: Delete PVCs in namespace
+    continueOnError: true
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: delete
+      arguments: pvc --all
+      namespace: $(kubernetesNamespace)
