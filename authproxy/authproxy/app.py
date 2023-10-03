@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import StreamingResponse
@@ -63,9 +63,19 @@ async def health() -> str:
 @app.patch("/{path:path}")
 @app.delete("/{path:path}")
 async def reverse_proxy(request: Request):
-    if not get_auth(request.session).get_user():
+    if not (user := get_auth(request.session).get_user()):
         return templates.TemplateResponse(
-            "login.html.j2", {"request": request, "error": False}
+            "login.html.j2",
+            dict(request=request, error=False),
+        )
+
+    email: str = user.get("emails", [""])[0]
+    if not (email.endswith("@thinkingmachin.es") or email.endswith("@unicef.org")):
+        request.session.clear()
+        return templates.TemplateResponse(
+            "unauthorized.html.j2",
+            dict(request=request),
+            status_code=status.HTTP_403_FORBIDDEN,
         )
 
     upstream = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)

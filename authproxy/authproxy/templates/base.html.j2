@@ -1,42 +1,45 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            container: {
-              center: true,
-              padding: "2rem",
-              screens: {
-                "2xl": "1400px",
-              },
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          container: {
+            center: true,
+            padding: "2rem",
+            screens: {
+              "2xl": "1400px",
             },
           },
         },
-      };
-    </script>
-    <style>
+      },
+    };
+  </script>
+  <style>
       body {
           font-size: 14pt;
           font-family: "Open Sans", sans-serif;
       }
-    </style>
+  </style>
 
-    <title>Login | Dagster</title>
-  </head>
-  <body>
-    <main>
-      {% block body %}{% endblock %}
-    </main>
-  </body>
+  <title>Login | Dagster</title>
+</head>
+<body>
+<main>
+  <div
+    class="h-screen flex flex-col items-center justify-center bg-gradient-to-b from-sky-600 to-sky-800 text-white gap-4">
+    {% block body %}{% endblock %}
+  </div>
+</main>
+</body>
 </html>

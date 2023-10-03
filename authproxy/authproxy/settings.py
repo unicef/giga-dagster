@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     AZURE_CLIENT_SECRET: str
     AZURE_TENANT_NAME: str
     AZURE_REDIRECT_URI: str
+    AZURE_LOGOUT_REDIRECT_URI: str
     AZURE_AUTH_POLICY_NAME: str
     DAGSTER_WEBSERVER_URL: str
 

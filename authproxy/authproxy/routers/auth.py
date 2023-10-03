@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, status
 from fastapi.responses import RedirectResponse
 
 from authproxy.lib.auth import AZURE_AD_SCOPES, get_auth
@@ -17,7 +17,12 @@ async def login(request: Request):
     return auth["auth_uri"]
 
 
-@router.get("/callback", include_in_schema=False, response_class=RedirectResponse)
+@router.get(
+    "/callback",
+    include_in_schema=False,
+    response_class=RedirectResponse,
+    status_code=status.HTTP_302_FOUND,
+)
 async def callback(request: Request):
     auth = get_auth(request.session).complete_log_in(dict(request.query_params))
     if "error" in auth.keys():
@@ -30,6 +35,6 @@ async def callback(request: Request):
 
 @router.get("/logout", include_in_schema=False, response_class=RedirectResponse)
 async def logout(request: Request):
-    url = get_auth(request.session).log_out("/")
+    url = get_auth(request.session).log_out(settings.AZURE_LOGOUT_REDIRECT_URI)
     request.session.clear()
     return url
