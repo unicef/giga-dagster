@@ -77,6 +77,10 @@ tasks:
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
 
+  build-and-push:
+    - task: build-cr
+    - task: push-cr
+
   build-cr:
     desc: Build Docker image
     cmds:
