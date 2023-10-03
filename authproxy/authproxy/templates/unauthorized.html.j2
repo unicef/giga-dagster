@@ -3,7 +3,7 @@
 {% block body %}
   <p>Unauthorized. Please contact the system administrator to request access.</p>
   <a
-    href="/auth/logout"
+    href="{{ logout_url }}"
     class="cursor-pointer text-white bg-zinc-800 shadow-lg px-12 py-4 rounded-2xl hover:bg-zinc-700 active:bg-zinc-900 transition-colors"
   >
     Logout

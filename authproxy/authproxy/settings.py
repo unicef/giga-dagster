@@ -8,8 +8,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     PYTHON_ENV: Literal["development", "staging", "production"] = "production"
     BASE_DIR: Path = Path(__file__).parent.parent
-    ALLOWED_HOSTS: list[str] = ["*"]
-    CORS_ALLOWED_ORIGINS: list[str] = ["*"]
     SECRET_KEY: str
     AZURE_TENANT_ID: str
     AZURE_CLIENT_ID: str
@@ -29,12 +27,40 @@ class Settings(BaseSettings):
         return self.PYTHON_ENV == "production"
 
     @property
-    def SESSION_COOKIE_PARAMS(self):
+    def ALLOWED_HOSTS(self):
+        if self.IN_PRODUCTION:
+            return ["io-airflow-dev.unitst.org"]
+        return ["*"]
+
+    @property
+    def CORS_ALLOWED_ORIGINS(self):
+        if self.IN_PRODUCTION:
+            return ["io-airflow-dev.unitst.org"]
+        return ["*"]
+
+    @property
+    def SESSION_COOKIE_MIDDLEWARE_PARAMS(self):
         return dict(
             max_age=int(timedelta(days=7).total_seconds()),
             same_site="strict",
             path="/",
             https_only=self.IN_PRODUCTION,
+        )
+
+    @property
+    def SESSION_COOKIE_DELETE_PARAMS(self):
+        return dict(
+            samesite="strict",
+            path="/",
+            httponly=True,
+            secure=self.IN_PRODUCTION,
+        )
+
+    @property
+    def SESSION_COOKIE_PARAMS(self):
+        return dict(
+            max_age=int(timedelta(days=7).total_seconds()),
+            **self.SESSION_COOKIE_DELETE_PARAMS,
         )
 
 
