@@ -33,7 +33,7 @@ WORKDIR /app
 # Copy source code into the container
 COPY src ./src
 
-# Read the PORT environment variable, otherwise default to 8080
-ENV PORT 8080
+# Read the PORT environment variable, otherwise default to the specified port
+ENV PORT 8088
 
 CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]
