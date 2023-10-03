@@ -82,3 +82,16 @@ task logs
 # List all tasks (inspect Taskfile.yml to see the actual commands being run)
 task -l
 ```
+
+### Adding dependencies
+Example: Adding `dagster-azure`
+```shell
+# Move to relevant folder
+cd dagster
+
+# Add the dependency using poetry
+poetry add dagster-azure
+
+# Re-run task
+task
+```
