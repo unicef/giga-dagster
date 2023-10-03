@@ -24,6 +24,7 @@ async def callback(request: Request):
         return templates.TemplateResponse(
             "login.html.j2", {"request": request, "error": True}
         )
+    request.session.pop("_token_cache")
     return "/"
 
 
