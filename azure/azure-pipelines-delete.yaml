@@ -23,6 +23,15 @@ steps:
       command: uninstall
       arguments: dagster
 
+  - task: HelmDeploy@0
+    displayName: Helm uninstall authproxy
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
+      command: uninstall
+      arguments: dagster-authproxy
+
   - task: Kubernetes@1
     displayName: Delete resources in namespace
     inputs:

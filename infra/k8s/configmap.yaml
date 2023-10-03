@@ -6,5 +6,4 @@ metadata:
     app: giga-dagster
 data:
   AZURE_BLOB_CONTAINER_NAME: "giga-dataops-dev"
-  AZURE_REDIRECT_URI: "http://localhost:3001/auth/callback"
   DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
