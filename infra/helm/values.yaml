@@ -48,7 +48,7 @@ dagsterWebserver:
     type: LoadBalancer
     # Defines the port where the webserver will serve requests; if changed, don't forget to update the
     # livenessProbe and startupProbe entries below as well.
-    port: 8088
+    port: 8080
     annotations: { }
 
   # Defines a workspace for the webserver. This should only be set if user deployments are enabled, but
@@ -180,7 +180,7 @@ dagsterWebserver:
   readinessProbe:
     httpGet:
       path: "/server_info"
-      port: 8088
+      port: 8080
     periodSeconds: 20
     timeoutSeconds: 10
     successThreshold: 1
