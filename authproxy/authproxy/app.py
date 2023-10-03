@@ -68,7 +68,7 @@ async def reverse_proxy(request: Request):
             "login.html.j2", {"request": request, "error": False}
         )
 
-    upstream = httpx.AsyncClient(base_url="http://dagster:3002/")
+    upstream = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
     url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
     upstream_req = upstream.build_request(
         request.method,

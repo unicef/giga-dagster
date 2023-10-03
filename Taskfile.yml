@@ -79,10 +79,9 @@ tasks:
 
   build-cr:
     desc: Build Docker image
-    dir: dagster
     cmds:
-      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f Dockerfile.prod .
+      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f dagster/Dockerfile.prod dagster
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f authproxy/Dockerfile.prod authproxy
 
   push-cr:
     desc: Build Docker image
@@ -96,22 +95,40 @@ tasks:
     cmds:
       - kubectl apply -f k8s/secrets.yaml
       - kubectl apply -f k8s/configmap.yaml
-      - |
-        helm upgrade --install dagster dagster/dagster \
-        --values helm/values.yaml \
-        --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
-        --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}} \
-        --set pipelineRun.image.repository={{.DAGSTER_IMAGE_REPOSITORY}} \
-        --set pipelineRun.image.tag={{.SHORT_SHA}} \
-        --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}} \
+      - task: helm-up-dagster
+      - task: helm-up-authproxy
+
+  helm-up-dagster:
+    desc: Install/upgade Dagster Helm chart
+    dir: infra/helm
+    cmds:
+      - >
+        helm upgrade --install dagster dagster/dagster
+        --values dagster/values.yaml
+        --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
+        --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}}
+        --set pipelineRun.image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
+        --set pipelineRun.image.tag={{.SHORT_SHA}}
+        --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
+
+  helm-up-authproxy:
+    desc: Install/upgade authproxy Helm chart
+    dir: infra/helm
+    cmds:
+      - >
+        helm upgrade --install dagster-authproxy ./authproxy
+        --values authproxy/values.yaml
+        --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
+        --set image.tag={{.SHORT_SHA}}
 
   helm-down:
     desc: Uninstall Helm chart
     dir: infra
+    ignore_error: true
     cmds:
+      - helm uninstall dagster-authproxy
       - helm uninstall dagster
       - kubectl delete -f k8s/configmap.yaml
       - kubectl delete -f k8s/secrets.yaml
       - kubectl delete pvc --all
-      - kubectl delete pv --all

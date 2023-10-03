@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     AZURE_TENANT_NAME: str
     AZURE_REDIRECT_URI: str
     AZURE_AUTH_POLICY_NAME: str
+    DAGSTER_WEBSERVER_URL: str
 
     class Config:
         env_file = ".env"

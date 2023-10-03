@@ -8,7 +8,7 @@ WORKDIR /tmp
 
 RUN pip install "poetry==$POETRY_VERSION"
 
-COPY api/pyproject.toml api/poetry.lock ./
+COPY pyproject.toml poetry.lock ./
 
 RUN poetry export -f requirements.txt --without-hashes --without dev > requirements.txt
 
@@ -22,8 +22,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 WORKDIR /app
 
-COPY ./authproxy/ ./
+COPY ./authproxy/ ./authproxy/
+COPY ./*.py ./
 
-ENV PORT 3000
+ENV PORT 3001
 
 CMD [ "/bin/sh", "-c",  "uvicorn main:app --host 0.0.0.0 --port $PORT" ]
