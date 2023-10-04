@@ -14,7 +14,7 @@ def encode_session_cookie(value: dict) -> str:
 
 def decode_session_cookie(value: str) -> dict:
     signer = TimestampSigner(settings.SECRET_KEY)
-    return json.loads(b64decode(signer.unsign(value.encode("utf-8"))))
+    return json.loads(b64decode(signer.unsign(value.encode("utf-8"))).decode("utf-8"))
 
 
 def get_request_session(request: Request) -> dict:
