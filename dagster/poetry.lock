@@ -283,13 +283,13 @@ typing-extensions = ">=4.0.1"
 
 [[package]]
 name = "azure-storage-blob"
-version = "12.17.0"
+version = "12.18.2"
 description = "Microsoft Azure Blob Storage Client Library for Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "azure-storage-blob-12.17.0.zip", hash = "sha256:c14b785a17050b30fc326a315bdae6bc4a078855f4f94a4c303ad74a48dc8c63"},
-    {file = "azure_storage_blob-12.17.0-py3-none-any.whl", hash = "sha256:0016e0c549a80282d7b4920c03f2f4ba35c53e6e3c7dbcd2a4a8c8eb3882c1e7"},
+    {file = "azure-storage-blob-12.18.2.tar.gz", hash = "sha256:e11935348981ffc005b848b55db25c04f2d1f90e1ee33000659906b763cf14c8"},
+    {file = "azure_storage_blob-12.18.2-py3-none-any.whl", hash = "sha256:ffd864bf9abf33dfc72c6ef37899a19bd9d585a946a2c61e288b4420c035df3a"},
 ]
 
 [package.dependencies]
@@ -303,18 +303,18 @@ aio = ["azure-core[aio] (>=1.28.0,<2.0.0)"]
 
 [[package]]
 name = "azure-storage-file-datalake"
-version = "12.12.0"
+version = "12.13.1"
 description = "Microsoft Azure File DataLake Storage Client Library for Python"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "azure-storage-file-datalake-12.12.0.zip", hash = "sha256:6a7898ddccb378059e93e4c6a8e045a81dbe3c85b5b9256e2a3ab9faa412c069"},
-    {file = "azure_storage_file_datalake-12.12.0-py3-none-any.whl", hash = "sha256:857dcacd18fcdc5df2e4c68dfd6a6417677a8a05cf74252bd660bcb33bac49ae"},
+    {file = "azure-storage-file-datalake-12.13.1.tar.gz", hash = "sha256:54e8b19e8e3d83bb5fbc51c3a17ed78d6be2811cc78af12beadc5b547bba574e"},
+    {file = "azure_storage_file_datalake-12.13.1-py3-none-any.whl", hash = "sha256:e53dbbfef817fac63de0df92787d8b84798d7f1e12d9d216f30b722b6b8ccf31"},
 ]
 
 [package.dependencies]
 azure-core = ">=1.28.0,<2.0.0"
-azure-storage-blob = ">=12.17.0,<13.0.0"
+azure-storage-blob = ">=12.18.1,<13.0.0"
 isodate = ">=0.6.1"
 typing-extensions = ">=4.3.0"
 
@@ -4643,4 +4643,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "770157662f8e29b77354d6574796b8fadd7f299fb9598229dc00f93e87129c5d"
+content-hash = "cc51d7870df8ce5bb538cf26f08ac9ec7ef704402b99ec40ae01c6ce49a94a58"

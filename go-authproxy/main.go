@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/template/django/v3"
 	_ "github.com/joho/godotenv/autoload"
 	"log"
-	"net/http"
 	"time"
 )
 
@@ -24,7 +23,7 @@ func main() {
 		EnablePrintRoutes:       true,
 		Views:                   engine,
 	})
-	store := GetStore()
+	//store := GetStore()
 
 	app.Use(logger.New())
 
@@ -36,13 +35,13 @@ func main() {
 	}
 
 	proxyHandler := func(ctx *fiber.Ctx) error {
-		sess, err := store.Get(ctx)
-		if err != nil {
-			return err
-		}
-		if sess.Get("user") == nil {
-			return ctx.Redirect("/login", http.StatusSeeOther)
-		}
+		//sess, err := store.Get(ctx)
+		//if err != nil {
+		//	return err
+		//}
+		//if sess.Get("user") == nil {
+		//	return ctx.Redirect("/login", http.StatusSeeOther)
+		//}
 
 		return proxy.Balancer(proxyConfig)(ctx)
 	}
