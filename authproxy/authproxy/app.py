@@ -120,12 +120,11 @@ async def proxy(path: str):
         return redirect(url_for("login"))
 
     email: str = user.get("emails", [""])[0]
-    is_tm_email = email.endswith("@thinkingmachin.es")
-    # if not (
-    #     (is_tm_email := email.endswith("@thinkingmachin.es"))
-    #     or email.endswith("@unicef.org")
-    # ):
-    #     return redirect(url_for("unauthorized"))
+    if not (
+        (is_tm_email := email.endswith("@thinkingmachin.es"))
+        or email.endswith("@unicef.org")
+    ):
+        return redirect(url_for("unauthorized"))
 
     upstream = upstream_rw if is_tm_email else upstream_ro
 
