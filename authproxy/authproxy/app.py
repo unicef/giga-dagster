@@ -1,45 +1,37 @@
+from http import HTTPStatus
+
 import httpx
-from fastapi import FastAPI, Request, Response, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 from loguru import logger
-from starlette.background import BackgroundTask
+from quart import (
+    Quart,
+    Response,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from authproxy.lib.auth import AZURE_AD_SCOPES, get_auth
-from authproxy.lib.session import get_request_session, set_response_session
-from authproxy.lib.templates import templates
 from authproxy.settings import settings
 
-app = FastAPI(title="Dagster", docs_url=None, redoc_url=None)
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS,
-    www_redirect=False,
+app = Quart(
+    __name__,
+    static_url_path="/static",
+    static_folder=settings.BASE_DIR / "authproxy" / "static",
+    template_folder=settings.BASE_DIR / "authproxy" / "templates",
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.config["SECRET_KEY"] = settings.SECRET_KEY
 
-client = httpx.AsyncClient(base_url="http://dagster-webserver:3002/")
-
-app.mount(
-    "/static",
-    StaticFiles(directory=settings.BASE_DIR / "authproxy" / "static"),
-    name="static",
-)
+auth = get_auth(session)
 
 upstream_rw = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
-upstream_ro = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
+upstream_ro = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_READONLY_URL)
 
 
 @app.get("/health")
-async def health(response: Response):
+async def health():
     res = dict(proxy="ok", dagster="unhealthy", dagster_readonly="unhealthy")
 
     try:
@@ -48,7 +40,6 @@ async def health(response: Response):
             raise ConnectionError(up_rw_res.text)
     except Exception as e:
         logger.error(e)
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
         res["dagster"] = "ok"
 
@@ -58,113 +49,83 @@ async def health(response: Response):
             raise ConnectionError(up_ro_res.text)
     except Exception as e:
         logger.error(e)
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        status_code = HTTPStatus.SERVICE_UNAVAILABLE
     else:
         res["dagster_readonly"] = "ok"
+        status_code = HTTPStatus.OK
 
-    return res
+    return make_response(res, status_code)
 
 
-@app.get("/login", response_class=HTMLResponse)
-async def login(request: Request):
-    session = get_request_session(request)
-    auth = get_auth(session).log_in(
-        scopes=AZURE_AD_SCOPES,
-        redirect_uri=settings.AZURE_REDIRECT_URI,
+@app.get("/login")
+async def login():
+    return await render_template(
+        "login.html.j2",
+        **auth.log_in(
+            scopes=AZURE_AD_SCOPES, redirect_uri=url_for("callback", _external=True)
+        ),
     )
-    res = templates.TemplateResponse("login.html.j2", dict(request=request, **auth))
-    set_response_session(res, session)
-    return res
 
 
 @app.get("/auth/callback")
-async def callback(request: Request):
-    session = get_request_session(request)
-    auth = get_auth(session).complete_log_in(dict(request.query_params))
-    if "error" in auth.keys():
-        logger.error(auth)
-        return RedirectResponse(request.url_for("auth_error"))
-    session.pop("_token_cache")
-    res = RedirectResponse("/")
-    set_response_session(res, session)
-    return res
-
-
-@app.get("/error", response_class=HTMLResponse)
-async def auth_error(request: Request):
-    session = get_request_session(request)
-    auth = get_auth(session).log_in(
-        scopes=AZURE_AD_SCOPES,
-        redirect_uri=settings.AZURE_REDIRECT_URI,
-    )
-    res = templates.TemplateResponse("error.html.j2", dict(request=request, **auth))
-    set_response_session(res, session)
-    return res
-
-
-@app.get("/unauthorized", response_class=HTMLResponse)
-async def unauthorized(request: Request):
-    session = get_request_session(request)
-    url = get_auth(session).log_out(settings.AZURE_LOGOUT_REDIRECT_URI)
-    res = templates.TemplateResponse(
-        "error.html.j2", dict(request=request, logout_url=url)
-    )
-    set_response_session(res, session)
-    return res
+async def callback():
+    try:
+        res = auth.complete_log_in(request.args)
+        if "error" in res.keys():
+            raise ValueError(res)
+    except ValueError as e:
+        logger.error(e)
+        return await render_template(
+            "error.html.j2",
+            **auth.log_in(
+                scopes=AZURE_AD_SCOPES, redirect_uri=url_for("callback", _external=True)
+            ),
+        )
+    return redirect(url_for("proxy"))
 
 
 @app.get("/logout")
-async def logout(request: Request):
-    session = get_request_session(request)
-    url = get_auth(session).log_out(settings.AZURE_LOGOUT_REDIRECT_URI)
-    res = RedirectResponse(url)
-    res.delete_cookie(
-        "session",
-        **settings.SESSION_COOKIE_DELETE_PARAMS,
+async def logout():
+    return redirect(auth.log_out(url_for("proxy", _external=True)))
+
+
+@app.get("/unauthorized")
+async def unauthorized():
+    return await render_template(
+        "unauthorized.html.j2",
+        logout_url=auth.log_out(url_for("proxy", _external=True)),
     )
-    return res
 
 
-@app.head("/{path:path}")
-@app.options("/{path:path}")
-@app.get("/{path:path}")
-@app.post("/{path:path}")
-@app.put("/{path:path}")
-@app.patch("/{path:path}")
-@app.delete("/{path:path}")
-async def reverse_proxy(request: Request):
-    session = get_request_session(request)
-    if not (user := get_auth(session).get_user()):
-        return RedirectResponse("/login")
+@app.route("/<path:path>")
+@app.route("/", defaults={"path": ""})
+async def proxy(path: str):
+    if not (user := auth.get_user()):
+        return redirect(url_for("login"))
 
     email: str = user.get("emails", [""])[0]
-    if not (
-        (is_tm_email := email.endswith("@thinkingmachin.es"))
-        or email.endswith("@unicef.org")
-    ):
-        res = RedirectResponse(request.url_for("unauthorized"))
-        res.delete_cookie(
-            "session",
-            **settings.SESSION_COOKIE_DELETE_PARAMS,
-        )
-        return res
+    is_tm_email = email.endswith("@thinkingmachin.es")
+    # if not (
+    #     (is_tm_email := email.endswith("@thinkingmachin.es"))
+    #     or email.endswith("@unicef.org")
+    # ):
+    #     return redirect(url_for("unauthorized"))
 
     upstream = upstream_rw if is_tm_email else upstream_ro
 
-    url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
+    url = httpx.URL(path=path, query=request.query_string)
     up_req = upstream.build_request(
         request.method,
         url,
-        headers=request.headers.raw,
-        content=request.stream(),
+        headers=[(k, v) for k, v in request.headers.items()],
+        content=await request.get_data(),
         cookies=request.cookies,
     )
-    up_res = await upstream.send(up_req, stream=True)
-    res = StreamingResponse(
-        up_res.aiter_raw(),
-        status_code=up_res.status_code,
-        headers=up_res.headers,
-        background=BackgroundTask(up_res.aclose),
+    up_res = await upstream.send(up_req)
+    res = Response(
+        up_res.content,
+        status=up_res.status_code,
+        headers=dict(up_res.headers),
     )
-    set_response_session(res, session)
+    app.add_background_task(up_res.aclose)
     return res

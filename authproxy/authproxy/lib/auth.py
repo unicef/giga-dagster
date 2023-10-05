@@ -9,7 +9,7 @@ AZURE_AD_SCOPES = [
 ]
 
 
-def get_auth(session: dict):
+def get_auth(session):
     return identity.web.Auth(
         session=session,
         authority=AUTHORITY_URL,

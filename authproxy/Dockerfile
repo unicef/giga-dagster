@@ -16,4 +16,13 @@ RUN poetry install --no-interaction --no-ansi
 
 WORKDIR /app
 
-CMD [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload" ]
+CMD [ \
+    "hypercorn", \
+    "main:app", \
+    "--bind", "0.0.0.0:3001", \
+    "--log-file", "-", \
+    "--access-logfile", "-", \
+    "--workers", "1", \
+    "--reload", \
+    "--debug" \
+]
