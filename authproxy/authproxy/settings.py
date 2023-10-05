@@ -64,5 +64,15 @@ class Settings(BaseSettings):
             **self.SESSION_COOKIE_DELETE_PARAMS,
         )
 
+    @property
+    def AUTHORITY_URL(self):
+        return f"https://{self.AZURE_TENANT_NAME}.b2clogin.com/{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_AUTH_POLICY_NAME}"
+
+    @property
+    def AZURE_AD_SCOPES(self):
+        return [
+            f"https://{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_CLIENT_ID}/User.Impersonate"
+        ]
+
 
 settings = Settings()

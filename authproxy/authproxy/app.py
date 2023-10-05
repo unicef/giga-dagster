@@ -1,6 +1,7 @@
 from http import HTTPStatus
 
 import httpx
+import identity.web
 from loguru import logger
 from quart import (
     Quart,
@@ -13,7 +14,6 @@ from quart import (
     url_for,
 )
 
-from authproxy.lib.auth import AZURE_AD_SCOPES, get_auth
 from authproxy.settings import settings
 
 app = Quart(
@@ -22,9 +22,18 @@ app = Quart(
     static_folder=settings.BASE_DIR / "authproxy" / "static",
     template_folder=settings.BASE_DIR / "authproxy" / "templates",
 )
-app.config["SECRET_KEY"] = settings.SECRET_KEY
+app.config.update(
+    dict(
+        SECRET_KEY=settings.SECRET_KEY,
+        TEMPLATES_AUTO_RELOAD=True,
+    )
+)
 
-auth = get_auth(session)
+auth = identity.web.Auth(
+    session=session,
+    authority=settings.AUTHORITY_URL,
+    client_id=settings.AZURE_CLIENT_ID,
+)
 
 upstream_rw = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
 upstream_ro = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_READONLY_URL)
@@ -62,7 +71,8 @@ async def login():
     return await render_template(
         "login.html.j2",
         **auth.log_in(
-            scopes=AZURE_AD_SCOPES, redirect_uri=url_for("callback", _external=True)
+            scopes=settings.AZURE_AD_SCOPES,
+            redirect_uri=url_for("callback", _external=True),
         ),
     )
 
@@ -75,18 +85,24 @@ async def callback():
             raise ValueError(res)
     except ValueError as e:
         logger.error(e)
-        return await render_template(
-            "error.html.j2",
-            **auth.log_in(
-                scopes=AZURE_AD_SCOPES, redirect_uri=url_for("callback", _external=True)
-            ),
-        )
+        return redirect(url_for("auth_error"))
     return redirect(url_for("proxy"))
 
 
 @app.get("/logout")
 async def logout():
     return redirect(auth.log_out(url_for("proxy", _external=True)))
+
+
+@app.get("/error")
+async def auth_error():
+    return await render_template(
+        "error.html.j2",
+        **auth.log_in(
+            scopes=settings.AZURE_AD_SCOPES,
+            redirect_uri=url_for("callback", _external=True),
+        ),
+    )
 
 
 @app.get("/unauthorized")
