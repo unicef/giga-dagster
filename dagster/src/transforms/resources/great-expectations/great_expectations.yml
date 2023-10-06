@@ -13,7 +13,7 @@ config_version: 2.0
 # add a new datasource. Read more at https://docs.greatexpectations.io/en/latest/features/datasource.html
 datasources:
   # Maps to an asset
-  raw__bank_loan:
+  raw__bank_loans:
     module_name: great_expectations.datasource
     class_name: PandasDatasource
     data_asset_type:
@@ -22,7 +22,7 @@ datasources:
     batch_kwargs_generators:
       subdir_reader:
         class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ..\.
+        base_directory: ../.
   raw__bank_marketing:
     module_name: great_expectations.datasource
     class_name: PandasDatasource
@@ -32,7 +32,7 @@ datasources:
     batch_kwargs_generators:
       subdir_reader:
         class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ..\.
+        base_directory: ../.
   raw__bank_savings:
     module_name: great_expectations.datasource
     class_name: PandasDatasource
@@ -42,7 +42,7 @@ datasources:
     batch_kwargs_generators:
       subdir_reader:
         class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ..\.
+        base_directory: ../.
   raw__insurance:
     module_name: great_expectations.datasource
     class_name: PandasDatasource
@@ -52,7 +52,7 @@ datasources:
     batch_kwargs_generators:
       subdir_reader:
         class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ..\.
+        base_directory: ../.
   raw__supermarket:
     module_name: great_expectations.datasource
     class_name: PandasDatasource
@@ -62,7 +62,7 @@ datasources:
     batch_kwargs_generators:
       subdir_reader:
         class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ..\.
+        base_directory: ../.
 config_variables_file_path: uncommitted/config_variables.yml
 
 # The plugins_directory will be added to your python path for custom modules
@@ -108,7 +108,7 @@ stores:
     class_name: ExpectationsStore
     store_backend:
       class_name: TupleFilesystemStoreBackend
-      base_directory: expectations/
+      base_directory: expectations/raw
 
   validations_store:
     class_name: ValidationsStore
@@ -130,21 +130,21 @@ data_docs_sites:
   ###########################################################################
   # Comment this out when you need to also build the data docs locally      #
   ###########################################################################
-  # local_site:
-  #   class_name: SiteBuilder
-  #   store_backend:
-  #     class_name: TupleFilesystemStoreBackend
-  #     base_directory: uncommitted/data_docs/local_site/
-  #   site_index_builder:
-  #     class_name: DefaultSiteIndexBuilder
-  s3_site:
+  local_site:
     class_name: SiteBuilder
     store_backend:
-      class_name: TupleS3StoreBackend
-      bucket: ${DATA_OBSERVABILITY_BUCKET_NAME}
-      prefix: ''
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/data_docs/local_site/
     site_index_builder:
       class_name: DefaultSiteIndexBuilder
+  # s3_site:
+  #   class_name: SiteBuilder
+  #   store_backend:
+  #     class_name: TupleS3StoreBackend
+  #     bucket: ${DATA_OBSERVABILITY_BUCKET_NAME}
+  #     prefix: ''
+  #   site_index_builder:
+  #     class_name: DefaultSiteIndexBuilder
 
 notebooks:
 include_rendered_content:

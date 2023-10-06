@@ -45,12 +45,12 @@ tasks:
   stop:
     desc: Stop containers
     cmds:
-      - docker compose --project-name {{.PROJECT_NAME}} stop {{.CLI_ARGS}}
+      - docker compose -f docker-compose-local.yaml --project-name {{.PROJECT_NAME}} stop {{.CLI_ARGS}}
 
   restart:
     desc: Restart containers
     cmds:
-      - docker compose --project-name {{.PROJECT_NAME}} restart {{.CLI_ARGS}}
+      - docker compose -f docker-compose-local.yaml --project-name {{.PROJECT_NAME}} restart {{.CLI_ARGS}}
 
   exec:
     desc: Run a command in the specified container
