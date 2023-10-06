@@ -63,7 +63,9 @@ to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ### Environment Setup
 
-Get contents of `.env` from Bitwarden.
+Get contents of `.env` from Bitwarden for the following:
+- Create a `dagster/.env` file.
+- Create an `authproxy/.env` file.
 
 Ensure that the Pre-requisites have already been set up and all the necessary
 command-line executables are in your `PATH`.
@@ -79,4 +81,17 @@ task logs
 
 # List all tasks (inspect Taskfile.yml to see the actual commands being run)
 task -l
+```
+
+### Adding dependencies
+Example: Adding `dagster-azure`
+```shell
+# Move to relevant folder
+cd dagster
+
+# Add the dependency using poetry
+poetry add dagster-azure
+
+# Re-run task
+task
 ```

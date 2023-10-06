@@ -1,10 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dagster
+  name: giga-dagster
   labels:
-    app: dagster
-    repo: giga-dagster
+    app: giga-dagster
 data:
-  AZURE_BLOB_SAS_HOST: "ingestionportalstorage.dfs.core.windows.net"
-  AZURE_BLOB_CONTAINER_NAME: "ingestion-portal-upload"
+  AZURE_BLOB_CONTAINER_NAME: "giga-dataops-dev"

@@ -1,27 +1,24 @@
 trigger:
-  - main
+  branches:
+    include:
+      - main
+
+pr: none
 
 pool:
   vmImage: ubuntu-latest
 
 variables:
-  containerRegistryServiceConnection: uniappsoigiga
+  containerRegistryServiceConnection: $(ACR_SERVICE_CONNECTION)
   kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
-  dagsterImageRepository: $(DAGSTER_IMAGE_REPOSITORY)
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
   azureSasToken: $(AZURE_SAS_TOKEN)
+  azureSasUrl: $(AZURE_SAS_URL)
   system.debug: true
 
 steps:
-  - task: Bash@3
-    displayName: Get short commit hash
-    inputs:
-      targetType: inline
-      script: "SHORT_SHA=`git rev-parse --short HEAD`"
-      workingDirectory: $(Build.SourcesDirectory)
-
   - task: Docker@2
     displayName: Login to container Registry
     inputs:
@@ -33,7 +30,7 @@ steps:
     inputs:
       command: buildAndPush
       repository: giga-dagster
-      dockerfile: $(Build.SourcesDirectory)/Dockerfile.prod
+      dockerfile: $(Build.SourcesDirectory)/dagster/Dockerfile.prod
       containerRegistry: $(containerRegistryServiceConnection)
       tags: |
         $(Build.SourceVersion)
@@ -43,8 +40,10 @@ steps:
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
       configurationType: configuration
       command: apply
+      useConfigurationFile: true
       configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
 
   - task: Kubernetes@1
@@ -52,17 +51,22 @@ steps:
     inputs:
       connectionType: Kubernetes Service Connection
       kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
       configurationType: inline
       command: apply
+      useConfigurationFile: true
       inline: |
         apiVersion: v1
         kind: Secret
         metadata:
-          name: dagster
+          name: giga-dagster
           labels:
-            app: dagster
+            app: giga-dagster
         stringData:
-          AZURE_SAS_TOKEN: "$(azureSasToken)"
+          AZURE_BLOB_SAS_TOKEN: "$(azureSasToken)"
+          AZURE_BLOB_SAS_HOST: "$(azureSasUrl)"
+          POSTGRESQL_USERNAME: "$(postgresqlUsername)"
+          POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
 
   - task: HelmDeploy@0
     displayName: Add Dagster Helm Repo
@@ -83,11 +87,22 @@ steps:
       chartName: dagster/dagster
       releaseName: dagster
       namespace: $(kubernetesNamespace)
-      arguments: |
-        --values infra/helm/values.yaml \
-        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io" \
-        --set dagster-user-deployments.deployments[0].image.tag=$SHORT_SHA \
-        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io" \
-        --set pipelineRun.image.tag=$SHORT_SHA \
-        --set postgresql.postgresqlUsername=$(postgresqlUsername) \
+      arguments: >
+        --values $(Build.SourcesDirectory)/infra/helm/values.yaml
+        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
+        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set pipelineRun.image.tag=$(Build.SourceVersion)
+        --set postgresql.postgresqlUsername=$(postgresqlUsername)
         --set postgresql.postgresqlPassword=$(postgresqlPassword)
+
+  - task: Kubernetes@1
+    displayName: Create ingress
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
+      configurationType: configuration
+      command: apply
+      useConfigurationFile: true
+      configuration: $(Build.SourcesDirectory)/infra/k8s/ingress.yaml
