@@ -16,4 +16,4 @@ RUN poetry install --no-interaction --no-ansi
 
 WORKDIR /app
 
-CMD [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload" ]
+CMD [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3001", "--reload", "--workers", "1" ]

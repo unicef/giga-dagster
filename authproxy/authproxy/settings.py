@@ -1,4 +1,5 @@
 from datetime import timedelta
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
         return ["*"]
 
     @property
+    def EMAIL_DOMAIN_ALLOWLIST(self):
+        return ["thinkingmachin.es", "unicef.org"]
+
+    @property
     def SESSION_COOKIE_MIDDLEWARE_PARAMS(self):
         return dict(
             max_age=int(timedelta(days=7).total_seconds()),
@@ -74,4 +79,9 @@ class Settings(BaseSettings):
         ]
 
 
-settings = Settings()
+@lru_cache()
+def get_settings():
+    return Settings()
+
+
+settings = get_settings()

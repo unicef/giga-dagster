@@ -1,3 +1,4 @@
+from datetime import timedelta
 from http import HTTPStatus
 
 import httpx
@@ -26,6 +27,13 @@ app.config.update(
     dict(
         SECRET_KEY=settings.SECRET_KEY,
         TEMPLATES_AUTO_RELOAD=True,
+        PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+        SESSION_COOKIE_PATH="/",
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SECURE=settings.IN_PRODUCTION,
+        SESSION_COOKIE_SAMESITE="Strict",
+        TESTING=not settings.IN_PRODUCTION,
+        PROPAGATE_EXCEPTIONS=True,
     )
 )
 
@@ -33,6 +41,7 @@ auth = identity.web.Auth(
     session=session,
     authority=settings.AUTHORITY_URL,
     client_id=settings.AZURE_CLIENT_ID,
+    client_credential=settings.AZURE_CLIENT_SECRET,
 )
 
 upstream_rw = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
@@ -117,16 +126,16 @@ async def unauthorized():
 @app.route("/", defaults={"path": ""})
 async def proxy(path: str):
     if not (user := auth.get_user()):
+        if path.startswith("favicon") or path.startswith("static"):
+            return await make_response("", HTTPStatus.UNAUTHORIZED)
         return redirect(url_for("login"))
 
     email: str = user.get("emails", [""])[0]
-    if not (
-        (is_tm_email := email.endswith("@thinkingmachin.es"))
-        or email.endswith("@unicef.org")
-    ):
+    if (email_domain := email.split("@")[-1]) not in settings.EMAIL_DOMAIN_ALLOWLIST:
         return redirect(url_for("unauthorized"))
 
-    upstream = upstream_rw if is_tm_email else upstream_ro
+    is_tm_user = email_domain == "thinkingmachin.es"
+    upstream = upstream_rw if is_tm_user else upstream_ro
 
     url = httpx.URL(path=path, query=request.query_string)
     up_req = upstream.build_request(
