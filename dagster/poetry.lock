@@ -319,6 +319,27 @@ typing-extensions = ">=4.3.0"
 aio = ["azure-core[aio] (>=1.28.0,<2.0.0)"]
 
 [[package]]
+name = "azure-storage-file-datalake"
+version = "12.12.0"
+description = "Microsoft Azure File DataLake Storage Client Library for Python"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "azure-storage-file-datalake-12.12.0.zip", hash = "sha256:6a7898ddccb378059e93e4c6a8e045a81dbe3c85b5b9256e2a3ab9faa412c069"},
+    {file = "azure_storage_file_datalake-12.12.0-py3-none-any.whl", hash = "sha256:857dcacd18fcdc5df2e4c68dfd6a6417677a8a05cf74252bd660bcb33bac49ae"},
+]
+
+[package.dependencies]
+azure-core = ">=1.28.0,<2.0.0"
+azure-storage-blob = ">=12.17.0,<13.0.0"
+isodate = ">=0.6.1"
+typing-extensions = ">=4.3.0"
+
+[package.extras]
+aio = ["azure-core[aio] (>=1.28.0,<2.0.0)"]
+
+[[package]]
 name = "babel"
 version = "2.12.1"
 description = "Internationalization utilities"
@@ -876,6 +897,25 @@ mypy = ["mypy (==0.991)"]
 pyright = ["pandas-stubs", "pyright (==1.1.327)", "types-PyYAML", "types-backports", "types-certifi", "types-chardet", "types-croniter", "types-cryptography", "types-mock", "types-paramiko", "types-pkg-resources", "types-pyOpenSSL", "types-python-dateutil", "types-pytz", "types-requests", "types-simplejson", "types-six", "types-sqlalchemy (==1.4.53.34)", "types-tabulate", "types-toml", "types-tzlocal"]
 ruff = ["ruff (==0.0.289)"]
 test = ["buildkite-test-collector", "docker", "grpcio-tools (>=1.44.0)", "mock (==3.0.5)", "morefs[asynclocal]", "objgraph", "pytest (==7.0.1)", "pytest-cov (==2.10.1)", "pytest-dependency (==0.5.1)", "pytest-mock (==3.3.1)", "pytest-rerunfailures (==10.0)", "pytest-runner (==5.2)", "pytest-xdist (==2.1.0)", "responses (<=0.23.1)", "syrupy (<4)", "tox (==3.25.0)", "yamllint"]
+
+[[package]]
+name = "dagster-azure"
+version = "0.21.0"
+description = "Package for Azure-specific Dagster framework op and resource components."
+category = "dev"
+optional = false
+python-versions = "*"
+files = [
+    {file = "dagster-azure-0.21.0.tar.gz", hash = "sha256:73c2937f8792b2cd03c2df028de24003f36e41b02286bf5aae2ea748392d1d56"},
+    {file = "dagster_azure-0.21.0-py3-none-any.whl", hash = "sha256:4e0b0759511fa30dd3103b37aa4157b3d3c46486eaf5f81adba0642ff312e193"},
+]
+
+[package.dependencies]
+azure-core = ">=1.7.0,<2.0.0"
+azure-identity = ">=1.7.0,<2.0.0"
+azure-storage-blob = ">=12.5.0,<13.0.0"
+azure-storage-file-datalake = ">=12.5,<13.0.0"
+dagster = "1.5.0"
 
 [[package]]
 name = "dagster-docker"
@@ -4900,4 +4940,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "2f341c0795ef4b881e29f9c406cef99d673a091b75469c57e13a09bf7226cb78"
+content-hash = "bc83c39528e9d5d20cf2d4f2ec51595e3afd926a5dadbd849b97d6bb2962ff80"
