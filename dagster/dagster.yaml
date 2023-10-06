@@ -9,7 +9,12 @@ run_launcher:
     env_vars:
       # Make sure to use the same environment vars as the dagster_pipelines service
       - ENVIRONMENT
-    network: dagster-network
+      - DAGSTER_CURRENT_IMAGE
+      - DAGSTER_POSTGRES_USER
+      - DAGSTER_POSTGRES_HOST
+      - DAGSTER_POSTGRES_PASSWORD
+      - DAGSTER_POSTGRES_DB
+    network: dagster-giga-network
     container_kwargs:
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock

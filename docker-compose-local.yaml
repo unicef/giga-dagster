@@ -1,8 +1,8 @@
 x-common-config: &common-config
   init: true
-  restart: unless-stopped
+  restart: on-failure
   networks:
-    - dagster-network
+    - dagster-giga-network
 
 services:
   dagster-storage:
@@ -13,20 +13,30 @@ services:
     volumes:
       - dagster-storage:/bitnami/postgresql
     environment:
-      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
-      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
-      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
 
   dagster-webserver:
     <<: *common-config
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"    
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: unicef/giga-dataops-platform/dagster-pipelines
     env_file: 
       - .env
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
+      DAGSTER_CURRENT_IMAGE: "dagster-pipelines-image"
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      DAGSTER_POSTGRES_HOST: dagster-storage
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/io_manager_storage:/tmp/io_manager_storage
@@ -39,12 +49,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: unicef/giga-dataops-platform/dagster-pipelines
     env_file: 
       - .env
     expose:
       - 4000
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
+      DAGSTER_CURRENT_IMAGE: "unicef/giga-dataops-platform/dagster-pipelines"
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      DAGSTER_POSTGRES_HOST: dagster-storage
     depends_on:
       - dagster-storage
   
@@ -53,10 +69,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: unicef/giga-dataops-platform/dagster-pipelines
+    command: ["dagster-daemon", "run"]
     env_file: 
       - .env
     environment:
       ENVIRONMENT: ${ENVIRONMENT}
+      DAGSTER_CURRENT_IMAGE: "dagster-pipelines-image"
+      DAGSTER_POSTGRES_USER: ${DAGSTER_POSTGRES_USER}
+      DAGSTER_POSTGRES_PASSWORD: ${DAGSTER_POSTGRES_PASSWORD}
+      DAGSTER_POSTGRES_DB: ${DAGSTER_POSTGRES_DB}
+      DAGSTER_POSTGRES_HOST: dagster-storage
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/io_manager_storage:/tmp/io_manager_storage
@@ -76,8 +99,8 @@ services:
       - "3001:3001"
 
 networks:
-  dagster-network:
-    name: dagster-network
+  dagster-giga-network:
+    name: dagster-giga-network
     driver: bridge
   
 volumes:

@@ -1,4 +1,4 @@
-FROM python:3.10-slim as poetry-export
+FROM python:3.11-slim as poetry-export
 
 WORKDIR /export_staging
 
@@ -12,9 +12,9 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 COPY dagster/pyproject.toml dagster/poetry.lock dagster/poetry.toml /export_staging/
 
 # export dependencies into requirements.txt
-RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes
+RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes --with pipelines,dagster,auth
 
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # install gcc
 RUN apt-get update && apt-get install gcc g++ -y
@@ -38,6 +38,6 @@ WORKDIR $DAGSTER_HOME
 
 COPY dagster/dagster.yaml $DAGSTER_HOME
 COPY dagster/workspace.yaml $DAGSTER_HOME
-COPY dagster ./dagster
+COPY dagster/src ./src
 
-CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "dagster/src/definitions.py"]
+CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "src/definitions.py"]
