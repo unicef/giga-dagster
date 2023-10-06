@@ -12,7 +12,7 @@ tasks:
   default:
     desc: Build and start Docker containers
     cmds:
-      - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
+      - docker compose -f docker-compose-local.yaml --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
 
   setup:
     desc: Run all first-time setup tasks
