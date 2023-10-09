@@ -1,4 +1,4 @@
-site_name: Giga Ingestion Portal
+site_name: Giga Dagster
 
 nav:
   - Introduction: 'README.md'

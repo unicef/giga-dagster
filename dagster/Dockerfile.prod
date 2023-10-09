@@ -18,7 +18,7 @@ WORKDIR /tmp
 COPY pyproject.toml poetry.lock ./
 
 # Convert package manifests to requirements.txt format and exclude dev dependencies
-RUN poetry export -f requirements.txt --without-hashes --without dev > requirements.txt
+RUN poetry export -f requirements.txt --without-hashes --without dev --with dagster,pipelines > requirements.txt
 
 FROM base AS prod
 
@@ -34,6 +34,6 @@ WORKDIR /app
 COPY src ./src
 
 # Read the PORT environment variable, otherwise default to the specified port
-ENV PORT 8088
+ENV PORT 3002
 
 CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]

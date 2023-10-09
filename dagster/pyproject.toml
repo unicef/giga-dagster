@@ -6,7 +6,7 @@ authors = ["Thinking Machines <hello@thinkingmachin.es>"]
 readme = "../docs/README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.13"
 
 [tool.poetry.group.dagster]
 optional = true
@@ -31,8 +31,11 @@ dagster-k8s = "0.21.0"
 deltalake = "^0.10.2"
 great-expectations = { version = "<0.17.12", extras = ["azure"] }
 azure-storage-blob = "^12.17.0"
+azure-storage-file-datalake = "^12.13.1"
 pytest-cov = "4.0.0"
 azure-identity = "^1.14.0"
+scipy = ">=1.10.0"
+cryptography = ">=41.0.4"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"

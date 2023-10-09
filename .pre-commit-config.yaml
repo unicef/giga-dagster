@@ -29,6 +29,7 @@ repos:
         args: [ '--fix=lf' ]
       - id: check-merge-conflict
       - id: check-yaml
+        exclude: helm/.+/templates/.+
   - repo: https://github.com/zricethezav/gitleaks
     rev: v8.18.0
     hooks:
