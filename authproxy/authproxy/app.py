@@ -3,7 +3,6 @@ from datetime import timedelta
 import httpx
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -20,12 +19,6 @@ from authproxy.lib.templates import templates
 from authproxy.settings import settings
 
 app = FastAPI(title="Giga Dagster", docs_url=None, redoc_url=None)
-
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS,
-    www_redirect=False,
-)
 
 app.add_middleware(
     CORSMiddleware,
