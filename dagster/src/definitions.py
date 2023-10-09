@@ -10,7 +10,7 @@ from src.transforms.assets.great_expectations import (
 )
 
 io_managers = {
-    "dev": fs_io_manager.configured({"base_dir": "/tmp/io_manager_storage"}),
+    "development": fs_io_manager.configured({"base_dir": "/tmp/io_manager_storage"}),
 }
 
 defs = Definitions(

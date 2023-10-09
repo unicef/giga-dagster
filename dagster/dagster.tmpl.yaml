@@ -14,11 +14,12 @@ run_launcher:
       - DAGSTER_POSTGRES_HOST
       - DAGSTER_POSTGRES_PASSWORD
       - DAGSTER_POSTGRES_DB
-    network: dagster-giga-network
+    network: giga-dataops-platform_dagster_default
     container_kwargs:
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
         - /tmp/io_manager_storage:/tmp/io_manager_storage
+        - "{{.PWD}}:/app"
 
 run_coordinator:
   module: dagster.core.run_coordinator
@@ -40,7 +41,7 @@ run_storage:
       db_name:
         env: DAGSTER_POSTGRES_DB
       port: 5432
-      
+
 schedule_storage:
   module: dagster_postgres.schedule_storage
   class: PostgresScheduleStorage
@@ -61,7 +62,7 @@ event_log_storage:
   class: PostgresEventLogStorage
   config:
     postgres_db:
-      hostname: 
+      hostname:
         env: DAGSTER_POSTGRES_HOST
       username:
         env: DAGSTER_POSTGRES_USER

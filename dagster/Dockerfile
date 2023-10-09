@@ -1,43 +1,28 @@
-FROM python:3.11-slim as poetry-export
-
-WORKDIR /export_staging
-
-# install curl
-RUN apt-get update && apt-get install curl -y
-
-# install poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
-
-# copy poetry files
-COPY dagster/pyproject.toml dagster/poetry.lock dagster/poetry.toml /export_staging/
-
-# export dependencies into requirements.txt
-RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes --with pipelines,dagster
-
 FROM python:3.11-slim
 
-# install gcc
-RUN apt-get update && apt-get install gcc g++ -y
+# Standard Python flags
+ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE 1
 
-# disable bytecode generation
-ENV PYTHONDONTWRITEBYTECODE=1
+ARG POETRY_VERSION=1.6.1
 
-# allow stdout streams to be sent straight to terminal
-ENV PYTHONUNBUFFERED=1
+# Move to a temporary directory
+WORKDIR /tmp
 
-COPY --from=poetry-export /export_staging/requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+# Install poetry and set to not create an additional virtualenv (we are already in a container)
+RUN pip install "poetry==$POETRY_VERSION" && \
+    poetry config virtualenvs.create false
 
-# Remove unnecessary stuff to make the image smaller
-RUN apt-get autoremove -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+# Copy package manifests inside the container
+COPY pyproject.toml poetry.lock ./
 
-# set DAGSTER_HOME, then copy configs and pipeline files into it
-ENV DAGSTER_HOME=/opt/dagster/dagster_home
-RUN mkdir -p $DAGSTER_HOME
-WORKDIR $DAGSTER_HOME
+# Install packages based on package manifests
+# This is an automated process: do not ask for user input
+RUN poetry install --no-interaction --no-ansi --with pipelines,dagster
 
-COPY dagster/dagster.yaml $DAGSTER_HOME
-COPY dagster/workspace.yaml $DAGSTER_HOME
-COPY dagster/src ./src
+# Move to the directory where we mount the source code (see: docker-compose.yml)
+ENV DAGSTER_HOME /app
 
-CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "src/definitions.py"]
+WORKDIR /app
+
+CMD [ "dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "./src/definitions.py" ]

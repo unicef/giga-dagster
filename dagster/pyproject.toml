@@ -34,7 +34,6 @@ azure-storage-blob = "^12.17.0"
 pytest-cov = "4.0.0"
 azure-identity = "^1.14.0"
 
-
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
 black = "^23.7.0"
