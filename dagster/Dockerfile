@@ -12,7 +12,7 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 COPY dagster/pyproject.toml dagster/poetry.lock dagster/poetry.toml /export_staging/
 
 # export dependencies into requirements.txt
-RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes --with pipelines,dagster,auth
+RUN /root/.local/bin/poetry export -f requirements.txt --output requirements.txt --without-hashes --with pipelines,dagster
 
 FROM python:3.11-slim
 
