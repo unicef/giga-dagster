@@ -24,6 +24,7 @@ variables:
   azureAdTenantName: $(AZURE_TENANT_NAME)
   azureAdPolicyName: $(AZURE_AUTH_POLICY_NAME)
   azureAdRedirectUri: $(AZURE_REDIRECT_URI)
+  azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   system.debug: true
 
 steps:
@@ -84,6 +85,7 @@ steps:
           AZURE_TENANT_NAME: "$(azureAdTenantName)"
           AZURE_AUTH_POLICY_NAME: "$(azureAdPolicyName)"
           AZURE_REDIRECT_URI: "$(azureAdRedirectUri)"
+          AZURE_LOGOUT_REDIRECT_URI: "$(azureAdLogoutRedirectUri)"
 
   - task: HelmDeploy@0
     displayName: Add Dagster Helm Repo
