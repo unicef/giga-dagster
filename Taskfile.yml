@@ -20,7 +20,7 @@ tasks:
     desc: Generate dagster.yaml with current directory as volume mount
     dir: dagster
     cmds:
-      - cat dagster.tmpl.yaml | yq e ".run_launcher.config.container_kwargs.volumes[2] = \"$(pwd):/app\"" > dagster.yaml
+      - sed "s|.PWD|$(pwd)|" dagster.tmpl.yaml > dagster.yaml
 
   setup:
     desc: Run all first-time setup tasks

@@ -19,7 +19,7 @@ run_launcher:
       volumes:
         - /var/run/docker.sock:/var/run/docker.sock
         - /tmp/io_manager_storage:/tmp/io_manager_storage
-        - "{{.PWD}}:/app"
+        - .PWD:/app
 
 run_coordinator:
   module: dagster.core.run_coordinator
