@@ -19,7 +19,7 @@ services:
 
   dagster-webserver:
     <<: *common-config
-    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]  
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3002", "-w", "workspace.yaml"]  
     build:
       context: .
       dockerfile: dagster/Dockerfile
