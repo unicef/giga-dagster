@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     AZURE_CLIENT_SECRET: str
     AZURE_TENANT_NAME: str
     AZURE_REDIRECT_URI: str
+    AZURE_LOGOUT_REDIRECT_URI: str
     AZURE_AUTH_POLICY_NAME: str
     DAGSTER_WEBSERVER_URL: str
     DAGSTER_WEBSERVER_READONLY_URL: str
@@ -70,12 +71,15 @@ class Settings(BaseSettings):
 
     @property
     def AUTHORITY_URL(self):
-        return f"https://{self.AZURE_TENANT_NAME}.b2clogin.com/{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_AUTH_POLICY_NAME}"
+        # return f"https://{self.AZURE_TENANT_NAME}.b2clogin.com/{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_AUTH_POLICY_NAME}"
+        return "https://login.microsoftonline.com/common"
 
     @property
     def AZURE_AD_SCOPES(self):
         return [
-            f"https://{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_CLIENT_ID}/User.Impersonate"
+            # f"https://{self.AZURE_TENANT_NAME}.onmicrosoft.com/{self.AZURE_CLIENT_ID}/User.Impersonate",
+            "User.ReadBasic.All",
+            "api://1e34b77a-70ed-4c14-a295-f0f47e4b84e1/user_impersonation",
         ]
 
 

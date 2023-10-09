@@ -1,47 +1,54 @@
 from datetime import timedelta
-from http import HTTPStatus
 
 import httpx
-import identity.web
-from loguru import logger
-from quart import (
-    Quart,
-    Response,
-    make_response,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
+from fastapi import FastAPI, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    RedirectResponse,
+    StreamingResponse,
 )
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+from starlette.background import BackgroundTask
+from starlette.middleware.sessions import SessionMiddleware
 
+from authproxy.lib.auth import get_auth
+from authproxy.lib.templates import templates
 from authproxy.settings import settings
 
-app = Quart(
-    __name__,
-    static_url_path="/static",
-    static_folder=settings.BASE_DIR / "authproxy" / "static",
-    template_folder=settings.BASE_DIR / "authproxy" / "templates",
-)
-app.config.update(
-    dict(
-        SECRET_KEY=settings.SECRET_KEY,
-        TEMPLATES_AUTO_RELOAD=True,
-        PERMANENT_SESSION_LIFETIME=timedelta(days=7),
-        SESSION_COOKIE_PATH="/",
-        SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SECURE=settings.IN_PRODUCTION,
-        SESSION_COOKIE_SAMESITE="Strict",
-        TESTING=not settings.IN_PRODUCTION,
-        PROPAGATE_EXCEPTIONS=True,
-    )
+app = FastAPI(title="Giga Dagster", docs_url=None, redoc_url=None)
+
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.ALLOWED_HOSTS,
+    www_redirect=False,
 )
 
-auth = identity.web.Auth(
-    session=session,
-    authority=settings.AUTHORITY_URL,
-    client_id=settings.AZURE_CLIENT_ID,
-    client_credential=settings.AZURE_CLIENT_SECRET,
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+    session_cookie="session",
+    max_age=int(timedelta(days=7).total_seconds()),
+    path="/",
+    same_site="strict",
+    https_only=settings.IN_PRODUCTION,
+)
+
+app.mount(
+    "/static",
+    StaticFiles(directory=settings.BASE_DIR / "authproxy" / "static"),
+    name="static",
 )
 
 upstream_rw = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
@@ -49,7 +56,7 @@ upstream_ro = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_READONLY_URL
 
 
 @app.get("/health")
-async def health():
+async def health(response: Response):
     res = dict(proxy="ok", dagster="unhealthy", dagster_readonly="unhealthy")
 
     try:
@@ -58,8 +65,10 @@ async def health():
             raise ConnectionError(up_rw_res.text)
     except Exception as e:
         logger.error(e)
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
         res["dagster"] = "ok"
+        response.status_code = status.HTTP_200_OK
 
     try:
         up_ro_res = await upstream_ro.get("/server_info")
@@ -67,89 +76,114 @@ async def health():
             raise ConnectionError(up_ro_res.text)
     except Exception as e:
         logger.error(e)
-        status_code = HTTPStatus.SERVICE_UNAVAILABLE
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     else:
         res["dagster_readonly"] = "ok"
-        status_code = HTTPStatus.OK
+        response.status_code = status.HTTP_200_OK
 
-    return make_response(res, status_code)
+    return res
 
 
-@app.get("/login")
-async def login():
-    return await render_template(
+@app.get("/favicon.ico", response_class=FileResponse)
+async def favicon():
+    return settings.BASE_DIR / "authproxy" / "static" / "dagster.svg"
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login(request: Request):
+    auth = get_auth(request.session)
+    return templates.TemplateResponse(
         "login.html.j2",
-        **auth.log_in(
-            scopes=settings.AZURE_AD_SCOPES,
-            redirect_uri=url_for("callback", _external=True),
-        ),
+        context={
+            "request": request,
+            **auth.log_in(
+                scopes=settings.AZURE_AD_SCOPES,
+                redirect_uri=settings.AZURE_REDIRECT_URI,
+            ),
+        },
     )
 
 
-@app.get("/auth/callback")
-async def callback():
+@app.get("/auth/callback", response_class=RedirectResponse)
+async def callback(request: Request):
+    auth = get_auth(request.session)
     try:
-        res = auth.complete_log_in(request.args)
+        res = auth.complete_log_in(dict(request.query_params))
         if "error" in res.keys():
             raise ValueError(res)
     except ValueError as e:
         logger.error(e)
-        return redirect(url_for("auth_error"))
-    return redirect(url_for("proxy"))
+        return "/error"
+    request.session.pop("_token_cache")
+    return "/"
 
 
-@app.get("/logout")
-async def logout():
-    return redirect(auth.log_out(url_for("proxy", _external=True)))
+@app.get("/logout", response_class=RedirectResponse)
+async def logout(request: Request):
+    auth = get_auth(request.session)
+    return auth.log_out(settings.AZURE_LOGOUT_REDIRECT_URI)
 
 
 @app.get("/error")
-async def auth_error():
-    return await render_template(
+async def auth_error(request: Request):
+    auth = get_auth(request.session)
+    return templates.TemplateResponse(
         "error.html.j2",
-        **auth.log_in(
-            scopes=settings.AZURE_AD_SCOPES,
-            redirect_uri=url_for("callback", _external=True),
-        ),
+        context={
+            "request": request,
+            **auth.log_in(
+                scopes=settings.AZURE_AD_SCOPES,
+                redirect_uri=settings.AZURE_REDIRECT_URI,
+            ),
+        },
     )
 
 
 @app.get("/unauthorized")
-async def unauthorized():
-    return await render_template(
+async def unauthorized(request: Request):
+    auth = get_auth(request.session)
+    return templates.TemplateResponse(
         "unauthorized.html.j2",
-        logout_url=auth.log_out(url_for("proxy", _external=True)),
+        context={
+            "request": request,
+            "logout_url": auth.log_out(settings.AZURE_LOGOUT_REDIRECT_URI),
+        },
     )
 
 
-@app.route("/<path:path>")
-@app.route("/", defaults={"path": ""})
-async def proxy(path: str):
+@app.get("/{path:path}", name="proxy")
+@app.post("/{path:path}")
+@app.put("/{path:path}")
+@app.patch("/{path:path}")
+@app.delete("/{path:path}")
+@app.head("/{path:path}")
+@app.options("/{path:path}")
+async def proxy(path: str, request: Request):
+    auth = get_auth(request.session)
     if not (user := auth.get_user()):
         if path.startswith("favicon") or path.startswith("static"):
-            return await make_response("", HTTPStatus.UNAUTHORIZED)
-        return redirect(url_for("login"))
+            return Response("", status_code=status.HTTP_401_UNAUTHORIZED)
+        return RedirectResponse("/login")
 
-    email: str = user.get("emails", [""])[0]
+    email: str = user.get("preferred_username")
     if (email_domain := email.split("@")[-1]) not in settings.EMAIL_DOMAIN_ALLOWLIST:
-        return redirect(url_for("unauthorized"))
+        return RedirectResponse("/unauthorized")
 
     is_tm_user = email_domain == "thinkingmachin.es"
     upstream = upstream_rw if is_tm_user else upstream_ro
 
-    url = httpx.URL(path=path, query=request.query_string)
+    url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
     up_req = upstream.build_request(
         request.method,
         url,
-        headers=[(k, v) for k, v in request.headers.items()],
-        content=await request.get_data(),
+        headers=request.headers.raw,
+        content=request.stream(),
         cookies=request.cookies,
     )
-    up_res = await upstream.send(up_req)
-    res = Response(
-        up_res.content,
-        status=up_res.status_code,
-        headers=dict(up_res.headers),
+    up_res = await upstream.send(up_req, stream=True)
+    return StreamingResponse(
+        up_res.aiter_raw(),
+        status_code=up_res.status_code,
+        headers=up_res.headers,
+        background=BackgroundTask(up_res.aclose),
     )
-    app.add_background_task(up_res.aclose)
-    return res
