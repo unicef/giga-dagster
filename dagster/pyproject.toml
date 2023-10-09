@@ -7,15 +7,32 @@ readme = "../docs/README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-azure-identity = "^1.14.0"
-azure-storage-blob = "^12.17.0"
-dagster = "^1.4.11"
-dagster-ge = "^0.20.11"
-dagster-k8s = "^0.20.16"
-dagster-postgres = "^0.20.11"
-dagster-webserver = "^1.4.11"
+
+[tool.poetry.group.dagster]
+optional = true
+
+[tool.poetry.group.dagster.dependencies]
+dagster = "1.5.0"
+dagster-webserver = "1.5.0"
+dagster_docker = "0.21.0"
+dagster-postgres = "0.21.0"
+
+[tool.poetry.group.pipelines]
+optional = true
+
+[tool.poetry.group.pipelines.dependencies]
+dagster = "1.5.0"
+dagster-webserver = "1.5.0"
+dagster-azure = "0.21.0"
+dagster_docker = "0.21.0"
+dagster-postgres = "0.21.0"
+dagster-ge = "0.21.0"
+dagster-k8s = "0.21.0"
 deltalake = "^0.10.2"
 great-expectations = { version = "<0.17.12", extras = ["azure"] }
+azure-storage-blob = "^12.17.0"
+pytest-cov = "4.0.0"
+azure-identity = "^1.14.0"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
@@ -30,6 +47,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 target-version = ["py311"]
+preview = true
 
 [tool.isort]
 profile = "black"

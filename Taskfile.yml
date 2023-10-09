@@ -13,7 +13,14 @@ tasks:
   default:
     desc: Build and start Docker containers
     cmds:
+      - task: generate-dagster-yaml
       - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
+
+  generate-dagster-yaml:
+    desc: Generate dagster.yaml with current directory as volume mount
+    dir: dagster
+    cmds:
+      - sed "s|.PWD|$(pwd)|" dagster.tmpl.yaml > dagster.yaml
 
   setup:
     desc: Run all first-time setup tasks
@@ -50,12 +57,18 @@ tasks:
   restart:
     desc: Restart containers
     cmds:
+      - task: generate-dagster-yaml
       - docker compose --project-name {{.PROJECT_NAME}} restart {{.CLI_ARGS}}
 
   exec:
     desc: Run a command in the specified container
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} exec {{.CLI_ARGS}}
+
+  ps:
+    desc: Show running processes in this project
+    cmds:
+      - docker compose --project-name {{.PROJECT_NAME}} ps
 
   clean:
     desc: Remove containers

@@ -314,7 +314,7 @@ dagster-user-deployments:
       # needing to restart the user code deployment pod.
       dagsterApiGrpcArgs:
         - "--python-file"
-        - "/app/src/repository.py"
+        - "/app/src/definitions.py"
       port: 3030
 
       # Whether or not to include configuration specified for this user code deployment in the pods

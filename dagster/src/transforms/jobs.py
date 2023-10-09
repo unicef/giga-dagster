@@ -1,5 +1,5 @@
 from dagster import job
-from src.ops.delta_poc_op import write_delta_lake_poc
+from dagster.src.transforms.assets.delta_poc_op import write_delta_lake_poc
 
 
 @job

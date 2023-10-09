@@ -37,7 +37,7 @@ app.add_middleware(
     same_site="lax",
 )
 
-client = httpx.AsyncClient(base_url="http://dagster:3002/")
+client = httpx.AsyncClient(base_url="http://dagster-webserver:3002/")
 
 app.mount(
     "/static",
