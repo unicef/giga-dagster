@@ -19,14 +19,10 @@ services:
 
   dagster-webserver:
     <<: *common-config
-    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
-    ports:
-      - "127.0.0.1:3000:3000"
-    expose:
-      - "3000"    
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]  
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: dagster/Dockerfile
     image: unicef/giga-dataops-platform/dagster-pipelines
     env_file: 
       - .env
@@ -48,7 +44,7 @@ services:
     <<: *common-config
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: dagster/Dockerfile
     image: unicef/giga-dataops-platform/dagster-pipelines
     env_file: 
       - .env
@@ -68,7 +64,7 @@ services:
     <<: *common-config
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: dagster/Dockerfile
     image: unicef/giga-dataops-platform/dagster-pipelines
     command: ["dagster-daemon", "run"]
     env_file: 
