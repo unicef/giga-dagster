@@ -15,7 +15,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -164,10 +163,14 @@ cython_debug/
 
 # Dagster
 .logs_queue/
-logs/
-storage/
-artifacts/
 .nux/
+.telemetry/
+artifacts/
+history/
+logs/
+schedules/
+storage/
+dagster.yaml
 
 # Kubernetes/Helm
 secrets.yaml

@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: dagster
+  name: giga-dagster
   labels:
-    app: dagster
-    repo: giga-dagster
+    app: giga-dagster
 data:
-  AZURE_BLOB_SAS_HOST: "ingestionportalstorage.dfs.core.windows.net"
-  AZURE_BLOB_CONTAINER_NAME: "ingestion-portal-upload"
+  AZURE_BLOB_CONTAINER_NAME: "giga-dataops-dev"
+  DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
+  DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"

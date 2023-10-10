@@ -26,7 +26,7 @@ What does this PR do
 2. Specify which files to review
 3. etc.
 
-## Link to Jira/Asana task (if applicable)
+## Link to Jira/Asana/Airtable task (if applicable)
 
 _placeholder_
 

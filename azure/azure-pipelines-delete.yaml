@@ -1,0 +1,52 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
+  kubernetesNamespace: $(KUBERNETES_NAMESPACE)
+  system.debug: true
+
+steps:
+  - task: HelmDeploy@0
+    displayName: Helm uninstall Dagster
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
+      command: uninstall
+      arguments: dagster
+
+  - task: HelmDeploy@0
+    displayName: Helm uninstall authproxy
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      namespace: $(kubernetesNamespace)
+      command: uninstall
+      arguments: dagster-authproxy
+
+  - task: Kubernetes@1
+    displayName: Delete resources in namespace
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: delete
+      arguments: all --all
+      namespace: $(kubernetesNamespace)
+
+  - task: Kubernetes@1
+    displayName: Delete PVCs in namespace
+    continueOnError: true
+    inputs:
+      connectionType: Kubernetes Service Connection
+      kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+      command: delete
+      arguments: pvc --all
+      namespace: $(kubernetesNamespace)

@@ -18,10 +18,11 @@ COPY pyproject.toml poetry.lock ./
 
 # Install packages based on package manifests
 # This is an automated process: do not ask for user input
-RUN poetry install --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi --with pipelines,dagster
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
+ENV DAGSTER_HOME /app
+
 WORKDIR /app
 
-# Run the development server and listen on the specified port
-CMD [ "dagster", "dev", "-h", "0.0.0.0", "-p", "3002" ]
+CMD [ "dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "./src/definitions.py" ]
