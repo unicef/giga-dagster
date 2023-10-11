@@ -159,14 +159,6 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
     kubectl ns
     ```
 
-### Cloning and Installation
-
-1. `git clone` the repository to your workstation.
-2. Run initial setup:
-    ```shell
-    task setup
-    ```
-
 #### pyenv
 
 1. Install Python build dependencies:
@@ -238,6 +230,14 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
     task --version
     ```
 
+### Cloning and Installation
+
+1. `git clone` the repository to your workstation.
+2. Run initial setup:
+    ```shell
+    task setup
+    ```
+   
 ### Environment Setup
 
 `task setup` will copy the contents of `dagster/.env.example`
