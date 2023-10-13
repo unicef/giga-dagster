@@ -9,7 +9,6 @@ readme = "../docs/README.md"
 python = ">=3.11,<3.13"
 scipy = ">=1.10.0"
 cryptography = ">=41.0.4"
-urllib3 = ">=2.0.6"
 
 [tool.poetry.group.dagster]
 optional = true
