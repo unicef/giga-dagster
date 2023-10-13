@@ -170,7 +170,6 @@ history/
 logs/
 schedules/
 storage/
-dagster.yaml
 
 # Kubernetes/Helm
 secrets.yaml
