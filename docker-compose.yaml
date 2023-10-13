@@ -21,6 +21,8 @@ services:
       - ./dagster:/app
     depends_on:
       - dagster-storage
+    ports:
+      - "3001:3002"
 
   dagster-webserver-readonly:
     <<: *common-config
@@ -41,15 +43,15 @@ services:
     depends_on:
       - dagster-storage
 
-  authproxy:
-    <<: *common-config
-    build: ./authproxy
-    image: unicef/giga-dataops-platform/dagster-authproxy
-    env_file: ./authproxy/.env
-    volumes:
-      - ./authproxy:/app
-    ports:
-      - "3001:3001"
+#  authproxy:
+#    <<: *common-config
+#    build: ./authproxy
+#    image: unicef/giga-dataops-platform/dagster-authproxy
+#    env_file: ./authproxy/.env
+#    volumes:
+#      - ./authproxy:/app
+#    ports:
+#      - "3001:3001"
 
 volumes:
   dagster-storage:
