@@ -1,19 +1,6 @@
 x-common-config: &common-config
   init: true
-  restart: on-failure
-
-x-common-dagster: &common-dagster
-  environment:
-    ENVIRONMENT: ${PYTHON_ENV}
-    DAGSTER_CURRENT_IMAGE: ${DAGSTER_CURRENT_IMAGE}
-    DAGSTER_POSTGRES_USER: ${POSTGRESQL_USERNAME}
-    DAGSTER_POSTGRES_PASSWORD: ${POSTGRESQL_PASSWORD}
-    DAGSTER_POSTGRES_DB: ${POSTGRESQL_DATABASE}
-    DAGSTER_POSTGRES_HOST: dagster-storage
-  volumes:
-    - /var/run/docker.sock:/var/run/docker.sock
-    - /tmp/io_manager_storage:/tmp/io_manager_storage
-    - ./dagster:/app
+  restart: unless-stopped
 
 services:
   dagster-storage:
@@ -23,66 +10,36 @@ services:
     volumes:
       - dagster-storage:/bitnami/postgresql
 
-  dagster-pipelines:
-    <<: [ *common-config, *common-dagster ]
+  dagster-webserver:
+    <<: *common-config
     build: ./dagster
-    image: ${DAGSTER_CURRENT_IMAGE}
+    image: unicef/giga-dataops-platform/dagster
     env_file: ./dagster/.env
+    environment:
+      DAGSTER_HOME: /app
     volumes:
       - ./dagster:/app
     depends_on:
       - dagster-storage
 
-  dagster-webserver:
-    <<: [ *common-config, *common-dagster ]
-    command:
-      - "dagster-webserver"
-      - "-h"
-      - "0.0.0.0"
-      - "-p"
-      - "3002"
-      - "-w"
-      - "workspace.yaml"
-    build: ./dagster
-    image: ${DAGSTER_CURRENT_IMAGE}
-    env_file: ./dagster/.env
-    depends_on:
-      - dagster-storage
-      - dagster-pipelines
-
   dagster-webserver-readonly:
-    <<: [ *common-config, *common-dagster ]
+    <<: *common-config
     command:
       - "dagster-webserver"
       - "-h"
       - "0.0.0.0"
       - "-p"
       - "3003"
-      - "-w"
-      - "workspace.yaml"
       - "--read-only"
     build: ./dagster
-    image: ${DAGSTER_CURRENT_IMAGE}
+    image: unicef/giga-dataops-platform/dagster
     env_file: ./dagster/.env
+    environment:
+      DAGSTER_HOME: /app
+    volumes:
+      - ./dagster:/app
     depends_on:
       - dagster-storage
-      - dagster-pipelines
-  
-  dagster-daemon:
-    <<: [ *common-config, *common-dagster ]
-    build: ./dagster
-    image: ${DAGSTER_CURRENT_IMAGE}
-    command:
-      - "dagster-daemon"
-      - "run"
-      - "--grpc-host"
-      - "dagster-pipelines"
-      - "--grpc-port"
-      - "4000"
-    env_file: ./dagster/.env
-    depends_on:
-      - dagster-storage
-      - dagster-pipelines
 
   authproxy:
     <<: *common-config
