@@ -1,60 +1,32 @@
 import io
-from typing import Any
 
 import pandas as pd
-from azure.storage.filedatalake import (
-    DataLakeFileClient,
-    DataLakeServiceClient,
-    StorageStreamDownloader,
-)
+from azure.storage.filedatalake import DataLakeFileClient, StorageStreamDownloader
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
-from src.settings import settings
+
+from .common import get_dir_client, get_file_path_from_context
 
 
 class Adls2CsvIOManager(ConfigurableIOManager):
     path_prefix = "raw"
 
-    def __init__(self, **data):
-        super().__init__(**data)
+    @staticmethod
+    def _type_handler(obj: pd.DataFrame) -> bytes:
+        return obj.to_csv(index=False).encode("utf-8-sig")
 
-    def _get_service_client(self):
-        return DataLakeServiceClient(
-            f"https://{settings.AZURE_BLOB_SAS_HOST}",
-            credential=settings.AZURE_SAS_TOKEN,
-        )
-
-    def _get_fs_client(self):
-        service_client = self._get_service_client()
-        return service_client.get_file_system_client(settings.AZURE_BLOB_CONTAINER_NAME)
-
-    def _get_dir_client(self):
-        fs_client = self._get_fs_client()
-        dir_client = fs_client.get_directory_client(self.path_prefix)
-        if not dir_client.exists():
-            dir_client.create_directory()
-        return dir_client
-
-    def _get_file_path(self, context):
-        file_path = "/".join(context.asset_key.path)
-        context.log.info(f"{file_path=}")
-        return file_path
-
-    def _type_handler(self, context, obj: Any) -> (bytes, str):
-        filename = self._get_file_path(context)
-        if isinstance(obj, pd.DataFrame):
-            return obj.to_csv(index=False).encode("utf-8-sig"), f"{filename}.csv"
-        raise NotImplementedError
-
-    def handle_output(self, context: OutputContext, obj: Any) -> None:
-        text_obj, filename = self._type_handler(context, obj)
-        file_client: DataLakeFileClient = self._get_dir_client().create_file(filename)
+    def handle_output(self, context: OutputContext, obj: pd.DataFrame) -> None:
+        text_obj = self._type_handler(obj)
+        filename = f"{get_file_path_from_context(context)}.csv"
+        dir_client = get_dir_client(filename)
+        file_client: DataLakeFileClient = dir_client.create_file(filename)
         with io.BytesIO(text_obj) as buffer:
             file_client.upload_data(buffer, overwrite=True)
 
     def load_input(self, context: InputContext) -> pd.DataFrame:
-        filename = self._get_file_path(context)
-        file_client = self._get_dir_client().get_file_client(f"{filename}.csv")
+        filename = get_file_path_from_context(context)
+        dir_client = get_dir_client(filename)
+        file_client = dir_client.get_file_client(f"{filename}.csv")
         file_stream: StorageStreamDownloader = file_client.download_file()
         with io.BytesIO() as buffer:
             file_stream.readinto(buffer)

@@ -16,13 +16,19 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
+    # Optional to be in .env; assumes `production` if not set
     PYTHON_ENV: Environment = Environment.PRODUCTION
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+
+    # Settings that must be present in .env
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_SAS_HOST: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
+    DAGSTER_CURRENT_IMAGE: str
+
+    # App settings
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
     @property
     def IN_PRODUCTION(self):
