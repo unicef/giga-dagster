@@ -9,6 +9,7 @@ readme = "../docs/README.md"
 python = ">=3.11,<3.13"
 scipy = ">=1.10.0"
 cryptography = ">=41.0.4"
+pydantic = "<2"
 
 [tool.poetry.group.dagster.dependencies]
 dagster = "1.5.0"
