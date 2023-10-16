@@ -4,7 +4,7 @@ from dagster import RunRequest, SensorEvaluationContext, sensor
 from src.io_managers.common import get_fs_client
 from src.jobs.log_added_file import log_file_job
 
-ADLS_SENSE_DIRECTORY = "sense"
+ADLS_SENSE_DIRECTORY = "sensor-test"
 
 
 @sensor(
