@@ -9,6 +9,7 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
+  containerRegistryName: $(ACR_NAME)
   containerRegistryServiceConnection: $(ACR_SERVICE_CONNECTION)
   kubernetesServiceConnection: $(KUBERNETES_SERVICE_CONNECTION)
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
@@ -119,9 +120,9 @@ steps:
       namespace: $(kubernetesNamespace)
       arguments: >
         --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
-        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
         --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
-        --set pipelineRun.image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster"
+        --set pipelineRun.image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
         --set pipelineRun.image.tag=$(Build.SourceVersion)
         --set postgresql.postgresqlUsername=$(postgresqlUsername)
         --set postgresql.postgresqlPassword=$(postgresqlPassword)
@@ -138,7 +139,7 @@ steps:
       releaseName: dagster-authproxy
       namespace: $(kubernetesNamespace)
       arguments: >
-        --set image.repository="$(containerRegistryServiceConnection).azurecr.io/giga-dagster-authproxy"
+        --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
         --set image.tag=$(Build.SourceVersion)
 
   - task: Kubernetes@1
