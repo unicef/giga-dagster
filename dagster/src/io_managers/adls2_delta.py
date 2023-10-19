@@ -8,7 +8,7 @@ from .common import get_file_path_from_context
 
 
 class Adls2DeltaLakeIOManager(ConfigurableIOManager):
-    path_prefix = "raw"
+    path_prefix = "fake-gold"
 
     def _get_delta_config(self, filename: str):
         return dict(

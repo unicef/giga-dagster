@@ -1,10 +1,17 @@
 from azure.storage.filedatalake import DataLakeServiceClient
 
+from dagster import InputContext
 from src.settings import settings
 
 
 def get_file_path_from_context(context):
     file_path = "/".join(context.asset_key.path)
+    context.log.info(f"{file_path=}")
+    return file_path
+
+
+def get_file_path_from_context_upstream(context: InputContext):
+    file_path = "/".join(context.upstream_output.asset_key.path)
     context.log.info(f"{file_path=}")
     return file_path
 
