@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./great_expectations/plugins"
+    ]
+}

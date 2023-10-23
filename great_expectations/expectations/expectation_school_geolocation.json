@@ -1,0 +1,221 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "expectation_school_geolocation",
+  "expectations": [
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": {
+        "column": "school_id"
+      },
+      "meta": {
+        "notes": {
+          "content": "This indicates if the school_id is unique",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_compound_columns_to_be_unique",
+      "kwargs": {
+        "column_list": [
+          "school_id",
+          "school_name",
+          "education_level",
+          "latitude",
+          "longitude"
+        ]
+      },
+      "meta": {
+        "notes": {
+          "content": "This indicates the uniqueness of compound columns ['school_id', 'school_name', 'education_level', 'latitude', 'longitude']",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_compound_columns_to_be_unique",
+      "kwargs": {
+        "column_list": [
+          "school_name",
+          "education_level",
+          "latitude",
+          "longitude"
+        ]
+      },
+      "meta": {
+        "notes": {
+          "content": "This indicates the uniqueness of compound columns ['school_name', 'education_level', 'latitude', 'longitude']",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "school_name"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column school_name to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "longitude"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column longitude to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "latitude"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column latitude to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "education_level"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column education_level to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "mobile_internet_generation"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column mobile_internet_generation to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "internet_availability"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column internet_availability to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "internet_type"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column internet_type to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "internet_speed_mbps"
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column internet_speed_mbps to have a value.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "internet_speed_mbps",
+        "max_value": 20,
+        "min_value": 1
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column internet_speed_mbps to have a value between 1 and 20.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "student_count",
+        "max_value": 2500,
+        "min_value": 20
+      },
+      "meta": {
+        "notes": {
+          "content": "This expects the column student_count to have a value between 20 and 2500.",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_same_availability",
+      "kwargs": {
+        "column_A": "internet_availability",
+        "column_B": "internet_type",
+        "mostly": 1.0
+      },
+      "meta": {
+        "notes": {
+          "content": "Indicates if internet_type has value when internet_availability is 'Yes'",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_pair_values_same_availability",
+      "kwargs": {
+        "column_A": "internet_availability",
+        "column_B": "internet_speed_mbps",
+        "mostly": 1.0
+      },
+      "meta": {
+        "notes": {
+          "content": "Indicates if internet_speed_mbps has value when internet_availability is 'Yes'",
+          "format": "markdown"
+        }
+      }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_not_similar",
+      "kwargs": {
+        "column": "school_name"
+      },
+      "meta": {
+        "notes": {
+          "content": "Indicates if school_name is without any similar name.",
+          "format": "markdown"
+        }
+      }
+    }
+  ],
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.17.10+0.g0d308ac69.dirty"
+  }
+}
