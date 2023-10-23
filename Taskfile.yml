@@ -125,14 +125,13 @@ tasks:
         --values authproxy/values.yaml
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
+        --set service.type=LoadBalancer
 
   helm-down:
     desc: Uninstall Helm chart
-    dir: infra
     ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy
       - helm uninstall dagster
-      - kubectl delete -f k8s/configmap.yaml
-      - kubectl delete -f k8s/secrets.yaml
+      - kubectl delete all --all
       - kubectl delete pvc --all

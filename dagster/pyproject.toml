@@ -36,6 +36,9 @@ azure-storage-blob = "^12.17.0"
 azure-storage-file-datalake = "^12.13.1"
 pytest-cov = "4.0.0"
 azure-identity = "^1.14.0"
+geopy = "^2.4.0"
+h3 = "^3.7.6"
+fastparquet = "^2023.8.0"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
