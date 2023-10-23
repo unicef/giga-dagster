@@ -1,41 +1,33 @@
-from datetime import datetime, timedelta
-
-from dagster import RunRequest, SensorEvaluationContext, sensor
+from dagster import RunRequest, sensor
 from src.io_managers.common import get_fs_client
-from src.jobs.log_added_file import log_file_job
-
-ADLS_SENSE_DIRECTORY = "sensor-test"
+from src.jobs.data_passthrough import move_to_gold_job
+from src.settings import settings
 
 
 @sensor(
-    job=log_file_job,
-    minimum_interval_seconds=int(
-        timedelta(minutes=5).total_seconds(),
-    ),
+    job=move_to_gold_job,
+    minimum_interval_seconds=30,
 )
-def adls_new_file(context: SensorEvaluationContext):
-    last_creation_time = float(context.cursor) if context.cursor else 0
-    max_creation_time = last_creation_time
-
+def adls_new_file():
     fs_client = get_fs_client()
-    for path in fs_client.get_paths(path=ADLS_SENSE_DIRECTORY, recursive=False):
-        path_creation_time: datetime = path["creation_time"]
-        path_time = path_creation_time.timestamp()
-        if path_time <= last_creation_time:
+    for path in fs_client.get_paths(path=settings.ADLS_SENSE_DIRECTORY, recursive=True):
+        if path["is_directory"]:
             continue
+
+        *path_prefix, filename = path["name"].split("/")
+        no_root_path_prefix = path_prefix[1:]
+        chroot_path_prefix = ["fake-gold", *no_root_path_prefix]
+        config = dict(
+            source_path_prefix="/".join(path_prefix),
+            destination_path_prefix="/".join(chroot_path_prefix),
+            filename=filename,
+        )
 
         yield RunRequest(
             run_key=path["name"],
             run_config={
                 "ops": {
-                    "read_filename": {
-                        "config": {
-                            "filename": path["name"],
-                        },
-                    },
+                    "move_to_gold_as_delta_table": dict(config=config),
                 },
             },
         )
-        max_creation_time = max(max_creation_time, path_time)
-
-    context.update_cursor(str(max_creation_time))

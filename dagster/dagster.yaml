@@ -21,7 +21,10 @@ run_launcher:
 
 run_coordinator:
   module: dagster.core.run_coordinator
-  class: DefaultRunCoordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 10
+    dequeue_use_threads: true
 
 compute_logs:
   module: dagster.core.storage.local_compute_log_manager
