@@ -1,0 +1,82 @@
+fluent_datasources:
+  azure_blob_storage:
+    type: pandas_abs
+    assets:
+      school_geolocation_parquet:
+        type: parquet
+        batching_regex: (.*).parquet
+        connect_options:
+          abs_container: giga-dataops-dev
+          abs_name_starts_with: bronze/school-geolocation-data/
+    azure_options:
+      account_url: ${AZURE_STORAGE_URL}
+      credential: ${AZURE_SAS_TOKEN}
+config_version: 3.0
+datasources:
+  pandas_datasource:
+    class_name: Datasource
+    module_name: great_expectations.datasource
+    execution_engine:
+      class_name: PandasExecutionEngine
+      module_name: great_expectations.execution_engine
+    data_connectors:
+      runtime_data_connector:
+        name: runtime_data_connector
+        class_name: RuntimeDataConnector
+        module_name: great_expectations.datasource.data_connector
+        batch_identifiers:
+          - id_key_0
+          - id_key_1
+expectations_store_name: expectations_store
+validations_store_name: validations_store
+evaluation_parameter_store_name: evaluation_parameter_store
+checkpoint_store_name: checkpoint_store
+profiler_store_name: profiler_store
+plugins_directory: plugins/expectations/
+stores:
+  expectations_store:
+    class_name: ExpectationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: expectations/
+
+  validations_store:
+    class_name: ValidationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/validations/
+  evaluation_parameter_store:
+    class_name: EvaluationParameterStore
+  checkpoint_store:
+    class_name: CheckpointStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: checkpoints/
+  # expectations_store:
+  #   class_name: ExpectationsStore
+  #   store_backend:
+  #     class_name: InMemoryStoreBackend
+  # validations_store:
+  #   class_name: ValidationsStore
+  #   store_backend:
+  #     class_name: InMemoryStoreBackend
+  # evaluation_parameter_store:
+  #   class_name: EvaluationParameterStore
+  # checkpoint_store:
+  #   class_name: CheckpointStore
+  #   store_backend:
+  #     class_name: InMemoryStoreBackend
+  profiler_store:
+    class_name: ProfilerStore
+    store_backend:
+      class_name: InMemoryStoreBackend
+notebooks:
+data_docs_sites: {}
+config_variables_file_path: uncommitted/config_variables.yml
+anonymous_usage_statistics:
+  data_context_id: 8d1da6f3-73e3-40f9-b2fc-bbcd1b771a82
+  enabled: true
+include_rendered_content:
+  globally: false
+  expectation_suite: false
+  expectation_validation_result: false
