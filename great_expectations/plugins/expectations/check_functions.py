@@ -2,14 +2,12 @@ import decimal
 
 # Name Similarity: Can use fuzzywuzzy or thefuzz instead
 import difflib
-import uuid
 
 import country_converter as coco
 
 # Geospatial
 import geopandas as gpd
 import geopy.distance
-import h3
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
 from shapely.geometry import Point
@@ -17,40 +15,6 @@ from shapely.ops import nearest_points
 
 DUPLICATE_SCHOOL_DISTANCE = 100
 DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"  # To Do: Convert to Azure Data Lake Storage
-
-# STANDARDIZATION FUNCTIONS
-
-
-def create_giga_school_id(row):
-    return str(
-        uuid.uuid3(
-            uuid.NAMESPACE_DNS,
-            (
-                str(row["school_id"])
-                + str(row["school_name"])
-                + str(row["education_level"])
-                + str(row["latitude"])
-                + str(row["longitude"])
-            ),
-        )
-    )
-
-
-# Note: Temporary function for transforming raw files to standardized columns.
-# This should eventually be converted to dbt transformations.
-def create_bronze_layer_columns(df):
-    # ID
-    df["giga_id_school"] = df.apply(create_giga_school_id, axis="columns")
-    # School Density Computation
-    df["hex8"] = df.apply(
-        lambda row: h3.geo_to_h3(
-            float(row["latitude"]), float(row["longitude"]), resolution=8
-        ),
-        axis="columns",
-    )
-    df["school_density"] = df.groupby(["hex8"])["giga_id_school"].transform("size")
-
-    return df
 
 
 # CHECK FUNCTIONS
