@@ -26,7 +26,6 @@ def _infer_filetype(filename: str, filetype: str) -> str:
         if (ext := filename_split[-1].lower()) in ["xls", "xlsx"]:
             return "excel"
         return ext
-
     return filetype
 
 
@@ -63,9 +62,12 @@ def adls_loader(
                 options = {}
                 if filetype not in ADLS_SUPPORTED_FILE_TYPES:
                     raise NotImplementedError(f"Unsupported file type `{filetype}`")
+
                 if filetype == "excel":
                     options.update(dict(header=1))
+
                 df = getattr(pd, f"read_{filetype}")(buffer, **options)
+
     return df
 
 
@@ -75,6 +77,7 @@ def adls_saver(
     filename: str,
     filetype: AdlsSupportedFileTypes = None,
 ) -> None:
+    filename = filename.replace(" ", "-")
     filetype = _infer_filetype(filename, filetype)
     match filetype:
         case "delta":
@@ -100,11 +103,11 @@ def adls_saver(
             if filetype not in ADLS_SUPPORTED_FILE_TYPES:
                 raise NotImplementedError(f"Unsupported file type `{filetype}`")
 
-            common_args = dict(index=False)
+            options = dict(index=False)
             if filetype == "json":
-                common_args.update(dict(indent=2, orient="records"))
+                options.update(dict(indent=2, orient="records"))
 
-            text_data = getattr(df, f"to_{filetype}")(*common_args)
+            text_data = getattr(df, f"to_{filetype}")(*options)
             if not isinstance(text_data, bytes):
                 text_data = text_data.encode()
 
