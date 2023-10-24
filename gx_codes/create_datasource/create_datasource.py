@@ -14,8 +14,8 @@ azure_options = {
     "credential": AZURE_SAS_TOKEN,
 }
 
-asset_name = "school_geolocation"
-batching_regex = r"(.*)"
+asset_name = "school_geolocation_parquet"
+batching_regex = r"(.*).parquet"
 abs_container = "giga-dataops-dev"
 abs_name_starts_with = "bronze/school-geolocation-data/"
 
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     context = gx.get_context(context_root_dir=context_root_dir)
 
     datasource = context.get_datasource(datasource_name)
-    data_asset = datasource.add_csv_asset(
+    data_asset = datasource.add_parquet_asset(
         name=asset_name,
         batching_regex=batching_regex,
         abs_container=abs_container,
