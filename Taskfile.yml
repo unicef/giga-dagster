@@ -11,6 +11,10 @@ vars:
 
 tasks:
   default:
+    cmds:
+      - task: up
+
+  up:
     desc: Build and start Docker containers
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
@@ -18,10 +22,16 @@ tasks:
   setup:
     desc: Run all first-time setup tasks
     cmds:
-      - pip install -U pre-commit
-      - pre-commit install
+      - task: setup-pre-commit
       - task: setup-dagster
       - task: setup-authproxy
+
+  setup-pre-commit:
+    internal: true
+    desc: Run first-time setup tasks for pre-commit
+    cmds:
+      - pip install -U pre-commit
+      - pre-commit install
 
   setup-dagster:
     internal: true
@@ -29,7 +39,7 @@ tasks:
     dir: dagster
     cmds:
       - poetry env use 3.11
-      - poetry install
+      - poetry install --with dev,dagster,pipelines
       - cp .env.example .env
 
   setup-authproxy:
