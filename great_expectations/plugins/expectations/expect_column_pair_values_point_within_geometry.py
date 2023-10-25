@@ -1,7 +1,17 @@
+"""
+This is a template for creating custom ColumnPairMapExpectations.
+For detailed instructions on how to use it, please see:
+    https://docs.greatexpectations.io/docs/guides/expectations/creating_custom_expectations/how_to_create_custom_column_pair_map_expectations
+"""
+
 from typing import Optional
 
 import pandas as pd
-from check_functions import has_same_availability
+from check_functions import (
+    is_within_boundary_distance,
+    is_within_country_gadm,
+    is_within_country_geopy,
+)
 from great_expectations.core.expectation_configuration import ExpectationConfiguration
 
 # from great_expectations.exceptions import InvalidExpectationConfigurationError
@@ -17,9 +27,9 @@ from great_expectations.expectations.metrics.map_metric_provider import (
 
 # This class defines a Metric to support your Expectation.
 # For most ColumnPairMapExpectations, the main business logic for calculation will live in this class.
-class ColumnPairValuesSameAvailability(ColumnPairMapMetricProvider):
+class ColumnPairValuesToBeWithinGeometry(ColumnPairMapMetricProvider):
     # This is the id string that will be used to reference your metric.
-    condition_metric_name = "column_pair_values.same_availability"
+    condition_metric_name = "column_pair_values.within_geometry"
     # These point your metric at the provided keys to facilitate calculation
     condition_domain_keys = (
         "column_A",
@@ -31,10 +41,14 @@ class ColumnPairValuesSameAvailability(ColumnPairMapMetricProvider):
     @column_pair_condition_partial(engine=PandasExecutionEngine)
     def _pandas(cls, column_A, column_B, **kwargs):
         results = []
-        for availability, value in zip(column_A, column_B):
-            result = has_same_availability(availability, value)
-            results.append(result)
-        print(results)
+        country_code_iso3 = kwargs.get("country_code", None)
+        for latitude, longitude in zip(column_A, column_B):
+            is_within = (
+                is_within_country_gadm(latitude, longitude, country_code_iso3)
+                or is_within_country_geopy(latitude, longitude, country_code_iso3)
+                or is_within_boundary_distance(latitude, longitude, country_code_iso3)
+            )
+            results.append(is_within)
         return pd.Series(results)
 
     # This method defines the business logic for evaluating your metric when using a SqlAlchemyExecutionEngine
@@ -49,25 +63,43 @@ class ColumnPairValuesSameAvailability(ColumnPairMapMetricProvider):
 
 
 # This class defines the Expectation itself
-class ExpectColumnPairValuesSameAvailability(ColumnPairMapExpectation):
-    """Expect column pairs to have consistent availability and value status."""
+class ExpectColumnPairValuesToBeWithinGeometry(ColumnPairMapExpectation):
+    """Expect the point to be within the geospatial shape."""
 
     # These examples will be shown in the public gallery.
     # They will also be executed as unit tests for your Expectation.
-    # examples = []
     examples = [
         {
             "data": {
-                "col_a": ["yes", "yes", "yes", "yes", "no"],
-                "col_b": ["2G", "3G", "4G", "5G", ""],
-                "col_b_negative": ["2G", "3G", "", "", "3G"],
+                # latitude
+                "col_a": [
+                    -88.19756,
+                    -88.19756,
+                    -88.19756,
+                    -88.19756,
+                    -88.19756,
+                ],
+                # longitude
+                "col_b": [
+                    17.49952,
+                    17.49952,
+                    17.49952,
+                    17.49952,
+                    17.49952,
+                ],
+                "country": "BLZ",
             },
             "tests": [
                 {
                     "title": "basic_positive_test",
                     "exact_match_out": False,
-                    "include_in_gallery": True,
-                    "in": {"column_A": "col_a", "column_B": "col_b", "mostly": 0.8},
+                    "include_in_gallery": False,
+                    "in": {
+                        "column_A": "col_a",
+                        "column_B": "col_b",
+                        "iso_country_code": "country",
+                        "mostly": 0.8,
+                    },
                     "out": {
                         "success": True,
                     },
@@ -75,11 +107,12 @@ class ExpectColumnPairValuesSameAvailability(ColumnPairMapExpectation):
                 {
                     "title": "basic_negative_test",
                     "exact_match_out": False,
-                    "include_in_gallery": True,
+                    "include_in_gallery": False,
                     "in": {
                         "column_A": "col_a",
-                        "column_B": "col_b_negative",
-                        "mostly": 0.8,
+                        "column_B": "col_b",
+                        "iso_country_code": "country",
+                        "mostly": 1,
                     },
                     "out": {
                         "success": False,
@@ -88,14 +121,16 @@ class ExpectColumnPairValuesSameAvailability(ColumnPairMapExpectation):
             ],
         }
     ]
+
     # This is the id string of the Metric used by this Expectation.
     # For most Expectations, it will be the same as the `condition_metric_name` defined in your Metric class above.
-    map_metric = "column_pair_values.same_availability"
+    map_metric = "column_pair_values.within_geometry"
 
     # This is a list of parameter names that can affect whether the Expectation evaluates to True or False
     success_keys = (
         "column_A",
         "column_B",
+        "iso_country_code",
         "mostly",
     )
 
@@ -140,4 +175,4 @@ class ExpectColumnPairValuesSameAvailability(ColumnPairMapExpectation):
 
 
 if __name__ == "__main__":
-    ExpectColumnPairValuesSameAvailability().print_diagnostic_checklist()
+    ExpectColumnPairValuesToBeWithinGeometry().print_diagnostic_checklist()

@@ -2,9 +2,9 @@ fluent_datasources:
   azure_blob_storage:
     type: pandas_abs
     assets:
-      school_geolocation:
-        type: csv
-        batching_regex: (.*)
+      school_geolocation_parquet:
+        type: parquet
+        batching_regex: (.*).parquet
         connect_options:
           abs_container: giga-dataops-dev
           abs_name_starts_with: bronze/school-geolocation-data/
@@ -32,7 +32,7 @@ validations_store_name: validations_store
 evaluation_parameter_store_name: evaluation_parameter_store
 checkpoint_store_name: checkpoint_store
 profiler_store_name: profiler_store
-plugins_directory: plugins/
+plugins_directory: plugins/expectations/
 stores:
   expectations_store:
     class_name: ExpectationsStore

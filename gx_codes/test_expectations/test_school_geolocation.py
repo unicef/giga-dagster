@@ -4,7 +4,9 @@ context_root_dir = "./great_expectations/"
 context = gx.get_context(context_root_dir=context_root_dir)
 
 # CHECK: Retrieve data asset
-my_asset = context.get_datasource("azure_blob_storage").get_asset("school_geolocation")
+my_asset = context.get_datasource("azure_blob_storage").get_asset(
+    "school_geolocation_parquet"
+)
 
 # Organize Batches
 my_datasource = context.get_datasource("azure_blob_storage")
