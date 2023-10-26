@@ -3,6 +3,8 @@ version: '3'
 dotenv:
   - ./dagster/.env
   - ./authproxy/.env
+  - ./spark/.env
+  - ./hive/.env
 
 vars:
   PROJECT_NAME: giga-dataops-platform_dagster
