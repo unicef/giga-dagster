@@ -1,7 +1,10 @@
+# from dagster import asset
+
 filepath = "raw/school_geolocation/BEN-school_geolocation-20210923.csv"
 
 
-def get_destination_path_from_filepath(filepath):
+# @asset
+def get_destination_path_from_filepath(context, filepath):
     if filepath.split("/", 1)[0] == "raw":
         if filepath.split("/")[1] == "qos":
             destination_prefix = "gold/qos"
@@ -22,10 +25,12 @@ def get_destination_path_from_filepath(filepath):
         destination_prefix = "gold/master_data"
 
     else:
-        print("unknown source prefix")
+        # print("unknown source prefix")
+        context.log.info("unknown source prefix")
 
     destination_filepath = destination_prefix + "/" + filepath.split("/", 1)[1]
+    context.log.info(destination_filepath)
     return destination_filepath
 
 
-get_destination_path_from_filepath(filepath)
+# get_destination_path_from_filepath(filepath)

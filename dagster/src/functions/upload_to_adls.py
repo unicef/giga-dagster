@@ -1,7 +1,8 @@
 from io import BytesIO
 
-import pandas as pd
-from adls_client import ADLSClient
+from src.functions.adls_client import ADLSClient
+
+# import pandas as pd
 
 
 def save_to_adls(data, filename, directory):
@@ -15,6 +16,6 @@ def save_to_adls(data, filename, directory):
     return
 
 
-df = pd.DataFrame([1, 2])
-data = df.to_csv(index=False)
-save_to_adls(data, filename="test12df", directory="adls-test")
+# df = pd.DataFrame([1, 2])
+# data = df.to_csv(index=False)
+# save_to_adls(data, filename="test12df", directory="adls-test")
