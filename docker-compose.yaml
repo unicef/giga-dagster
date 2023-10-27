@@ -1,18 +1,27 @@
-x-dagster-common-config: &dagster-common-config
+x-common-config: &common-config
   init: true
   restart: unless-stopped
+  networks:
+    - giga-dataops
+
+x-dagster-common-config: &dagster-common-config
+  <<: *common-config
   env_file: ./dagster/.env
 
 x-spark-common-config: &spark-common-config
+  <<: *common-config
   user: "1001:1001"
-  image: bitnami/spark:3.5.0
-  restart: unless-stopped
-  init: true
+  build: ./spark
+  image: unicef/giga-dagster/spark
   env_file: ./spark/.env
 
-x-spark-common-env: &spark-common-env
-  SPARK_RPC_AUTHENTICATION_ENABLED: "yes"
-  SPARK_RPC_ENCRYPTION: "yes"
+volumes:
+  dagster-storage:
+  metastore-data:
+
+networks:
+  giga-dataops:
+    external: true
 
 services:
   dagster-storage:
@@ -54,68 +63,70 @@ services:
     ports:
       - "3003:3003"
 
-    #  spark-master:
-    #    <<: *spark-common-config
-    #    environment:
-    #      <<: *spark-common-env
-    #      SPARK_MODE: master
-    #      SPARK_MASTER_PORT: 7077
-    #      SPARK_MASTER_WEBUI_PORT: 8070
-    #    ports:
-    #      - "7077:7077"
-    #      - "8070:8070"
-
   spark-master:
     <<: *spark-common-config
     environment:
-      <<: *spark-common-env
       SPARK_MODE: master
       SPARK_MASTER_PORT: 7077
       SPARK_MASTER_WEBUI_PORT: 8070
-    command:
-      - sbin/start-connect-server.sh
-      - --packages
-      - org.apache.spark:spark-connect_2.12:3.5.0,io.delta:delta-spark_2.12:3.0.0
-      - --conf
-      - fs.azure.account.auth.type.${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net=SharedKey
-      - --conf
-      - fs.azure.account.key.${AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net=${AZURE_SAS_TOKEN}
-    volumes:
-      - ./spark/conf/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-    tmpfs:
-      - /tmp/spark-events:mode=770,size=100m,uid=1001,gid=1001
     ports:
+      - "7077:7077"
       - "8070:8070"
-      - "15002:15002"
 
-#  spark-worker:
-#    <<: *spark-common-config
-#    environment:
-#      <<: *spark-common-env
-#      SPARK_MODE: worker
-#      SPARK_MASTER_URL: spark://spark-master:7077
-#      SPARK_WORKER_CORES: 1
-#      SPARK_WORKER_MEMORY: 256M
-#    deploy:
-#      mode: replicated
-#      replicas: 3
-#      endpoint_mode: dnsrr
-#      restart_policy:
-#        condition: on-failure
-#        delay: 5s
-#        max_attempts: 3
-#        window: 120s
+  spark-worker:
+    <<: *spark-common-config
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_CORES: 1
+      SPARK_WORKER_MEMORY: 1024M
+    deploy:
+      mode: replicated
+      replicas: 3
+      endpoint_mode: dnsrr
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
 
-#  authproxy:
-#    <<: *common-config
-#    build: ./authproxy
-#    image: unicef/giga-dataops-platform/dagster-authproxy
-#    env_file: ./authproxy/.env
-#    volumes:
-#      - ./authproxy:/app
-#    ports:
-#      - "3001:3001"
+  #  authproxy:
+  #    <<: *common-config
+  #    build: ./authproxy
+  #    image: unicef/giga-dataops-platform/dagster-authproxy
+  #    env_file: ./authproxy/.env
+  #    volumes:
+  #      - ./authproxy:/app
+  #    ports:
+  #      - "3001:3001"
 
-volumes:
-  dagster-storage:
-  metastore-data:
+  #  metastore:
+  #    image: apache/hive:3.1.3
+  #    <<: *common-config
+  #    env_file: ./hive/.env
+  #    environment:
+  #      SERVICE_NAME: metastore
+  #      DB_DRIVER: postgres
+  #      SERVICE_OPTS: >
+  #        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
+  #        -Djavax.jdo.option.ConnectionURL=jdbc:postgresql://metastore-storage:5432/${HIVE_POSTGRESQL_DATABASE}
+  #        -Djavax.jdo.option.ConnectionUserName=${HIVE_POSTGRESQL_USERNAME}
+  #        -Djavax.jdo.option.ConnectionPassword=${HIVE_POSTGRESQL_PASSWORD}
+  #    ports:
+  #      - "9083:9083"
+  #    volumes:
+  #      - ./hive/warehouse:/opt/hive/data/warehouse
+  #    depends_on:
+  #      - metastore-storage
+
+  metastore-storage:
+    image: bitnami/postgresql:14
+    <<: *common-config
+    env_file: ./hive/.env
+    environment:
+      POSTGRESQL_USERNAME: ${HIVE_POSTGRESQL_USERNAME}
+      POSTGRESQL_PASSWORD: ${HIVE_POSTGRESQL_PASSWORD}
+      POSTGRESQL_DATABASE: ${HIVE_POSTGRESQL_DATABASE}
+      POSTGRESQL_HOST_AUTH_METHOD: md5
+    volumes:
+      - metastore-data:/bitnami/postgresql

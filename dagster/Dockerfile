@@ -1,4 +1,7 @@
-FROM python:3.11-slim
+FROM python:3.11-bullseye
+
+# Java flags
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64
 
 # Standard Python flags
 ENV PYTHONUNBUFFERED 1
@@ -9,9 +12,17 @@ ARG POETRY_VERSION=1.6.1
 # Move to a temporary directory
 WORKDIR /tmp
 
-# Install poetry and set to not create an additional virtualenv (we are already in a container)
+# Update packages & install JDK
+RUN apt-get update && \
+    apt-get install -y openjdk-11-jdk-headless && \
+    apt-get clean
+
+# Install poetry,
+# set to not create an additional virtualenv (we are already in a container),
+# enable parallel installs
 RUN pip install "poetry==$POETRY_VERSION" && \
-    poetry config virtualenvs.create false
+    poetry config virtualenvs.create false && \
+    poetry config installer.max-workers 4
 
 # Copy package manifests inside the container
 COPY pyproject.toml poetry.lock ./
