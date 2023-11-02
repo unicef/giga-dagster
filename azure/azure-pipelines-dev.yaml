@@ -40,7 +40,7 @@ steps:
     inputs:
       command: buildAndPush
       repository: giga-dagster
-      dockerfile: $(Build.SourcesDirectory)/dagster/Dockerfile.prod
+      dockerfile: $(Build.SourcesDirectory)/dagster/prod.Dockerfile
       containerRegistry: $(containerRegistryServiceConnection)
       tags: |
         $(Build.SourceVersion)
@@ -50,7 +50,7 @@ steps:
     inputs:
       command: buildAndPush
       repository: giga-dagster-authproxy
-      dockerfile: $(Build.SourcesDirectory)/authproxy/Dockerfile.prod
+      dockerfile: $(Build.SourcesDirectory)/authproxy/prod.Dockerfile
       containerRegistry: $(containerRegistryServiceConnection)
       tags: |
         $(Build.SourceVersion)

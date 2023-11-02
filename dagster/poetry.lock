@@ -4047,6 +4047,20 @@ files = [
 ]
 
 [[package]]
+name = "roapi"
+version = "0.10.0"
+description = ""
+optional = false
+python-versions = "*"
+files = [
+    {file = "roapi-0.10.0-py3-none-macosx_10_7_x86_64.whl", hash = "sha256:94cc6ab1376b39302e531419ff2edc4eddb4cd62bd680da7549332979fbd7fa0"},
+    {file = "roapi-0.10.0-py3-none-macosx_10_9_x86_64.macosx_11_0_arm64.macosx_10_9_universal2.whl", hash = "sha256:e45461b7ab101bfa0a043837671ed8305e7b3dbd6991a4f952f5e0729e0be43d"},
+    {file = "roapi-0.10.0-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:ad0e8e335288dcfca42bd67930bd5352842ab3c639fdc107140f6ea98ecd3819"},
+    {file = "roapi-0.10.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:28f83b2c670f3dce01c0b013b9de4775b264ff9ec47bfe3ea71f8e96f60b2579"},
+    {file = "roapi-0.10.0-py3-none-win_amd64.whl", hash = "sha256:ee01027893e063d9dd50d83d6a81b4eacb8284dccedd8bff3b6b73a1e0970941"},
+]
+
+[[package]]
 name = "rpds-py"
 version = "0.10.6"
 description = "Python bindings to Rust's persistent data structures (rpds)"
@@ -5040,4 +5054,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "22fd816039e94a75928365faefb7ea11d48d1651af798fd71a175349a2f5610c"
+content-hash = "e3a70ab14d662e598bcec81852b1bb6d169bc601f18974714a828ffe3bcefa45"

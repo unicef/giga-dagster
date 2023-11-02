@@ -1,20 +1,20 @@
 FROM python:3.11-bullseye
 
-# Java flags
-ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64
-
 # Standard Python flags
 ENV PYTHONUNBUFFERED 1
 ENV PYTHONDONTWRITEBYTECODE 1
-
 ARG POETRY_VERSION=1.6.1
+
+# Java flags
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64
+ENV SPARK_HOME /opt/spark
 
 # Move to a temporary directory
 WORKDIR /tmp
 
 # Update packages & install JDK
 RUN apt-get update && \
-    apt-get install -y openjdk-11-jdk-headless && \
+    apt-get install -y curl wget openjdk-11-jdk-headless && \
     apt-get clean
 
 # Install poetry,
@@ -29,7 +29,24 @@ COPY pyproject.toml poetry.lock ./
 
 # Install packages based on package manifests
 # This is an automated process: do not ask for user input
-RUN poetry install --no-interaction --no-ansi --with pipelines,dagster
+RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,spark
+
+# Download pre-built Spark w/ Hadoop
+RUN wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
+
+# Extract Spark files to $SPARK_HOME
+RUN tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
+    mkdir --parents /opt/spark && \
+    mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}"
+
+# Move to Spark JARs directory and download additional dependencies
+WORKDIR /opt/spark/jars
+
+RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar
+RUN wget https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar
+RUN wget https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
+RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar
+RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
 WORKDIR /app
