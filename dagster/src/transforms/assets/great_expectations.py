@@ -9,7 +9,7 @@ expectation_suite_op = ge_validation_op_factory(
     validation_operator_name="action_list_operator",
 )
 
-expectation_suite_asset = AssetsDefinition.from_op(
+test_expectation_suite_asset = AssetsDefinition.from_op(
     expectation_suite_op,
     keys_by_input_name={"dataset": AssetKey("raw__bank_loans")},
 )
