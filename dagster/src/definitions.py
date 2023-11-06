@@ -1,4 +1,4 @@
-from dagster_ge import ge_data_context
+from dagster_ge.factory import ge_data_context
 
 from dagster import Definitions, fs_io_manager
 from src.datasource1.assets.raw_bank_loans import raw__bank_loans
