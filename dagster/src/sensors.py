@@ -1,7 +1,7 @@
 import os
 
 from dagster import RunRequest, sensor
-from dagster.src.transforms.jobs import (
+from dagster.src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_manual_checks_and_transforms_job,
 )
