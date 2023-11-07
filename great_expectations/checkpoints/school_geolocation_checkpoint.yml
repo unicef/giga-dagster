@@ -21,7 +21,7 @@ runtime_configuration: {}
 validations:
   - batch_request:
       datasource_name: azure_blob_storage
-      data_asset_name: school_geolocation
+      data_asset_name: school_geolocation_parquet
       options: {}
       batch_slice:
     expectation_suite_name: expectation_school_geolocation
