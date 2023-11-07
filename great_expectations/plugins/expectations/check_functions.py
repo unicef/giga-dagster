@@ -13,8 +13,6 @@ from geopy.geocoders import Nominatim
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-MIN_INTERNET_SPEED = 1
-
 DUPLICATE_SCHOOL_DISTANCE = 100
 DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"  # To Do: Convert to Azure Data Lake Storage
 

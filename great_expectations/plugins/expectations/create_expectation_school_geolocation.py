@@ -1,6 +1,11 @@
-import datetime
-
 import tools_expectations as gx_tools
+from config_expectations import (  # CONFIG_COLUMN_SUM,; CONFIG_FIVE_DECIMAL_PLACES,; CONFIG_NOT_SIMILAR_COLUMN,; CONFIG_PAIR_AVAILABILITY,; CONFIG_VALUES_RANGE_COVERAGE_ITU,; CONFIG_VALUES_TYPE,
+    CONFIG_NONEMPTY_COLUMNS,
+    CONFIG_UNIQUE_COLUMNS,
+    CONFIG_UNIQUE_SET_COLUMNS,
+    CONFIG_VALUES_OPTIONS,
+    CONFIG_VALUES_RANGE,
+)
 
 import great_expectations as gx
 
@@ -24,129 +29,6 @@ suite = context.add_or_update_expectation_suite(
 )
 
 # Notes: These value options may eventually be variables on the UI that the user can set.
-
-# Single column checks
-CONFIG_UNIQUE_COLUMNS = ["school_id", "giga_id_school"]
-CONFIG_NONEMPTY_COLUMNS = [
-    "school_name",
-    "longitude",
-    "latitude",
-    "education_level",
-    "mobile_internet_generation",
-    "internet_availability",
-    "internet_type",
-    "internet_speed_mbps",
-]
-CONFIG_NOT_SIMILAR_COLUMN = ["school_name"]
-CONFIG_FIVE_DECIMAL_PLACES = ["latitude", "longitude"]
-
-# Multi-column checks
-CONFIG_UNIQUE_SET_COLUMNS = [
-    ["school_id", "school_name", "education_level", "latitude", "longitude"],
-    ["school_name", "education_level", "latitude", "longitude"],
-]
-
-CONFIG_COLUMN_SUM = [
-    ["student_count_girls", "student_count_boys", "student_count_others"]
-]
-
-# Single Column w/ parameters
-date_today = datetime.date.today()
-current_year = date_today.year
-
-# For GOVERNMENT SCHOOL COLUMNS
-CONFIG_VALUES_RANGE = [
-    # Mandatory
-    {"column": "internet_speed_mbps", "min": 1, "max": 20},
-    {"column": "student_count", "min": 20, "max": 2500},
-    {"column": "latitude", "min": -90, "max": 90},
-    {"column": "longitude", "min": -180, "max": 180},
-    {"column": "school_establishment_year", "min": 1000, "max": current_year},
-    {"column": "latitude", "min": -90, "max": 90},
-    {"column": "longitude", "min": -180, "max": 180},
-    # Calculated
-    {"column": "school_density", "min": 0, "max": 5},
-    # Optional
-    # {"column": "connectivity_speed_static", "min": 0, "max": 200},
-    # {"column": "connectivity_speed_contracted", "min": 0, "max": 500},
-    # {"column": "connectivity_latency_static", "min": 0, "max": 200},
-    # {"column": "num_computers", "min": 0, "max": 500},
-    # {"column": "num_computers_desired", "min": 0, "max": 1000},
-    # {"column": "num_teachers", "min": 0, "max": 200},
-    # {"column": "num_adm_personnel", "min": 0, "max": 200},
-    # {"column": "num_students", "min": 0, "max": 10000},
-    # {"column": "num_classrooms", "min": 0, "max": 200},
-    # {"column": "num_latrines", "min": 0, "max": 200},
-    # {"column": "school_data_collection_year", "min": 1000, "max": current_year},
-]
-
-CONFIG_VALUES_OPTIONS = [
-    {"column": "computer_lab", "set": ["yes", "no"]},
-    {"column": "electricity_availability", "set": ["yes", "no"]},
-    {"column": "water_availability", "set": ["yes", "no"]},
-    {"column": "cellular_network_availability", "set": ["yes", "no"]},
-    {"column": "connectivity_availability", "set": ["yes", "no"]},
-    {"column": "school_is_open", "set": ["yes", "no"]},
-    {"column": "school_daily_check_app", "set": ["yes", "no"]},
-    {"column": "2G_coverage", "set": ["true", "false"]},
-    {"column": "3G_coverage", "set": ["true", "false"]},
-    {"column": "4G_coverage", "set": ["true", "false"]},
-    {
-        "column": "education_level_isced",
-        "set": [
-            "childhood education",
-            "primary education",
-            "secondary education",
-            "post secondary education",
-        ],
-    },
-    {
-        "column": "connectivity_type",
-        "set": [
-            "fiber",
-            "xdsl",
-            "wired",
-            "cellular",
-            "p2mp wireless",
-            "p2p wireless",
-            "satellite",
-            "other",
-        ],
-    },
-    {"column": "school_area_type", "set": ["urban", "rural"]},
-    {"column": "school_type_public", "set": ["public", "not public"]},
-    {
-        "column": "electricity_type",
-        "set": ["electrical grid", "diesel generator", "solar power station", "other"],
-    },
-    {
-        "column": "school_data_collection_modality",
-        "set": ["online", "in-person", "phone", "other"],
-    },
-    {"column": "cellular_network_type", "set": ["2g", "3g", "4g", "5g"]},
-]
-
-# For COVERAGE ITU dataset. To separate COVERAGE ITU expectations into different file.
-CONFIG_VALUES_RANGE_COVERAGE_ITU = [
-    {"column": "fiber_node_distance", "min": 0, "max": None},
-    {"column": "microwave_node_distance", "min": 0, "max": None},
-    {"column": "nearest_school_distance", "min": 0, "max": None},
-    {"column": "schools_within_1km", "min": 0, "max": 20},
-    {"column": "schools_within_1km", "min": 0, "max": 40},
-    {"column": "schools_within_1km", "min": 0, "max": 60},
-    {"column": "schools_within_1km", "min": 0, "max": 100},
-]
-
-CONFIG_VALUES_TYPE = [{"column": "school_id", "type": "int64"}]
-
-# Column Pairs
-CONFIG_PAIR_AVAILABILITY = [
-    {"availability_column": "internet_availability", "value_column": "internet_type"},
-    {
-        "availability_column": "internet_availability",
-        "value_column": "internet_speed_mbps",
-    },
-]
 
 # Setting expectations
 # Single Column Expectations
@@ -176,15 +58,15 @@ for column in CONFIG_NONEMPTY_COLUMNS:
 #     suite.add_expectation(expectation_configuration=gx_config)
 
 # Single Column Expectations w/ parameters
-for column in CONFIG_VALUES_RANGE:
+for value in CONFIG_VALUES_RANGE:
     gx_config = gx_tools.add_expect_column_values_to_be_between(
-        column["column"], column["min"], column["max"]
+        value, CONFIG_VALUES_RANGE[value]["min"], CONFIG_VALUES_RANGE[value]["max"]
     )
     suite.add_expectation(expectation_configuration=gx_config)
 
-for column in CONFIG_VALUES_OPTIONS:
+for value in CONFIG_VALUES_OPTIONS:
     gx_config = gx_tools.add_expect_column_values_to_be_in_set(
-        column["column"], column["set"]
+        value, CONFIG_VALUES_OPTIONS[value]
     )
     suite.add_expectation(expectation_configuration=gx_config)
 

@@ -21,8 +21,7 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --no-interaction --no-ansi --with pipelines,dagster
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
-ENV DAGSTER_HOME /app
-
 WORKDIR /app
 
-CMD [ "dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "./src/definitions.py" ]
+# Run the development server and listen on the specified port
+CMD [ "dagster", "dev", "-h", "0.0.0.0", "-p", "3002" ]

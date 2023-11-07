@@ -30,38 +30,3 @@ if __name__ == "__main__":
         abs_container=abs_container,
         abs_name_starts_with=abs_name_starts_with,
     )
-
-    # datasource = context.sources.add_pandas_abs(
-    #     name=datasource_name, azure_options=azure_options
-    # )
-
-# # Build batch request
-# batch_request = asset.build_batch_request()
-# my_asset = context.get_datasource("bronze_files").get_asset("school_data")
-
-# print(my_asset)
-# print(my_asset.batch_request_options)
-# my_batch_request = my_asset.build_batch_request()
-# my_batch_request = my_asset.build_batch_request(dataframe=dataframe)
-
-# print(my_asset)
-# print(my_asset.batch_request_options)
-# my_batch_request = my_asset.build_batch_request()
-# my_batch_request = my_asset.build_batch_request(dataframe=dataframe)
-
-## Data source config
-# context.sources.add_pandas_filesystem(
-#     "taxi_multi_batch_datasource",
-#     base_directory="./data",  # replace with your data directory
-# ).add_csv_asset(
-#     "all_years",
-#     batching_regex=r"yellow_tripdata_sample_(?P<year>\d{4})-(?P<month>\d{2})\.csv",
-# )
-
-## BatchRequest config
-# all_years_asset: DataAsset = context.datasources[
-#     "taxi_multi_batch_datasource"
-# ].get_asset("all_years")
-# multi_batch_all_years_batch_request: BatchRequest = (
-#     all_years_asset.build_batch_request()
-# )
