@@ -10,17 +10,11 @@ python = ">=3.11,<3.13"
 scipy = ">=1.10.0"
 cryptography = ">=41.0.4"
 
-[tool.poetry.group.dagster]
-optional = true
-
 [tool.poetry.group.dagster.dependencies]
 dagster = "1.5.0"
 dagster-webserver = "1.5.0"
 dagster_docker = "0.21.0"
 dagster-postgres = "0.21.0"
-
-[tool.poetry.group.pipelines]
-optional = true
 
 [tool.poetry.group.pipelines.dependencies]
 dagster = "1.5.0"
@@ -30,7 +24,6 @@ dagster_docker = "0.21.0"
 dagster-postgres = "0.21.0"
 dagster-ge = "0.21.0"
 dagster-k8s = "0.21.0"
-deltalake = "^0.10.2"
 great-expectations = { version = "<0.17.12", extras = ["azure"] }
 azure-storage-blob = "^12.17.0"
 azure-storage-file-datalake = "^12.13.1"
@@ -39,6 +32,14 @@ azure-identity = "^1.14.0"
 geopy = "^2.4.0"
 h3 = "^3.7.6"
 fastparquet = "^2023.8.0"
+grpcio-status = "^1.59.0"
+
+[tool.poetry.group.spark.dependencies]
+pyspark = "^3.5.0"
+delta-spark = "^3.0.0"
+deltalake = "^0.10.2"
+pyarrow = "<=12"
+roapi = "^0.10.0"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
