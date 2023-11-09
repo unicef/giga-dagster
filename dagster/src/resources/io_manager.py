@@ -9,15 +9,17 @@ class StagingADLSIOManager(IOManager):
         self.adls_client = ADLSFileClient()
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
-        if context.step_key == "raw":
-            return
         if output.empty:
             context.log.warn("Output DataFrame is empty. Skipping write operation.")
             return
 
         filepath = self._get_filepath(context)
 
-        self.adls_client.save_to_adls(filepath, output)
+        # if context.step_key in ['bronze']:
+        #     self.adls_client.move_file_in_adls(context.step_context.op_config["filepath"], filepath)
+        # else:
+        self.adls_client.upload_to_adls(filepath, output)
+
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
             f" {('/').join(filepath.split('/')[:-1])} in ADLS."
@@ -31,7 +33,7 @@ class StagingADLSIOManager(IOManager):
             f" {('/').join(filepath.split('/')[:-1])} in ADLS."
         )
 
-        return self.adls_client.load_from_adls(filepath)
+        return self.adls_client.download_from_adls(filepath)
 
     def _get_filepath(self, context):
         filepath = context.step_context.op_config["filepath"]

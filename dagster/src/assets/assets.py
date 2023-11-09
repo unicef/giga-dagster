@@ -7,7 +7,7 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def raw(context: OpExecutionContext) -> pd.DataFrame:
-    df = context.resources.adls_file_client.load_from_adls(
+    df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
@@ -69,7 +69,7 @@ def dq_failed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.Data
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
-    df = context.resources.adls_file_client.load_from_adls(
+    df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
@@ -80,7 +80,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
-    df = context.resources.adls_file_client.load_from_adls(
+    df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
