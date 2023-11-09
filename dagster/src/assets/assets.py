@@ -5,11 +5,11 @@ from dagster import OpExecutionContext, Output, asset
 # from dagster_ge import ge_validation_op_factory
 
 
-@asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_loader"})
+@asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def raw(context: OpExecutionContext) -> pd.DataFrame:
     context.log.info(f'context run tags: {context.run_tags["dagster/run_key"]}')
 
-    df = context.resources.adls_loader.load_from_adls(
+    df = context.resources.adls_file_client.load_from_adls(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
