@@ -1,0 +1,12 @@
+networks:
+  giga-dataops:
+    name: giga-dataops
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: giga-dataops
+
+services:
+  init-network:
+    image: hello-world
+    networks:
+      - giga-dataops

@@ -18,7 +18,7 @@ WORKDIR /tmp
 COPY pyproject.toml poetry.lock ./
 
 # Convert package manifests to requirements.txt format and exclude dev dependencies
-RUN poetry export -f requirements.txt --without-hashes --without dev --with dagster,pipelines > requirements.txt
+RUN poetry export -f requirements.txt --without-hashes --with dagster,pipelines,spark > requirements.txt
 
 FROM base AS prod
 

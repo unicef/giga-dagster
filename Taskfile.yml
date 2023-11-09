@@ -11,17 +11,28 @@ vars:
 
 tasks:
   default:
+    cmds:
+      - task: up
+
+  up:
     desc: Build and start Docker containers
     cmds:
+      - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml up --detach --build --remove-orphans {{.CLI_ARGS}}
       - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
 
   setup:
     desc: Run all first-time setup tasks
     cmds:
-      - pip install -U pre-commit
-      - pre-commit install
+      - task: setup-pre-commit
       - task: setup-dagster
       - task: setup-authproxy
+
+  setup-pre-commit:
+    internal: true
+    desc: Run first-time setup tasks for pre-commit
+    cmds:
+      - pip install -U pre-commit
+      - pre-commit install
 
   setup-dagster:
     internal: true
@@ -29,7 +40,7 @@ tasks:
     dir: dagster
     cmds:
       - poetry env use 3.11
-      - poetry install
+      - poetry install --with dev,dagster,pipelines,spark
       - cp .env.example .env
 
   setup-authproxy:
@@ -38,7 +49,7 @@ tasks:
     dir: authproxy
     cmds:
       - poetry env use 3.11
-      - poetry install
+      - poetry install --with dev
       - cp .env.example .env
 
   logs:
@@ -70,6 +81,7 @@ tasks:
     desc: Remove containers
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
+      - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml down --volumes --remove-orphans {{.CLI_ARGS}}
 
   build-and-push:
     desc: Build and push Docker image
@@ -81,8 +93,8 @@ tasks:
     internal: true
     desc: Build Docker image
     cmds:
-      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f dagster/Dockerfile.prod dagster
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f authproxy/Dockerfile.prod authproxy
+      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f dagster/prod.Dockerfile dagster
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f authproxy/prod.Dockerfile authproxy
 
   push-cr:
     internal: true
@@ -92,17 +104,18 @@ tasks:
       - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
 
   helm-up:
-    desc: Install/upgrade Helm chart
+    desc: Install/upgrade Helm charts
     dir: infra
     cmds:
       - kubectl apply -f k8s/secrets.yaml
       - kubectl apply -f k8s/configmap.yaml
       - task: helm-up-dagster
+      - task: helm-up-spark
       - task: helm-up-authproxy
 
   helm-up-dagster:
     internal: true
-    desc: Install/upgade Dagster Helm chart
+    desc: Install/upgrade Dagster Helm chart
     dir: infra/helm
     cmds:
       - >
@@ -117,7 +130,7 @@ tasks:
 
   helm-up-authproxy:
     internal: true
-    desc: Install/upgade authproxy Helm chart
+    desc: Install/upgrade authproxy Helm chart
     dir: infra/helm
     cmds:
       - >
@@ -127,11 +140,23 @@ tasks:
         --set image.tag={{.SHORT_SHA}}
         --set service.type=LoadBalancer
 
+  helm-up-spark:
+    internal: true
+    desc: Install/upgrade Spark Helm chart
+    dir: infra/helm
+    cmds:
+      - >
+        helm upgrade --install spark bitnami/spark
+        --values spark/values.yaml
+        --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
+        --set image.tag={{.SHORT_SHA}}
+
   helm-down:
-    desc: Uninstall Helm chart
+    desc: Uninstall Helm charts
     ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy
+      - helm uninstall spark
       - helm uninstall dagster
       - kubectl delete all --all
       - kubectl delete pvc --all
