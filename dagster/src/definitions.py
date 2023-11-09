@@ -6,7 +6,8 @@ from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_manual_checks_and_transforms_job,
 )
-from src.resources.adls_file_client import ADLSFileClient, StagingADLSIOManager
+from src.resources.adls_file_client import ADLSFileClient
+from src.resources.io_manager import StagingADLSIOManager
 from src.sensors import (
     school_master__run_automated_data_checks_sensor,
     school_master__run_manual_checks_and_transforms_sensor,
