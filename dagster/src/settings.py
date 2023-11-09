@@ -7,5 +7,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
 AZURE_BLOB_SAS_HOST = os.environ.get("AZURE_BLOB_SAS_HOST")
+AZURE_DFS_SAS_HOST = os.environ.get("AZURE_DFS_SAS_HOST")
 AZURE_BLOB_CONTAINER_NAME = os.environ.get("AZURE_BLOB_CONTAINER_NAME")
 AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")
