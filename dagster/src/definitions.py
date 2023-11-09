@@ -4,13 +4,15 @@ from dagster import Definitions, fs_io_manager, load_assets_from_package_module
 from src import assets
 from src.jobs import (
     school_master__run_automated_data_checks_job,
-    school_master__run_manual_checks_and_transforms_job,
+    school_master__run_failed_manual_checks_job,
+    school_master__run_successful_manual_checks_job,
 )
 from src.resources.adls_file_client import ADLSFileClient
 from src.resources.io_manager import StagingADLSIOManager
 from src.sensors import (
-    school_master__run_automated_data_checks_sensor,
-    school_master__run_manual_checks_and_transforms_sensor,
+    school_master__failed_manual_checks_sensor,
+    school_master__raw_file_uploads_sensor,
+    school_master__successful_manual_checks_sensor,
 )
 from src.settings import ENVIRONMENT
 
@@ -33,10 +35,12 @@ defs = Definitions(
     },
     jobs=[
         school_master__run_automated_data_checks_job,
-        school_master__run_manual_checks_and_transforms_job,
+        school_master__run_successful_manual_checks_job,
+        school_master__run_failed_manual_checks_job,
     ],
     sensors=[
-        school_master__run_automated_data_checks_sensor,
-        school_master__run_manual_checks_and_transforms_sensor,
+        school_master__raw_file_uploads_sensor,
+        school_master__successful_manual_checks_sensor,
+        school_master__failed_manual_checks_sensor,
     ],
 )
