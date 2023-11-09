@@ -1,7 +1,7 @@
 import pandas as pd
-from dagster.src.resources.adls_file_client import ADLSFileClient
 
 from dagster import InputContext, IOManager, OutputContext
+from src.resources.adls_file_client import ADLSFileClient
 
 
 class StagingADLSIOManager(IOManager):
