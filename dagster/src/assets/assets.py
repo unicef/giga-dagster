@@ -7,8 +7,6 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def raw(context: OpExecutionContext) -> pd.DataFrame:
-    context.log.info(f'context run tags: {context.run_tags["dagster/run_key"]}')
-
     df = context.resources.adls_file_client.load_from_adls(
         context.run_tags["dagster/run_key"]
     )
@@ -51,7 +49,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
     df = bronze
     df["baby"] = "shark"
-    return df
+    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return (
     #     expectations_suite_asset.passed_rows()
     # )  # io manager should upload this to staging/pending-review/<dataset_name> as deltatable
@@ -63,28 +61,32 @@ def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.Data
 def dq_failed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
     df = bronze
     df["doodoo"] = "doodoo"
-    return df
+    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return (
     #     expectations_suite_asset.failed_rows()
     # )  # io manager should upload this to archive/gx_tests_failed as deltatable
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
-def manual_review_passed_rows(
-    context: OpExecutionContext, dq_passed_rows: pd.DataFrame
-) -> pd.DataFrame:
-    return dq_passed_rows  # io manager should upload this to staging/approved/<dataset_name> as deltatable
+@asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
+def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
+    df = context.resources.adls_file_client.load_from_adls(
+        context.run_tags["dagster/run_key"]
+    )
+    context.log.info(f"data={df}")
+    yield Output(
+        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+    )  # io manager should upload this to staging/approved/<dataset_name> as deltatable
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
-def manual_review_failed_rows(
-    context: OpExecutionContext, dq_passed_rows: pd.DataFrame
-) -> pd.DataFrame:
-    return dq_passed_rows  # io manager should upload this to archive/manual_review_rejected as deltatable
+@asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
+def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
+    df = context.resources.adls_file_client.load_from_adls(
+        context.run_tags["dagster/run_key"]
+    )
+    context.log.info(f"data={df}")
+    yield Output(
+        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+    )  # io manager should upload this to archive/manual_review_rejected as deltatable
 
 
 ########## unsure how manual review will go yet/how datasets will be moved to the correct folders so the assets are probably wrong
@@ -96,10 +98,9 @@ def manual_review_failed_rows(
 def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFrame:
     df = manual_review_passed_rows
     df["e"] = False
-    return df
-    # return (
-    #     manual_review_passed_rows.transform()
-    # )  # io manager should upload this to silver/<dataset_name> as deltatable
+    yield Output(
+        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+    )  # io manager should upload this to silver/<dataset_name> as deltatable
 
 
 @asset(
@@ -108,7 +109,6 @@ def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFra
 def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     df = silver
     df["f"] = True
-    return df
-    # return (
-    #     silver.merge()
-    # )  # io manager should upload this to gold/master_data as deltatable
+    yield Output(
+        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+    )  # io manager should upload this to gold/master_data as deltatable
