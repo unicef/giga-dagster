@@ -2,7 +2,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from src.functions.adls_client import ADLSClient
+from src._utils.adls_client import ADLSClient
 
 
 def load_from_adls(filepath):
