@@ -1,4 +1,8 @@
+import datahub.emitter.mce_builder as builder
 import pandas as pd
+from datahub.emitter.mcp import MetadataChangeProposalWrapper
+from datahub.emitter.rest_emitter import DatahubRestEmitter
+from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -22,6 +26,29 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
     df["d"] = 12345
+
+    emitter = DatahubRestEmitter(gms_server="http://datahub-gms:8080", extra_headers={})
+
+    # Test the connection
+    emitter.test_connection()
+
+    # Construct a dataset properties object
+    dataset_properties = DatasetPropertiesClass(
+        description="This table stored the canonical User profile",
+        customProperties={"governance": "ENABLED"},
+    )
+
+    # Construct a MetadataChangeProposalWrapper object.
+    metadata_event = MetadataChangeProposalWrapper(
+        entityUrn=builder.make_dataset_urn("adls", "cereals.highest_calorie_cereal"),
+        entityType="dataHubIngestionSource",
+        changeType="CREATE",
+        aspect=dataset_properties,
+    )
+
+    # Emit metadata! This is a blocking call
+    context.log.info("EMITTING METADATA")
+    emitter.emit(metadata_event)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return Output(df, metadata={"filename": df.shape[0]})
