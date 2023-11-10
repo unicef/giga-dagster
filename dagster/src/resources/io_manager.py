@@ -10,14 +10,10 @@ class StagingADLSIOManager(IOManager):
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
         if output.empty:
-            context.log.warn("Output DataFrame is empty. Skipping write operation.")
+            context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return
 
         filepath = self._get_filepath(context)
-
-        # if context.step_key in ['bronze']:
-        #     self.adls_client.move_file_in_adls(context.step_context.op_config["filepath"], filepath)
-        # else:
         self.adls_client.upload_to_adls(filepath, output)
 
         context.log.info(

@@ -31,22 +31,18 @@ def school_master__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
+
             yield RunRequest(
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "raw": FileConfig(filepath=filepath, dataset_type=dataset_type),
-                        "bronze": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
-                        "dq_passed_rows": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
-                        "dq_failed_rows": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
+                        "raw": file_config,
+                        "bronze": file_config,
+                        "dq_passed_rows": file_config,
+                        "dq_failed_rows": file_config,
                     }
                 ),
             )
@@ -66,21 +62,16 @@ def school_master__successful_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
             yield RunRequest(
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "manual_review_passed_rows": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
-                        "silver": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
-                        "gold": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
+                        "manual_review_passed_rows": file_config,
+                        "silver": file_config,
+                        "gold": file_config,
                     }
                 ),
             )
@@ -98,15 +89,14 @@ def school_master__failed_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
             yield RunRequest(
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "manual_review_failed_rows": FileConfig(
-                            filepath=filepath, dataset_type=dataset_type
-                        ),
+                        "manual_review_failed_rows": file_config,
                     }
                 ),
             )
