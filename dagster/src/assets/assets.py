@@ -4,7 +4,8 @@ from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
+from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 # from dagster_ge import ge_validation_op_factory
 
@@ -15,6 +16,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
+    context.log.info(context.run_tags["dagster/run_key"])
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -25,12 +27,16 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
-    df["d"] = 12345
+    # df["d"] = 12345
 
-    emitter = DatahubRestEmitter(gms_server="http://datahub-gms:8080", extra_headers={})
+    rest_emitter = DatahubRestEmitter(
+        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
+        extra_headers={},
+        token=DATAHUB_ACCESS_TOKEN,
+    )
 
-    # Test the connection
-    emitter.test_connection()
+    # # Test the connection
+    # emitter.test_connection()
 
     # Construct a dataset properties object
     dataset_properties = DatasetPropertiesClass(
@@ -40,15 +46,17 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 
     # Construct a MetadataChangeProposalWrapper object.
     metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=builder.make_dataset_urn("adls", "cereals.highest_calorie_cereal"),
-        entityType="dataHubIngestionSource",
+        entityUrn=builder.make_dataset_urn(
+            platform="adls", name=context.run_tags["dagster/run_key"]
+        ),
+        # entityType="Platform",
         changeType="CREATE",
         aspect=dataset_properties,
     )
 
     # Emit metadata! This is a blocking call
     context.log.info("EMITTING METADATA")
-    emitter.emit(metadata_event)
+    rest_emitter.emit(metadata_event)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return Output(df, metadata={"filename": df.shape[0]})
@@ -139,3 +147,42 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     yield Output(
         df, metadata={"filepath": context.run_tags["dagster/run_key"]}
     )  # io manager should upload this to gold/master_data as deltatable
+
+
+############
+
+# @asset(
+#     io_manager_key="adls_io_manager",
+# )
+# def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
+#     df = raw
+#     df["d"] = 12345
+
+#     emitter = DatahubRestEmitter(gms_server="http://datahub-gms:8080", extra_headers={})
+
+#     # Test the connection
+#     emitter.test_connection()
+
+#     # Construct a dataset properties object
+#     dataset_properties = DatasetPropertiesClass(
+#         description="This table stored the canonical User profile",
+#         customProperties={"governance": "ENABLED"},
+#     )
+
+#     # Construct a MetadataChangeProposalWrapper object.
+#     metadata_event = MetadataChangeProposalWrapper(
+#         entityUrn=builder.make_dataset_urn("adls", "cereals.highest_calorie_cereal"),
+#         entityType="dataHubIngestionSource",
+#         changeType="CREATE",
+#         aspect=dataset_properties,
+#     )
+
+#     # Emit metadata! This is a blocking call
+#     context.log.info("EMITTING METADATA")
+#     emitter.emit(metadata_event)
+
+#     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
+#     # return Output(df, metadata={"filename": df.shape[0]})
+#     # return (
+#     #     raw_file.transform()
+#     # )  # io manager should upload this to bronze/<dataset_name> as deltatable
