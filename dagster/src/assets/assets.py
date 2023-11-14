@@ -30,9 +30,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     # df["d"] = 12345
 
     rest_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
-        extra_headers={},
-        token=DATAHUB_ACCESS_TOKEN,
+        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
 
     # # Test the connection
