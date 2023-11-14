@@ -60,4 +60,4 @@ preview = true
 profile = "black"
 
 [tool.dagster]
-module_name = "src"
+module_name = "src.definitions"
