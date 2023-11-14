@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "staging")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

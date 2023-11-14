@@ -40,8 +40,7 @@ tasks:
     dir: dagster
     cmds:
       - poetry env use 3.11
-      - poetry install --with dev,dagster,pipelines,spark
-      - cp .env.example .env
+      - poetry install --with dev,dagster,pipelines,spark,notebook
 
   setup-authproxy:
     internal: true
@@ -50,7 +49,6 @@ tasks:
     cmds:
       - poetry env use 3.11
       - poetry install --with dev
-      - cp .env.example .env
 
   logs:
     desc: Attach to Docker logs
@@ -93,8 +91,8 @@ tasks:
     internal: true
     desc: Build Docker image
     cmds:
-      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f dagster/prod.Dockerfile dagster
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} --no-cache -f authproxy/prod.Dockerfile authproxy
+      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f dagster/prod.Dockerfile dagster
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f authproxy/prod.Dockerfile authproxy
 
   push-cr:
     internal: true

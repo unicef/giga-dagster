@@ -17,20 +17,6 @@ RUN apt-get update && \
     apt-get install -y curl wget openjdk-11-jdk-headless && \
     apt-get clean
 
-# Install poetry,
-# set to not create an additional virtualenv (we are already in a container),
-# enable parallel installs
-RUN pip install "poetry==$POETRY_VERSION" && \
-    poetry config virtualenvs.create false && \
-    poetry config installer.max-workers 4
-
-# Copy package manifests inside the container
-COPY pyproject.toml poetry.lock ./
-
-# Install packages based on package manifests
-# This is an automated process: do not ask for user input
-RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,spark
-
 # Download pre-built Spark w/ Hadoop
 RUN wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
 
@@ -47,6 +33,20 @@ RUN wget https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/
 RUN wget https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
+
+# Install poetry,
+# set to not create an additional virtualenv (we are already in a container),
+# enable parallel installs
+RUN pip install "poetry==$POETRY_VERSION" && \
+    poetry config virtualenvs.create false && \
+    poetry config installer.max-workers 4
+
+# Copy package manifests inside the container
+COPY pyproject.toml poetry.lock ./
+
+# Install packages based on package manifests
+# This is an automated process: do not ask for user input
+RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,spark,notebook
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
 WORKDIR /app
