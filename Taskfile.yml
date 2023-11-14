@@ -146,8 +146,6 @@ tasks:
       - >
         helm upgrade --install spark bitnami/spark
         --values spark/values.yaml
-        --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
-        --set image.tag={{.SHORT_SHA}}
 
   helm-down:
     desc: Uninstall Helm charts

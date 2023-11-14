@@ -24,7 +24,8 @@ WORKDIR /app
 
 COPY ./authproxy/ ./authproxy/
 COPY ./*.py ./
+COPY ./*.sh ./
 
 ENV PORT 8088
 
-CMD [ "/bin/sh", "-c",  "uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers" ]
+CMD [ "./docker-entrypoint.sh" ]
