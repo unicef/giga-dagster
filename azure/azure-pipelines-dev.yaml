@@ -70,8 +70,6 @@ stages:
                 - task: Kubernetes@1
                   displayName: Create configmap
                   inputs:
-                    connectionType: Kubernetes Service Connection
-                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     namespace: $(kubernetesNamespace)
                     configurationType: configuration
                     command: apply
@@ -81,8 +79,6 @@ stages:
                 - task: Kubernetes@1
                   displayName: Create secret
                   inputs:
-                    connectionType: Kubernetes Service Connection
-                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     namespace: $(kubernetesNamespace)
                     configurationType: inline
                     command: apply
@@ -113,8 +109,6 @@ stages:
                 - task: HelmDeploy@0
                   displayName: Add Dagster Helm Repo
                   inputs:
-                    connectionType: Kubernetes Service Connection
-                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: repo
                     arguments: add dagster https://dagster-io.github.io/helm
                     namespace: $(kubernetesNamespace)
@@ -122,8 +116,6 @@ stages:
                 - task: HelmDeploy@0
                   displayName: Helm deploy Dagster
                   inputs:
-                    connectionType: Kubernetes Service Connection
-                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: upgrade
                     install: true
                     chartType: Name
@@ -142,8 +134,6 @@ stages:
                 - task: HelmDeploy@0
                   displayName: Helm deploy authproxy
                   inputs:
-                    connectionType: Kubernetes Service Connection
-                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: upgrade
                     install: true
                     chartType: FilePath
