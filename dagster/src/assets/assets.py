@@ -10,13 +10,56 @@ from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 # from dagster_ge import ge_validation_op_factory
 
 
+def output_filepath(context):
+    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    input_filepath = context.get_step_execution_context().op_config["filepath"]
+    filename = input_filepath.split("/")[1]
+    step_key = context.asset_key.to_user_string()
+
+    return step_key + "/" + dataset_type + "/" + filename
+
+
+def emit_metadata_to_datahub(context):
+    rest_emitter = DatahubRestEmitter(
+        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+    )
+
+    # Construct a dataset properties object
+    dataset_properties = DatasetPropertiesClass(
+        description=f"{context.asset_key.to_user_string()}",
+        customProperties={"governance": "ENABLED"},
+    )
+
+    # Set the dataset's URN
+    dataset_urn = builder.make_dataset_urn(
+        platform="adls", name=output_filepath(context)
+    )
+
+    # Construct a MetadataChangeProposalWrapper object
+    metadata_event = MetadataChangeProposalWrapper(
+        entityUrn=dataset_urn,
+        aspect=dataset_properties,
+    )
+
+    # Emit metadata! This is a blocking call
+    context.log.info("EMITTING METADATA")
+    rest_emitter.emit(metadata_event)
+
+    return context.log.info(
+        f"Metadata of dataset {output_filepath(context)} has been successfully emitted"
+        " to Datahub."
+    )
+
+
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def raw(context: OpExecutionContext) -> pd.DataFrame:
     df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
-    context.log.info(context.run_tags["dagster/run_key"])
+
+    # Emit metadata of dataset to Datahub
+    emit_metadata_to_datahub(context)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -27,36 +70,12 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
-    # df["d"] = 12345
+    df["d"] = 12345
 
-    rest_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
-    )
+    # Emit metadata of dataset to Datahub
+    emit_metadata_to_datahub(context)
 
-    # # Test the connection
-    # emitter.test_connection()
-
-    # Construct a dataset properties object
-    dataset_properties = DatasetPropertiesClass(
-        description="This table stored the canonical User profile",
-        customProperties={"governance": "ENABLED"},
-    )
-
-    # Construct a MetadataChangeProposalWrapper object.
-    metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=builder.make_dataset_urn(
-            platform="adls", name=context.run_tags["dagster/run_key"]
-        ),
-        # entityType="Platform",
-        changeType="CREATE",
-        aspect=dataset_properties,
-    )
-
-    # Emit metadata! This is a blocking call
-    context.log.info("EMITTING METADATA")
-    rest_emitter.emit(metadata_event)
-
-    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
+    yield Output(df, metadata={"filepath": output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
     # return (
     #     raw_file.transform()
