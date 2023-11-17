@@ -161,6 +161,16 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
     df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
     )
+
+    # Emit metadata of dataset to Datahub
+    staging_pending_review_dataset_urn = builder.make_dataset_urn(
+        platform="adls",
+        name=input_filepath(context, upstream_step="staging/pending-review"),
+    )
+    emit_metadata_to_datahub(
+        context, upstream_dataset_urn=staging_pending_review_dataset_urn
+    )
+
     context.log.info(f"data={df}")
     yield Output(
         df, metadata={"filepath": context.run_tags["dagster/run_key"]}
@@ -186,7 +196,17 @@ def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
 )
 def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFrame:
     df = manual_review_passed_rows
-    df["e"] = False
+    # df["e"] = False
+
+    # Emit metadata of dataset to Datahub
+    staging_pending_review_dataset_urn = builder.make_dataset_urn(
+        platform="adls",
+        name=input_filepath(context, upstream_step="staging/pending-review"),
+    )
+    emit_metadata_to_datahub(
+        context, upstream_dataset_urn=staging_pending_review_dataset_urn
+    )
+
     yield Output(
         df, metadata={"filepath": context.run_tags["dagster/run_key"]}
     )  # io manager should upload this to silver/<dataset_name> as deltatable

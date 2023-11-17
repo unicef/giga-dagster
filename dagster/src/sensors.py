@@ -70,8 +70,8 @@ def school_master__successful_manual_checks_sensor():
                 run_config=RunConfig(
                     ops={
                         "manual_review_passed_rows": file_config,
-                        "silver": file_config,
-                        "gold": file_config,
+                        # "silver": file_config,
+                        # "gold": file_config,
                     }
                 ),
             )
