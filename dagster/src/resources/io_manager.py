@@ -2,6 +2,7 @@ import pandas as pd
 
 from dagster import InputContext, IOManager, OutputContext
 from src.resources.adls_file_client import ADLSFileClient
+from src.resources.get_destination_file_path import get_destination_filepath
 
 
 class StagingADLSIOManager(IOManager):
@@ -34,27 +35,38 @@ class StagingADLSIOManager(IOManager):
     def _get_filepath(self, context):
         filepath = context.step_context.op_config["filepath"]
         parent_folder = context.step_context.op_config["dataset_type"]
-
-        filename = filepath.split("/")[-1]
         step = context.step_key
 
-        step_destination_folder_map = {
-            "raw": "adls-testing-raw",
-            "bronze": f"bronze/{parent_folder}",
-            "dq_passed_rows": f"staging/pending-review/{parent_folder}",
-            "dq_failed_rows": "archive/gx-tests-failed",
-            "manual_review_passed_rows": f"staging/approved/{parent_folder}",
-            "manual_review_failed_rows": "archive/manual-review-rejected",
-            "silver": f"silver/{parent_folder}",
-            "gold": "gold",
-        }
+        destination_filepath = get_destination_filepath(filepath, parent_folder, step)
 
-        destination_folder = step_destination_folder_map[step]
-
-        if not destination_folder:
-            raise ValueError(f"Unknown filepath: {filepath}")
-
-        destination_filepath = f"{destination_folder}/{filename}"
         context.log.info(f"Moving from {filepath} to {destination_filepath}")
 
         return destination_filepath
+
+    # def _get_filepath(self, context):
+    #     filepath = context.step_context.op_config["filepath"]
+    #     parent_folder = context.step_context.op_config["dataset_type"]
+
+    #     filename = filepath.split("/")[-1]
+    #     step = context.step_key
+
+    #     step_destination_folder_map = {
+    #         "raw": "adls-testing-raw",
+    #         "bronze": f"bronze/{parent_folder}",
+    #         "dq_passed_rows": f"staging/pending-review/{parent_folder}",
+    #         "dq_failed_rows": "archive/gx-tests-failed",
+    #         "manual_review_passed_rows": f"staging/approved/{parent_folder}",
+    #         "manual_review_failed_rows": "archive/manual-review-rejected",
+    #         "silver": f"silver/{parent_folder}",
+    #         "gold": "gold",
+    #     }
+
+    #     destination_folder = step_destination_folder_map[step]
+
+    #     if not destination_folder:
+    #         raise ValueError(f"Unknown filepath: {filepath}")
+
+    #     destination_filepath = f"{destination_folder}/{filename}"
+    #     context.log.info(f"Moving from {filepath} to {destination_filepath}")
+
+    #     return destination_filepath

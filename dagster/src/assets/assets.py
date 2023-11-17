@@ -5,6 +5,7 @@ from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
+from src.resources.get_destination_file_path import get_destination_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 # from dagster_ge import ge_validation_op_factory
@@ -12,11 +13,12 @@ from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 def output_filepath(context):
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    input_filepath = context.get_step_execution_context().op_config["filepath"]
-    filename = input_filepath.split("/")[1]
-    step_key = context.asset_key.to_user_string()
+    source_path = context.get_step_execution_context().op_config["filepath"]
+    step = context.asset_key.to_user_string()
 
-    return step_key + "/" + dataset_type + "/" + filename
+    destination_filepath = get_destination_filepath(source_path, dataset_type, step)
+
+    return destination_filepath
 
 
 def emit_metadata_to_datahub(context):
@@ -59,7 +61,9 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
+    # emit_metadata_to_datahub(context)
+
+    context.log.info(output_filepath(context))
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -73,7 +77,24 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df["d"] = 12345
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
+    # emit_metadata_to_datahub(context)
+
+    # # Set the dataset's URN
+    # raw_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls", name=output_filepath(context)
+    # )
+
+    # # Construct a lineage object
+    # lineage_mce = builder.make_lineage_mce(
+    #     [], # Upstream URNs
+    #     dataset_urn,  # Downstream URN
+    # )
+
+    # # Emit lineage metadata!
+    # context.log.info("EMITTING LINEAGE METADATA")
+    # rest_emitter.emit_mce(lineage_mce)
+
+    context.log.info(output_filepath(context))
 
     yield Output(df, metadata={"filepath": output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
