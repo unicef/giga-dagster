@@ -138,7 +138,7 @@ def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.Data
     # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
 
-    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
+    yield Output(df, metadata={"filepath": output_filepath(context)})
     # return (
     #     expectations_suite_asset.passed_rows()
     # )  # io manager should upload this to staging/pending-review/<dataset_name> as deltatable
@@ -173,7 +173,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
 
     context.log.info(f"data={df}")
     yield Output(
-        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+        df, metadata={"filepath": output_filepath(context)}
     )  # io manager should upload this to staging/approved/<dataset_name> as deltatable
 
 
@@ -206,7 +206,7 @@ def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFra
     emit_metadata_to_datahub(context, upstream_dataset_urn=staging_approved_dataset_urn)
 
     yield Output(
-        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+        df, metadata={"filepath": output_filepath(context)}
     )  # io manager should upload this to silver/<dataset_name> as deltatable
 
 
@@ -225,7 +225,7 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn)
 
     yield Output(
-        df, metadata={"filepath": context.run_tags["dagster/run_key"]}
+        df, metadata={"filepath": output_filepath(context)}
     )  # io manager should upload this to gold/master_data as deltatable
 
 
