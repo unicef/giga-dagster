@@ -21,6 +21,16 @@ def output_filepath(context):
     return destination_filepath
 
 
+def input_filepath(context, upstream_step):
+    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    source_path = context.get_step_execution_context().op_config["filepath"]
+    filename = source_path.split("/")[-1]
+
+    upstream_path = upstream_step + "/" + dataset_type + "/" + filename
+
+    return upstream_path
+
+
 def emit_metadata_to_datahub(context, upstream_dataset_urn):
     rest_emitter = DatahubRestEmitter(
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
@@ -118,6 +128,15 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 )
 def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
     df = bronze
+
+    context.log.info(input_filepath(context, upstream_step="bronze"))
+
+    bronze_dataset_urn = builder.make_dataset_urn(
+        platform="adls", name=input_filepath(context, upstream_step="bronze")
+    )
+
+    # Emit metadata of dataset to Datahub
+    emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return (

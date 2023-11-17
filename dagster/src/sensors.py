@@ -41,7 +41,7 @@ def school_master__raw_file_uploads_sensor():
                     ops={
                         "raw": file_config,
                         "bronze": file_config,
-                        # "dq_passed_rows": file_config,
+                        "dq_passed_rows": file_config,
                         # "dq_failed_rows": file_config,
                     }
                 ),
