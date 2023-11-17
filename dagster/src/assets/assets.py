@@ -21,7 +21,7 @@ def output_filepath(context):
     return destination_filepath
 
 
-def emit_metadata_to_datahub(context):
+def emit_metadata_to_datahub(context, upstream_dataset_urn):
     rest_emitter = DatahubRestEmitter(
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
@@ -47,6 +47,19 @@ def emit_metadata_to_datahub(context):
     context.log.info("EMITTING METADATA")
     rest_emitter.emit(metadata_event)
 
+    step = context.asset_key.to_user_string()
+
+    if step != "raw":
+        # Construct a lineage object
+        lineage_mce = builder.make_lineage_mce(
+            [upstream_dataset_urn],  # Upstream URNs
+            dataset_urn,  # Downstream URN
+        )
+
+        # Emit lineage metadata!
+        context.log.info("EMITTING LINEAGE METADATA")
+        rest_emitter.emit_mce(lineage_mce)
+
     return context.log.info(
         f"Metadata of dataset {output_filepath(context)} has been successfully emitted"
         " to Datahub."
@@ -61,7 +74,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
+    emit_metadata_to_datahub(context, upstream_dataset_urn="")
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -73,31 +86,12 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
 
-    # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
-
-    # Set the dataset URNs
-    dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=output_filepath(context)
-    )
-
     raw_dataset_urn = builder.make_dataset_urn(
         platform="adls", name=context.run_tags["dagster/run_key"]
     )
 
-    # Construct a lineage object
-    lineage_mce = builder.make_lineage_mce(
-        [raw_dataset_urn],  # Upstream URNs
-        dataset_urn,  # Downstream URN
-    )
-
-    rest_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
-    )
-
-    # Emit lineage metadata!
-    context.log.info("EMITTING LINEAGE METADATA")
-    rest_emitter.emit_mce(lineage_mce)
+    # Emit metadata of dataset to Datahub
+    emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
 
     yield Output(df, metadata={"filepath": output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
@@ -124,7 +118,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 )
 def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
     df = bronze
-    df["baby"] = "shark"
+
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return (
     #     expectations_suite_asset.passed_rows()
