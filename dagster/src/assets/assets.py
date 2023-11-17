@@ -61,9 +61,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context)
-
-    context.log.info(output_filepath(context))
+    emit_metadata_to_datahub(context)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -74,27 +72,32 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
-    df["d"] = 12345
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context)
+    emit_metadata_to_datahub(context)
 
-    # # Set the dataset's URN
-    # raw_dataset_urn = builder.make_dataset_urn(
-    #     platform="adls", name=output_filepath(context)
-    # )
+    # Set the dataset URNs
+    dataset_urn = builder.make_dataset_urn(
+        platform="adls", name=output_filepath(context)
+    )
 
-    # # Construct a lineage object
-    # lineage_mce = builder.make_lineage_mce(
-    #     [], # Upstream URNs
-    #     dataset_urn,  # Downstream URN
-    # )
+    raw_dataset_urn = builder.make_dataset_urn(
+        platform="adls", name=context.run_tags["dagster/run_key"]
+    )
 
-    # # Emit lineage metadata!
-    # context.log.info("EMITTING LINEAGE METADATA")
-    # rest_emitter.emit_mce(lineage_mce)
+    # Construct a lineage object
+    lineage_mce = builder.make_lineage_mce(
+        [raw_dataset_urn],  # Upstream URNs
+        dataset_urn,  # Downstream URN
+    )
 
-    context.log.info(output_filepath(context))
+    rest_emitter = DatahubRestEmitter(
+        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+    )
+
+    # Emit lineage metadata!
+    context.log.info("EMITTING LINEAGE METADATA")
+    rest_emitter.emit_mce(lineage_mce)
 
     yield Output(df, metadata={"filepath": output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
