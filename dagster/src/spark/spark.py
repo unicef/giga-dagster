@@ -32,6 +32,8 @@ def get_spark_session():
     conf.set("spark.authenticate.secret", SPARK_RPC_AUTHENTICATION_SECRET)
     conf.set("spark.authenticate.enableSaslEncryption", "true")
     conf.set("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
+    conf.set("spark.python.use.daemon", "true")
+    conf.set("spark.python.daemon.module", "src.utils.sentry")
     conf.set(
         f"fs.azure.sas.{AZURE_BLOB_CONTAINER_NAME}.{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
         AZURE_SAS_TOKEN,
