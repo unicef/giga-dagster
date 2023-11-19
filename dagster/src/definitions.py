@@ -1,3 +1,4 @@
+import sentry_sdk
 from dagster_ge.factory import ge_data_context
 
 from dagster import Definitions, fs_io_manager, load_assets_from_package_module
@@ -14,12 +15,21 @@ from src.sensors import (
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
-from src.settings import ENVIRONMENT
+from src.settings import ENVIRONMENT, IN_PRODUCTION, PYTHON_ENV, SENTRY_DSN
+
+if IN_PRODUCTION and SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=PYTHON_ENV,
+    )
 
 io_managers = {
     "dev": fs_io_manager.configured({"base_dir": "/tmp/io_manager_storage"}),
     "adls_staging": StagingADLSIOManager(),
 }
+
 defs = Definitions(
     assets=[
         *load_assets_from_package_module(

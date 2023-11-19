@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
 
+PYTHON_ENV = os.environ.get("PYTHON_ENV", "production")
+
+IN_PRODUCTION = PYTHON_ENV == "production"
+
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "staging")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -16,3 +20,5 @@ AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")
 AZURE_BLOB_CONNECTION_URI = f"wasbs://{AZURE_BLOB_CONTAINER_NAME}@{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
 
 SPARK_RPC_AUTHENTICATION_SECRET = os.environ.get("SPARK_RPC_AUTHENTICATION_SECRET")
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
