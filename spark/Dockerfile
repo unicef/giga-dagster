@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir \
     deltalake==${DELTALAKE_VERSION} \
     pandas==${PANDAS_VERSION} \
     roapi==${ROAPI_VERSION} \
-    pyarrow==${PYARROW_VERSION}
+    pyarrow==${PYARROW_VERSION} \
+    sentry-sdk
 
 WORKDIR /opt/bitnami/spark/jars
 

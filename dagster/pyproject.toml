@@ -48,6 +48,7 @@ pyspark = "^3.5.0"
 delta-spark = "^3.0.0"
 deltalake = "^0.10.2"
 pyarrow = "<=12"
+pyarrow-hotfix = "^0.5"
 roapi = "^0.10.0"
 
 [tool.poetry.group.notebook.dependencies]
