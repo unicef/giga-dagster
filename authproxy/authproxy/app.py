@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import httpx
+import sentry_sdk
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import (
@@ -17,6 +18,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from authproxy.lib.auth import get_auth
 from authproxy.lib.templates import templates
 from authproxy.settings import settings
+
+if settings.IN_PRODUCTION and settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+        environment=settings.PYTHON_ENV,
+    )
 
 app = FastAPI(title="Giga Dagster", docs_url=None, redoc_url=None)
 
