@@ -29,6 +29,7 @@ def get_spark_session():
         "org.apache.spark.sql.delta.catalog.DeltaCatalog",
     )
     conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+    conf.set("spark.sql.warehouse.dir", "/opt/spark/warehouse")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", SPARK_RPC_AUTHENTICATION_SECRET)
     conf.set("spark.authenticate.enableSaslEncryption", "true")
@@ -46,4 +47,4 @@ def get_spark_session():
         .config(conf=conf)
     )
     spark = configure_spark_with_delta_pip(builder)
-    return spark.getOrCreate()
+    return spark.enableHiveSupport().getOrCreate()

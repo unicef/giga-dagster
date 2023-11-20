@@ -170,6 +170,8 @@ history/
 logs/
 schedules/
 storage/
+metastore_db/
+.tmp/
 
 # Kubernetes/Helm
 secrets.yaml

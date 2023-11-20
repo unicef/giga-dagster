@@ -14,7 +14,7 @@ def create_test_table():
     spark.sql("CREATE SCHEMA IF NOT EXISTS gold")
     spark.sql(
         f"""
-    CREATE OR REPLACE TABLE gold.delta_test (
+    CREATE TABLE IF NOT EXISTS gold.delta_test (
         giga_id_school STRING,
         school_id LONG,
         name STRING,

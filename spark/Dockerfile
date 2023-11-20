@@ -1,4 +1,4 @@
-FROM bitnami/spark:3.5.0
+FROM bitnami/spark:3.5.0 as base
 
 USER root
 
@@ -33,3 +33,9 @@ RUN wget https://repo1.maven.org/maven2/org/apache/spark/spark-avro_2.13/3.4.0/s
 USER 1001
 
 WORKDIR /opt/bitnami/spark
+
+FROM base as master
+
+RUN /opt/bitnami/spark/sbin/start-thriftserver.sh \
+    --hiveconf hive.server2.thrift.port=$THRIFT_PORT \
+    --master "spark://localhost:$SPARK_MASTER_PORT"
