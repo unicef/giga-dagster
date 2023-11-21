@@ -19,8 +19,8 @@ from great_expectations.expectations.metrics import (
 # For most ColumnMapExpectations, the main business logic for calculation will live in this class.
 class ColumnValuesToBeNotSimilar(ColumnMapMetricProvider):
     # This is the id string that will be used to reference your metric.
-    condition_metric_name = (
-        "expect_column_values_to_be_not_similar"  # column_values.not_similar
+    condition_metric_name = (  # column_values.not_similar
+        "expect_column_values_to_be_not_similar"
     )
 
     # This method implements the core logic for the PandasExecutionEngine

@@ -1,156 +1,82 @@
-# Welcome to Great Expectations! Always know what to expect from your data.
-#
-# Here you can define datasources, batch kwargs generators, integrations and
-# more. This file is intended to be committed to your repo. For help with
-# configuration please:
-#   - Read our docs: https://docs.greatexpectations.io/en/latest/reference/data_context_reference.html#configuration
-#   - Join our slack channel: http://greatexpectations.io/slack
-
-config_version: 2.0
-
-# Datasources tell Great Expectations where your data lives and how to get it.
-# You can use the CLI command `great_expectations datasource new` to help you
-# add a new datasource. Read more at https://docs.greatexpectations.io/en/latest/features/datasource.html
+fluent_datasources:
+  azure_blob_storage:
+    type: pandas_abs
+    assets:
+      school_geolocation_parquet:
+        type: parquet
+        batching_regex: (.*).csv
+        connect_options:
+          abs_container: giga-dataops-dev
+          abs_name_starts_with: bronze/school-geolocation-data/
+    azure_options:
+      account_url: ${AZURE_STORAGE_URL}
+      credential: ${AZURE_SAS_TOKEN}
+config_version: 3.0
 datasources:
-  # Maps to an asset
-  raw__bank_loans:
-    class_name: PandasDatasource
+  pandas_datasource:
+    class_name: Datasource
     module_name: great_expectations.datasource
-    data_asset_type:
-      class_name: PandasDataset
-      module_name: great_expectations.dataset
-    batch_kwargs_generators:
-      subdir_reader:
-        class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ../.
-  raw__bank_marketing:
-    class_name: PandasDatasource
-    module_name: great_expectations.datasource
-    data_asset_type:
-      class_name: PandasDataset
-      module_name: great_expectations.dataset
-    batch_kwargs_generators:
-      subdir_reader:
-        class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ../.
-  raw__bank_savings:
-    class_name: PandasDatasource
-    module_name: great_expectations.datasource
-    data_asset_type:
-      class_name: PandasDataset
-      module_name: great_expectations.dataset
-    batch_kwargs_generators:
-      subdir_reader:
-        class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ../.
-  raw__insurance:
-    class_name: PandasDatasource
-    module_name: great_expectations.datasource
-    data_asset_type:
-      class_name: PandasDataset
-      module_name: great_expectations.dataset
-    batch_kwargs_generators:
-      subdir_reader:
-        class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ../.
-  raw__supermarket:
-    class_name: PandasDatasource
-    module_name: great_expectations.datasource
-    data_asset_type:
-      class_name: PandasDataset
-      module_name: great_expectations.dataset
-    batch_kwargs_generators:
-      subdir_reader:
-        class_name: SubdirReaderBatchKwargsGenerator
-        base_directory: ../.
-config_variables_file_path: uncommitted/config_variables.yml
-
-# The plugins_directory will be added to your python path for custom modules
-# used to override and extend Great Expectations.
-plugins_directory: plugins/
-
-# Validation Operators are customizable workflows that bundle the validation of
-# one or more expectation suites and subsequent actions. The example below
-# stores validations and send a slack notification. To read more about
-# customizing and extending these, read: https://docs.greatexpectations.io/en/latest/features/validation_operators_and_actions.html
-validation_operators:
-  action_list_operator:
-    class_name: ActionListValidationOperator
-    action_list:
-      - name: store_validation_result
-        action:
-          class_name: StoreValidationResultAction
-      - name: store_evaluation_params
-        action:
-          class_name: StoreEvaluationParametersAction
-      # - name: update_data_docs
-      #   action:
-      #     class_name: UpdateDataDocsAction
-      # - name: send_slack_notification_on_validation_result
-      #   action:
-      #     class_name: SlackNotificationAction
-      #     # put the actual webhook URL in the uncommitted/config_variables.yml file
-      #     slack_webhook: ${validation_notification_slack_webhook}
-      #     notify_on: all # possible values: "all", "failure", "success"
-      #     renderer:
-      #       module_name: great_expectations.render.renderer.slack_renderer
-      #       class_name: SlackRenderer
-
+    execution_engine:
+      class_name: PandasExecutionEngine
+      module_name: great_expectations.execution_engine
+    data_connectors:
+      runtime_data_connector:
+        name: runtime_data_connector
+        class_name: RuntimeDataConnector
+        module_name: great_expectations.datasource.data_connector
+        batch_identifiers:
+          - id_key_0
+          - id_key_1
+expectations_store_name: expectations_store
+validations_store_name: validations_store
+evaluation_parameter_store_name: evaluation_parameter_store
+checkpoint_store_name: checkpoint_store
+profiler_store_name: profiler_store
+plugins_directory: plugins/expectations/
 stores:
-# Stores are configurable places to store things like Expectations, Validations
-# Data Docs, and more. These are for advanced users only - most users can simply
-# leave this section alone.
-#
-# Three stores are required: expectations, validations, and
-# evaluation_parameters, and must exist with a valid store entry. Additional
-# stores can be configured for uses such as data_docs, validation_operators, etc.
   expectations_store:
     class_name: ExpectationsStore
     store_backend:
       class_name: TupleFilesystemStoreBackend
-      base_directory: expectations/raw
+      base_directory: expectations/
 
   validations_store:
     class_name: ValidationsStore
     store_backend:
       class_name: TupleFilesystemStoreBackend
       base_directory: uncommitted/validations/
-
   evaluation_parameter_store:
     class_name: EvaluationParameterStore
-expectations_store_name: expectations_store
-validations_store_name: validations_store
-evaluation_parameter_store_name: evaluation_parameter_store
-
-data_docs_sites:
-  # Data Docs make it simple to visualize data quality in your project. These
-  # include Expectations, Validations & Profiles. The are built for all
-  # Datasources from JSON artifacts in the local repo including validations &
-  # profiles from the uncommitted directory. Read more at https://docs.greatexpectations.io/en/latest/features/data_docs.html
-  ###########################################################################
-  # Comment this out when you need to also build the data docs locally      #
-  ###########################################################################
-  local_site:
-    class_name: SiteBuilder
+  checkpoint_store:
+    class_name: CheckpointStore
     store_backend:
       class_name: TupleFilesystemStoreBackend
-      base_directory: uncommitted/data_docs/local_site/
-    site_index_builder:
-      class_name: DefaultSiteIndexBuilder
-  # s3_site:
-  #   class_name: SiteBuilder
+      base_directory: checkpoints/
+  # expectations_store:
+  #   class_name: ExpectationsStore
   #   store_backend:
-  #     class_name: TupleS3StoreBackend
-  #     bucket: ${DATA_OBSERVABILITY_BUCKET_NAME}
-  #     prefix: ''
-  #   site_index_builder:
-  #     class_name: DefaultSiteIndexBuilder
-
+  #     class_name: InMemoryStoreBackend
+  # validations_store:
+  #   class_name: ValidationsStore
+  #   store_backend:
+  #     class_name: InMemoryStoreBackend
+  # evaluation_parameter_store:
+  #   class_name: EvaluationParameterStore
+  # checkpoint_store:
+  #   class_name: CheckpointStore
+  #   store_backend:
+  #     class_name: InMemoryStoreBackend
+  profiler_store:
+    class_name: ProfilerStore
+    store_backend:
+      class_name: InMemoryStoreBackend
 notebooks:
-include_rendered_content:
-  globally: true
-  expectation_suite: true
-  expectation_validation_result: true
+data_docs_sites: {}
+config_variables_file_path: uncommitted/config_variables.yml
 anonymous_usage_statistics:
-  data_context_id: 43ef586b-70ab-4718-b543-3b926fb52531
+  data_context_id: 8d1da6f3-73e3-40f9-b2fc-bbcd1b771a82
   enabled: true
+include_rendered_content:
+  globally: false
+  expectation_suite: false
+  expectation_validation_result: false

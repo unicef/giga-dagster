@@ -1,3 +1,4 @@
+import great_expectations as gx
 import tools_expectations as gx_tools
 from config_expectations import (  # CONFIG_COLUMN_SUM,; CONFIG_FIVE_DECIMAL_PLACES,; CONFIG_NOT_SIMILAR_COLUMN,; CONFIG_PAIR_AVAILABILITY,; CONFIG_VALUES_RANGE_COVERAGE_ITU,; CONFIG_VALUES_TYPE,
     CONFIG_NONEMPTY_COLUMNS,
@@ -6,8 +7,6 @@ from config_expectations import (  # CONFIG_COLUMN_SUM,; CONFIG_FIVE_DECIMAL_PLA
     CONFIG_VALUES_OPTIONS,
     CONFIG_VALUES_RANGE,
 )
-
-import great_expectations as gx
 
 # This file is for setting the expectations for school geolocation data
 # Instead of directly editing the expectation file in great_expectations/expectatios,

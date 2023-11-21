@@ -76,8 +76,10 @@ def add_unique_columns_expectation(column_names):
         meta={
             "notes": {
                 "format": "markdown",
-                "content": "This indicates the uniqueness of compound columns {}".format(
-                    column_names
+                "content": (
+                    "This indicates the uniqueness of compound columns {}".format(
+                        column_names
+                    )
                 ),
             }
         },
@@ -95,8 +97,9 @@ def add_expect_column_values_to_be_in_set(column, value_set):
         meta={
             "notes": {
                 "format": "markdown",
-                "content": "This expects the column {} to have a value within the set {}.".format(
-                    column, value_set
+                "content": (
+                    "This expects the column {} to have a value within the set {}."
+                    .format(column, value_set)
                 ),
             }
         },
@@ -120,8 +123,9 @@ def add_expect_column_values_to_be_between(column_name, min_value, max_value):
         meta={
             "notes": {
                 "format": "markdown",
-                "content": "This expects the column {} to have a value between {} and {}.".format(
-                    column_name, min_value, max_value
+                "content": (
+                    "This expects the column {} to have a value between {} and {}."
+                    .format(column_name, min_value, max_value)
                 ),
             }
         },

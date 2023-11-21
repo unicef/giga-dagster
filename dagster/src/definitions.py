@@ -2,6 +2,8 @@ from dagster_ge.factory import ge_data_context
 
 from dagster import Definitions, fs_io_manager, load_assets_from_package_module
 from src import assets
+
+# from src.assets.assets import raw, bronze, expectation_suite_asset, dq_failed_rows, dq_passed_rows, manual_review_failed_rows, manual_review_passed_rows, silver, gold
 from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
@@ -32,7 +34,7 @@ defs = Definitions(
     ],
     resources={
         "ge_data_context": ge_data_context.configured(
-            {"ge_root_dir": "src/transforms/resources/great-expectations"}
+            {"ge_root_dir": "src/resources/great-expectations"}
         ),
         "adls_io_manager": io_managers.get(f"adls_{ENVIRONMENT}"),
         "adls_file_client": ADLSFileClient(),

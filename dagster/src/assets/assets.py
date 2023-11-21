@@ -1,14 +1,20 @@
 import datahub.emitter.mce_builder as builder
+import great_expectations as gx
 import pandas as pd
+from dagster_ge import ge_validation_op_factory
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
-from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
+from dagster import (  # AssetsDefinition
+    AssetKey,
+    AssetsDefinition,
+    OpExecutionContext,
+    Output,
+    asset,
+)
 from src.resources._utils import get_input_filepath, get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
-
-# from dagster_ge import ge_validation_op_factory
 
 
 def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
@@ -75,6 +81,9 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
+    df["d"] = 12345
+    gx_context = gx.get_context()
+    context.log.info(f"gx_context: {gx_context.list_expectation_suite_names()}")
 
     raw_dataset_urn = builder.make_dataset_urn(
         platform="adls", name=context.run_tags["dagster/run_key"]
@@ -90,17 +99,27 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     # )  # io manager should upload this to bronze/<dataset_name> as deltatable
 
 
-# expectation_suite_op = ge_validation_op_factory(
-#     name="raw_file_expectations",
-#     datasource_name="raw_file",
-#     suite_name="data-quality-checks",
-#     validation_operator_name="action_list_operator",
-# )
+expectation_suite_op = ge_validation_op_factory(
+    name="data_quality_checks",
+    datasource_name="bronze",
+    suite_name="expectation_school_geolocation",
+    validation_operator_name="action_list_operator",
+)
 
-# expectation_suite_asset = AssetsDefinition.from_op(
-#     expectation_suite_op,
-#     keys_by_input_name={"dataset": AssetKey("bronze")},
-# )  # not sure yet if we can return dfs from this. runs on dfs but uploads as deltatable
+expectation_suite_asset = AssetsDefinition.from_op(
+    expectation_suite_op,
+    keys_by_input_name={"dataset": AssetKey("bronze")},
+)  # not sure yet if we can return dfs from this. runs on dfs but uploads as deltatable
+
+
+@asset(
+    description="Do a full greatexpectations' data docs rebuild",
+    non_argument_deps={AssetKey("bronze")},
+    required_resource_keys={"ge_data_context"},
+    op_tags={"kind": "ge"},
+)
+def ge_data_docs(context):
+    context.resources.ge_data_context.build_data_docs()
 
 
 @asset(
