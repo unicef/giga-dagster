@@ -4,8 +4,8 @@ from uuid import uuid4
 
 import pyspark.pandas as pd
 
+from src._utils.spark import get_spark_session
 from src.settings import AZURE_BLOB_CONNECTION_URI
-from src.spark.spark import get_spark_session
 
 spark = get_spark_session()
 
