@@ -6,20 +6,9 @@ RUN apt-get update && \
     apt-get install -y wget && \
     apt-get clean
 
-ARG DELTA_SPARK_VERSION="3.0.0"
-ARG DELTALAKE_VERSION="0.12.0"
-ARG PANDAS_VERSION="1.5.3"
-ARG ROAPI_VERSION="0.9.0"
-ARG PYARROW_VERSION="11.0.0"
+COPY requirements.txt /tmp/requirements.txt
 
-RUN pip install --no-cache-dir \
-    delta-spark==${DELTA_SPARK_VERSION} \
-    pandas==${PANDAS_VERSION} \
-    deltalake==${DELTALAKE_VERSION} \
-    pandas==${PANDAS_VERSION} \
-    roapi==${ROAPI_VERSION} \
-    pyarrow==${PYARROW_VERSION} \
-    sentry-sdk
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 WORKDIR /opt/bitnami/spark/jars
 
