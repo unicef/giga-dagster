@@ -26,6 +26,7 @@ variables:
   azureAdPolicyName: $(AZURE_AUTH_POLICY_NAME)
   azureAdRedirectUri: $(AZURE_REDIRECT_URI)
   azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
+  secretKey: $(AUTHPROXY_SECRET_KEY)
   system.debug: true
 
 stages:
