@@ -5,33 +5,13 @@ from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
-from src.resources.get_destination_file_path import get_destination_filepath
+from src.resources._utils import get_input_filepath, get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 # from dagster_ge import ge_validation_op_factory
 
 
-def output_filepath(context):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    source_path = context.get_step_execution_context().op_config["filepath"]
-    step = context.asset_key.to_user_string()
-
-    destination_filepath = get_destination_filepath(source_path, dataset_type, step)
-
-    return destination_filepath
-
-
-def input_filepath(context, upstream_step):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    source_path = context.get_step_execution_context().op_config["filepath"]
-    filename = source_path.split("/")[-1]
-
-    upstream_path = upstream_step + "/" + dataset_type + "/" + filename
-
-    return upstream_path
-
-
-def emit_metadata_to_datahub(context, upstream_dataset_urn):
+def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
     rest_emitter = DatahubRestEmitter(
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
@@ -44,7 +24,7 @@ def emit_metadata_to_datahub(context, upstream_dataset_urn):
 
     # Set the dataset's URN
     dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=output_filepath(context)
+        platform="adls", name=get_output_filepath(context)
     )
 
     # Construct a MetadataChangeProposalWrapper object
@@ -71,8 +51,8 @@ def emit_metadata_to_datahub(context, upstream_dataset_urn):
         rest_emitter.emit_mce(lineage_mce)
 
     return context.log.info(
-        f"Metadata of dataset {output_filepath(context)} has been successfully emitted"
-        " to Datahub."
+        f"Metadata of dataset {get_output_filepath(context)} has been successfully"
+        " emitted to Datahub."
     )
 
 
@@ -103,7 +83,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
 
-    yield Output(df, metadata={"filepath": output_filepath(context)})
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
     # return (
     #     raw_file.transform()
@@ -129,16 +109,16 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
     df = bronze
 
-    context.log.info(input_filepath(context, upstream_step="bronze"))
+    context.log.info(get_input_filepath(context, upstream_step="bronze"))
 
     bronze_dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=input_filepath(context, upstream_step="bronze")
+        platform="adls", name=get_input_filepath(context, upstream_step="bronze")
     )
 
     # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
 
-    yield Output(df, metadata={"filepath": output_filepath(context)})
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})
     # return (
     #     expectations_suite_asset.passed_rows()
     # )  # io manager should upload this to staging/pending-review/<dataset_name> as deltatable
@@ -165,7 +145,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
     # Emit metadata of dataset to Datahub
     staging_pending_review_dataset_urn = builder.make_dataset_urn(
         platform="adls",
-        name=input_filepath(context, upstream_step="staging/pending-review"),
+        name=get_input_filepath(context, upstream_step="staging/pending-review"),
     )
     emit_metadata_to_datahub(
         context, upstream_dataset_urn=staging_pending_review_dataset_urn
@@ -173,7 +153,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
 
     context.log.info(f"data={df}")
     yield Output(
-        df, metadata={"filepath": output_filepath(context)}
+        df, metadata={"filepath": get_output_filepath(context)}
     )  # io manager should upload this to staging/approved/<dataset_name> as deltatable
 
 
@@ -201,12 +181,12 @@ def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFra
     # Emit metadata of dataset to Datahub
     staging_approved_dataset_urn = builder.make_dataset_urn(
         platform="adls",
-        name=input_filepath(context, upstream_step="staging/approved"),
+        name=get_input_filepath(context, upstream_step="staging/approved"),
     )
     emit_metadata_to_datahub(context, upstream_dataset_urn=staging_approved_dataset_urn)
 
     yield Output(
-        df, metadata={"filepath": output_filepath(context)}
+        df, metadata={"filepath": get_output_filepath(context)}
     )  # io manager should upload this to silver/<dataset_name> as deltatable
 
 
@@ -220,49 +200,10 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     # Emit metadata of dataset to Datahub
     silver_dataset_urn = builder.make_dataset_urn(
         platform="adls",
-        name=input_filepath(context, upstream_step="silver"),
+        name=get_input_filepath(context, upstream_step="silver"),
     )
     emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn)
 
     yield Output(
-        df, metadata={"filepath": output_filepath(context)}
+        df, metadata={"filepath": get_output_filepath(context)}
     )  # io manager should upload this to gold/master_data as deltatable
-
-
-############
-
-# @asset(
-#     io_manager_key="adls_io_manager",
-# )
-# def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
-#     df = raw
-#     df["d"] = 12345
-
-#     emitter = DatahubRestEmitter(gms_server="http://datahub-gms:8080", extra_headers={})
-
-#     # Test the connection
-#     emitter.test_connection()
-
-#     # Construct a dataset properties object
-#     dataset_properties = DatasetPropertiesClass(
-#         description="This table stored the canonical User profile",
-#         customProperties={"governance": "ENABLED"},
-#     )
-
-#     # Construct a MetadataChangeProposalWrapper object.
-#     metadata_event = MetadataChangeProposalWrapper(
-#         entityUrn=builder.make_dataset_urn("adls", "cereals.highest_calorie_cereal"),
-#         entityType="dataHubIngestionSource",
-#         changeType="CREATE",
-#         aspect=dataset_properties,
-#     )
-
-#     # Emit metadata! This is a blocking call
-#     context.log.info("EMITTING METADATA")
-#     emitter.emit(metadata_event)
-
-#     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
-#     # return Output(df, metadata={"filename": df.shape[0]})
-#     # return (
-#     #     raw_file.transform()
-#     # )  # io manager should upload this to bronze/<dataset_name> as deltatable

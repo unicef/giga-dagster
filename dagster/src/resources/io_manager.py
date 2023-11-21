@@ -1,8 +1,8 @@
 import pandas as pd
 
 from dagster import InputContext, IOManager, OutputContext
+from src.resources._utils import get_destination_filepath
 from src.resources.adls_file_client import ADLSFileClient
-from src.resources.get_destination_file_path import get_destination_filepath
 
 
 class StagingADLSIOManager(IOManager):
