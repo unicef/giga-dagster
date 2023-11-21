@@ -35,6 +35,7 @@ def get_spark_session():
     conf.set("spark.authenticate.secret", SPARK_RPC_AUTHENTICATION_SECRET)
     conf.set("spark.authenticate.enableSaslEncryption", "true")
     conf.set("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
+    conf.set("spark.databricks.delta.schema.autoMerge.enabled", "true")
     conf.set("spark.databricks.delta.properties.defaults.appendOnly", "false")
     # conf.set("spark.python.use.daemon", "true")
     # conf.set("spark.python.daemon.module", "src.utils.sentry")
