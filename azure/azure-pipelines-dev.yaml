@@ -45,7 +45,7 @@ stages:
                   displayName: Login to container Registry
                   inputs:
                     command: login
-                    containerRegistry: $(containerRegistryServiceConnection)
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
 
                 - task: Docker@2
                   displayName: Build and push Dagster image to container registry
@@ -53,7 +53,7 @@ stages:
                     command: buildAndPush
                     repository: giga-dagster
                     dockerfile: $(Build.SourcesDirectory)/dagster/prod.Dockerfile
-                    containerRegistry: $(containerRegistryServiceConnection)
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
                     tags: |
                       $(Build.SourceVersion)
 
@@ -63,7 +63,7 @@ stages:
                     command: buildAndPush
                     repository: giga-dagster-authproxy
                     dockerfile: $(Build.SourcesDirectory)/authproxy/prod.Dockerfile
-                    containerRegistry: $(containerRegistryServiceConnection)
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
                     tags: |
                       $(Build.SourceVersion)
 
