@@ -34,3 +34,8 @@ class ADLSFileClient:
     def list_paths(self, path: str, recursive=True):
         paths = self.adls.get_paths(path=path, recursive=recursive)
         return list(paths)
+
+    def get_file_metadata(self, filepath: str):
+        file_client = self.adls.get_file_client(filepath)
+        properties = file_client.get_file_properties()
+        return properties

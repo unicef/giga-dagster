@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import datahub.emitter.mce_builder as builder
 import pandas as pd
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
@@ -6,6 +8,7 @@ from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src.resources._utils import get_input_filepath, get_output_filepath
+from src.resources.adls_file_client import ADLSFileClient
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 # from dagster_ge import ge_validation_op_factory
@@ -16,16 +19,53 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
 
+    step = context.asset_key.to_user_string()
+    output_filepath = get_output_filepath(context)
+
+    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    data_format = output_filepath.split(".")[-1]
+    country = output_filepath.split("/")[1].split("_")[0]
+    source = output_filepath.split("_")[2]
+    date_modified = output_filepath.split(".")[0].split("_")[-1]
+    asset_type = "Raw Data" if step == "raw" else "Table"
+
+    properties = ADLSFileClient().get_file_metadata(filepath=output_filepath)
+    context.log.info(f"file metadata: {properties}")
+    size = properties["size"] / 1000000  # bytes to MB
+
+    # datetime containing current date and time # dd/mm/YY H:M:S
+    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
     # Construct a dataset properties object
     dataset_properties = DatasetPropertiesClass(
         description=f"{context.asset_key.to_user_string()}",
-        customProperties={"governance": "ENABLED"},
+        customProperties={
+            "Dagster Asset Key": f"{step}",
+            "Metadata Last Ingested": f"{now}",
+            "Asset Type": f"{asset_type}",
+            "Sensitivity Level": "",
+            "Data Security Classification (UNICEF)": "",
+            "PII Classification": "",
+            "Created By": "",
+            "Date Uploaded": "",
+            "Geolocation Data Source": f"{source}",
+            "Data Collection Modality": "",
+            "Data Collection Date": "",
+            "Domain": f"{dataset_type}",
+            "Date Modified": f"{date_modified}",
+            "Source": f"{source}",
+            "Data Format": f"{data_format}",
+            "Data Size": f"{size} MB",
+            "Data Owner": "",
+            "Data Schema": "",
+            "Country": f"{country}",
+            "School ID Type": "",
+            "Description of file update": "",
+        },
     )
 
     # Set the dataset's URN
-    dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=get_output_filepath(context)
-    )
+    dataset_urn = builder.make_dataset_urn(platform="adls", name=output_filepath)
 
     # Construct a MetadataChangeProposalWrapper object
     metadata_event = MetadataChangeProposalWrapper(
@@ -36,8 +76,6 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
     # Emit metadata! This is a blocking call
     context.log.info("EMITTING METADATA")
     rest_emitter.emit(metadata_event)
-
-    step = context.asset_key.to_user_string()
 
     if step != "raw":
         # Construct a lineage object
@@ -51,7 +89,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
         rest_emitter.emit_mce(lineage_mce)
 
     return context.log.info(
-        f"Metadata of dataset {get_output_filepath(context)} has been successfully"
+        f"Metadata of dataset {output_filepath} has been successfully"
         " emitted to Datahub."
     )
 
