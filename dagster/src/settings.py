@@ -1,6 +1,10 @@
 import os
 from pathlib import Path
 
+PYTHON_ENV = os.environ.get("PYTHON_ENV", "production")
+
+IN_PRODUCTION = PYTHON_ENV == "production"
+
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "staging")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,3 +24,5 @@ SPARK_RPC_AUTHENTICATION_SECRET = os.environ.get("SPARK_RPC_AUTHENTICATION_SECRE
 DATAHUB_METADATA_SERVER_URL = os.environ.get("DATAHUB_METADATA_SERVER_URL")
 
 DATAHUB_ACCESS_TOKEN = os.environ.get("DATAHUB_ACCESS_TOKEN")
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN")

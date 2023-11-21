@@ -1,4 +1,4 @@
-FROM bitnami/spark:3.5.0
+FROM bitnami/spark:3.5.0 as base
 
 USER root
 
@@ -6,19 +6,9 @@ RUN apt-get update && \
     apt-get install -y wget && \
     apt-get clean
 
-ARG DELTA_SPARK_VERSION="3.0.0"
-ARG DELTALAKE_VERSION="0.12.0"
-ARG PANDAS_VERSION="1.5.3"
-ARG ROAPI_VERSION="0.9.0"
-ARG PYARROW_VERSION="11.0.0"
+COPY requirements.txt /tmp/requirements.txt
 
-RUN pip install --no-cache-dir \
-    delta-spark==${DELTA_SPARK_VERSION} \
-    pandas==${PANDAS_VERSION} \
-    deltalake==${DELTALAKE_VERSION} \
-    pandas==${PANDAS_VERSION} \
-    roapi==${ROAPI_VERSION} \
-    pyarrow==${PYARROW_VERSION}
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 WORKDIR /opt/bitnami/spark/jars
 
@@ -32,3 +22,9 @@ RUN wget https://repo1.maven.org/maven2/org/apache/spark/spark-avro_2.13/3.4.0/s
 USER 1001
 
 WORKDIR /opt/bitnami/spark
+
+FROM base as master
+
+RUN /opt/bitnami/spark/sbin/start-thriftserver.sh \
+    --hiveconf hive.server2.thrift.port=$THRIFT_PORT \
+    --master "spark://localhost:$SPARK_MASTER_PORT"

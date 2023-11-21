@@ -1,3 +1,4 @@
+import pyarrow_hotfix  # noqa: F401
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
@@ -28,10 +29,13 @@ def get_spark_session():
         "org.apache.spark.sql.delta.catalog.DeltaCatalog",
     )
     conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
+    conf.set("spark.sql.warehouse.dir", "/opt/spark/warehouse")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", SPARK_RPC_AUTHENTICATION_SECRET)
     conf.set("spark.authenticate.enableSaslEncryption", "true")
     conf.set("spark.databricks.delta.properties.defaults.enableChangeDataFeed", "true")
+    # conf.set("spark.python.use.daemon", "true")
+    # conf.set("spark.python.daemon.module", "src.utils.sentry")
     conf.set(
         f"fs.azure.sas.{AZURE_BLOB_CONTAINER_NAME}.{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net",
         AZURE_SAS_TOKEN,
@@ -43,4 +47,4 @@ def get_spark_session():
         .config(conf=conf)
     )
     spark = configure_spark_with_delta_pip(builder)
-    return spark.getOrCreate()
+    return spark.enableHiveSupport().getOrCreate()

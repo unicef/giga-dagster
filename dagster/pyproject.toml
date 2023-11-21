@@ -9,6 +9,7 @@ readme = "../docs/README.md"
 python = ">=3.11,<3.13"
 scipy = ">=1.10.0"
 cryptography = ">=41.0.4"
+sentry-sdk = "^1.35.0"
 
 [tool.poetry.group.dagster.dependencies]
 dagster = "1.5.0"
@@ -32,14 +33,22 @@ azure-identity = "^1.14.0"
 geopy = "^2.4.0"
 h3 = "^3.7.6"
 fastparquet = "^2023.8.0"
-acryl-datahub = "^0.12.0"
 grpcio-status = "^1.59.0"
+acryl-datahub = {extras = ["azure-ad"], version = "^0.12.0.1"}
+shapely = "^2.0.2"
+geopandas = "^0.14.1"
+thefuzz = "^0.20.0"
+country-converter = "^1.1.1"
+dbt = "^1.0.0.34.14"
+dbt-trino = "^1.7.0"
+great-expectations-experimental = "^0.1.20231115049"
 
 [tool.poetry.group.spark.dependencies]
 pyspark = "^3.5.0"
 delta-spark = "^3.0.0"
 deltalake = "^0.10.2"
 pyarrow = "<=12"
+pyarrow-hotfix = "^0.5"
 roapi = "^0.10.0"
 
 [tool.poetry.group.notebook.dependencies]

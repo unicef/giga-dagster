@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     AZURE_AUTH_POLICY_NAME: str
     DAGSTER_WEBSERVER_URL: str
     DAGSTER_WEBSERVER_READONLY_URL: str
+    SENTRY_DSN: str = ""
 
     class Config:
         env_file = ".env"

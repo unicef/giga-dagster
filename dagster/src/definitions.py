@@ -15,11 +15,15 @@ from src.sensors import (
     school_master__successful_manual_checks_sensor,
 )
 from src.settings import ENVIRONMENT
+from src.utils.sentry import setup_sentry
+
+setup_sentry()
 
 io_managers = {
     "dev": fs_io_manager.configured({"base_dir": "/tmp/io_manager_storage"}),
     "adls_staging": StagingADLSIOManager(),
 }
+
 defs = Definitions(
     assets=[
         *load_assets_from_package_module(

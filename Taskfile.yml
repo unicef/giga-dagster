@@ -108,7 +108,7 @@ tasks:
       - kubectl apply -f k8s/secrets.yaml
       - kubectl apply -f k8s/configmap.yaml
       - task: helm-up-dagster
-      - task: helm-up-spark
+      # - task: helm-up-spark
       - task: helm-up-authproxy
 
   helm-up-dagster:
@@ -152,7 +152,7 @@ tasks:
     ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy
-      - helm uninstall spark
+      # - helm uninstall spark
       - helm uninstall dagster
       - kubectl delete all --all
       - kubectl delete pvc --all
