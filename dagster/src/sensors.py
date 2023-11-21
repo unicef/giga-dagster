@@ -19,7 +19,7 @@ def get_dataset_type(filepath: str) -> str:
         return "school-coverage-data"
 
 
-@sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=60)
+@sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=30)
 def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
@@ -42,7 +42,7 @@ def school_master__raw_file_uploads_sensor():
                         "raw": file_config,
                         "bronze": file_config,
                         "dq_passed_rows": file_config,
-                        "dq_failed_rows": file_config,
+                        # "dq_failed_rows": file_config,
                     }
                 ),
             )

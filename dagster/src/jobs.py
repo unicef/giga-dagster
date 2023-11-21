@@ -6,7 +6,7 @@ school_master__run_automated_data_checks_job = define_asset_job(
         "raw",
         "bronze",
         # "expectation_suite_asset",
-        "dq_failed_rows",
+        # "dq_failed_rows",
         "dq_passed_rows",
     ],
 )
