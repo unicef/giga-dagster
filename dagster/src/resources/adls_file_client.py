@@ -8,6 +8,8 @@ from ..settings import AZURE_BLOB_CONTAINER_NAME, AZURE_BLOB_SAS_HOST, AZURE_SAS
 
 class ADLSFileClient:
     def __init__(self):
+        print(f"{AZURE_BLOB_SAS_HOST=}")
+        print(f"{AZURE_SAS_TOKEN=}")
         self.client = DataLakeServiceClient(
             account_url=f"https://{AZURE_BLOB_SAS_HOST}", credential=AZURE_SAS_TOKEN
         )
