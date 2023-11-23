@@ -1,5 +1,4 @@
 import datahub.emitter.mce_builder as builder
-import great_expectations as gx
 import pandas as pd
 
 # from dagster_ge import ge_validation_op_factory
@@ -64,7 +63,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
 def raw(context: OpExecutionContext) -> pd.DataFrame:
-    df = context.resources.adls_file_client.download_from_adls(
+    df = context.resources.adls_file_client.download_adls_csv_to_pandas(
         context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
@@ -81,8 +80,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
-    gx_context = gx.get_context()
-    context.log.info(f"gx_context: {gx_context.list_expectation_suite_names()}")
+    # gx_context = gx.get_context()
 
     # raw_dataset_urn = builder.make_dataset_urn(
     #     platform="adls", name=context.run_tags["dagster/run_key"]
@@ -135,6 +133,9 @@ def data_quality_results(context, bronze: pd.DataFrame):
         checkpoint_name="school_geolocation_checkpoint", validations=validations
     )
 
+    context.log.info(f"dqcheck: {dq_results}")
+    context.log.info(f"dqcheck: {dq_results['run_results']}")
+
     return dq_results
 
 
@@ -150,6 +151,8 @@ def ge_data_docs(context):
 
 @asset(
     io_manager_key="adls_io_manager",
+    required_resource_keys={"ge_data_context"},
+    op_tags={"kind": "ge"},
 )
 def dq_passed_rows(
     context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
@@ -159,12 +162,24 @@ def dq_passed_rows(
     context.log.info(
         f"Available attributes in CheckpointResult: {dir(data_quality_results)}"
     )
+
+    context.resources.ge_data_context.build_data_docs()
+    context.resources.ge_data_context.open_data_docs()
+    context.log.info(f"validresults: {data_quality_results}")
+    context.log.info(f"{data_quality_results.run_results}")
+    context.log.info(f"{data_quality_results.to_dict()}")
+
     failed_rows_indices = set()
-    for suite_result in data_quality_results["run_results"].values():
-        for result in suite_result["validation_result"]["results"]:
-            if not result["success"]:
-                for unexpected_row in result["result"]["unexpected_index_list"]:
+    for suite_result_key, suite_result in data_quality_results.run_results.items():
+        validation_result = suite_result["validation_result"]
+        for result in validation_result.results:
+            if not result.success:
+                for unexpected_row in result.result.unexpected_index_list:
                     failed_rows_indices.add(unexpected_row)
+        # for result in suite_result["validation_result"]["results"]:
+        #     if not result["success"]:
+        #         for unexpected_row in result["result"]["unexpected_index_list"]:
+        #             failed_rows_indices.add(unexpected_row)
 
     df = bronze
     df_passed = df.drop(index=list(failed_rows_indices))
