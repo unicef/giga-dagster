@@ -17,8 +17,10 @@ class StagingADLSIOManager(IOManager):
             return
 
         filepath = self._get_filepath(context)
-        self.adls_client.upload_to_adls(filepath, output)
-
+        if context.step_key != "data_quality_checks":
+            self.adls_client.upload_pandas_to_adls_csv(filepath, output)
+        else:
+            self.adls_client.upload_json_to_adls_json(filepath, output)
         # if context.step_key == "gold":
         #     self._create_delta_table(context, output, filepath)
 
@@ -30,12 +32,21 @@ class StagingADLSIOManager(IOManager):
     def load_input(self, context: InputContext):
         filepath = self._get_filepath(context.upstream_output)
 
+        context.log.info(f"inputcontext: {dir(context.upstream_output)}")
+        context.log.info(f"assetkey: {context.asset_key.to_user_string()}")
+
         context.log.info(
             f"Downloaded {filepath.split('/')[-1]} from"
             f" {('/').join(filepath.split('/')[:-1])} in ADLS."
         )
 
-        return self.adls_client.download_from_adls(filepath)
+        if (
+            context.upstream_output.step_key == "data_quality_checks"
+            and context.asset_key.to_user_string() == "data_quality_checks"
+        ):
+            return self.adls_client.download_adls_json_to_json(filepath)
+        else:
+            return self.adls_client.download_adls_csv_to_pandas(filepath)
 
     def _get_filepath(self, context):
         filepath = context.step_context.op_config["filepath"]

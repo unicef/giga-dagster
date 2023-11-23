@@ -1,3 +1,4 @@
+import json
 from io import BytesIO
 
 import pandas as pd
@@ -15,7 +16,7 @@ class ADLSFileClient:
             file_system=AZURE_BLOB_CONTAINER_NAME
         )
 
-    def download_from_adls(self, filepath: str):
+    def download_adls_csv_to_pandas(self, filepath: str):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
@@ -23,11 +24,27 @@ class ADLSFileClient:
             buffer.seek(0)
             return pd.read_csv(buffer)
 
-    def upload_to_adls(self, filepath: str, data: pd.DataFrame):
+    def upload_pandas_to_adls_csv(self, filepath: str, data: pd.DataFrame):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
             data.to_csv(buffer, index=False)
+            buffer.seek(0)
+            file_client.upload_data(buffer.getvalue(), overwrite=True)
+
+    def download_adls_json_to_json(self, filepath: str):
+        file_client = self.adls.get_file_client(filepath)
+
+        with BytesIO() as buffer:
+            file_client.download_file().readinto(buffer)
+            buffer.seek(0)
+            return json.load(buffer)
+
+    def upload_json_to_adls_json(self, filepath: str, data):
+        file_client = self.adls.get_file_client(filepath)
+        json_data = json.dumps(data).encode("utf-8")
+
+        with BytesIO(json_data) as buffer:
             buffer.seek(0)
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
