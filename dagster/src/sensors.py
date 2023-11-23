@@ -44,7 +44,7 @@ def school_master__raw_file_uploads_sensor():
                         "bronze": file_config,
                         "data_quality_results": file_config,
                         "dq_passed_rows": file_config,
-                        "dq_failed_rows": file_config
+                        # "dq_failed_rows": file_config
                         # "dq_failed_rows": file_config,
                     }
                 ),
