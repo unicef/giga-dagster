@@ -1,19 +1,19 @@
 import datahub.emitter.mce_builder as builder
 import great_expectations as gx
 import pandas as pd
-from dagster_ge import ge_validation_op_factory
+
+# from dagster_ge import ge_validation_op_factory
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
-from dagster import (  # AssetsDefinition
+from dagster import (  # AssetsDefinition; AssetOut,; AssetsDefinition,; multi_asset,
     AssetKey,
-    AssetsDefinition,
     OpExecutionContext,
     Output,
     asset,
 )
-from src.resources._utils import get_input_filepath, get_output_filepath
+from src.resources._utils import get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 
@@ -69,8 +69,8 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
     )
     context.log.info(f"data={df}")
 
-    # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn="")
+    # # Emit metadata of dataset to Datahub
+    # emit_metadata_to_datahub(context, upstream_dataset_urn="")
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -81,16 +81,15 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     df = raw
-    df["d"] = 12345
     gx_context = gx.get_context()
     context.log.info(f"gx_context: {gx_context.list_expectation_suite_names()}")
 
-    raw_dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=context.run_tags["dagster/run_key"]
-    )
+    # raw_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls", name=context.run_tags["dagster/run_key"]
+    # )
 
-    # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
+    # # Emit metadata of dataset to Datahub
+    # emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
@@ -99,22 +98,49 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     # )  # io manager should upload this to bronze/<dataset_name> as deltatable
 
 
-expectation_suite_op = ge_validation_op_factory(
-    name="data_quality_checks",
-    datasource_name="bronze",
-    suite_name="expectation_school_geolocation",
-    validation_operator_name="action_list_operator",
-)
+# expectation_suite_op = ge_validation_op_factory(
+#     name="data_quality_checks",
+#     datasource_name="bronze",
+#     suite_name="expectation_school_geolocation",
+#     validation_operator_name="action_list_operator",
+# )
 
-expectation_suite_asset = AssetsDefinition.from_op(
-    expectation_suite_op,
-    keys_by_input_name={"dataset": AssetKey("bronze")},
-)  # not sure yet if we can return dfs from this. runs on dfs but uploads as deltatable
+# expectation_suite_asset = AssetsDefinition.from_op(
+#     expectation_suite_op,
+#     keys_by_input_name={"dataset": AssetKey("bronze")},
+# )  # not sure yet if we can return dfs from this. runs on dfs but uploads as deltatable
+
+
+@asset(required_resource_keys={"ge_data_context"}, op_tags={"kind": "ge"})
+def data_quality_results(context, bronze: pd.DataFrame):
+    # filepath_array = context.run_tags["dagster/run_key"].split("/")
+    # filepath_array[-3] = "bronze"
+    # new_filepath = "/".join(filepath_array)
+    validations = [
+        {
+            "batch_request": {
+                "datasource_name": "pandas_datasource",
+                "runtime_parameters": {"batch_data": bronze},
+                "data_connector_name": "runtime_data_connector",
+                "data_asset_name": "bronze_school_data",
+                "batch_identifiers": {
+                    "name": context.run_tags["dagster/run_key"],
+                    "step": "bronze",
+                },
+            },
+            "expectation_suite_name": "expectation_school_geolocation",
+        },
+    ]
+    dq_results = context.resources.ge_data_context.run_checkpoint(
+        checkpoint_name="school_geolocation_checkpoint", validations=validations
+    )
+
+    return dq_results
 
 
 @asset(
     description="Do a full greatexpectations' data docs rebuild",
-    non_argument_deps={AssetKey("bronze")},
+    deps={AssetKey("data_quality_results")},
     required_resource_keys={"ge_data_context"},
     op_tags={"kind": "ge"},
 )
@@ -125,34 +151,107 @@ def ge_data_docs(context):
 @asset(
     io_manager_key="adls_io_manager",
 )
-def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
+def dq_passed_rows(
+    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
+) -> pd.DataFrame:
     df = bronze
-
-    context.log.info(get_input_filepath(context, upstream_step="bronze"))
-
-    bronze_dataset_urn = builder.make_dataset_urn(
-        platform="adls", name=get_input_filepath(context, upstream_step="bronze")
+    # context.log.info(f"DQ: {data_quality_results}")
+    context.log.info(
+        f"Available attributes in CheckpointResult: {dir(data_quality_results)}"
     )
+    failed_rows_indices = set()
+    for suite_result in data_quality_results["run_results"].values():
+        for result in suite_result["validation_result"]["results"]:
+            if not result["success"]:
+                for unexpected_row in result["result"]["unexpected_index_list"]:
+                    failed_rows_indices.add(unexpected_row)
 
-    # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
+    df = bronze
+    df_passed = df.drop(index=list(failed_rows_indices))
+
+    yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
+
+    # raw_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls", name=context.run_tags["dagster/run_key"]
+    # )
+
+    # # Emit metadata of dataset to Datahub
+    # emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
-    # return (
-    #     expectations_suite_asset.passed_rows()
-    # )  # io manager should upload this to staging/pending-review/<dataset_name> as deltatable
 
 
 @asset(
     io_manager_key="adls_io_manager",
 )
-def dq_failed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.DataFrame:
+def dq_failed_rows(
+    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
+) -> pd.DataFrame:
     df = bronze
-    df["doodoo"] = "doodoo"
-    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
-    # return (
-    #     expectations_suite_asset.failed_rows()
-    # )  # io manager should upload this to archive/gx_tests_failed as deltatable
+    failed_rows_indices = set()
+    for suite_result in data_quality_results["run_results"].values():
+        for result in suite_result["validation_result"]["results"]:
+            if not result["success"]:
+                for unexpected_row in result["result"]["unexpected_index_list"]:
+                    failed_rows_indices.add(unexpected_row)
+
+    df = bronze
+    df_failed = df.loc[list(failed_rows_indices)]
+
+    yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
+
+    # raw_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls", name=context.run_tags["dagster/run_key"]
+    # )
+
+    # # Emit metadata of dataset to Datahub
+    # emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
+
+
+# @multi_asset(
+#     deps={AssetKey("ge_data_docs")},
+#     outs={
+#         "dq_passed_rows": AssetOut(
+#             is_required=False, io_manager_key="adls_io_manager"
+#         ),
+#         "dq_failed_rows": AssetOut(
+#             is_required=False, io_manager_key="adls_io_manager"
+#         ),
+#     },
+# )
+# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: pd.DataFrame) -> pd.DataFrame:
+#     failed_rows_indices = set()
+#     for suite_result in data_quality_results["run_results"].values():
+#         for result in suite_result["validation_result"]["results"]:
+#             if not result["success"]:
+#                 for unexpected_row in result["result"]["unexpected_index_list"]:
+#                     failed_rows_indices.add(unexpected_row)
+
+#     df = bronze
+#     df_passed = df.drop(index=list(failed_rows_indices))
+#     df_failed = df.loc[list(failed_rows_indices)]
+
+#     yield Output(df_passed, output_name="dq_passed_rows", metadata={"filepath": get_output_filepath(context)})
+#     yield Output(df_failed, output_name="dq_failed_rows", metadata={"filepath": get_output_filepath(context)})
+
+# bronze_dataset_urn = builder.make_dataset_urn(
+#     platform="adls", name=get_input_filepath(context, upstream_step="bronze")
+# )
+
+# # Emit metadata of dataset to Datahub
+# emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
+
+
+# @asset(
+#     io_manager_key="adls_io_manager",
+# )
+# def dq_failed_rows(context: OpExecutionContext, data_quality_checks: pd.DataFrame) -> pd.DataFrame:
+#     df = bronze
+#     df["doodoo"] = "doodoo"
+#     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
+# return (
+#     expectations_suite_asset.failed_rows()
+# )  # io manager should upload this to archive/gx_tests_failed as deltatable
 
 
 @asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
@@ -161,14 +260,14 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
         context.run_tags["dagster/run_key"]
     )
 
-    # Emit metadata of dataset to Datahub
-    staging_pending_review_dataset_urn = builder.make_dataset_urn(
-        platform="adls",
-        name=get_input_filepath(context, upstream_step="staging/pending-review"),
-    )
-    emit_metadata_to_datahub(
-        context, upstream_dataset_urn=staging_pending_review_dataset_urn
-    )
+    # # Emit metadata of dataset to Datahub
+    # staging_pending_review_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls",
+    #     name=get_input_filepath(context, upstream_step="staging/pending-review"),
+    # )
+    # emit_metadata_to_datahub(
+    #     context, upstream_dataset_urn=staging_pending_review_dataset_urn
+    # )
 
     context.log.info(f"data={df}")
     yield Output(
@@ -197,12 +296,12 @@ def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFra
     df = manual_review_passed_rows
     df["e"] = False
 
-    # Emit metadata of dataset to Datahub
-    staging_approved_dataset_urn = builder.make_dataset_urn(
-        platform="adls",
-        name=get_input_filepath(context, upstream_step="staging/approved"),
-    )
-    emit_metadata_to_datahub(context, upstream_dataset_urn=staging_approved_dataset_urn)
+    # # Emit metadata of dataset to Datahub
+    # staging_approved_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls",
+    #     name=get_input_filepath(context, upstream_step="staging/approved"),
+    # )
+    # emit_metadata_to_datahub(context, upstream_dataset_urn=staging_approved_dataset_urn)
 
     yield Output(
         df, metadata={"filepath": get_output_filepath(context)}
@@ -216,12 +315,12 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     df = silver
     df["f"] = True
 
-    # Emit metadata of dataset to Datahub
-    silver_dataset_urn = builder.make_dataset_urn(
-        platform="adls",
-        name=get_input_filepath(context, upstream_step="silver"),
-    )
-    emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn)
+    # # Emit metadata of dataset to Datahub
+    # silver_dataset_urn = builder.make_dataset_urn(
+    #     platform="adls",
+    #     name=get_input_filepath(context, upstream_step="silver"),
+    # )
+    # emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn)
 
     yield Output(
         df, metadata={"filepath": get_output_filepath(context)}

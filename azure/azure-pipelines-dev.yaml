@@ -93,7 +93,7 @@ stages:
                           app: giga-dagster
                       stringData:
                         AZURE_BLOB_SAS_TOKEN: "$(azureSasToken)"
-                        AZURE_BLOB_SAS_HOST: "$(azureSasUrl)"
+                        AZURE_DFS_SAS_HOST: "$(azureSasUrl)"
                         AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
                         AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                         POSTGRESQL_USERNAME: "$(postgresqlUsername)"

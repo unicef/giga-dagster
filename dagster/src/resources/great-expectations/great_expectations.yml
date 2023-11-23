@@ -3,13 +3,13 @@ fluent_datasources:
     type: pandas_abs
     assets:
       school_geolocation_parquet:
-        type: parquet
+        type: csv
         batching_regex: (.*).csv
         connect_options:
           abs_container: giga-dataops-dev
           abs_name_starts_with: bronze/school-geolocation-data/
     azure_options:
-      account_url: ${AZURE_STORAGE_URL}
+      account_url: https://${AZURE_BLOB_SAS_HOST}
       credential: ${AZURE_SAS_TOKEN}
 config_version: 3.0
 datasources:
@@ -25,8 +25,8 @@ datasources:
         class_name: RuntimeDataConnector
         module_name: great_expectations.datasource.data_connector
         batch_identifiers:
-          - id_key_0
-          - id_key_1
+          - name
+          - step
 expectations_store_name: expectations_store
 validations_store_name: validations_store
 evaluation_parameter_store_name: evaluation_parameter_store

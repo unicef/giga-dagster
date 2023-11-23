@@ -7,6 +7,8 @@ def get_destination_filepath(source_path, dataset_type, step):
     step_destination_folder_map = {
         "raw": f"adls-testing-raw/{dataset_type}",
         "bronze": f"bronze/{dataset_type}",
+        "data_quality_results": "logs-gx",
+        "dq_split_rows": "bronze/split-rows",
         "dq_passed_rows": f"staging/pending-review/{dataset_type}",
         "dq_failed_rows": "archive/gx-tests-failed",
         "manual_review_passed_rows": f"staging/approved/{dataset_type}",

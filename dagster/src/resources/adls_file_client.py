@@ -3,13 +3,13 @@ from io import BytesIO
 import pandas as pd
 from azure.storage.filedatalake import DataLakeServiceClient
 
-from ..settings import AZURE_BLOB_CONTAINER_NAME, AZURE_BLOB_SAS_HOST, AZURE_SAS_TOKEN
+from ..settings import AZURE_BLOB_CONTAINER_NAME, AZURE_DFS_SAS_HOST, AZURE_SAS_TOKEN
 
 
 class ADLSFileClient:
     def __init__(self):
         self.client = DataLakeServiceClient(
-            account_url=f"https://{AZURE_BLOB_SAS_HOST}", credential=AZURE_SAS_TOKEN
+            account_url=f"https://{AZURE_DFS_SAS_HOST}", credential=AZURE_SAS_TOKEN
         )
         self.adls = self.client.get_file_system_client(
             file_system=AZURE_BLOB_CONTAINER_NAME

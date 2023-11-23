@@ -10,6 +10,9 @@ action_list:
   - name: store_validation_result
     action:
       class_name: StoreValidationResultAction
+      # result_format: COMPLETE
+      target_store_name: validations_store
+      # unexpected_index_list: school_id
   - name: store_evaluation_params
     action:
       class_name: StoreEvaluationParametersAction
@@ -17,7 +20,10 @@ action_list:
     action:
       class_name: UpdateDataDocsAction
 evaluation_parameters: {}
-runtime_configuration: {}
+runtime_configuration:
+  result_format:
+      result_format: COMPLETE
+      unexpected_index_list: school_id
 validations:
   - batch_request:
       datasource_name: azure_blob_storage

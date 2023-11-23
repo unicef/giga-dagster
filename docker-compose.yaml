@@ -59,39 +59,39 @@ services:
     ports:
       - "3003:3003"
 
-  spark-master:
-    <<: *spark-common-config
-    build:
-      context: ./spark
-      target: master
-    environment:
-      SPARK_MODE: master
-      SPARK_MASTER_PORT: 7077
-      SPARK_MASTER_WEBUI_PORT: 8070
-      THRIFT_PORT: 10000
-    ports:
-      - "8070:8070"
-      - "10000:10000"
+  # spark-master:
+  #   <<: *spark-common-config
+  #   build:
+  #     context: ./spark
+  #     target: master
+  #   environment:
+  #     SPARK_MODE: master
+  #     SPARK_MASTER_PORT: 7077
+  #     SPARK_MASTER_WEBUI_PORT: 8070
+  #     THRIFT_PORT: 10000
+  #   ports:
+  #     - "8070:8070"
+  #     - "10000:10000"
 
-  spark-worker:
-    <<: *spark-common-config
-    build:
-      context: ./spark
-      target: base
-    environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_CORES: 1
-      SPARK_WORKER_MEMORY: 1024M
-    deploy:
-      mode: replicated
-      replicas: 3
-      endpoint_mode: dnsrr
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
+  # spark-worker:
+  #   <<: *spark-common-config
+  #   build:
+  #     context: ./spark
+  #     target: base
+  #   environment:
+  #     SPARK_MODE: worker
+  #     SPARK_MASTER_URL: spark://spark-master:7077
+  #     SPARK_WORKER_CORES: 1
+  #     SPARK_WORKER_MEMORY: 1024M
+  #   deploy:
+  #     mode: replicated
+  #     replicas: 3
+  #     endpoint_mode: dnsrr
+  #     restart_policy:
+  #       condition: on-failure
+  #       delay: 5s
+  #       max_attempts: 3
+  #       window: 120s
 
   #  authproxy:
   #    <<: *common-config
