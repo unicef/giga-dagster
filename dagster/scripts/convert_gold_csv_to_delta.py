@@ -9,7 +9,7 @@ client = ADLSFileClient()
 
 
 def main():
-    df = client.download_from_adls("gold/BEN_school_geolocation_coverage_master.csv")
+    df = client.download_from_adls("gold/ATG_school_geolocation_master_test.csv")
     df = df.astype(pd.StringDtype())
 
     columns_convert_to_float = ["connectivity_speed", "latency_connectivity"]
@@ -58,7 +58,7 @@ def main():
 
     spark.sql(
         f"""
-    CREATE TABLE IF NOT EXISTS gold.BEN_school_master (
+    CREATE TABLE IF NOT EXISTS gold.ATG_school_master (
         giga_id_school STRING NOT NULL,
         school_id STRING,
         name STRING,
@@ -105,11 +105,11 @@ def main():
         pop_within_10km LONG
     )
     USING DELTA
-    LOCATION '{AZURE_BLOB_CONNECTION_URI}/gold/BEN-school_geolocation_coverage-master'
+    LOCATION '{AZURE_BLOB_CONNECTION_URI}/gold/ATG-school_geolocation_coverage-master'
     """
     )
 
-    df.write.format("delta").mode("overwrite").saveAsTable("gold.BEN_school_master")
+    df.write.format("delta").mode("overwrite").saveAsTable("gold.ATG_school_master")
 
 
 if __name__ == "__main__":

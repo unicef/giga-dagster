@@ -82,6 +82,13 @@ tasks:
       - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
       - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml down --volumes --remove-orphans {{.CLI_ARGS}}
 
+  python:
+    desc: Run a Python command in the Dagster container
+    cmds:
+      - >
+        docker compose --project-name {{.PROJECT_NAME}} exec
+        --interactive --tty dagster-webserver python {{.CLI_ARGS}}
+
   build-and-push:
     desc: Build and push Docker image
     cmds:
