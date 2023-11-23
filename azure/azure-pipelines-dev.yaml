@@ -27,6 +27,7 @@ variables:
   azureAdRedirectUri: $(AZURE_REDIRECT_URI)
   azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   secretKey: $(AUTHPROXY_SECRET_KEY)
+  datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   system.debug: true
 
 stages:
@@ -106,6 +107,8 @@ stages:
                         AZURE_AUTH_POLICY_NAME: "$(azureAdPolicyName)"
                         AZURE_REDIRECT_URI: "$(azureAdRedirectUri)"
                         AZURE_LOGOUT_REDIRECT_URI: "$(azureAdLogoutRedirectUri)"
+                        DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
+                        KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
 
                 - task: HelmDeploy@0
                   displayName: Add Dagster Helm Repo

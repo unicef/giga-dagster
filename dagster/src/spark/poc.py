@@ -27,7 +27,7 @@ def create_test_table():
         coverage_availability STRING
     )
     USING DELTA
-    LOCATION '{AZURE_BLOB_CONNECTION_URI}/fake-gold/delta-spark'
+    LOCATION '{AZURE_BLOB_CONNECTION_URI}/gold/delta-spark'
     """
     )
     df = pd.DataFrame(

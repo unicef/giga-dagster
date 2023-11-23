@@ -118,6 +118,8 @@ tasks:
     cmds:
       - >
         helm upgrade --install dagster dagster/dagster
+        --namespace giga-dataops
+        --create-namespace
         --values dagster/values.yaml
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
         --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}}
@@ -125,6 +127,8 @@ tasks:
         --set pipelineRun.image.tag={{.SHORT_SHA}}
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
+        --set dagsterWebserver.service.type=LoadBalancer
+        --set dagsterWebserver.enableReadOnly=false
 
   helm-up-authproxy:
     internal: true
@@ -133,6 +137,8 @@ tasks:
     cmds:
       - >
         helm upgrade --install dagster-authproxy ./authproxy
+        --namespace giga-dataops
+        --create-namespace
         --values authproxy/values.yaml
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
@@ -145,6 +151,8 @@ tasks:
     cmds:
       - >
         helm upgrade --install spark bitnami/spark
+        --namespace giga-dataops
+        --create-namespace
         --values spark/values.yaml
 
   helm-down:

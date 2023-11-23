@@ -14,7 +14,7 @@ WORKDIR /tmp
 
 # Update packages & install JDK
 RUN apt-get update && \
-    apt-get install -y curl wget openjdk-11-jdk-headless && \
+    apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
     apt-get clean
 
 # Download pre-built Spark w/ Hadoop
@@ -39,7 +39,8 @@ RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.1
 # enable parallel installs
 RUN pip install "poetry==$POETRY_VERSION" && \
     poetry config virtualenvs.create false && \
-    poetry config installer.max-workers 4
+    poetry config installer.max-workers 4 && \
+    poetry config installer.no-binary shapely,fiona
 
 # Copy package manifests inside the container
 COPY pyproject.toml poetry.lock ./
