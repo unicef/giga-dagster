@@ -71,7 +71,28 @@ stores:
     store_backend:
       class_name: InMemoryStoreBackend
 notebooks:
-data_docs_sites: {}
+data_docs_sites:
+  # Data Docs make it simple to visualize data quality in your project. These
+  # include Expectations, Validations & Profiles. The are built for all
+  # Datasources from JSON artifacts in the local repo including validations &
+  # profiles from the uncommitted directory. Read more at https://docs.greatexpectations.io/docs/terms/data_docs
+  local_site:
+    class_name: SiteBuilder
+    show_how_to_buttons: true
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: uncommitted/data_docs/local_site/
+    site_index_builder:
+      class_name: DefaultSiteIndexBuilder
+  # adls_site:
+  #   class_name: SiteBuilder
+  #   store_backend:
+  #     class_name: TupleAzureBlobStoreBackend
+  #     container: giga-dataops-dev
+  #   account_url: ${AZURE_SAS_URL}
+  #   prefix: logs_gx
+  #   site_index_builder:
+  #     class_name: DefaultSiteIndexBuilder
 config_variables_file_path: uncommitted/config_variables.yml
 anonymous_usage_statistics:
   data_context_id: 8d1da6f3-73e3-40f9-b2fc-bbcd1b771a82

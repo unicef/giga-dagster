@@ -19,11 +19,15 @@ action_list:
   - name: update_data_docs
     action:
       class_name: UpdateDataDocsAction
+      site_names:
+      - local_site
+      # - adls_site
 evaluation_parameters: {}
 runtime_configuration:
   result_format:
       result_format: COMPLETE
-      unexpected_index_list: school_id
+      unexpected_index_column_names:
+      - school_id
 validations:
   - batch_request:
       datasource_name: azure_blob_storage
