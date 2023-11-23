@@ -26,7 +26,6 @@ def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
     file_list = adls.list_paths("adls-testing-raw")
-    print(f"{file_list=}")
 
     for file_data in file_list:
         if file_data["is_directory"]:

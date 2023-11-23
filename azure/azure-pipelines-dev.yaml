@@ -16,7 +16,7 @@ variables:
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
   azureSasToken: $(AZURE_SAS_TOKEN)
-  azureSasUrl: $(AZURE_SAS_URL)
+  azureSasHost: $(AZURE_BLOB_SAS_HOST)
   azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
   azureAdTenantId: $(AZURE_TENANT_ID)
@@ -98,7 +98,7 @@ stages:
                         SECRET_KEY: "$(secretKey)"
                         AZURE_SAS_TOKEN: "$(azureSasToken)"
                         AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
-                        AZURE_BLOB_SAS_HOST: "$(azureSasUrl)"
+                        AZURE_BLOB_SAS_HOST: "$(azureSasHost)"
                         AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
                         AZURE_TENANT_ID: "$(azureAdTenantId)"
                         AZURE_CLIENT_ID: "$(azureAdClientId)"
