@@ -89,6 +89,13 @@ tasks:
         docker compose --project-name {{.PROJECT_NAME}} exec
         --interactive --tty dagster-webserver python {{.CLI_ARGS}}
 
+  ipython:
+    desc: Spawn an ipython shell in the Dagster container
+    cmds:
+      - >
+        docker compose --project-name {{.PROJECT_NAME}} exec
+        --interactive --tty dagster-webserver ipython
+
   build-and-push:
     desc: Build and push Docker image
     cmds:
