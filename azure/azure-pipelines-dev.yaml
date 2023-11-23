@@ -134,6 +134,9 @@ stages:
                       --set pipelineRun.image.tag=$(Build.SourceVersion)
                       --set postgresql.postgresqlUsername=$(postgresqlUsername)
                       --set postgresql.postgresqlPassword=$(postgresqlPassword)
+                      --set computeLogManager.config.azureBlobComputeLogManager.storageAccount=$(azureStorageAccountName)
+                      --set computeLogManager.config.azureBlobComputeLogManager.container=$(azureBlobContainerName)
+                      --set computeLogManager.config.azureBlobComputeLogManager.credential=$(azureSasToken)
 
                 - task: HelmDeploy@0
                   displayName: Helm deploy authproxy
