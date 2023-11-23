@@ -29,7 +29,7 @@ def get_spark_session():
         "org.apache.spark.sql.delta.catalog.DeltaCatalog",
     )
     conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
-    # conf.set("spark.sql.warehouse.dir", "/opt/spark/warehouse")
+    conf.set("spark.sql.warehouse.dir", "/opt/spark/warehouse")
     conf.set("spark.authenticate", "true")
     conf.set("spark.authenticate.secret", SPARK_RPC_AUTHENTICATION_SECRET)
     conf.set("spark.authenticate.enableSaslEncryption", "true")
@@ -45,7 +45,7 @@ def get_spark_session():
         SparkSession.builder.master("spark://spark-master:7077")
         .appName("GigaDagsterSpark")
         .config(conf=conf)
-        # .enableHiveSupport()
+        .enableHiveSupport()
     )
     spark = configure_spark_with_delta_pip(builder)
     return spark.getOrCreate()

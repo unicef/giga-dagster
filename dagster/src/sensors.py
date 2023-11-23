@@ -1,4 +1,4 @@
-from dagster import Config, RunConfig, RunRequest, sensor
+from dagster import Config, RunConfig, RunRequest, SensorEvaluationContext, sensor
 from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
@@ -20,10 +20,11 @@ def get_dataset_type(filepath: str) -> str:
 
 
 @sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=30)
-def school_master__raw_file_uploads_sensor():
+def school_master__raw_file_uploads_sensor(context: SensorEvaluationContext):
     adls = ADLSFileClient()
 
     file_list = adls.list_paths("adls-testing-raw")
+    context.log.debug(f"{file_list=}")
 
     for file_data in file_list:
         if file_data["is_directory"]:

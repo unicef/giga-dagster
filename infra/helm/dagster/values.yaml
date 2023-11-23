@@ -19,6 +19,8 @@ global:
   # to false below.
   celeryConfigSecretName: "dagster-celery-config-secret"
 
+x-dagster-version: &dagster-version "1.5.0"
+
 nameOverride: ""
 fullnameOverride: ""
 rbacEnabled: true
@@ -35,7 +37,7 @@ dagsterWebserver:
     # When a tag is not supplied for a Dagster provided image,
     # it will default as the Helm chart version.
     repository: "docker.io/dagster/dagster-celery-k8s"
-    tag: ~
+    tag: *dagster-version
     pullPolicy: Always
 
   # Support overriding the name prefix of the webserver pods
@@ -430,7 +432,7 @@ pipelineRun:
     # When a tag is not supplied for a Dagster provided image,
     # it will default as the Helm chart version.
     repository: "docker.io/dagster/user-code-example"
-    tag: ~
+    tag: *dagster-version
     pullPolicy: Always
 
   # Additional environment variables to set.
@@ -609,7 +611,7 @@ runLauncher:
         # When a tag is not supplied for a Dagster provided image,
         # it will default as the Helm chart version.
         repository: "docker.io/dagster/dagster-celery-k8s"
-        tag: ~
+        tag: *dagster-version
         pullPolicy: Always
 
       # The Kubernetes namespace where new jobs will be launched.
@@ -1059,7 +1061,7 @@ dagsterDaemon:
     # When a tag is not supplied for a Dagster provided image,
     # it will default as the Helm chart version.
     repository: "docker.io/dagster/dagster-celery-k8s"
-    tag: ~
+    tag: *dagster-version
     pullPolicy: Always
 
   heartbeatTolerance: 300
