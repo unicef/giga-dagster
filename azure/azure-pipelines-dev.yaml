@@ -93,13 +93,13 @@ stages:
                         labels:
                           app: giga-dagster
                       stringData:
-                        AZURE_BLOB_SAS_TOKEN: "$(azureSasToken)"
-                        AZURE_BLOB_SAS_HOST: "$(azureSasUrl)"
-                        AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-                        AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                         POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                         POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
                         SECRET_KEY: "$(secretKey)"
+                        AZURE_SAS_TOKEN: "$(azureSasToken)"
+                        AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
+                        AZURE_BLOB_SAS_HOST: "$(azureSasUrl)"
+                        AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
                         AZURE_TENANT_ID: "$(azureAdTenantId)"
                         AZURE_CLIENT_ID: "$(azureAdClientId)"
                         AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"

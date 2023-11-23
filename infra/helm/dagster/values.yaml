@@ -211,17 +211,18 @@ computeLogManager:
   #   S3ComputeLogManager,
   #   CustomComputeLogManager,
   # ]
-  type: CustomComputeLogManager
+  type: AzureBlobComputeLogManager
   config:
     ##  Uncomment this configuration if the AzureBlobComputeLogManager is selected
-    #   azureBlobComputeLogManager:
-    #     storageAccount: ~
-    #     container: ~
-    #     secretKey: ~
-    #     defaultAzureCredential: ~
-    #     localDir: ~
-    #     prefix: ~
-    #     uploadInterval: ~
+    azureBlobComputeLogManager:
+      storageAccount: ~
+      container: ~
+      #      secretKey: ~
+      credential: ~
+      #      defaultAzureCredential: ~
+      localDir: /opt/dagster/dagster_home/logs
+      prefix: dagster_logs
+      uploadInterval: ~
     ##  Uncomment this configuration if the GCSComputeLogManager is selected
     #   gcsComputeLogManager:
     #     bucket: ~
@@ -244,11 +245,11 @@ computeLogManager:
     ##  Uncomment this configuration if the CustomComputeLogManager is selected.
     ##  Using this setting requires a custom webserver image that defines the user specified
     ##  compute log manager in an installed python module.
-    customComputeLogManager:
-      module: dagster.core.storage.local_compute_log_manager
-      class: LocalComputeLogManager
-      config:
-        base_dir: /opt/dagster/dagster_home/logs
+#    customComputeLogManager:
+#      module: dagster.core.storage.local_compute_log_manager
+#      class: LocalComputeLogManager
+#      config:
+#        base_dir: /opt/dagster/dagster_home/logs
 
 pythonLogs: { }
 ## The names of python loggers that will be captured as Dagster logs
@@ -290,7 +291,7 @@ dagster-user-deployments:
 
   # List of unique deployments
   deployments:
-    - name: "k8s-user-code-1"
+    - name: "k8s-giga-dataops"
       image:
         # When a tag is not supplied, it will default as the Helm chart version.
         repository: ~
@@ -431,8 +432,8 @@ pipelineRun:
   image:
     # When a tag is not supplied for a Dagster provided image,
     # it will default as the Helm chart version.
-    repository: "docker.io/dagster/user-code-example"
-    tag: *dagster-version
+    repository: ~
+    tag: ~
     pullPolicy: Always
 
   # Additional environment variables to set.
@@ -1129,7 +1130,7 @@ dagsterDaemon:
     maxRetries: 0
 
   sensors:
-    # Whether to evaluate sensors using an asynchronous thread pool, allowing sensprs
+    # Whether to evaluate sensors using an asynchronous thread pool, allowing sensors
     # to execute in parallel,
     useThreads: true
     # The max number of worker threads to use when evaluating sensors. Can be tuned
