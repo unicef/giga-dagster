@@ -13,7 +13,7 @@ from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
     rest_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+        gms_server=DATAHUB_METADATA_SERVER_URL, token=DATAHUB_ACCESS_TOKEN
     )
 
     # Construct a dataset properties object
