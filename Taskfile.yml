@@ -129,9 +129,6 @@ tasks:
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
         --set dagsterWebserver.service.type=LoadBalancer
         --set dagsterWebserver.enableReadOnly=false
-        --set computeLogManager.config.azureBlobComputeLogManager.storageAccount={{.AZURE_STORAGE_ACCOUNT_NAME}}
-        --set computeLogManager.config.azureBlobComputeLogManager.container={{.AZURE_BLOB_CONTAINER_NAME}}
-        --set computeLogManager.config.azureBlobComputeLogManager.credential={{.AZURE_SAS_TOKEN}}
 
   helm-up-authproxy:
     internal: true

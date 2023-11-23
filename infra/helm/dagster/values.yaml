@@ -211,18 +211,18 @@ computeLogManager:
   #   S3ComputeLogManager,
   #   CustomComputeLogManager,
   # ]
-  type: AzureBlobComputeLogManager
+  type: CustomComputeLogManager
   config:
     ##  Uncomment this configuration if the AzureBlobComputeLogManager is selected
-    azureBlobComputeLogManager:
-      storageAccount: ~
-      container: ~
-      #      secretKey: ~
-      credential: ~
-      #      defaultAzureCredential: ~
-      localDir: /opt/dagster/dagster_home/logs
-      prefix: dagster_logs
-      uploadInterval: ~
+    #    azureBlobComputeLogManager:
+    #      storageAccount: ~
+    #      container: ~
+    #      #      secretKey: ~
+    #      credential: ~
+    #      #      defaultAzureCredential: ~
+    #      localDir: /opt/dagster/dagster_home/logs
+    #      prefix: dagster_logs
+    #      uploadInterval: ~
     ##  Uncomment this configuration if the GCSComputeLogManager is selected
     #   gcsComputeLogManager:
     #     bucket: ~
@@ -245,11 +245,11 @@ computeLogManager:
     ##  Uncomment this configuration if the CustomComputeLogManager is selected.
     ##  Using this setting requires a custom webserver image that defines the user specified
     ##  compute log manager in an installed python module.
-#    customComputeLogManager:
-#      module: dagster.core.storage.local_compute_log_manager
-#      class: LocalComputeLogManager
-#      config:
-#        base_dir: /opt/dagster/dagster_home/logs
+    customComputeLogManager:
+      module: dagster.core.storage.local_compute_log_manager
+      class: LocalComputeLogManager
+      config:
+        base_dir: /opt/dagster/dagster_home/logs
 
 pythonLogs: { }
 ## The names of python loggers that will be captured as Dagster logs
