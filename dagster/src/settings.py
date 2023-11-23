@@ -24,7 +24,7 @@ SPARK_RPC_AUTHENTICATION_SECRET = os.environ.get("SPARK_RPC_AUTHENTICATION_SECRE
 KUBERNETES_NAMESPACE = os.environ.get("KUBERNETES_NAMESPACE", "")
 
 DATAHUB_METADATA_SERVER_URL = (
-    f"http://datahub-datahub-gms.{KUBERNETES_NAMESPACE}:8080"
+    f"http://datahub-datahub-gms.{KUBERNETES_NAMESPACE}.svc.cluster.local:8080"
     if IN_PRODUCTION
     else "http://datahub-gms:8080"
 )
