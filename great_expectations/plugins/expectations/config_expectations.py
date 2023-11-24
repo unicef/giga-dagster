@@ -1,17 +1,22 @@
 import datetime
 
+SIMILARITY_RATIO_CUTOFF = 0.7
+
 # Single column checks
 CONFIG_UNIQUE_COLUMNS = ["school_id", "giga_id_school"]
-CONFIG_NONEMPTY_COLUMNS = [
+CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
     "school_name",
     "longitude",
     "latitude",
     "education_level",
+]
+CONFIG_NONEMPTY_COLUMNS_WARNING = [
     "mobile_internet_generation",
     "internet_availability",
     "internet_type",
     "internet_speed_mbps",
 ]
+
 CONFIG_NOT_SIMILAR_COLUMN = ["school_name"]
 CONFIG_FIVE_DECIMAL_PLACES = ["latitude", "longitude"]
 
@@ -19,6 +24,7 @@ CONFIG_FIVE_DECIMAL_PLACES = ["latitude", "longitude"]
 CONFIG_UNIQUE_SET_COLUMNS = [
     ["school_id", "school_name", "education_level", "latitude", "longitude"],
     ["school_name", "education_level", "latitude", "longitude"],
+    ["education_level", "latitude", "longitude"],
 ]
 
 CONFIG_COLUMN_SUM = [
