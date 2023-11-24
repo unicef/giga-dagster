@@ -1,10 +1,7 @@
 import pandas as pd
 
 from dagster import InputContext, IOManager, OutputContext
-
-# from src._utils import get_spark_session
-from src.resources._utils import get_destination_filepath
-from src.resources.adls_file_client import ADLSFileClient
+from src._utils.adls import ADLSFileClient, get_destination_filepath
 
 
 class StagingADLSIOManager(IOManager):
@@ -12,17 +9,18 @@ class StagingADLSIOManager(IOManager):
         self.adls_client = ADLSFileClient()
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
-        if output.empty:
-            context.log.warning("Output DataFrame is empty. Skipping write operation.")
-            return
-
         filepath = self._get_filepath(context)
-        if context.step_key != "data_quality_checks":
+        if context.step_key != "data_quality_results":
+            if output.empty:
+                context.log.warning(
+                    "Output DataFrame is empty. Skipping write operation."
+                )
+                return
             self.adls_client.upload_pandas_to_adls_csv(filepath, output)
+            context.log.info("uploaded csv")
         else:
             self.adls_client.upload_json_to_adls_json(filepath, output)
-        # if context.step_key == "gold":
-        #     self._create_delta_table(context, output, filepath)
+            context.log.info("uploaded json")
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
@@ -41,12 +39,16 @@ class StagingADLSIOManager(IOManager):
         )
 
         if (
-            context.upstream_output.step_key == "data_quality_checks"
-            and context.asset_key.to_user_string() == "data_quality_checks"
+            context.upstream_output.step_key == "data_quality_results"
+            and context.asset_key.to_user_string() == "data_quality_results"
         ):
-            return self.adls_client.download_adls_json_to_json(filepath)
+            file = self.adls_client.download_adls_json_to_json(filepath)
+            context.log.info(f"downloaded json: {file}")
+            return file
         else:
-            return self.adls_client.download_adls_csv_to_pandas(filepath)
+            file = self.adls_client.download_adls_csv_to_pandas(filepath)
+            context.log.info(f"downloaded csv: {file}")
+            return file
 
     def _get_filepath(self, context):
         filepath = context.step_context.op_config["filepath"]
@@ -59,12 +61,3 @@ class StagingADLSIOManager(IOManager):
         context.log.info(f"Moving from {filepath} to {destination_filepath}")
 
         return destination_filepath
-
-
-# no type
-# education_level_regional VARCHAR(20)
-# school_type VARCHAR(20)
-#  admin1 VARCHAR(100)
-#                 admin2 VARCHAR(100)
-#                 admin3 VARCHAR(100)
-#                 # admin4 VARCHAR(100)
