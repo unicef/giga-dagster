@@ -9,7 +9,7 @@ client = ADLSFileClient()
 
 
 def main():
-    df = client.download_from_adls("gold/ATG_school_geolocation_master_test.csv")
+    df = client.download_from_adls("school_data/ATG_school_geolocation_master_test.csv")
     df = df.astype(pd.StringDtype())
 
     columns_convert_to_float = ["connectivity_speed", "latency_connectivity"]
@@ -54,11 +54,11 @@ def main():
 
     df = spark.createDataFrame(df)
 
-    spark.sql("CREATE SCHEMA IF NOT EXISTS gold")
+    spark.sql("CREATE SCHEMA IF NOT EXISTS school_data")
 
     spark.sql(
         f"""
-    CREATE TABLE IF NOT EXISTS gold.ATG_school_master (
+    CREATE TABLE IF NOT EXISTS school_data.ATG (
         giga_id_school STRING NOT NULL,
         school_id STRING,
         name STRING,
@@ -109,7 +109,7 @@ def main():
     """
     )
 
-    df.write.format("delta").mode("overwrite").saveAsTable("gold.ATG_school_master")
+    df.write.format("delta").mode("overwrite").saveAsTable("school_data.ATG")
 
 
 if __name__ == "__main__":
