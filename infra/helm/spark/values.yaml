@@ -113,7 +113,7 @@ image:
   ## Set to true if you would like to see extra information on logs
   ## It turns BASH and/or NAMI debugging in the image
   ##
-  debug: false
+  debug: true
 ## @param hostNetwork Enable HOST Network
 ## If hostNetwork is true, then dnsPolicy is set to ClusterFirstWithHostNet
 ##
@@ -696,8 +696,8 @@ security:
   ## @param security.rpc.encryptionEnabled Enable the encryption for RPC
   ##
   rpc:
-    authenticationEnabled: false
-    encryptionEnabled: false
+    authenticationEnabled: true
+    encryptionEnabled: true
   ## @param security.storageEncryptionEnabled Enables local storage encryption
   ##
   storageEncryptionEnabled: false
@@ -763,7 +763,7 @@ security:
 service:
   ## @param service.type Kubernetes Service type
   ##
-  type: LoadBalancer
+  type: ClusterIP
   ## @param service.ports.http Spark client port for HTTP
   ## @param service.ports.https Spark client port for HTTPS
   ## @param service.ports.cluster Spark cluster port
