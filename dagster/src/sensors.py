@@ -1,11 +1,11 @@
 from dagster import Config, RunConfig, RunRequest, sensor
+from src._utils.adls import ADLSFileClient
 from src.jobs import (
     school_master__convert_gold_to_delta_job,
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
     school_master__run_successful_manual_checks_job,
 )
-from src.resources.adls_file_client import ADLSFileClient
 
 
 class FileConfig(Config):
