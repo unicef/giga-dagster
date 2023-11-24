@@ -15,7 +15,7 @@ class StagingADLSIOManager(IOManager):
             return
 
         filepath = self._get_filepath(context)
-        self.adls_client.upload_to_adls(filepath, output)
+        self.adls_client.upload_to_adls(context, filepath, output)
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"

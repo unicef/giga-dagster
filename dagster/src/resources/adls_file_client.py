@@ -23,13 +23,16 @@ class ADLSFileClient:
             buffer.seek(0)
             return pd.read_csv(buffer)
 
-    def upload_to_adls(self, filepath: str, data: pd.DataFrame):
+    def upload_to_adls(self, context, filepath: str, data: pd.DataFrame):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
+            metadata = context.step_context.op_config["metadata"]
             data.to_csv(buffer, index=False)
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(
+                buffer.getvalue(), overwrite=True, metadata=metadata
+            )
 
     def list_paths(self, path: str, recursive=True):
         paths = self.adls.get_paths(path=path, recursive=recursive)

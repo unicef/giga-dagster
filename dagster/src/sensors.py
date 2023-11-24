@@ -10,6 +10,8 @@ from src.resources.adls_file_client import ADLSFileClient
 class FileConfig(Config):
     filepath: str
     dataset_type: str
+    metadata: dict
+    file_size_bytes: int
 
 
 def get_dataset_type(filepath: str) -> str:
@@ -31,7 +33,15 @@ def school_master__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
+            properties = ADLSFileClient().get_file_metadata(filepath=filepath)
+            metadata = properties["metadata"]
+            size = properties["size"]
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type=dataset_type,
+                metadata=metadata,
+                file_size_bytes=size,
+            )
 
             print(f"FILE: {filepath}")
 
@@ -62,7 +72,15 @@ def school_master__successful_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
+            properties = ADLSFileClient().get_file_metadata(filepath=filepath)
+            metadata = properties["metadata"]
+            size = properties["size"]
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type=dataset_type,
+                metadata=metadata,
+                file_size_bytes=size,
+            )
 
             print(f"FILE: {filepath}")
             yield RunRequest(
@@ -89,7 +107,15 @@ def school_master__failed_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
+            properties = ADLSFileClient().get_file_metadata(filepath=filepath)
+            metadata = properties["metadata"]
+            size = properties["size"]
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type=dataset_type,
+                metadata=metadata,
+                file_size_bytes=size,
+            )
 
             print(f"FILE: {filepath}")
             yield RunRequest(
