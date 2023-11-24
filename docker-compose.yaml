@@ -62,8 +62,9 @@ services:
   spark-master:
     <<: *spark-common-config
     build:
-      context: ./spark
+      context: .
       target: master
+      dockerfile: spark/Dockerfile
     environment:
       SPARK_MODE: master
       SPARK_MASTER_PORT: 7077
@@ -76,13 +77,15 @@ services:
   spark-worker:
     <<: *spark-common-config
     build:
-      context: ./spark
+      context: .
       target: base
+      dockerfile: spark/Dockerfile
     environment:
       SPARK_MODE: worker
       SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_CORES: 1
       SPARK_WORKER_MEMORY: 1024M
+      PYTHONPATH: /opt/bitnami/spark/app
     deploy:
       mode: replicated
       replicas: 3
@@ -92,6 +95,9 @@ services:
         delay: 5s
         max_attempts: 3
         window: 120s
+    working_dir: /opt/bitnami/spark/app
+    volumes:
+      - ./dagster:/opt/bitnami/spark/app
 
   #  authproxy:
   #    <<: *common-config
