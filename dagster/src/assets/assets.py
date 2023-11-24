@@ -2,12 +2,15 @@ from datetime import datetime
 
 import datahub.emitter.mce_builder as builder
 import pandas as pd
-from datahub.emitter.mce_builder import make_data_platform_urn
+from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
+    ChangeTypeClass,
     DatasetPropertiesClass,
     DateTypeClass,
+    DomainPropertiesClass,
     NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
@@ -23,6 +26,28 @@ from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 # from dagster_ge import ge_validation_op_factory
 
 
+def create_domains_in_datahub():
+    domains = ["Geospatial", "Infrastructure", "School", "Finance"]
+
+    for domain in domains:
+        domain_urn = make_domain_urn(domain)
+        domain_properties_aspect = DomainPropertiesClass(name=domain, description="")
+
+        event: MetadataChangeProposalWrapper = MetadataChangeProposalWrapper(
+            entityType="domain",
+            changeType=ChangeTypeClass.UPSERT,
+            entityUrn=domain_urn,
+            aspect=domain_properties_aspect,
+        )
+
+        rest_emitter = DatahubRestEmitter(
+            gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
+            token=DATAHUB_ACCESS_TOKEN,
+        )
+
+        rest_emitter.emit(event)
+
+
 def emit_metadata_to_datahub(
     context: OpExecutionContext, upstream_dataset_urn, df: pd.DataFrame
 ):
@@ -33,12 +58,13 @@ def emit_metadata_to_datahub(
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
 
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
     metadata = context.get_step_execution_context().op_config["metadata"]
 
     data_format = output_filepath.split(".")[-1]
-    country = output_filepath.split("/")[1].split("_")[0]
+    country = output_filepath.split("/")[2].split("_")[0]
+    # domain = output_filepath.split("/")[2].split("_")[1] #out-of-range daw whaaat
+    domain = context.get_step_execution_context().op_config["dataset_type"]
     source = output_filepath.split("_")[2]
     date_modified = output_filepath.split(".")[0].split("_")[-1]
     asset_type = "Raw Data" if step == "raw" else "Table"
@@ -58,7 +84,7 @@ def emit_metadata_to_datahub(
         "Geolocation Data Source": f"{source}",
         "Data Collection Modality": "",
         "Data Collection Date": "",
-        "Domain": f"{dataset_type}",
+        "Domain": f"{domain}",
         "Date_Modified": f"{date_modified}",
         "Source": f"{source}",
         "Data Format": f"{data_format}",
@@ -86,6 +112,12 @@ def emit_metadata_to_datahub(
         aspect=dataset_properties,
     )
 
+    # Emit metadata! This is a blocking call
+    context.log.info("EMITTING METADATA")
+    context.log.info(f"metadata: {custom_metadata}")
+    rest_emitter.emit(metadata_event)
+
+    ##### SCHEMA #####
     context.log.info(df.info)
     columns = list(df.columns)
     dtypes = list(df.dtypes)
@@ -126,15 +158,40 @@ def emit_metadata_to_datahub(
     )
 
     # Emit metadata! This is a blocking call
-    context.log.info("EMITTING METADATA")
-    context.log.info(f"metadata: {custom_metadata}")
-    rest_emitter.emit(metadata_event)
-
-    # Emit metadata! This is a blocking call
     context.log.info("EMITTING SCHEMA")
     context.log.info(f"schema: {schema_properties}")
     rest_emitter.emit(schema_metadata_event)
 
+    ##### DOMAIN #####
+    graph = DataHubGraph(
+        DatahubClientConfig(
+            server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+        )
+    )
+
+    if "school" in domain:
+        domain_urn = make_domain_urn("School")
+    elif "geospatial" in domain:
+        domain_urn = make_domain_urn("Geospatial")
+    elif "fin" in domain:
+        domain_urn = make_domain_urn("Finance")
+    elif "infra" in domain:
+        domain_urn = make_domain_urn("Infrastructure")
+    else:
+        context.log.info("UNKNOWN DOMAIN")
+        domain_urn = make_domain_urn("UNKOWN DOMAIN")
+
+    # Query multiple aspects from entity
+    query = f"""
+    mutation setDomain {{
+        setDomain(domainUrn: {domain_urn}, entityUrn: {dataset_urn})
+    }}
+    """
+    # Emit domain metadata!
+    context.log.info("EMITTING DOMAIN")
+    graph.execute_graphql(query=query)
+
+    ##### LINEAGE #####
     if step != "raw":
         # Construct a lineage object
         lineage_mce = builder.make_lineage_mce(
@@ -158,6 +215,11 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
         context.run_tags["dagster/run_key"]
     )
     context.log.info(df.head())
+
+    # Create domains in Datahub
+    # Emit metadata! This is a blocking call
+    context.log.info("CREATING DOMAINS IN DATAHUB")
+    create_domains_in_datahub()
 
     # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, upstream_dataset_urn="", df=df)
