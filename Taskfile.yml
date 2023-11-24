@@ -160,6 +160,7 @@ tasks:
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
         --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
+        --set service.type=LoadBalancer
 
   helm-down:
     desc: Uninstall Helm charts
