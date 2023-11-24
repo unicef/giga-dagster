@@ -6,8 +6,9 @@ from datahub.emitter.mce_builder import make_data_platform_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import (
-    AuditStampClass,
     DatasetPropertiesClass,
+    DateTypeClass,
+    NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
     SchemaFieldDataTypeClass,
@@ -22,7 +23,9 @@ from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 # from dagster_ge import ge_validation_op_factory
 
 
-def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
+def emit_metadata_to_datahub(
+    context: OpExecutionContext, upstream_dataset_urn, df: pd.DataFrame
+):
     rest_emitter = DatahubRestEmitter(
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
@@ -76,7 +79,6 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
 
     # Set the dataset's URN
     dataset_urn = builder.make_dataset_urn(platform="adls", name=output_filepath)
-    context.log.info(f"{step} URN : {dataset_urn}")
 
     # Construct a MetadataChangeProposalWrapper object
     metadata_event = MetadataChangeProposalWrapper(
@@ -84,31 +86,37 @@ def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
         aspect=dataset_properties,
     )
 
+    context.log.info(df.info)
+    columns = list(df.columns)
+    dtypes = list(df.dtypes)
+    fields = []
+
+    for column, dtype in list(zip(columns, dtypes)):
+        if dtype == "float64" or dtype == "int64":
+            type_class = NumberTypeClass()
+        elif dtype == "datetime64[ns]":
+            type_class = DateTypeClass()
+        elif dtype == "object":
+            type_class = StringTypeClass()
+        else:
+            context.log.info("Unknown Type")
+            type_class = StringTypeClass()
+
+        fields.append(
+            SchemaFieldClass(
+                fieldPath=f"{column}",
+                type=SchemaFieldDataTypeClass(type_class),
+                nativeDataType=f"{dtype}",  # use this to provide the type of the field in the source system's vernacular
+            )
+        )
+
     schema_properties = SchemaMetadataClass(
         schemaName="placeholder",  # not used
         platform=make_data_platform_urn("adls"),  # important <- platform must be an urn
         version=0,  # when the source system has a notion of versioning of schemas, insert this in, otherwise leave as 0
         hash="",  # when the source system has a notion of unique schemas identified via hash, include a hash, else leave it as empty string
         platformSchema=OtherSchemaClass(rawSchema="__insert raw schema here__"),
-        lastModified=AuditStampClass(
-            time=1640692800000, actor="urn:li:corpuser:ingestion"
-        ),
-        fields=[
-            "field1",
-            "field2",
-            SchemaFieldClass(
-                fieldPath="address.zipcode",
-                type=SchemaFieldDataTypeClass(type=StringTypeClass()),
-                nativeDataType="VARCHAR(50)",  # use this to provide the type of the field in the source system's vernacular
-                description=(
-                    "This is the zipcode of the address. Specified using extended form"
-                    " and limited to addresses in the United States"
-                ),
-                lastModified=AuditStampClass(
-                    time=1640692800000, actor="urn:li:corpuser:ingestion"
-                ),
-            ),
-        ],
+        fields=fields,
     )
 
     # Construct a MetadataChangeProposalWrapper object
@@ -150,10 +158,9 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
         context.run_tags["dagster/run_key"]
     )
     context.log.info(df.head())
-    context.log.info(df.iloc[0])
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn="")
+    emit_metadata_to_datahub(context, upstream_dataset_urn="", df=df)
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
     # return df  # io manager should upload this to raw bucket as csv
@@ -170,7 +177,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn)
+    emit_metadata_to_datahub(context, upstream_dataset_urn=raw_dataset_urn, df=df)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
     # return Output(df, metadata={"filename": df.shape[0]})
@@ -205,7 +212,7 @@ def dq_passed_rows(context: OpExecutionContext, bronze: pd.DataFrame) -> pd.Data
     )
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn)
+    emit_metadata_to_datahub(context, upstream_dataset_urn=bronze_dataset_urn, df=df)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
     # return (
@@ -237,7 +244,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
         name=get_input_filepath(context, upstream_step="staging/pending-review"),
     )
     emit_metadata_to_datahub(
-        context, upstream_dataset_urn=staging_pending_review_dataset_urn
+        context, upstream_dataset_urn=staging_pending_review_dataset_urn, df=df
     )
 
     context.log.info(f"data={df}")
@@ -272,7 +279,9 @@ def silver(context: OpExecutionContext, manual_review_passed_rows) -> pd.DataFra
         platform="adls",
         name=get_input_filepath(context, upstream_step="staging/approved"),
     )
-    emit_metadata_to_datahub(context, upstream_dataset_urn=staging_approved_dataset_urn)
+    emit_metadata_to_datahub(
+        context, upstream_dataset_urn=staging_approved_dataset_urn, df=df
+    )
 
     yield Output(
         df, metadata={"filepath": get_output_filepath(context)}
@@ -291,7 +300,7 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
         platform="adls",
         name=get_input_filepath(context, upstream_step="silver"),
     )
-    emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn)
+    emit_metadata_to_datahub(context, upstream_dataset_urn=silver_dataset_urn, df=df)
 
     yield Output(
         df, metadata={"filepath": get_output_filepath(context)}
