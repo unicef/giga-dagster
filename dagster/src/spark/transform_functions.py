@@ -2,7 +2,6 @@ import os
 import uuid
 
 import h3
-import pandas as pd
 from pyspark.sql import functions as f
 from pyspark.sql.types import ArrayType, BooleanType, StringType
 from pyspark.sql.utils import AnalysisException
@@ -19,6 +18,9 @@ from src.spark.check_functions import (
     is_within_boundary_distance_udf,
     is_within_country,
     is_within_country_udf,
+    are_all_points_beyond_minimum_distance_udf,
+    are_pair_points_beyond_minimum_distance_udf,
+    has_similar_name_udf,
 )
 from src.spark.config_expectations import (
     CONFIG_NONEMPTY_COLUMNS_CRITICAL,
@@ -26,6 +28,7 @@ from src.spark.config_expectations import (
     CONFIG_UNIQUE_COLUMNS,
     CONFIG_UNIQUE_SET_COLUMNS,
     CONFIG_VALUES_RANGE,
+    CONFIG_VALUES_RANGE_PRIO,
 )
 
 from .spark import get_spark_session
@@ -38,8 +41,6 @@ spark = get_spark_session()
 df_spark = spark.read.csv(file_url, header=True)
 
 # STANDARDIZATION FUNCTIONS
-
-
 def generate_uuid(column_name):
     return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(column_name)))
 
@@ -111,7 +112,7 @@ def standardize_school_name(df):
 def standardize_internet_speed(df):
     df = df.withColumn(
         "internet_speed_mbps",
-        f.expr("regexp_replace(internet_speed_mbps, '[^0-9.]', '')").cast("float"),
+            f.expr("regexp_replace(internet_speed_mbps, '[^0-9.]', '')").cast("float"),
     )
     return df
 
@@ -122,17 +123,7 @@ def h3_geo_to_h3(latitude, longitude):
     else:
         return h3.geo_to_h3(latitude, longitude, resolution=8)
 
-
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
-
-# def has_duplicate(row):
-#     return (
-#         row["duplicate_id_name_level_location"]
-#         or row["duplicate_level_location"]
-#         or row["has_similar_name"]
-#         or row["duplicate_name_level_within_110m_radius"]
-#         or row["duplicate_similar_name_same_level_within_100m_radius"]
-#     )
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
@@ -196,8 +187,8 @@ def create_error_columns(df, country_code_iso3):
                     Window.partitionBy("{}".format(column))
                 )
                 > 1,
-                True,
-            ).otherwise(False),
+                1
+            ).otherwise(0)
         )
 
     # 6. School latitude and longitude should be valid values
@@ -212,21 +203,13 @@ def create_error_columns(df, country_code_iso3):
                 CONFIG_VALUES_RANGE["longitude"]["min"],
                 CONFIG_VALUES_RANGE["longitude"]["max"],
             ),
-            True,
-        ).otherwise(False),
+            1
+        ).otherwise(0)
     )
 
     # 7. School latitude and longitude should be in the expected country
     df = df.withColumn("country_code", f.lit(country_code_iso3))
-    # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
-    # df["is_within_country"] = df.apply(
-    #     lambda row: is_within_country(
-    #         row["latitude"], row["longitude"], country_code_iso3
-    #     )
-    #     if row["is_valid_location_values"] is True
-    #     else False,
-    #     axis="columns",
-    # )
+    df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
 
     return df
 
@@ -241,69 +224,136 @@ def has_critical_error(df):
             "   OR duplicate_giga_id_school = true "
             "   OR size(critical_error_empty_column) > 0 "
             "   OR is_valid_location_values = false "
-            # "   OR is_within_country != true "
+            "   OR is_within_country != true "
             "   THEN true "
             "ELSE false END"
         ),
     )
-    # # Outside country
-    # if row["is_within_country"] is not True:
-    #     return True
 
     return df
 
 
-# def is_within_range(value, min, max):
-#     if pd.isna(value) is False:
-#         return value >= min and value <= max
-#     return None
+def coordinates_comp(coordinates_list, row_coords):
+    # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
+    for sublist in coordinates_list:
+        if sublist == row_coords:
+            coordinates_list.remove(sublist)
+            break
+    return coordinates_list 
 
-# import decimal
-# def get_decimal_places(number):
-#     decimal_places = -decimal.Decimal(str(number)).as_tuple().exponent
-#
-#     return decimal_places
-#
-# get_decimal_places_udf = f.udf(get_decimal_places)
+coordinates_comp_udf = f.udf(coordinates_comp)
+
+
+def point_110(column):
+    if column is None:
+        return None
+    point = int(1000 * float(column)) / 1000
+    return point 
+
+point_110_udf = f.udf(point_110)
 
 
 def create_staging_layer_columns(df):
-    df = df.withColumn(
-        "precision_longitude", get_decimal_places_udf(f.col("longitude"))
-    )
+    df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
     df = df.withColumn("precision_latitude", get_decimal_places_udf(f.col("latitude")))
 
     for column in CONFIG_NONEMPTY_COLUMNS_WARNING:
         column_name = "missing_{}_flag".format(column)
         df = df.withColumn(
-            column_name, f.when(f.col(column).isNull(), True).otherwise(False)
+            column_name, f.when(f.col(column).isNull(), 1).otherwise(0)
         )
+    
+    df = df.withColumn("location_id", f.concat_ws("_", f.col('longitude').cast('string'), f.col('latitude').cast('string')))
 
-    #     for column_set in CONFIG_UNIQUE_SET_COLUMNS:
-    #         set_name = "_".join(column_set)
-    #         df["duplicate_{}".format(set_name)] = df.duplicated(
-    #             subset=column_set, keep=False
-    #         )
+    for column_set in CONFIG_UNIQUE_SET_COLUMNS:
+        set_name = "_".join(column_set)
+        df = df.withColumn(
+            "duplicate_{}".format(set_name), 
+            f.when(
+                f.count("*").over(Window.partitionBy(column_set))
+                    > 1, 1).otherwise(0)
+                )
 
-    #     for value in CONFIG_VALUES_RANGE:
-    #         # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
-    #         df["is_valid_{}".format(value)] = df[value].apply(
-    #             lambda x: is_within_range(
-    #                 x,
-    #                 CONFIG_VALUES_RANGE[value]["min"],
-    #                 CONFIG_VALUES_RANGE[value]["max"],
-    #             )
-    #         )
+    for value in CONFIG_VALUES_RANGE_PRIO:
+    # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
+        df = df.withColumn(
+            "is_valid_{}".format(value),
+            f.when(
+                f.col("latitude").between(
+                    CONFIG_VALUES_RANGE[value]["min"],
+                    CONFIG_VALUES_RANGE[value]["max"],
+                ), 1).otherwise(0)
+        )
+    
 
-    #     # Custom checks
-    #     df["has_similar_name"] = not has_no_similar_name_fuzz(df["school_name"])
-    #     df["duplicate_name_level_within_110m_radius"] = duplicate_check(
-    #         df, is_same_name_level_within_radius
-    #     )
+    # Custom checks
+    name_list = df.rdd.map(lambda x: x.school_name).collect()
+    df = df.withColumn("school_name_list", f.lit(name_list))
+    df = df.withColumn("has_similar_name", has_similar_name_udf(f.col("school_name"), f.col("school_name_list")))
+    df = df.drop("school_name_list")
+
+    # duplicate_name_level_within_110m_radius
+    # #     df["duplicate_name_level_within_110m_radius"] = duplicate_check(
+    # #         df, is_same_name_level_within_radius
+
+    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))    
+    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))    
+    window_spec1 = Window.partitionBy("school_name", "education_level", "lat_110", "long_110")
+    df = df.withColumn(
+        "duplicate_name_level_within_110m_radius", 
+            f.when(
+                f.count("*").over(window_spec1)
+                    > 1, 1).otherwise(0)
+                )
+    df = df.withColumn(
+        "duplicate_name_level_within_110m_radius",
+        f.expr(
+            "CASE "
+            "   WHEN duplicate_school_id_school_name_education_level_location_id = 1 "
+            "       OR duplicate_school_name_education_level_location_id = 1 "
+            "       OR duplicate_education_level_location_id = 1 "
+            "       THEN 0 "
+            "ELSE duplicate_name_level_within_110m_radius END"
+        ))
+
+    # df = df.withColumn("coordinates", f.array("latitude", "longitude"))
+    # df = df.withColumn("coordinates_list", f.collect_list("coordinates").over(window_spec))
+    # df = df.withColumn("duplicate_name_level_within_110m_radius", are_all_points_beyond_minimum_distance_udf(f.col("coordinates_list")))
+
+    # duplicate_similar_name_same_level_within_100m_radius
     #     df["duplicate_similar_name_same_level_within_100m_radius"] = duplicate_check(
     #         df, is_similar_name_level_within_radius
-    #     )
+
+    window_spec2 = Window.partitionBy("education_level", "lat_110", "long_110")
+    df = df.withColumn(
+        "duplicate_similar_name_same_level_within_100m_radius", 
+            f.when(
+                f.count("*").over(window_spec2)
+                    > 1, 1).otherwise(0)
+                )
+    df = df.withColumn(
+        "duplicate_similar_name_same_level_within_100m_radius",
+        f.expr(
+            "CASE "
+            "   WHEN has_similar_name = true "
+            "       AND duplicate_similar_name_same_level_within_100m_radius = 1 "
+            "       THEN 1 "
+            "ELSE 0 END"
+        ))
+
     #     df["duplicate"] = df.apply(has_duplicate, axis="columns")
+    df = df.withColumn(
+        "duplicate",
+        f.expr(
+            "CASE "
+            "   WHEN duplicate_school_id_school_name_education_level_location_id = 1 "
+            "       OR duplicate_school_name_education_level_location_id = 1 "
+            "       OR duplicate_education_level_location_id = 1 "
+            "       OR duplicate_name_level_within_110m_radius = 1 "
+            "       OR duplicate_similar_name_same_level_within_100m_radius = 1 "
+            "       THEN 1 "
+            "ELSE 0 END"
+        ))
 
     return df
 
@@ -343,34 +393,112 @@ if __name__ == "__main__":
 
     # testing
     # test_columns = ["school_id", "school_name", "education_level", "latitude", "longitude", "internet_speed_mbps"]
-    test_columns_latitude = [
-        "latitude",
-        "longitude",
-        "mobile_internet_generation",
-        "internet_availability",
-        "internet_type",
-        "internet_speed_mbps",
-    ]
-    df = df_spark.select(test_columns_latitude)
-    # df = df.limit(10)
+    # test_columns_latitude = [
+    #     "latitude",
+    #     "longitude",
+    #     "mobile_internet_generation",
+    #     "internet_availability",
+    #     "internet_type",
+    #     "internet_speed_mbps",
+    # ]
+    # test_columns_unique_set = [
+    #     "school_id", "school_name", "education_level", "latitude", "longitude", "internet_speed_mbps"]
+    # df = df_spark.select(test_columns_unique_set)
     # df = create_bronze_layer_columns(df)
+    
+    
+#     data = [
+#     ("School1", "District2", 90, 180),
+#     ("School2", None, 8, -2),
+#     ("School1", "District2", 90, 180),
+#     ("School3", "ewna", 8, -2),
+#     ("School1", "District2", 89, 180),
+# ]
+#     columns = ["school_name", "education_level", "latitude", "longitude"]
+#     df = spark.createDataFrame(data, columns)
+    # df = df.withColumn("latitude", df["latitude"].cast("float"))
+    # df = df.withColumn("longitude", df["longitude"].cast("float"))
+
+    # df = df.withColumn("coordinates", f.array("latitude", "longitude"))
+
+    # window_spec = Window.partitionBy("school_name", "education_level")
+    # df = df.withColumn("coordinates_list", f.collect_list("coordinates").over(window_spec))
+
+
+    # df = df.withColumn("coordinates_list", coordinates_comp_udf(f.col("coordinates_list"), f.col("coordinates")))
+    # df = df.withColumn("duplicate_name_level_within_110m_radius", are_all_points_beyond_minimum_distance_udf(f.col("coordinates_list")))
+    # df.show(truncate=False)
+
+
+    # name_list = df.rdd.map(lambda x: x.school_name).collect()
+    # df = df.withColumn("school_name_list", f.lit(name_list))
+    # df = df.withColumn("has_similar_name", has_no_similar_name_udf(f.col("school_name"), f.col("school_name_list")))
+    # df.orderBy(f.desc("has_similar_name")).show(400)
+
+    # df.show(truncate = False)
+    # name_list = df.rdd.map(lambda x: x.internet_speed_mbps).collect()
+    # print(len(name_list))
+    # print(range(len(name_list)))
+    # print([True for i in range(len(name_list))])
+
+
+    # for value in CONFIG_VALUES_RANGE_PRIO:
+    # # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
+    #     df = df.withColumn(
+    #         "is_valid_{}".format(value),
+    #         f.when(
+    #             f.col(value).between(
+    #                 CONFIG_VALUES_RANGE[value]["min"],
+    #                 CONFIG_VALUES_RANGE[value]["max"],
+    #             ), True).otherwise(False)
+    #     )
+    # df.orderBy("school_density").show()
+    # print(CONFIG_VALUES_RANGE["internet_speed_mbps"]["min"])
+    # print(CONFIG_VALUES_RANGE["internet_speed_mbps"]["max"])
+    # df = df.limit(10)
+    # df = create_error_columns(df, "BLZ")
+    # df.show()
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
-    # df = create_error_columns(df)
-    # df.show()
     # # df.orderBy("school_name").show()
     # data = [("School1", "District2", "Region1", "School", 181, 2),
     #         ("School2", None, None, "School", 8, -2),
     #         ("School1", "District2", "Region3", "School", 8, -222)]
     # columns = ["school_id", "giga_id_school", "education_level", "school_name", "latitude", "longitude"]
-    # df = spark.createDataFrame(data, columns)
-    # df = create_bronze_layer_columns(df)
     # df = create_error_columns(df, "BLZ")
     # df = has_critical_error(df)
     # print(CONFIG_NONEMPTY_COLUMNS_CRITICAL)
     # df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
-    df = create_staging_layer_columns(df)
-    df.show(10, truncate=False)
-    # df.filter(df["school_name"] == "Hill Top Primary School").show()
+    # df = create_staging_layer_columns(df)
+    # df = df.withColumn("country_code", f.lit("BLZ"))
+    # df = df.withColumn("is_within_country", is_within_country_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
+    # df.show(10, truncate=False)
+    # df = df.filter(df["school_name"] == "NAZARENE PRIMARY SCHOOL")
     # df.filter(df["has_critical_error"] == True).show(30)
     # print(is_within_country(1,1,"BLZ"))
+    
+        # df = df.withColumn(
+        #     column_name,
+        #     f.when(
+        #         f.count("{}".format(column)).over(
+        #             Window.partitionBy("{}".format(column))
+        #         )
+        #         > 1,
+        #         True,
+        #     ).otherwise(False),
+        # )
+    # for value in CONFIG_VALUES_RANGE['internet_speed_mbps']:
+    #     print(value)
+    df = df_spark
+    df = create_bronze_layer_columns(df)
+    # df = create_staging_layer_columns(df)
+    df.show()
+    # df = create_error_columns(df, "BLZ")
+    # df = has_critical_error(df)
+    # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))    
+    # df = df.withColumn("long_110", point_110_udf(f.col("longitude")))    
+    
+    # duplicate_name_level_within_110m_radius
+    
+    # df.filter(df["duplicate"] == 1).show()
+    # df.filter(df["school_name"] == "Yo Creek Sacred Heart RC Primary School").show()
