@@ -22,7 +22,7 @@ from pyspark.sql.types import StringType, BooleanType, ArrayType
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.window import Window
 
-DUPLICATE_SCHOOL_DISTANCE = 100
+DUPLICATE_SCHOOL_DISTANCE = .1
 
 AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
@@ -111,7 +111,6 @@ def is_within_boundary_distance(latitude, longitude, country_code_iso3):
     return None
 
 is_within_boundary_distance_udf = f.udf(is_within_boundary_distance)
-# is_within_country_udf = f.udf(is_within_country)
 
 # All the checks to verify if location is within the country
 def is_within_country(latitude, longitude, country_code_iso3):
@@ -142,8 +141,9 @@ def has_same_availability(availability, value):
 
 # Decimal places tests
 def get_decimal_places(number):
+    if number is None:
+        return None
     decimal_places = -decimal.Decimal(str(number)).as_tuple().exponent
-
     return decimal_places
 
 get_decimal_places_udf = f.udf(get_decimal_places)
@@ -157,51 +157,79 @@ def has_at_least_n_decimal_places(number, places):
 # coords_2 = (latitude, longitude)
 # distance_km is a float number that indicates the minimum distane
 def are_pair_points_beyond_minimum_distance(
-    coords_1, coords_2, distance_km=DUPLICATE_SCHOOL_DISTANCE
+    coords_1, coords_2 #, distance_km=DUPLICATE_SCHOOL_DISTANCE
 ):
-    return geodesic(coords_1, coords_2).km > distance_km
+    return geodesic(coords_1, coords_2).km <= DUPLICATE_SCHOOL_DISTANCE
 
+are_pair_points_beyond_minimum_distance_udf = f.udf(are_pair_points_beyond_minimum_distance)
 
-def are_all_points_beyond_minimum_distance(
-    points, distance_km=DUPLICATE_SCHOOL_DISTANCE
-):
-    # Initial assumption all are far apart
-    check_list = [True for i in range(len(points))]
+def are_all_points_beyond_minimum_distance(coordinates_list):
+    # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
+    for i in range(len(coordinates_list)):
+        for j in range(i + 1, len(coordinates_list)):
+            if are_pair_points_beyond_minimum_distance(coordinates_list[i], coordinates_list[j]) is True:
+                return True
+    # row_coords_t = tuple(row_coords)
+    # for i in coordinates_list:
+    #     i_tuple = tuple(i)
+    #     try:
+    #         geodesic(row_coords_t, i_tuple).km
+    #     except ValueError:
+    #         print(f"Invalid coordinates: {row_coords_t}, {i_tuple}")
+    #         continue
+    #     if geodesic(row_coords_t, i_tuple).km <= 0.1:
+    #         return True
+    return False
 
-    # Loop through the first and last point
-    for i in range(len(points)):
-        # Loop through the point after the current point
-        for j in range(i + 1, len(points)):
-            # When items are shown to be within the prescribed distance, mark it
-            if are_pair_points_beyond_minimum_distance(points[i], points[j]) is False:
-                check_list[i] is False
-                check_list[j] is False
+are_all_points_beyond_minimum_distance_udf = f.udf(are_all_points_beyond_minimum_distance)
 
-    return check_list
+# def are_all_points_beyond_minimum_distance(
+#     points, distance_km=DUPLICATE_SCHOOL_DISTANCE
+# ):
+#     # Initial assumption all are far apart
+#     check_list = [True for i in range(len(points))]
+
+#     # Loop through the first and last point
+#     for i in range(len(points)):
+#         # Loop through the point after the current point
+#         for j in range(i + 1, len(points)):
+#             # When items are shown to be within the prescribed distance, mark it
+#             if are_pair_points_beyond_minimum_distance(points[i], points[j]) is False:
+#                 check_list[i] is False
+#                 check_list[j] is False
+
+#     return check_list
 
 
 # Checks if the name is not similar to any name in the list
 # Original using difflib
-def has_no_similar_name(name_list, similarity_percentage=SIMILARITY_RATIO_CUTOFF):
-    already_found = []
-    is_unique = []
-    for string_value in name_list:
-        if string_value in already_found:
-            is_unique.append(False)
-            continue
+# def has_no_similar_name(name_list, similarity_percentage=SIMILARITY_RATIO_CUTOFF):
+#     already_found = []
+#     is_unique = []
+#     for string_value in name_list:
+#         if string_value in already_found:
+#             is_unique.append(False)
+#             continue
 
-        # This always loops through whole list to get close matches
-        matches = difflib.get_close_matches(
-            string_value, name_list, cutoff=SIMILARITY_RATIO_CUTOFF
-        )
-        if len(matches) > 1:
-            already_found.extend(matches)
-            is_unique.append(False)
-        else:
-            is_unique.append(True)
+#         # This always loops through whole list to get close matches
+#         matches = difflib.get_close_matches(
+#             string_value, name_list, cutoff=SIMILARITY_RATIO_CUTOFF
+#         )
+#         if len(matches) > 1:
+#             already_found.extend(matches)
+#             is_unique.append(False)
+#         else:
+#             is_unique.append(True)
 
-    return is_unique
+#     return is_unique
 
+def has_similar_name(column, name_list):
+        for name in name_list:
+            if 1 > difflib.SequenceMatcher(None, column, name).ratio() >= SIMILARITY_RATIO_CUTOFF:
+                return True
+        return False
+
+has_similar_name_udf = f.udf(has_similar_name)
 
 # Using thefuzz library
 def has_no_similar_name_fuzz(name_list):
