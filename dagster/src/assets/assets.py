@@ -6,14 +6,15 @@ from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src.resources._utils import get_input_filepath, get_output_filepath
-from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
+from src.settings import settings
 
 # from dagster_ge import ge_validation_op_factory
 
 
 def emit_metadata_to_datahub(context: OpExecutionContext, upstream_dataset_urn):
     rest_emitter = DatahubRestEmitter(
-        gms_server=DATAHUB_METADATA_SERVER_URL, token=DATAHUB_ACCESS_TOKEN
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
     # Construct a dataset properties object

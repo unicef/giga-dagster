@@ -14,7 +14,7 @@ from src.sensors import (
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
-from src.settings import ENVIRONMENT
+from src.settings import settings
 from src.utils.sentry import setup_sentry
 
 setup_sentry()
@@ -34,7 +34,7 @@ defs = Definitions(
         "ge_data_context": ge_data_context.configured(
             {"ge_root_dir": "src/transforms/resources/great-expectations"}
         ),
-        "adls_io_manager": io_managers.get(f"adls_{ENVIRONMENT}"),
+        "adls_io_manager": io_managers.get(f"adls_{settings.ENVIRONMENT}"),
         "adls_file_client": ADLSFileClient(),
     },
     jobs=[
