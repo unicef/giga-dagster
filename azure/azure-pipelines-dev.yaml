@@ -28,6 +28,7 @@ variables:
   azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
+  sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   system.debug: true
 
 stages:
@@ -109,6 +110,7 @@ stages:
                         AZURE_LOGOUT_REDIRECT_URI: "$(azureAdLogoutRedirectUri)"
                         DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                         KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
+                        SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
 
                 - task: HelmDeploy@0
                   displayName: Add Dagster Helm Repo
