@@ -1,34 +1,57 @@
-import os
+from enum import StrEnum
+from functools import lru_cache
 from pathlib import Path
 
-PYTHON_ENV = os.environ.get("PYTHON_ENV", "production")
+from pydantic import BaseSettings
 
-IN_PRODUCTION = PYTHON_ENV == "production"
 
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "staging")
+class Environment(StrEnum):
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
 
-BASE_DIR = Path(__file__).resolve().parent.parent
 
-AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
+class Settings(BaseSettings):
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
-AZURE_BLOB_SAS_HOST = os.environ.get("AZURE_BLOB_SAS_HOST")
+    # Settings required to be in .env
+    AZURE_SAS_TOKEN: str
+    AZURE_BLOB_SAS_HOST: str
+    AZURE_BLOB_CONTAINER_NAME: str
+    AZURE_STORAGE_ACCOUNT_NAME: str
+    SPARK_RPC_AUTHENTICATION_SECRET: str
 
-AZURE_BLOB_CONTAINER_NAME = os.environ.get("AZURE_BLOB_CONTAINER_NAME")
+    # Settings with a default are not required to be in .env
+    ENVIRONMENT: Environment = Environment.STAGING
+    PYTHON_ENV: Environment = Environment.PRODUCTION
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+    KUBERNETES_NAMESPACE: str = ""
+    SENTRY_DSN: str = ""
+    DATAHUB_ACCESS_TOKEN: str = ""
 
-AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME")
+    # Derived settings
+    @property
+    def IN_PRODUCTION(self) -> bool:
+        return self.PYTHON_ENV == Environment.PRODUCTION
 
-AZURE_BLOB_CONNECTION_URI = f"wasbs://{AZURE_BLOB_CONTAINER_NAME}@{AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+    @property
+    def AZURE_BLOB_CONNECTION_URI(self) -> str:
+        return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
 
-SPARK_RPC_AUTHENTICATION_SECRET = os.environ.get("SPARK_RPC_AUTHENTICATION_SECRET")
+    @property
+    def DATAHUB_METADATA_SERVER_URL(self) -> str:
+        return (
+            f"http://datahub-datahub-gms.{self.KUBERNETES_NAMESPACE}:8080"
+            if self.IN_PRODUCTION
+            else "http://datahub-gms:8080"
+        )
 
-KUBERNETES_NAMESPACE = os.environ.get("KUBERNETES_NAMESPACE", "")
 
-DATAHUB_METADATA_SERVER_URL = (
-    f"http://datahub-datahub-gms.{KUBERNETES_NAMESPACE}.svc.cluster.local:8080"
-    if IN_PRODUCTION
-    else "http://datahub-gms:8080"
-)
+@lru_cache
+def get_settings():
+    return Settings()
 
-DATAHUB_ACCESS_TOKEN = os.environ.get("DATAHUB_ACCESS_TOKEN")
 
-SENTRY_DSN = os.environ.get("SENTRY_DSN")
+settings = get_settings()
