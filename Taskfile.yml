@@ -33,7 +33,7 @@ tasks:
     desc: Run first-time setup tasks for pre-commit
     cmds:
       - pip install -U pre-commit
-      - pre-commit install
+      - pre-commit install --install-hooks -t pre-commit -t commit-msg
 
   setup-dagster:
     internal: true
