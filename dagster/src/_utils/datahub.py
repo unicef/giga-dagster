@@ -1,12 +1,19 @@
 import datahub.emitter.mce_builder as builder
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
+from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.metadata.schema_classes import DatasetPropertiesClass
 
 from dagster import OpExecutionContext
 from src._utils.adls import get_input_filepath, get_output_filepath
+from src.settings import settings
 
 
 def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
+    datahub_emitter = DatahubRestEmitter(
+        gms_server=f"http://{settings.DATAHUB_METADATA_SERVER_URL}",
+        token=settings.DATAHUB_ACCESS_TOKEN,
+    )
+
     # Construct a dataset properties object
     dataset_properties = DatasetPropertiesClass(
         description=f"{context.asset_key.to_user_string()}",
@@ -24,7 +31,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
 
     # Emit metadata! This is a blocking call
     context.log.info("Emitting metadata")
-    context.resources.datahub_emitter.emit(metadata_event)
+    datahub_emitter.emit(metadata_event)
 
     if context.asset_key.to_user_string() != "raw":
         upstream_dataset_urn = create_dataset_urn(context)
@@ -37,7 +44,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
 
         # Emit lineage metadata!
         context.log.info("Emitting lineage metadata")
-        context.resources.datahub_emitter.emit_mce(lineage_mce)
+        datahub_emitter.emit_mce(lineage_mce)
 
     context.log.info(
         f"Metadata of dataset {get_output_filepath(context)} has been successfully"

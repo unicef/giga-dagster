@@ -5,17 +5,17 @@ import pandas as pd
 from azure.storage.filedatalake import DataLakeServiceClient
 
 from dagster import OpExecutionContext
-
-from ..settings import AZURE_BLOB_CONTAINER_NAME, AZURE_DFS_SAS_HOST, AZURE_SAS_TOKEN
+from src.settings import settings
 
 
 class ADLSFileClient:
     def __init__(self):
         self.client = DataLakeServiceClient(
-            account_url=f"https://{AZURE_DFS_SAS_HOST}", credential=AZURE_SAS_TOKEN
+            account_url=f"https://{settings.AZURE_BLOB_SAS_HOST}",
+            credential=settings.AZURE_SAS_TOKEN,
         )
         self.adls = self.client.get_file_system_client(
-            file_system=AZURE_BLOB_CONTAINER_NAME
+            file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
     def download_adls_csv_to_pandas(self, filepath: str):

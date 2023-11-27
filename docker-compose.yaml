@@ -43,21 +43,21 @@ services:
     ports:
       - "3001:3002"
 
-  dagster-webserver-readonly:
-    <<: *dagster-common-config
-    command:
-      - "dagster-webserver"
-      - "-h"
-      - "0.0.0.0"
-      - "-p"
-      - "3003"
-      - "--read-only"
-    volumes:
-      - ./dagster:/app
-    depends_on:
-      - dagster-storage
-    ports:
-      - "3003:3003"
+  #  dagster-webserver-readonly:
+  #    <<: *dagster-common-config
+  #    command:
+  #      - "dagster-webserver"
+  #      - "-h"
+  #      - "0.0.0.0"
+  #      - "-p"
+  #      - "3003"
+  #      - "--read-only"
+  #    volumes:
+  #      - ./dagster:/app
+  #    depends_on:
+  #      - dagster-storage
+  #    ports:
+  #      - "3003:3003"
 
   # spark-master:
   #   <<: *spark-common-config

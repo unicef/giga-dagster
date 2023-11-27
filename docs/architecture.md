@@ -13,9 +13,10 @@ a [Template in Backstage]([url](https://catalog.tm8.dev/create?filters%5Bkind%5D
 ```Note: Structure of this document assumes Dev and Prod are in different Cloud Platform projects. You can reduce the sections for architecture if redundant. Just note the datasets, vms, buckets, etc. being used in Dev vs Prod ```
 
 - Provider: Azure
-- Dev Environment: ``` @TODO: Link to dev env ```
-- Prod Environment: ``` @TODO: Link to prod env ```
-- Technology: Python / Dagster / Postgres
+- Dev Environment: https://io-dagster-dev.unitst.org
+- Staging Environment: TBD
+- Prod Environment: TBD
+- Technology: Python / Dagster / Postgres / Spark
 
 ### Implementation Notes
 
@@ -31,100 +32,39 @@ a [Template in Backstage]([url](https://catalog.tm8.dev/create?filters%5Bkind%5D
 
 ### Virtual Machines
 
-``` @TODO: List VMs used and what they host```
+N/A
 
 ### Datasets
 
-``` @TODO: List datasets given following format```
+#### School Master
 
-#### Dataset A
-
-- Description: PSGC Data
-- File Location: GCS Uri / GDrive link / etc
-- Retention Policy: 3 months
+- Description: Existing School Geolocation Master Data
+- File Location: `saunigiga` Storage Account / giga-dataops-dev / gold / school-data
+- Retention Policy: Indefinite
 
 ### Tokens and Accounts
 
-``` @TODO: Please fill out all Tokens and Accounts being used in the project given the format below. Include tokens from client used in the project.```
+**Dev Azure DevOps Pipeline Variables**
 
-**Dev GitHub Service Account Token**
-
-- Location: Bitwarden GitHub Collection
-- Person in charge: Client Name (client@email.com)
-- Validity: 30 Days
-- Description: This token is used to call the GitHub API using the account ``
-  sample-account@thinkingmachin.es`
+- Location: Bitwarden - UNICEF GIGA Collection
+- Person in charge: Sofia Pineda (sofia.pineda@thinkingmachin.es)
+- Validity: Indefinite
+- Description: This contains all the variables used in the dev deployment pipeline.
 - How to Refresh:
-    1. Go to github.com
-    2. Click refresh
+    - N/A
 
 ## Production Architecture
 
-``` @TODO: Prod architecture diagram and description. Please include any OAuth or similar Applications.```
-``` @TODO: List out main components being used and their descriptions.```
-
-### Virtual Machines
-
-``` @TODO: List VMs used and what they host```
-
-### Datasets
-
-``` @TODO: List datasets given following format```
-
-#### Dataset A
-
-- Description: PSGC Data
-- File Location: GCS Uri / GDrive link / etc
-- Retention Policy: 3 months
-
-### Tokens and Accounts
-
-``` @TODO: Please fill out all Tokens and Accounts being used in the project given the format below. Include tokens from client used in the project.```
-
-**Prod GitHub Service Account Token**
-
-- Location: Bitwarden GitHub Collection
-- Person in charge: Client Name (client@email.com)
-- Validity: 30 Days
-- Description: This token is used to call the GitHub API using the account ``
-  sample-account@thinkingmachin.es`
-- How to Refresh:
-    1. Go to github.com
-    2. Click refresh
+TBD
 
 ## Accessing Cloud Platform Environments
 
-```@TODO: Describe the steps to access the prod VMs/platform```
+**Get access to Client Azure Portal**
 
-**Get access to Client AWS Platform**
-
-- Person in charge: Client Name/Dev Name
-- Bitwarden Credentials:
-
-1. Install AWS CLI
-2. Run `aws configure` - ID and Secret from Bitwarden
-
-**Accessing Prod VM**
-
-1. Update your ssh config to have the following:
-
-```
-Host project-vpn
-   Hostname xx.xxx.xxx.xxx
-   User ubuntu
-   
-# Use the Private IP for the rest
-Host dev-project-app
-   Hostname xxx.xx.xx.xx
-   User ubuntu
-   ProxyJump project-vpn
-```
-
-2. Run `ssh dev-project-app`
+- Person in charge: [Kenneth Domingo](mailto:kenneth@thinkingmachin.es)
+  (TM), [Brian Musisi](mailto:bmusisi@unicef.org) (Giga)
 
 **Access Prod App in UI**
 
-1. Install `sshuttle`
-2. Run `sshuttle -r dev-project-app xxx.xx.0.0/16`
-3. Open web browser using the Private IP found in you SSH config (http:xxx.xx.xx.xx:
-    3000) 
+Open web browser and navigate to https://io-dagster-dev.unitst.org. Login with your
+TM/UNICEF email. 

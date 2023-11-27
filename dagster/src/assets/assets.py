@@ -7,7 +7,7 @@ from src._utils.datahub import emit_metadata_to_datahub
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client", "datahub_emitter"},
+    required_resource_keys={"adls_file_client"},
 )
 def raw(context: OpExecutionContext) -> pd.DataFrame:
     # Load data
@@ -25,7 +25,6 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"datahub_emitter"},
 )
 def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     # Run bronze layer transforms, standardize columns
@@ -39,7 +38,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"ge_data_context", "datahub_emitter"},
+    required_resource_keys={"ge_data_context"},
     op_tags={"kind": "ge"},
 )
 def data_quality_results(context, bronze: pd.DataFrame):
@@ -71,7 +70,6 @@ def data_quality_results(context, bronze: pd.DataFrame):
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"datahub_emitter"},
 )
 def dq_passed_rows(
     context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
@@ -97,7 +95,6 @@ def dq_passed_rows(
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"datahub_emitter"},
 )
 def dq_failed_rows(
     context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
@@ -150,7 +147,7 @@ def dq_failed_rows(
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client", "datahub_emitter"},
+    required_resource_keys={"adls_file_client"},
 )
 def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
     # Load data
@@ -168,7 +165,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client", "datahub_emitter"},
+    required_resource_keys={"adls_file_client"},
 )
 def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
     # Load data
@@ -186,7 +183,6 @@ def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"datahub_emitter"},
 )
 def silver(
     context: OpExecutionContext, manual_review_passed_rows: pd.DataFrame
@@ -204,7 +200,6 @@ def silver(
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"datahub_emitter"},
 )
 def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     # Run gold layer transforms - merge data

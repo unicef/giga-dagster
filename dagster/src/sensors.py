@@ -13,11 +13,13 @@ class FileConfig(Config):
     dataset_type: str
 
 
-def get_dataset_type(filepath: str) -> str:
+def get_dataset_type(filepath: str) -> str | None:
     if "geolocation" in filepath:
         return "school-geolocation-data"
     elif "coverage" in filepath:
         return "school-coverage-data"
+    else:
+        return None
 
 
 @sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=30)
@@ -32,6 +34,9 @@ def school_master__raw_file_uploads_sensor():
         elif file_data["name"].endswith("test.csv"):
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
@@ -65,6 +70,9 @@ def school_master__successful_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
@@ -92,6 +100,9 @@ def school_master__failed_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
 
             print(f"FILE: {filepath}")
