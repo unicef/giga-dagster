@@ -3,10 +3,7 @@ import pandas as pd
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src.resources._utils import get_input_filepath, get_output_filepath
-from src.resources.datahub_emitter import (  # create_dataset_containers,
-    create_domains,
-    emit_metadata_to_datahub,
-)
+from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 
 # from dagster_ge import ge_validation_op_factory
 
@@ -22,11 +19,6 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
     # Emit metadata! This is a blocking call
     context.log.info("CREATING DOMAINS IN DATAHUB")
     create_domains()
-
-    # # Create containers in Datahub
-    # # Emit metadata! This is a blocking call
-    # context.log.info("CREATING CONTAINERS IN DATAHUB")
-    # create_dataset_containers()
 
     # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, upstream_dataset_urn="", df=df)
