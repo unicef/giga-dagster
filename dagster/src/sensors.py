@@ -1,4 +1,5 @@
 from dagster import Config, RunConfig, RunRequest, sensor
+from src.constants import constants
 from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
@@ -25,7 +26,7 @@ def get_dataset_type(filepath: str) -> str:
 def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths("raw_dev")
+    file_list = adls.list_paths(f"{constants.raw_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -64,7 +65,7 @@ def school_master__raw_file_uploads_sensor():
 def school_master__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths("staging/approved")
+    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -99,7 +100,7 @@ def school_master__successful_manual_checks_sensor():
 def school_master__failed_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths("archive/manual-review-rejected")
+    file_list = adls.list_paths(f"{constants.archive_manual_review_rejected_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:
