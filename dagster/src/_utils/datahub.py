@@ -21,7 +21,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
     )
 
     # Set the dataset's URN
-    dataset_urn = create_dataset_urn(context)
+    dataset_urn = create_dataset_urn(context, upstream=False)
 
     # Construct a MetadataChangeProposalWrapper object
     metadata_event = MetadataChangeProposalWrapper(
@@ -34,7 +34,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
     datahub_emitter.emit(metadata_event)
 
     if context.asset_key.to_user_string() != "raw":
-        upstream_dataset_urn = create_dataset_urn(context)
+        upstream_dataset_urn = create_dataset_urn(context, upstream=True)
 
         # Construct a lineage object
         lineage_mce = builder.make_lineage_mce(
@@ -52,5 +52,12 @@ def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
     )
 
 
-def create_dataset_urn(context: OpExecutionContext) -> str:
-    return builder.make_dataset_urn(platform="adls", name=get_input_filepath(context))
+def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
+    if upstream:
+        return builder.make_dataset_urn(
+            platform="adls", name=get_input_filepath(context)
+        )
+    else:
+        return builder.make_dataset_urn(
+            platform="adls", name=get_output_filepath(context)
+        )
