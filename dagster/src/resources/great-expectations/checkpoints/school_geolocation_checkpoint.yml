@@ -19,7 +19,7 @@ action_list:
       class_name: UpdateDataDocsAction
       site_names:
       - local_site
-      - adls_site
+      # - adls_site
 evaluation_parameters: {}
 runtime_configuration:
   result_format:
