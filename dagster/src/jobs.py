@@ -28,10 +28,3 @@ school_master__run_failed_manual_checks_job = define_asset_job(
         "manual_review_failed_rows",
     ],
 )
-
-school_master__convert_gold_to_delta_job = define_asset_job(
-    name="school_master__convert_gold_to_delta_job",
-    selection=[
-        "gold",
-    ],
-)
