@@ -181,10 +181,13 @@ def emit_metadata_to_datahub(
         context.log.info("UNKNOWN DOMAIN")
         domain_urn = make_domain_urn("UNKOWN DOMAIN")
 
+    context.log.info(domain_urn)
+    context.log.info(dataset_urn)
+
     # Query multiple aspects from entity
     query = f"""
     mutation setDomain {{
-        setDomain(domainUrn: {domain_urn}, entityUrn: {dataset_urn})
+        setDomain(domainUrn: "{domain_urn}", entityUrn: "{dataset_urn}")
     }}
     """
     # Emit domain metadata!
