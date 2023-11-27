@@ -71,7 +71,6 @@ def data_quality_results(context, bronze: pd.DataFrame):
 
 @asset(
     io_manager_key="adls_io_manager",
-    op_tags={"kind": "ge"},
     required_resource_keys={"datahub_emitter"},
 )
 def dq_passed_rows(
@@ -79,12 +78,13 @@ def dq_passed_rows(
 ) -> pd.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
-    for suite_result in data_quality_results["run_results"].items():
-        validation_result = suite_result["validation_result"]
-        for result in validation_result.results:
-            if not result.success:
-                for unexpected_row in result.result.unexpected_index_list:
-                    failed_rows_indices.add(unexpected_row)
+    # for suite_result in data_quality_results["run_results"].items():
+    #     context.log.info(f"suite_result={suite_result}, {type(suite_result)}")
+    #     validation_result = suite_result["validation_result"]
+    #     for result in validation_result.results:
+    #         if not result.success:
+    #             for unexpected_row in result.result.unexpected_index_list:
+    #                 failed_rows_indices.add(unexpected_row)
 
     df_passed = bronze.drop(index=list(failed_rows_indices))
 
@@ -104,22 +104,23 @@ def dq_failed_rows(
 ) -> pd.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
-    for suite_result in data_quality_results["run_results"].items():
-        validation_result = suite_result["validation_result"]
-        for result in validation_result.results:
-            if not result.success:
-                for unexpected_row in result.result.unexpected_index_list:
-                    failed_rows_indices.add(unexpected_row)
+    # for suite_result in data_quality_results["run_results"].items():
+    #     validation_result = suite_result["validation_result"]
+    #     for result in validation_result.results:
+    #         if not result.success:
+    #             for unexpected_row in result.result.unexpected_index_list:
+    #                 failed_rows_indices.add(unexpected_row)
 
     df_failed = bronze.loc[list(failed_rows_indices)]
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
+    # emit_metadata_to_datahub(context)
 
     # Yield output
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
+# Would want to refactor the above code to a multi-asset, but it doesn't work yet. Have asked in Dagster slack, still waiting for response
 # @multi_asset(
 #     deps={AssetKey("ge_data_docs")},
 #     outs={
