@@ -2,12 +2,20 @@ from datetime import datetime
 
 import datahub.emitter.mce_builder as builder
 import pandas as pd
-from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
+from datahub.emitter.mce_builder import (  # make_container_urn,
+    make_data_platform_urn,
+    make_domain_urn,
+)
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
+
+# from datahub.emitter.mcp_builder import (
+#     # FolderKey,
+#     # add_dataset_to_container,
+#     # gen_containers,
+# )
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
-from datahub.metadata.schema_classes import (
-    ChangeTypeClass,
+from datahub.metadata.schema_classes import (  # ChangeTypeClass,; ContainerPropertiesClass,
     DatasetPropertiesClass,
     DateTypeClass,
     DomainPropertiesClass,
@@ -24,7 +32,7 @@ from src.resources._utils import get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 
-def create_domains_in_datahub():
+def create_domains():
     domains = ["Geospatial", "Infrastructure", "School", "Finance"]
 
     for domain in domains:
@@ -32,8 +40,6 @@ def create_domains_in_datahub():
         domain_properties_aspect = DomainPropertiesClass(name=domain, description="")
 
         event: MetadataChangeProposalWrapper = MetadataChangeProposalWrapper(
-            entityType="domain",
-            changeType=ChangeTypeClass.UPSERT,
             entityUrn=domain_urn,
             aspect=domain_properties_aspect,
         )
@@ -46,12 +52,55 @@ def create_domains_in_datahub():
         rest_emitter.emit(event)
 
 
+# def create_dataset_containers():
+#     containers = ['raw', 'bronze', 'staging', 'silver', 'gold']
+
+#     for container in containers:
+#         container_urn = make_container_urn(FolderKey(
+#             platform='adls', env='PROD', folder_abs_path=container))
+#         container_properties_aspect = ContainerPropertiesClass(name=container, description="")
+
+#         # Construct a MetadataChangeProposalWrapper object
+#         container_event = MetadataChangeProposalWrapper(
+#             entityUrn=container_urn,
+#             aspect=container_properties_aspect
+#         )
+
+#         rest_emitter = DatahubRestEmitter(
+#             gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
+#             token=DATAHUB_ACCESS_TOKEN,
+#         )
+
+#         rest_emitter.emit(container_event)
+
+# def create_dataset_containers():
+
+#     containers = ['raw', 'bronze', 'staging', 'silver', 'gold']
+
+#     for container in containers:
+#         container_event = gen_containers(
+#             container_key=FolderKey(platform='adls', env='PROD', folder_abs_path=container),
+#             name=container,
+#             sub_types=[],
+#         )
+
+#         rest_emitter = DatahubRestEmitter(
+#             gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
+#             token=DATAHUB_ACCESS_TOKEN,
+#         )
+
+#         # Emit metadata! This is a blocking call
+#         rest_emitter.emit(container_event)
+
+
 def emit_metadata_to_datahub(
     context: OpExecutionContext, upstream_dataset_urn, df: pd.DataFrame
 ):
     rest_emitter = DatahubRestEmitter(
         gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
     )
+
+    ##### CREATE DATASET WITH CUSTOM PROPERTIES METADATA #####
 
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
@@ -101,8 +150,11 @@ def emit_metadata_to_datahub(
         customProperties=custom_metadata,
     )
 
+    dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
+    dataset_urn_name = dataset_urn_name.replace("/", ".")  # Datahub reads '.' as folder
+
     # Set the dataset's URN
-    dataset_urn = builder.make_dataset_urn(platform="adls", name=output_filepath)
+    dataset_urn = builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
 
     # Construct a MetadataChangeProposalWrapper object
     metadata_event = MetadataChangeProposalWrapper(
@@ -114,6 +166,16 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING METADATA")
     context.log.info(f"metadata: {custom_metadata}")
     rest_emitter.emit(metadata_event)
+
+    # ##### ADD DATASET TO A CONTAINER #####
+    # add_dataset_to_container_event = add_dataset_to_container(
+    #     container_key=FolderKey(platform='adls', env='PROD', folder_abs_path=step),
+    #     dataset_urn=dataset_urn
+    # )
+
+    # # Emit metadata! This is a blocking call
+    # context.log.info(f"ADDING DATASET TO {step} CONTAINER")
+    # rest_emitter.emit(add_dataset_to_container_event)
 
     ##### SCHEMA #####
     context.log.info(df.info)
