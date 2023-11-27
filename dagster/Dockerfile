@@ -46,7 +46,7 @@ COPY pyproject.toml poetry.lock ./
 
 # Install packages based on package manifests
 # This is an automated process: do not ask for user input
-RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,notebook
+RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,spark,notebook
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
 WORKDIR /app
