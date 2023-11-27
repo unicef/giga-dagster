@@ -10,9 +10,7 @@ action_list:
   - name: store_validation_result
     action:
       class_name: StoreValidationResultAction
-      # result_format: COMPLETE
       target_store_name: validations_store
-      # unexpected_index_list: school_id
   - name: store_evaluation_params
     action:
       class_name: StoreEvaluationParametersAction
@@ -21,7 +19,7 @@ action_list:
       class_name: UpdateDataDocsAction
       site_names:
       - local_site
-      # - adls_site
+      - adls_site
 evaluation_parameters: {}
 runtime_configuration:
   result_format:

@@ -55,7 +55,7 @@ class ADLSFileClient:
         return list(paths)
 
 
-def get_destination_filepath(source_path: str, dataset_type: str, step: str):
+def _get_filepath(source_path: str, dataset_type: str, step: str):
     filename = source_path.split("/")[-1]
     filename = (
         filename.replace(".csv", ".json")
@@ -91,16 +91,30 @@ def get_output_filepath(context: OpExecutionContext):
     source_path = context.get_step_execution_context().op_config["filepath"]
     step = context.asset_key.to_user_string()
 
-    destination_filepath = get_destination_filepath(source_path, dataset_type, step)
+    destination_filepath = _get_filepath(source_path, dataset_type, step)
 
     return destination_filepath
 
 
-def get_input_filepath(context: OpExecutionContext, upstream_step):
+def get_input_filepath(context: OpExecutionContext) -> str:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
     filename = source_path.split("/")[-1]
+    step = context.asset_key.to_user_string()
 
+    step_origin_folder_map = {
+        "bronze": "raw",
+        "data_quality_results": "bronze",
+        "dq_split_rows": "bronze",
+        "dq_passed_rows": "bronze",
+        "dq_failed_rows": "bronze",
+        "manual_review_passed_rows": "bronze",
+        "manual_review_failed_rows": "bronze",
+        "silver": "manuaL_review_passed",
+        "gold": "silver",
+    }
+
+    upstream_step = step_origin_folder_map[step]
     upstream_path = f"{upstream_step}/{dataset_type}/{filename}"
 
     return upstream_path

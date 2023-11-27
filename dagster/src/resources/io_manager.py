@@ -1,7 +1,7 @@
 import pandas as pd
 
 from dagster import InputContext, IOManager, OutputContext
-from src._utils.adls import ADLSFileClient, get_destination_filepath
+from src._utils.adls import ADLSFileClient, _get_filepath
 
 
 class StagingADLSIOManager(IOManager):
@@ -30,9 +30,6 @@ class StagingADLSIOManager(IOManager):
     def load_input(self, context: InputContext):
         filepath = self._get_filepath(context.upstream_output)
 
-        context.log.info(f"inputcontext: {dir(context.upstream_output)}")
-        context.log.info(f"assetkey: {context.asset_key.to_user_string()}")
-
         context.log.info(
             f"Downloaded {filepath.split('/')[-1]} from"
             f" {('/').join(filepath.split('/')[:-1])} in ADLS."
@@ -56,7 +53,7 @@ class StagingADLSIOManager(IOManager):
         parent_folder = context.step_context.op_config["dataset_type"]
         step = context.step_key
 
-        destination_filepath = get_destination_filepath(filepath, parent_folder, step)
+        destination_filepath = _get_filepath(filepath, parent_folder, step)
 
         context.log.info(f"Moving from {filepath} to {destination_filepath}")
 
