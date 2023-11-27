@@ -25,7 +25,7 @@ def get_dataset_type(filepath: str) -> str:
 def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths("raw-dev")
+    file_list = adls.list_paths("raw_dev")
 
     for file_data in file_list:
         if file_data["is_directory"]:
