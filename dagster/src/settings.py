@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Settings required to be in .env
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_SAS_HOST: str
+    AZURE_DFS_SAS_HOST: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
