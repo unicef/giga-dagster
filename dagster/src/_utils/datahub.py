@@ -10,7 +10,7 @@ from src.settings import settings
 
 def emit_metadata_to_datahub(context: OpExecutionContext) -> None:
     datahub_emitter = DatahubRestEmitter(
-        gms_server=f"http://{settings.DATAHUB_METADATA_SERVER_URL}",
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
 

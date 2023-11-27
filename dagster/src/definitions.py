@@ -32,7 +32,7 @@ defs = Definitions(
     ],
     resources={
         "ge_data_context": ge_data_context.configured(
-            {"ge_root_dir": "src/resources/great-expectations"}
+            {"ge_root_dir": "src/resources/great_expectations"}
         ),
         "adls_io_manager": io_managers.get(f"adls_{settings.ENVIRONMENT}"),
         "adls_file_client": ADLSFileClient(),

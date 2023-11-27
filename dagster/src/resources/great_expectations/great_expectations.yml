@@ -107,3 +107,4 @@ include_rendered_content:
   globally: false
   expectation_suite: false
   expectation_validation_result: false
+config_variables_file_path:

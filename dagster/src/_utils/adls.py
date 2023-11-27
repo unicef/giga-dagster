@@ -11,7 +11,7 @@ from src.settings import settings
 class ADLSFileClient:
     def __init__(self):
         self.client = DataLakeServiceClient(
-            account_url=f"https://{settings.AZURE_BLOB_SAS_HOST}",
+            account_url=f"https://{settings.AZURE_DFS_SAS_HOST}",
             credential=settings.AZURE_SAS_TOKEN,
         )
         self.adls = self.client.get_file_system_client(
