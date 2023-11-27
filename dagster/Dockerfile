@@ -19,12 +19,12 @@ RUN apt-get update && \
 # Download pre-built Spark w/ Hadoop
 RUN wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
 
-# # Extract Spark files to $SPARK_HOME
+# Extract Spark files to $SPARK_HOME
 RUN tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
     mkdir --parents /opt/spark && \
     mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}"
 
-# # Move to Spark JARs directory and download additional dependencies
+# Move to Spark JARs directory and download additional dependencies
 WORKDIR /opt/spark/jars
 
 RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar
@@ -33,7 +33,7 @@ RUN wget https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azu
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
 
-# # Install poetry,
+# Install poetry,
 # set to not create an additional virtualenv (we are already in a container),
 # enable parallel installs
 RUN pip install "poetry==$POETRY_VERSION" && \
