@@ -1,5 +1,4 @@
 import pandas as pd
-
 from dagster import InputContext, IOManager, OutputContext
 from src._utils.adls import ADLSFileClient, _get_filepath
 

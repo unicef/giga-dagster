@@ -4,7 +4,8 @@ from io import BytesIO
 import pandas as pd
 from azure.storage.filedatalake import DataLakeServiceClient
 
-from dagster import OpExecutionContext
+from dagster import OpExecutionContext, OutputContext
+from src.constants import constants
 from src.settings import settings
 
 
@@ -26,13 +27,18 @@ class ADLSFileClient:
             buffer.seek(0)
             return pd.read_csv(buffer)
 
-    def upload_pandas_to_adls_csv(self, filepath: str, data: pd.DataFrame):
+    def upload_pandas_to_adls_csv(
+        self, context: OutputContext, filepath: str, data: pd.DataFrame
+    ):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
+            metadata = context.step_context.op_config["metadata"]
             data.to_csv(buffer, index=False)
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(
+                buffer.getvalue(), overwrite=True, metadata=metadata
+            )
 
     def download_adls_json_to_json(self, filepath: str):
         file_client = self.adls.get_file_client(filepath)
@@ -64,14 +70,18 @@ def _get_filepath(source_path: str, dataset_type: str, step: str):
     )
 
     step_destination_folder_map = {
-        "raw": f"adls-testing-raw/{dataset_type}",
+        "raw": f"{constants.raw_folder}/{dataset_type}",
         "bronze": f"bronze/{dataset_type}",
         "data_quality_results": "logs-gx",
         "dq_split_rows": "bronze/split-rows",
         "dq_passed_rows": f"staging/pending-review/{dataset_type}",
         "dq_failed_rows": "archive/gx-tests-failed",
-        "manual_review_passed_rows": f"staging/approved/{dataset_type}",
-        "manual_review_failed_rows": "archive/manual-review-rejected",
+        "manual_review_passed_rows": (
+            f"{constants.staging_approved_folder}/{dataset_type}"
+        ),
+        "manual_review_failed_rows": (
+            f"{constants.archive_manual_review_rejected_folder}"
+        ),
         "silver": f"silver/{dataset_type}",
         "gold": "gold",
     }

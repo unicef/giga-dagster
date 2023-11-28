@@ -1,6 +1,5 @@
-from dagster_ge.factory import ge_data_context
-
 from dagster import Definitions, fs_io_manager, load_assets_from_package_module
+from dagster_ge.factory import ge_data_context
 from src import assets
 from src._utils.adls import ADLSFileClient
 from src._utils.sentry import setup_sentry
