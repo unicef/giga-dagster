@@ -3,6 +3,7 @@ from random import choice, randint
 from uuid import uuid4
 
 import pyspark.pandas as pd
+
 from src.settings import settings
 from src.spark.spark import get_spark_session
 

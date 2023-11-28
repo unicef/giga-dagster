@@ -1,4 +1,5 @@
 import pandas as pd
+
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src._utils.adls import get_output_filepath
 from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
@@ -88,9 +89,6 @@ def dq_passed_rows(
     #                 failed_rows_indices.add(unexpected_row)
 
     df_passed = bronze.drop(index=list(failed_rows_indices))
-
-    # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df=df_passed)
 
     # Yield output
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})

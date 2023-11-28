@@ -2,6 +2,7 @@ import pyarrow_hotfix  # noqa: F401
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
+
 from src.settings import settings
 
 
