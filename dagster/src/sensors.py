@@ -155,7 +155,12 @@ def school_master__get_gold_delta_tables_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            file_config = FileConfig(filepath=filepath, dataset_type=dataset_type)
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type=dataset_type,
+                metadata={},
+                file_size_bytes=0,
+            )
 
             print(f"FILE: {filepath}")
             yield RunRequest(

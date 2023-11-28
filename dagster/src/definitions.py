@@ -4,7 +4,6 @@ from dagster import Definitions, fs_io_manager, load_assets_from_package_module
 from src import assets
 from src._utils.adls import ADLSFileClient
 from src._utils.sentry import setup_sentry
-from src._utils.spark import get_spark_session
 from src.jobs import (
     school_master__get_gold_delta_tables_job,
     school_master__run_automated_data_checks_job,
@@ -39,7 +38,6 @@ defs = Definitions(
         ),
         "adls_io_manager": io_managers.get(f"adls_{settings.ENVIRONMENT}"),
         "adls_file_client": ADLSFileClient(),
-        "spark": get_spark_session(),
     },
     jobs=[
         school_master__run_automated_data_checks_job,

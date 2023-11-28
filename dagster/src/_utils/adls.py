@@ -22,12 +22,9 @@ class ADLSFileClient:
             file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
-    def download_adls_csv_to_spark_dataframe(self, filepath: str):
-        return spark.read.csv(
-            f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}",
-            header=True,
-            inferSchema=True,
-        )
+    def download_adls_csv_to_spark_dataframe(self, filepath: str) -> DataFrame:
+        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+        return spark.read.csv(adls_path, header=True, inferSchema=True)
 
     # def upload_spark_df_to_adls_deltatable(self, filepath: str, data: pd.DataFrame):
     #     file_client = self.adls.get_file_client(filepath)
@@ -43,61 +40,64 @@ class ADLSFileClient:
 
     def upload_spark_dataframe_to_adls_deltatable(self, data: DataFrame, filepath: str):
         filename = filepath.split("/")[-1]
-        spark.sql("CREATE SCHEMA IF NOT EXISTS gold")
+        country_code = filename.split("_")[0]
+        spark.sql("CREATE SCHEMA IF NOT EXISTS school_data")
         spark.sql(
             f"""
-                CREATE TABLE IF NOT EXISTS gold.{filename} (
-                    giga_id_school STRING,
-                    school_id STRING,
-                    name STRING,
-                    education_level STRING,
-                    lat DOUBLE,
-                    lon DOUBLE,
-                    connectivity STRING,
-                    type_connectivity STRING,
-                    connectivity_speed LONG,
-                    num_students INT,
-                    num_computers INT,
-                    electricity STRING,
-                    computer_availability STRING,
-                    education_level_regional STRING,
-                    school_type STRING,
-                    coverage_availability STRING,
-                    coverage_type STRING,
-                    latency_connectivity STRING,
-                    admin1 STRING,
-                    admin2 STRING,
-                    admin3 STRING,
-                    admin4 STRING,
-                    school_region STRING,
-                    num_teachers INT,
-                    num_classroom INT,
-                    computer_lab STRING,
-                    water STRING,
-                    address STRING,
-                    fiber_node_distance DOUBLE,
-                    microwave_node_distance DOUBLE,
-                    nearest_school_distance DOUBLE,
-                    schools_within_1km INT,
-                    schools_within_2km INT,
-                    schools_within_3km INT,
-                    schools_within_10km INT,
-                    nearest_LTE_id LONG,
-                    nearest_LTE_distance DOUBLE,
-                    nearest_UMTS_id LONG,
-                    nearest_UMTS_distance DOUBLE,
-                    nearest_GSM_id LONG,
-                    nearest_GSM_distance DOUBLE,
-                    pop_within_1km LONG,
-                    pop_within_2km LONG,
-                    pop_within_3km LONG,
-                    pop_within_10km LONG
-                )
-                USING DELTA
-                LOCATION f'{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables'
+        CREATE TABLE IF NOT EXISTS school_data.{country_code} (
+            giga_id_school STRING,
+            school_id STRING,
+            name STRING,
+            education_level STRING,
+            lat DOUBLE,
+            lon DOUBLE,
+            connectivity STRING,
+            type_connectivity STRING,
+            connectivity_speed LONG,
+            num_students INT,
+            num_computers INT,
+            electricity STRING,
+            computer_availability STRING,
+            education_level_regional STRING,
+            school_type STRING,
+            coverage_availability STRING,
+            coverage_type STRING,
+            latency_connectivity STRING,
+            admin1 STRING,
+            admin2 STRING,
+            admin3 STRING,
+            admin4 STRING,
+            school_region STRING,
+            num_teachers INT,
+            num_classroom INT,
+            computer_lab STRING,
+            water STRING,
+            address STRING,
+            fiber_node_distance DOUBLE,
+            microwave_node_distance DOUBLE,
+            nearest_school_distance DOUBLE,
+            schools_within_1km INT,
+            schools_within_2km INT,
+            schools_within_3km INT,
+            schools_within_10km INT,
+            nearest_LTE_id LONG,
+            nearest_LTE_distance DOUBLE,
+            nearest_UMTS_id LONG,
+            nearest_UMTS_distance DOUBLE,
+            nearest_GSM_id LONG,
+            nearest_GSM_distance DOUBLE,
+            pop_within_1km LONG,
+            pop_within_2km LONG,
+            pop_within_3km LONG,
+            pop_within_10km LONG
+        )
+        USING DELTA
+        LOCATION '{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}'
             """
         )
-        data.write.format("delta").mode("overwrite").saveAsTable(f"gold.{filename}")
+        data.write.format("delta").mode("overwrite").saveAsTable(
+            f"school_data.{country_code}"
+        )
 
     def download_adls_json_to_json(self, filepath: str):
         file_client = self.adls.get_file_client(filepath)
@@ -164,7 +164,7 @@ def _get_filepath(source_path: str, dataset_type: str, step: str):
 def get_output_filepath(context: OpExecutionContext):
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
-    step = context.asset_key.to_user_string, ()
+    step = context.asset_key.to_user_string()
 
     destination_filepath = _get_filepath(source_path, dataset_type, step)
 
@@ -175,7 +175,7 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
     filename = source_path.split("/")[-1]
-    step = context.asset_key.to_user_string, ()
+    step = context.asset_key.to_user_string()
 
     step_origin_folder_map = {
         "bronze": "raw",
