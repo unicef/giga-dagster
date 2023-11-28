@@ -150,7 +150,9 @@ def school_master__get_gold_delta_tables_sensor():
     file_list = adls.list_paths("raw/school_geolocation_coverage_data/gold/school_data")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data["is_directory"] or file_data["name"].split("/")[-1].startswith(
+            ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
+        ):
             continue
         else:
             filepath = file_data["name"]
