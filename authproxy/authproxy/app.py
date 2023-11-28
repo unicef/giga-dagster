@@ -55,6 +55,7 @@ app.mount(
 
 upstream_rw = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_URL)
 upstream_ro = httpx.AsyncClient(base_url=settings.DAGSTER_WEBSERVER_READONLY_URL)
+upstream_spark = httpx.AsyncClient(base_url=settings.SPARK_UI_URL)
 
 
 @app.get("/health")
@@ -171,8 +172,11 @@ async def proxy(path: str, request: Request):
     if (email_domain := email.split("@")[-1]) not in settings.EMAIL_DOMAIN_ALLOWLIST:
         return RedirectResponse("/unauthorized")
 
-    is_tm_user = email_domain == "thinkingmachin.es"
-    upstream = upstream_rw if is_tm_user else upstream_ro
+    if path.lstrip("/").startswith("spark"):
+        upstream = upstream_spark
+    else:
+        is_tm_user = email_domain == "thinkingmachin.es"
+        upstream = upstream_rw if is_tm_user else upstream_ro
 
     url = httpx.URL(path=request.url.path, query=request.url.query.encode("utf-8"))
     up_req = upstream.build_request(

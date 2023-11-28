@@ -5,6 +5,6 @@ metadata:
   labels:
     app: giga-dagster
 data:
-  AZURE_BLOB_CONTAINER_NAME: "giga-dataops-dev"
   DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
   DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"
+  SPARK_UI_URL: "http://spark-master-svc:8080"

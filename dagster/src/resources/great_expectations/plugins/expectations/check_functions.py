@@ -14,7 +14,9 @@ from shapely.geometry import Point
 from shapely.ops import nearest_points
 
 DUPLICATE_SCHOOL_DISTANCE = 100
-DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"  # To Do: Convert to Azure Data Lake Storage
+DIRECTORY_LOCATION = (  # To Do: Convert to Azure Data Lake Storage
+    "great_expectations/uncommitted/notebooks/data/"
+)
 
 
 # CHECK FUNCTIONS
