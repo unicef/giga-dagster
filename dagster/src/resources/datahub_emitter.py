@@ -2,7 +2,6 @@ from datetime import datetime
 
 import datahub.emitter.mce_builder as builder
 import pandas as pd
-from dagster import OpExecutionContext, version
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -18,8 +17,10 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
-from src.resources._utils import get_input_filepath, get_output_filepath
-from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
+
+from dagster import OpExecutionContext, version
+from src._utils.adls import get_input_filepath, get_output_filepath
+from src.settings import settings
 
 
 def create_domains():
@@ -35,8 +36,8 @@ def create_domains():
         )
 
         datahub_emitter = DatahubRestEmitter(
-            gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
-            token=DATAHUB_ACCESS_TOKEN,
+            gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
         )
 
         datahub_emitter.emit(event)
@@ -45,20 +46,19 @@ def create_domains():
 
 
 def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
-    output_filepath = get_output_filepath(context)
-    input_filepath = get_input_filepath(context)
-
-    dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
-    dataset_urn_name = dataset_urn_name.replace("/", ".")  # Datahub reads '.' as folder
-
-    upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
-    upstream_urn_name = upstream_urn_name.replace(
-        "/", "."
-    )  # Datahub reads '.' as folder
-
     if upstream:
+        input_filepath = get_input_filepath(context)
+        upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
+        upstream_urn_name = upstream_urn_name.replace(
+            "/", "."
+        )  # Datahub reads '.' as folder
         return builder.make_dataset_urn(platform="adls", name=upstream_urn_name)
     else:
+        output_filepath = get_output_filepath(context)
+        dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
+        dataset_urn_name = dataset_urn_name.replace(
+            "/", "."
+        )  # Datahub reads '.' as folder
         return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
 
 
@@ -167,7 +167,8 @@ def set_domain(context: OpExecutionContext):
 def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     # Instantiate a Datahub Rest Emitter client
     datahub_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
     # Set the dataset's URN
@@ -198,7 +199,8 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     # Instantiate a Datahub Graph client
     graph = DataHubGraph(
         DatahubClientConfig(
-            server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+            server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
 

@@ -1,4 +1,5 @@
 import pandas as pd
+
 from dagster import InputContext, IOManager, OutputContext
 from src._utils.adls import ADLSFileClient, _get_filepath
 
@@ -15,7 +16,9 @@ class StagingADLSIOManager(IOManager):
                     "Output DataFrame is empty. Skipping write operation."
                 )
                 return
-            self.adls_client.upload_pandas_to_adls_csv(filepath, output)
+            self.adls_client.upload_pandas_to_adls_csv(
+                context=context, filepath=filepath, data=output
+            )
             context.log.info("uploaded csv")
         else:
             self.adls_client.upload_json_to_adls_json(filepath, output)
