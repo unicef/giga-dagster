@@ -2,7 +2,6 @@ from datetime import datetime
 
 import datahub.emitter.mce_builder as builder
 import pandas as pd
-from dagster import OpExecutionContext, version
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -18,7 +17,9 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
-from src.resources._utils import get_input_filepath, get_output_filepath
+
+from dagster import OpExecutionContext, version
+from src._utils.adls import get_input_filepath, get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 
