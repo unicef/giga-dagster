@@ -127,10 +127,7 @@ def emit_metadata_to_datahub(
             type_class = NumberTypeClass()
         elif dtype == "datetime64[ns]":
             type_class = DateTypeClass()
-        elif dtype == "object":
-            type_class = StringTypeClass()
         else:
-            context.log.info("Unknown Type")
             type_class = StringTypeClass()
 
         fields.append(
