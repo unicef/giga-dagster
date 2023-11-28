@@ -36,7 +36,7 @@ class StagingADLSIOManager(IOManager):
         ):
             file = self.adls_client.download_adls_json_to_json(filepath)
         else:
-            file = self.adls_client.download_adls_deltatable_to_spark_df(
+            file = self.adls_client.download_adls_deltatable_to_spark_dataframe(
                 context.resources.spark, filepath
             )
 

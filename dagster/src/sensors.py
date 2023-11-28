@@ -40,7 +40,7 @@ def school_master__raw_file_uploads_sensor():
             if dataset_type is None:
                 continue
 
-            properties = ADLSFileClient().get_file_metadata(filepath=filepath)
+            properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
             file_config = FileConfig(
