@@ -24,6 +24,7 @@ setup_sentry()
 
 pyspark = PySparkResource(
     spark_config={
+        "spark.app.name": f"giga-dagster@{settings.SHORT_SHA}",
         "spark.master": f"spark://{settings.SPARK_MASTER_HOST}",
         "spark.driver.extraJavaOptions": str.join(
             " ",
