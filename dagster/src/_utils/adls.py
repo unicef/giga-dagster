@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 
 from azure.storage.filedatalake import DataLakeServiceClient
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 
 from dagster import OpExecutionContext
 from src.constants import constants
@@ -19,13 +19,13 @@ class ADLSFileClient:
             file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
-    # def download_adls_deltatable_to_spark_df(self, filepath: str):
-    #     file_client = self.adls.get_file_client(filepath)
+    def download_adls_csv_to_spark_df(self, spark: SparkSession, filepath: str):
+        file_client = self.adls.get_file_client(filepath)
 
-    #     with BytesIO() as buffer:
-    #         file_client.download_file().readinto(buffer)
-    #         buffer.seek(0)
-    #         return self.spark.read.parquet(buffer)
+        with BytesIO() as buffer:
+            file_client.download_file().readinto(buffer)
+            buffer.seek(0)
+            return spark.read.csv(buffer)
 
     # def upload_spark_df_to_adls_deltatable(self, filepath: str, data: pd.DataFrame):
     #     file_client = self.adls.get_file_client(filepath)
@@ -35,12 +35,14 @@ class ADLSFileClient:
     #         buffer.seek(0)
     #         file_client.upload_data(buffer.getvalue(), overwrite=True)
 
-    def download_adls_deltatable_to_spark_dataframe(self, spark, filepath: str):
+    def download_adls_deltatable_to_spark_dataframe(
+        self, spark: SparkSession, filepath: str
+    ):
         df = spark.read.format("delta").load(filepath)
         df.show()
 
     def upload_spark_dataframe_to_adls_deltatable(
-        self, spark, data: DataFrame, filepath: str
+        self, spark: SparkSession, data: DataFrame, filepath: str
     ):
         filename = filepath.split("/")[-1]
         spark.sql("CREATE SCHEMA IF NOT EXISTS gold")

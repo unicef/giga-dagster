@@ -23,10 +23,7 @@ run_coordinator:
   module: dagster.core.run_coordinator
   class: QueuedRunCoordinator
   config:
-    max_concurrent_runs: 5
-    tag_concurrency_limits:
-      - key: "spark-submit"
-        limit: 1
+    max_concurrent_runs: 1
 
 compute_logs:
   module: dagster.core.storage.local_compute_log_manager
