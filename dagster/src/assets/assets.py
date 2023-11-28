@@ -153,7 +153,7 @@ def dq_failed_rows(
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def fake_gold(context: OpExecutionContext) -> DataFrame:
+def manual_review_passed_rows(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
         context.resources.spark, context.run_tags["dagster/run_key"]
@@ -213,3 +213,21 @@ def gold(context: OpExecutionContext, silver: DataFrame) -> DataFrame:
 
     # Yield output
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
+
+
+@asset(
+    io_manager_key="adls_io_manager",
+    required_resource_keys={"adls_file_client"},
+)
+def fake_gold(context: OpExecutionContext) -> DataFrame:
+    # Load data
+    df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
+        context.resources.spark, context.run_tags["dagster/run_key"]
+    )
+    context.log.info(f"data={df}")
+
+    # Emit metadata of dataset to Datahub
+    emit_metadata_to_datahub(context, df)
+
+    # Yield output
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})

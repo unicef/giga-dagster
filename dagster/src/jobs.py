@@ -15,7 +15,7 @@ school_master__run_automated_data_checks_job = define_asset_job(
 school_master__run_successful_manual_checks_job = define_asset_job(
     name="school_master__run_successful_manual_checks_job",
     selection=[
-        # "manual_review_passed_rows",
+        "manual_review_passed_rows",
         "silver",
         "gold",
     ],

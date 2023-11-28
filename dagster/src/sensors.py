@@ -12,8 +12,8 @@ from src.jobs import (
 class FileConfig(Config):
     filepath: str
     dataset_type: str
-    metadata: dict
-    file_size_bytes: int
+    # metadata: dict
+    # file_size_bytes: int
 
 
 def get_dataset_type(filepath: str) -> str | None:
@@ -40,14 +40,14 @@ def school_master__raw_file_uploads_sensor():
             if dataset_type is None:
                 continue
 
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+            # properties = adls.get_file_metadata(filepath=filepath)
+            # metadata = properties["metadata"]
+            # size = properties["size"]
             file_config = FileConfig(
                 filepath=filepath,
                 dataset_type=dataset_type,
-                metadata=metadata,
-                file_size_bytes=size,
+                # metadata=metadata,
+                # file_size_bytes=size,
             )
 
             print(f"FILE: {filepath}")
@@ -61,8 +61,7 @@ def school_master__raw_file_uploads_sensor():
                         "data_quality_results": file_config,
                         "data_quality_results": file_config,
                         "dq_passed_rows": file_config,
-                        # "dq_failed_rows": file_config
-                        # "dq_failed_rows": file_config,
+                        "dq_failed_rows": file_config,
                     }
                 ),
             )
@@ -163,7 +162,7 @@ def school_master__get_gold_delta_tables_sensor():
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "gold": file_config,
+                        "fake_gold": file_config,
                     }
                 ),
             )
