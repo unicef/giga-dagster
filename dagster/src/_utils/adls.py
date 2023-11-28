@@ -1,8 +1,8 @@
 import json
 from io import BytesIO
 
-import pandas as pd
 from azure.storage.filedatalake import DataLakeServiceClient
+from pyspark.sql import DataFrame
 
 from dagster import OpExecutionContext
 from src.settings import settings
@@ -18,21 +18,85 @@ class ADLSFileClient:
             file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
-    def download_adls_csv_to_pandas(self, filepath: str):
-        file_client = self.adls.get_file_client(filepath)
+    # def download_adls_deltatable_to_spark_df(self, filepath: str):
+    #     file_client = self.adls.get_file_client(filepath)
 
-        with BytesIO() as buffer:
-            file_client.download_file().readinto(buffer)
-            buffer.seek(0)
-            return pd.read_csv(buffer)
+    #     with BytesIO() as buffer:
+    #         file_client.download_file().readinto(buffer)
+    #         buffer.seek(0)
+    #         return self.spark.read.parquet(buffer)
 
-    def upload_pandas_to_adls_csv(self, filepath: str, data: pd.DataFrame):
-        file_client = self.adls.get_file_client(filepath)
+    # def upload_spark_df_to_adls_deltatable(self, filepath: str, data: pd.DataFrame):
+    #     file_client = self.adls.get_file_client(filepath)
 
-        with BytesIO() as buffer:
-            data.to_csv(buffer, index=False)
-            buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+    #     with BytesIO() as buffer:
+    #         data.to_csv(buffer, index=False)
+    #         buffer.seek(0)
+    #         file_client.upload_data(buffer.getvalue(), overwrite=True)
+
+    def download_adls_deltatable_to_spark_dataframe(self, spark, filepath: str):
+        df = spark.read.format("delta").load(filepath)
+        df.show()
+
+    def upload_spark_dataframe_to_adls_deltatable(
+        self, spark, data: DataFrame, filepath: str
+    ):
+        filename = filepath.split("/")[-1]
+        spark.sql("CREATE SCHEMA IF NOT EXISTS gold")
+        spark.sql(
+            f"""
+                CREATE TABLE IF NOT EXISTS gold.{filename} (
+                    giga_id_school STRING
+                    school_id STRING
+                    name STRING
+                    education_level STRING
+                    lat DOUBLE
+                    lon DOUBLE
+                    connectivity STRING
+                    type_connectivity STRING
+                    connectivity_speed LONG
+                    num_students LONG
+                    num_computers LONG
+                    electricity STRING
+                    computer_availability STRING
+                    education_level_regional STRING
+                    school_type STRING
+                    coverage_availability STRING
+                    coverage_type STRING
+                    latency_connectivity STRING
+                    admin1 STRING
+                    admin2 STRING
+                    admin3 STRING
+                    admin4 STRING
+                    school_region STRING
+                    num_teachers LONG
+                    num_classroom LONG
+                    computer_lab STRING
+                    water STRING
+                    address STRING
+                    fiber_node_distance DOUBLE
+                    microwave_node_distance DOUBLE
+                    nearest_school_distance DOUBLE
+                    schools_within_1km LONG
+                    schools_within_2km LONG
+                    schools_within_3km LONG
+                    schools_within_10km LONG
+                    nearest_LTE_id LONG
+                    nearest_LTE_distance DOUBLE
+                    nearest_UMTS_id LONG
+                    nearest_UMTS_distance DOUBLE
+                    nearest_GSM_id LONG
+                    nearest_GSM_distance DOUBLE
+                    pop_within_1km LONG
+                    pop_within_2km LONG
+                    pop_within_3km LONG
+                    pop_within_10km LONG
+                )
+                USING DELTA
+                LOCATION f'{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables'
+            """
+        )
+        data.write.format("delta").mode("overwrite").saveAsTable(f"gold.{filename}")
 
     def download_adls_json_to_json(self, filepath: str):
         file_client = self.adls.get_file_client(filepath)
