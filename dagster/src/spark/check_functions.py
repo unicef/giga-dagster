@@ -23,14 +23,16 @@ from pyspark.sql.types import StringType, BooleanType, ArrayType
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.window import Window
 
+# Auth
+from src.settings import AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
+
 DUPLICATE_SCHOOL_DISTANCE = .1
 
-AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 
 # DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"
 DIRECTORY_LOCATION = "raw/geospatial-data/gadm_files/version4.1/"
-container_name = "giga-dataops-dev"
+container_name = AZURE_BLOB_CONTAINER_NAME
 
 
 # CHECK FUNCTIONS
