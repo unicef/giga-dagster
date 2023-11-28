@@ -1,6 +1,7 @@
 import decimal
 import difflib
 import os
+import io
 
 # Geospatial
 import country_converter as coco
@@ -41,11 +42,12 @@ def get_country_geometry(country_code_iso3):
         filename = "{}.gpkg".format(country_code_iso3)
         file = "{}{}".format(DIRECTORY_LOCATION, filename)
         blob_client = service.get_blob_client(container=container_name, blob=file)
-        with open(filename, mode="wb") as file_blob:
+        with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
-            file_blob.write(download_stream.readall())
+            download_stream.readinto(file_blob)
+            file_blob.seek(0)
+            gdf_boundaries = gpd.read_file(file_blob)
 
-        gdf_boundaries = gpd.read_file(filename)
         country_geometry = gdf_boundaries[gdf_boundaries["GID_0"] == country_code_iso3][
             "geometry"
         ][0]
@@ -335,23 +337,23 @@ if __name__ == "__main__":
     # print(geo)
     # output = is_valid_range(2, 1, 3)
     # print(output)
-    df = pd.DataFrame({'school_name': ["1", "mark", "mark", "marko"],
-                       'education_level': [3, 4, 4, 4],
-                       'latitude': [3, 5, 5, 5], 'longitude': [2, 4, 4, 4]})
-    # print(duplicate_check(df, is_same_name_level_within_radius))
-    # print(duplicate_check(df, is_similar_name_level_within_radius))
-    # point_list = [(12.000, 13.000), (12.000, 13.100), (15.000, 15.000)]
-    # print(are_all_points_beyond_minimum_distance(point_list))
-    # print(has_no_similar_name(["mawda", "adsads"]))
-    # print(has_no_similar_name(["mawda", "mawda / B"]))
-    # print(has_at_least_n_decimal_places(10.35452, 5))
-    # print(has_at_least_n_decimal_places(10.3545, 5))
-    print("Within country")
-    print(
-        is_within_boundary_distance(
-            latitude=16.14626, longitude=-88.72097, country_code_iso3="BLZ"
-        )
-    )
+    # df = pd.DataFrame({'school_name': ["1", "mark", "mark", "marko"],
+    #                    'education_level': [3, 4, 4, 4],
+    #                    'latitude': [3, 5, 5, 5], 'longitude': [2, 4, 4, 4]})
+    # # print(duplicate_check(df, is_same_name_level_within_radius))
+    # # print(duplicate_check(df, is_similar_name_level_within_radius))
+    # # point_list = [(12.000, 13.000), (12.000, 13.100), (15.000, 15.000)]
+    # # print(are_all_points_beyond_minimum_distance(point_list))
+    # # print(has_no_similar_name(["mawda", "adsads"]))
+    # # print(has_no_similar_name(["mawda", "mawda / B"]))
+    # # print(has_at_least_n_decimal_places(10.35452, 5))
+    # # print(has_at_least_n_decimal_places(10.3545, 5))
+    # print("Within country")
+    # print(
+    #     is_within_boundary_distance(
+    #         latitude=16.14626, longitude=-88.72097, country_code_iso3="BLZ"
+    #     )
+    # )
     # latitude = 17.49952
     # longitude = -88.19756
     # country_code_iso3 = "BLZ"
@@ -362,3 +364,5 @@ if __name__ == "__main__":
     # print(list_values[1:])
     # print(range(3))
     # print(geopy.distance.geodesic((12.000, 13.0009), (12.000, 13.001)).km)
+    test_geo = get_country_geometry("UZB")
+    print(test_geo)
