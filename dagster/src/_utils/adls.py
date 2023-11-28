@@ -24,7 +24,7 @@ class ADLSFileClient:
 
     def download_adls_csv_to_spark_dataframe(self, filepath: str) -> DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True, inferSchema=True)
+        return spark.read.csv(adls_path, header=True)
 
     # def upload_spark_df_to_adls_deltatable(self, filepath: str, data: pd.DataFrame):
     #     file_client = self.adls.get_file_client(filepath)
@@ -49,13 +49,13 @@ class ADLSFileClient:
             school_id STRING,
             name STRING,
             education_level STRING,
-            lat DOUBLE,
-            lon DOUBLE,
+            lat STRING,
+            lon STRING,
             connectivity STRING,
             type_connectivity STRING,
             connectivity_speed LONG,
-            num_students INT,
-            num_computers INT,
+            num_students STRING,
+            num_computers STRING,
             electricity STRING,
             computer_availability STRING,
             education_level_regional STRING,
@@ -68,28 +68,28 @@ class ADLSFileClient:
             admin3 STRING,
             admin4 STRING,
             school_region STRING,
-            num_teachers INT,
-            num_classroom INT,
+            num_teachers STRING,
+            num_classroom STRING,
             computer_lab STRING,
             water STRING,
             address STRING,
-            fiber_node_distance DOUBLE,
-            microwave_node_distance DOUBLE,
-            nearest_school_distance DOUBLE,
-            schools_within_1km INT,
-            schools_within_2km INT,
-            schools_within_3km INT,
-            schools_within_10km INT,
-            nearest_LTE_id LONG,
-            nearest_LTE_distance DOUBLE,
-            nearest_UMTS_id LONG,
-            nearest_UMTS_distance DOUBLE,
-            nearest_GSM_id LONG,
-            nearest_GSM_distance DOUBLE,
-            pop_within_1km LONG,
-            pop_within_2km LONG,
-            pop_within_3km LONG,
-            pop_within_10km LONG
+            fiber_node_distance STRING,
+            microwave_node_distance STRING,
+            nearest_school_distance STRING,
+            schools_within_1km STRING,
+            schools_within_2km STRING,
+            schools_within_3km STRING,
+            schools_within_10km STRING,
+            nearest_LTE_id STRING,
+            nearest_LTE_distance STRING,
+            nearest_UMTS_id STRING,
+            nearest_UMTS_distance STRING,
+            nearest_GSM_id STRING,
+            nearest_GSM_distance STRING,
+            pop_within_1km STRING,
+            pop_within_2km STRING,
+            pop_within_3km STRING,
+            pop_within_10km STRING
         )
         USING DELTA
         LOCATION '{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}'

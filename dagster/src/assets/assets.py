@@ -1,5 +1,5 @@
-import pyspark.pandas as pd
-from pandas import Float32Dtype, Float64Dtype, Int32Dtype, Int64Dtype, StringDtype
+from pyspark import sql
+from pyspark.sql import functions, types
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src._utils.adls import get_output_filepath
@@ -13,7 +13,7 @@ from src._utils.adls import get_output_filepath
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def raw(context: OpExecutionContext) -> pd.DataFrame:
+def raw(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
         context.run_tags["dagster/run_key"]
@@ -35,7 +35,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 @asset(
     io_manager_key="adls_io_manager",
 )
-def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
+def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
     # Run bronze layer transforms, standardize columns
 
     # Emit metadata of dataset to Datahub
@@ -50,7 +50,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     required_resource_keys={"ge_data_context"},
     op_tags={"kind": "ge"},
 )
-def data_quality_results(context, bronze: pd.DataFrame):
+def data_quality_results(context, bronze: sql.DataFrame):
     # Run data quality checks
     validations = [
         {
@@ -81,8 +81,8 @@ def data_quality_results(context, bronze: pd.DataFrame):
     io_manager_key="adls_io_manager",
 )
 def dq_passed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext, bronze: sql.DataFrame, data_quality_results
+) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
@@ -103,8 +103,8 @@ def dq_passed_rows(
     io_manager_key="adls_io_manager",
 )
 def dq_failed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext, bronze: sql.DataFrame, data_quality_results
+) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
@@ -155,7 +155,7 @@ def dq_failed_rows(
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
+def manual_review_passed_rows(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
         context.run_tags["dagster/run_key"]
@@ -173,7 +173,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
+def manual_review_failed_rows(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
@@ -191,8 +191,8 @@ def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
     io_manager_key="adls_io_manager",
 )
 def silver(
-    context: OpExecutionContext, manual_review_passed_rows: pd.DataFrame
-) -> pd.DataFrame:
+    context: OpExecutionContext, manual_review_passed_rows: sql.DataFrame
+) -> sql.DataFrame:
     # Run silver layer transforms
 
     # Emit metadata of dataset to Datahub
@@ -207,7 +207,7 @@ def silver(
 @asset(
     io_manager_key="adls_io_manager",
 )
-def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
+def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
     # Run gold layer transforms - merge data
 
     # Emit metadata of dataset to Datahub
@@ -221,55 +221,16 @@ def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def fake_gold(context: OpExecutionContext) -> pd.DataFrame:
+def fake_gold(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
-    df: pd.DataFrame = (
+    df: sql.DataFrame = (
         context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
             context.run_tags["dagster/run_key"]
         )
     )
 
-    df = df.astype(StringDtype())
-
-    columns_convert_to_float = ["connectivity_speed", "latency_connectivity"]
-    columns_convert_to_double = [
-        "lat",
-        "lon",
-        "fiber_node_distance",
-        "microwave_node_distance",
-        "nearest_school_distance",
-        "nearest_UMTS_distance",
-        "nearest_GSM_distance",
-    ]
-    columns_convert_to_int = [
-        "num_computers",
-        "num_teachers",
-        "num_students",
-        "num_classroom",
-        "nearest_GSM_id",
-        "schools_within_1km",
-        "schools_within_2km",
-        "schools_within_3km",
-        "schools_within_10km",
-    ]
-    columns_convert_to_long = [
-        "nearest_LTE_id",
-        "nearest_UMTS_id",
-        "nearest_GSM_id",
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "pop_within_10km",
-    ]
-
-    for col in columns_convert_to_float:
-        df[col] = df[col].astype(Float32Dtype())
-    for col in columns_convert_to_double:
-        df[col] = df[col].astype(Float64Dtype())
-    for col in columns_convert_to_int:
-        df[col] = df[col].astype(Float32Dtype()).astype(Int32Dtype())
-    for col in columns_convert_to_long:
-        df[col] = df[col].astype(Float32Dtype()).astype(Int64Dtype())
+    for col in df.columns:
+        df = df.withColumn(col, functions.col(col).cast(types.StringType()))
 
     context.log.info(f"data={df}")
 
