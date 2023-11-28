@@ -2,7 +2,8 @@ from pyspark.sql import DataFrame
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src._utils.adls import get_output_filepath
-from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
+
+# from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 
 # from dagster_ge import ge_validation_op_factory
 
@@ -14,17 +15,17 @@ from src.resources.datahub_emitter import create_domains, emit_metadata_to_datah
 def raw(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-        context.resources.spark, context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"]
     )
     context.log.info(df.head())
 
     # Create domains in Datahub
     # Emit metadata! This is a blocking call
     context.log.info("CREATING DOMAINS IN DATAHUB")
-    create_domains()
+    # create_domains()
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df=df)
+    # emit_metadata_to_datahub(context, df=df)
 
     # Yield output
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
@@ -37,7 +38,7 @@ def bronze(context: OpExecutionContext, raw: DataFrame) -> DataFrame:
     # Run bronze layer transforms, standardize columns
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df=raw)
+    # emit_metadata_to_datahub(context, df=raw)
 
     # Yield output
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
@@ -115,7 +116,7 @@ def dq_failed_rows(
     df_failed = bronze.loc[list(failed_rows_indices)]
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context)
+    # emit_metadata_to_datahub(context)
 
     # Yield output
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
@@ -156,12 +157,12 @@ def dq_failed_rows(
 def manual_review_passed_rows(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-        context.resources.spark, context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
 
     # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -179,7 +180,7 @@ def manual_review_failed_rows(context: OpExecutionContext) -> DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
 
     # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -194,7 +195,7 @@ def silver(
     # Run silver layer transforms
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
 
     # Yield output
     yield Output(
@@ -209,7 +210,7 @@ def gold(context: OpExecutionContext, silver: DataFrame) -> DataFrame:
     # Run gold layer transforms - merge data
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df=silver)
+    # emit_metadata_to_datahub(context, df=silver)
 
     # Yield output
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
@@ -222,12 +223,12 @@ def gold(context: OpExecutionContext, silver: DataFrame) -> DataFrame:
 def fake_gold(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-        context.resources.spark, context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    emit_metadata_to_datahub(context, df)
+    # # emit_metadata_to_datahub(context, df)
 
     # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})

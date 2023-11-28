@@ -143,11 +143,11 @@ def school_master__failed_manual_checks_sensor():
             )
 
 
-@sensor(job=school_master__get_gold_delta_tables_job, minimum_interval_seconds=60)
+@sensor(job=school_master__get_gold_delta_tables_job, minimum_interval_seconds=30)
 def school_master__get_gold_delta_tables_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths("gold")
+    file_list = adls.list_paths("raw/school_geolocation_coverage_data/gold/school_data")
 
     for file_data in file_list:
         if file_data["is_directory"]:

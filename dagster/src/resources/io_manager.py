@@ -16,9 +16,7 @@ class StagingADLSIOManager(IOManager):
                     "Output DataFrame is empty. Skipping write operation."
                 )
                 return
-            self.adls_client.upload_spark_dataframe_to_adls_deltatable(
-                context.resources.spark, output, filepath
-            )
+            self.adls_client.upload_spark_dataframe_to_adls_deltatable(output, filepath)
         else:
             self.adls_client.upload_json_to_adls_json(filepath, output)
 
@@ -37,7 +35,7 @@ class StagingADLSIOManager(IOManager):
             file = self.adls_client.download_adls_json_to_json(filepath)
         else:
             file = self.adls_client.download_adls_deltatable_to_spark_dataframe(
-                context.resources.spark, filepath
+                filepath
             )
 
         context.log.info(
