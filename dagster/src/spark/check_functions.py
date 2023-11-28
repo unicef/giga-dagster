@@ -26,7 +26,7 @@ from pyspark.sql.window import Window
 # Auth
 from src.settings import AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
 
-DUPLICATE_SCHOOL_DISTANCE = .1
+DUPLICATE_SCHOOL_DISTANCE_KM = .1
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 
@@ -163,7 +163,7 @@ def has_at_least_n_decimal_places(number, places):
 def are_pair_points_beyond_minimum_distance(
     coords_1, coords_2 #, distance_km=DUPLICATE_SCHOOL_DISTANCE
 ):
-    return geodesic(coords_1, coords_2).km <= DUPLICATE_SCHOOL_DISTANCE
+    return geodesic(coords_1, coords_2).km <= DUPLICATE_SCHOOL_DISTANCE_KM
 
 are_pair_points_beyond_minimum_distance_udf = f.udf(are_pair_points_beyond_minimum_distance)
 
@@ -188,7 +188,7 @@ def are_all_points_beyond_minimum_distance(coordinates_list):
 are_all_points_beyond_minimum_distance_udf = f.udf(are_all_points_beyond_minimum_distance)
 
 # def are_all_points_beyond_minimum_distance(
-#     points, distance_km=DUPLICATE_SCHOOL_DISTANCE
+#     points, distance_km=DUPLICATE_SCHOOL_DISTANCE_KM
 # ):
 #     # Initial assumption all are far apart
 #     check_list = [True for i in range(len(points))]
