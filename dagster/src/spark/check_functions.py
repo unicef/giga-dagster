@@ -55,7 +55,7 @@ def get_country_geometry(country_code_iso3):
         if str(e) == "Must be a coordinate pair or Point":
             country_geometry is None
         else:
-            raise
+            raise e
 
     return country_geometry
 
@@ -67,7 +67,7 @@ def get_point(longitude, latitude):
         if str(e) == "Must be a coordinate pair or Point":
             point = None
         else:
-            raise
+            raise e
 
     return point
 
