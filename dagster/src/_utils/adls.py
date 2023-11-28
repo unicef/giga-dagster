@@ -2,14 +2,11 @@ import json
 from io import BytesIO
 
 from azure.storage.filedatalake import DataLakeServiceClient
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, SparkSession
 
 from dagster import OpExecutionContext
-from src._utils.spark import get_spark_session
 from src.constants import constants
 from src.settings import settings
-
-spark = get_spark_session()
 
 
 class ADLSFileClient:
@@ -22,7 +19,9 @@ class ADLSFileClient:
             file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
-    def download_adls_csv_to_spark_dataframe(self, filepath: str) -> DataFrame:
+    def download_adls_csv_to_spark_dataframe(
+        self, filepath: str, spark: SparkSession
+    ) -> DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         return spark.read.csv(adls_path, header=True)
 
@@ -34,11 +33,15 @@ class ADLSFileClient:
     #         buffer.seek(0)
     #         file_client.upload_data(buffer.getvalue(), overwrite=True)
 
-    def download_adls_deltatable_to_spark_dataframe(self, filepath: str):
+    def download_adls_deltatable_to_spark_dataframe(
+        self, filepath: str, spark: SparkSession
+    ):
         df = spark.read.format("delta").load(filepath)
         df.show()
 
-    def upload_spark_dataframe_to_adls_deltatable(self, data: DataFrame, filepath: str):
+    def upload_spark_dataframe_to_adls_deltatable(
+        self, data: DataFrame, filepath: str, spark: SparkSession
+    ):
         filename = filepath.split("/")[-1]
         country_code = filename.split("_")[0]
         spark.sql("CREATE SCHEMA IF NOT EXISTS school_data")

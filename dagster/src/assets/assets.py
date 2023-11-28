@@ -1,4 +1,4 @@
-from pyspark.sql import sql
+from pyspark import sql
 from pyspark.sql.functions import col
 from pyspark.sql.types import DoubleType, IntegerType, LongType, StringType
 
@@ -12,12 +12,12 @@ from src._utils.adls import get_output_filepath
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client"},
+    required_resource_keys={"adls_file_client", "pyspark"},
 )
 def raw(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-        context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"], context.resources.pyspark.spark_session
     )
     context.log.info(df.head())
 
@@ -154,12 +154,12 @@ def dq_failed_rows(
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client"},
+    required_resource_keys={"adls_file_client", "pyspark"},
 )
 def manual_review_passed_rows(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-        context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"], context.resources.pyspark.spark_session
     )
     context.log.info(f"data={df}")
 
@@ -220,13 +220,13 @@ def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
 
 @asset(
     io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client"},
+    required_resource_keys={"adls_file_client", "pyspark"},
 )
 def fake_gold(context: OpExecutionContext) -> sql.DataFrame:
     # Load data
     df: sql.DataFrame = (
         context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
-            context.run_tags["dagster/run_key"]
+            context.run_tags["dagster/run_key"], context.resources.pyspark.spark_session
         )
     )
 

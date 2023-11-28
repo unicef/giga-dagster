@@ -1,12 +1,14 @@
+from dagster_pyspark import PySparkResource
 from pyspark.sql import DataFrame
 
-from dagster import InputContext, IOManager, OutputContext
+from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src._utils.adls import ADLSFileClient, _get_filepath
 
+adls_client = ADLSFileClient()
 
-class StagingADLSIOManager(IOManager):
-    def __init__(self):
-        self.adls_client = ADLSFileClient()
+
+class StagingADLSIOManager(ConfigurableIOManager):
+    pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: DataFrame):
         filepath = self._get_filepath(context)
@@ -16,9 +18,11 @@ class StagingADLSIOManager(IOManager):
                     "Output DataFrame is empty. Skipping write operation."
                 )
                 return
-            self.adls_client.upload_spark_dataframe_to_adls_deltatable(output, filepath)
+            adls_client.upload_spark_dataframe_to_adls_deltatable(
+                output, filepath, self.pyspark.spark_session
+            )
         else:
-            self.adls_client.upload_json_to_adls_json(filepath, output)
+            adls_client.upload_json_to_adls_json(filepath, output)
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
@@ -32,10 +36,10 @@ class StagingADLSIOManager(IOManager):
             context.upstream_output.step_key == "data_quality_results"
             and context.asset_key.to_user_string() == "data_quality_results"
         ):
-            file = self.adls_client.download_adls_json_to_json(filepath)
+            file = adls_client.download_adls_json_to_json(filepath)
         else:
-            file = self.adls_client.download_adls_deltatable_to_spark_dataframe(
-                filepath
+            file = adls_client.download_adls_deltatable_to_spark_dataframe(
+                filepath, self.pyspark.spark_session
             )
 
         context.log.info(

@@ -21,8 +21,15 @@ RUN wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
 
 # Extract Spark files to $SPARK_HOME
 RUN tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
-    mkdir --parents /opt/spark && \
+    mkdir --parents "${SPARK_HOME}" && \
     mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}"
+
+# Download and install Scala
+RUN curl -fL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz | gzip -d > cs && \
+    chmod +x cs && \
+    ./cs setup --env --yes && \
+    ./cs install scala:2.12.18 && \
+    ./cs install scalac:2.12.18
 
 # Move to Spark JARs directory and download additional dependencies
 WORKDIR /opt/spark/jars
@@ -32,6 +39,8 @@ RUN wget https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/
 RUN wget https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar
 RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
+RUN wget https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.0.0/delta-spark_2.12-3.0.0.jar
+RUN wget https://repo1.maven.org/maven2/io/delta/delta-storage/3.0.0/delta-storage-3.0.0.jar
 
 # Install poetry,
 # set to not create an additional virtualenv (we are already in a container),
