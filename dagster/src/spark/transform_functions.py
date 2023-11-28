@@ -209,7 +209,7 @@ def create_error_columns(df, country_code_iso3):
 
     # 7. School latitude and longitude should be in the expected country
     df = df.withColumn("country_code", f.lit(country_code_iso3))
-    df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
+    df = df.withColumn("is_within_country", is_within_country_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
 
     return df
 
@@ -490,10 +490,10 @@ if __name__ == "__main__":
     # for value in CONFIG_VALUES_RANGE['internet_speed_mbps']:
     #     print(value)
     df = df_spark
-    df = create_bronze_layer_columns(df)
     # df = create_staging_layer_columns(df)
+    df = create_bronze_layer_columns(df)
+    df = create_error_columns(df, "BLZ")
     df.show()
-    # df = create_error_columns(df, "BLZ")
     # df = has_critical_error(df)
     # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))    
     # df = df.withColumn("long_110", point_110_udf(f.col("longitude")))    
