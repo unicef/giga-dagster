@@ -2,6 +2,7 @@ from datetime import datetime
 
 import datahub.emitter.mce_builder as builder
 import pandas as pd
+from dagster import OpExecutionContext, version
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -17,9 +18,7 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
-
-from dagster import OpExecutionContext, version
-from src.resources._utils import get_output_filepath
+from src.resources._utils import get_input_filepath, get_output_filepath
 from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
 
 
@@ -35,39 +34,51 @@ def create_domains():
             aspect=domain_properties_aspect,
         )
 
-        rest_emitter = DatahubRestEmitter(
+        datahub_emitter = DatahubRestEmitter(
             gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
             token=DATAHUB_ACCESS_TOKEN,
         )
 
-        rest_emitter.emit(event)
+        datahub_emitter.emit(event)
+
+    return
 
 
-def emit_metadata_to_datahub(
-    context: OpExecutionContext, upstream_dataset_urn, df: pd.DataFrame
-):
-    rest_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
-    )
+def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
+    output_filepath = get_output_filepath(context)
+    input_filepath = get_input_filepath(context)
 
-    ##### CREATE DATASET WITH CUSTOM PROPERTIES METADATA #####
+    dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
+    dataset_urn_name = dataset_urn_name.replace("/", ".")  # Datahub reads '.' as folder
 
+    upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
+    upstream_urn_name = upstream_urn_name.replace(
+        "/", "."
+    )  # Datahub reads '.' as folder
+
+    if upstream:
+        return builder.make_dataset_urn(platform="adls", name=upstream_urn_name)
+    else:
+        return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
+
+
+def define_dataset_properties(context: OpExecutionContext):
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
 
+    domain = context.get_step_execution_context().op_config["dataset_type"]
     file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
     metadata = context.get_step_execution_context().op_config["metadata"]
 
     data_format = output_filepath.split(".")[-1]
     country = output_filepath.split("/")[2].split("_")[0]
-    domain = context.get_step_execution_context().op_config["dataset_type"]
     source = output_filepath.split("_")[2]
     date_modified = output_filepath.split(".")[0].split("_")[-1]
     asset_type = "Raw Data" if step == "raw" else "Table"
     file_size_MB = file_size_bytes / 1000000  # bytes to MB
 
-    # datetime containing current date and time # dd/mm/YY H:M:S
-    now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    # current date and time format: day/month/year 24-hour clock
+    now = datetime.now().strftime("%d/%b/%Y %H:%M:%S")
 
     custom_metadata = {
         "Dagster Asset Key": f"{step}",
@@ -95,29 +106,14 @@ def emit_metadata_to_datahub(
 
     # Construct a dataset properties object
     dataset_properties = DatasetPropertiesClass(
-        description=f"{context.asset_key.to_user_string()}",
+        description=f"{step}",
         customProperties=custom_metadata,
     )
 
-    dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
-    dataset_urn_name = dataset_urn_name.replace("/", ".")  # Datahub reads '.' as folder
+    return dataset_properties
 
-    # Set the dataset's URN
-    dataset_urn = builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
 
-    # Construct a MetadataChangeProposalWrapper object
-    metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=dataset_urn,
-        aspect=dataset_properties,
-    )
-
-    # Emit metadata! This is a blocking call
-    context.log.info("EMITTING METADATA")
-    context.log.info(f"metadata: {custom_metadata}")
-    rest_emitter.emit(metadata_event)
-
-    ##### SCHEMA #####
-    context.log.info(df.info)
+def define_schema_properties(df: pd.DataFrame):
     columns = list(df.columns)
     dtypes = list(df.dtypes)
     fields = []
@@ -147,23 +143,11 @@ def emit_metadata_to_datahub(
         fields=fields,
     )
 
-    # Construct a MetadataChangeProposalWrapper object
-    schema_metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=dataset_urn,
-        aspect=schema_properties,
-    )
+    return schema_properties
 
-    # Emit metadata! This is a blocking call
-    context.log.info("EMITTING SCHEMA")
-    context.log.info(f"schema: {schema_properties}")
-    rest_emitter.emit(schema_metadata_event)
 
-    ##### DOMAIN #####
-    graph = DataHubGraph(
-        DatahubClientConfig(
-            server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
-        )
-    )
+def set_domain(context: OpExecutionContext):
+    domain = context.get_step_execution_context().op_config["dataset_type"]
 
     if "school" in domain:
         domain_urn = make_domain_urn("School")
@@ -177,22 +161,63 @@ def emit_metadata_to_datahub(
         context.log.info("UNKNOWN DOMAIN")
         domain_urn = make_domain_urn("UNKOWN DOMAIN")
 
-    context.log.info(domain_urn)
-    context.log.info(dataset_urn)
+    return domain_urn
 
-    # Query multiple aspects from entity
-    query = f"""
+
+def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
+    # Instantiate a Datahub Rest Emitter client
+    datahub_emitter = DatahubRestEmitter(
+        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+    )
+
+    # Set the dataset's URN
+    dataset_urn = create_dataset_urn(context, upstream=False)
+
+    # Construct Dataset metadata MCP
+    dataset_properties = define_dataset_properties(context)
+    dataset_metadata_event = MetadataChangeProposalWrapper(
+        entityUrn=dataset_urn,
+        aspect=dataset_properties,
+    )
+
+    # Emit Dataset metadata! This is a blocking call
+    context.log.info("EMITTING DATASET METADATA")
+    datahub_emitter.emit(dataset_metadata_event)
+
+    # Construct Schema metadata MCP
+    schema_properties = define_schema_properties(df)
+    schema_metadata_event = MetadataChangeProposalWrapper(
+        entityUrn=dataset_urn,
+        aspect=schema_properties,
+    )
+
+    # Emit Schema metadata! This is a blocking call
+    context.log.info("EMITTING SCHEMA")
+    datahub_emitter.emit(schema_metadata_event)
+
+    # Instantiate a Datahub Graph client
+    graph = DataHubGraph(
+        DatahubClientConfig(
+            server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+        )
+    )
+
+    # Create domain mutation query
+    domain_urn = set_domain(context)
+    domain_query = f"""
     mutation setDomain {{
         setDomain(domainUrn: "{domain_urn}", entityUrn: "{dataset_urn}")
     }}
     """
-    # Emit domain metadata!
-    context.log.info("EMITTING DOMAIN")
-    graph.execute_graphql(query=query)
 
-    ##### LINEAGE #####
+    # Emit Domain metadata! This is a blocking call
+    context.log.info("EMITTING DOMAIN METADATA")
+    graph.execute_graphql(query=domain_query)
+
+    # Construct a Lineage object
+    step = context.asset_key.to_user_string()
     if step != "raw":
-        # Construct a lineage object
+        upstream_dataset_urn = create_dataset_urn(context, upstream=True)
         lineage_mce = builder.make_lineage_mce(
             [upstream_dataset_urn],  # Upstream URNs
             dataset_urn,  # Downstream URN
@@ -200,9 +225,9 @@ def emit_metadata_to_datahub(
 
         # Emit lineage metadata!
         context.log.info("EMITTING LINEAGE METADATA")
-        rest_emitter.emit_mce(lineage_mce)
+        datahub_emitter.emit_mce(lineage_mce)
 
     return context.log.info(
-        f"Metadata of dataset {output_filepath} has been successfully"
+        f"Metadata of dataset {get_output_filepath(context)} has been successfully"
         " emitted to Datahub."
     )

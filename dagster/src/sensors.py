@@ -1,11 +1,11 @@
 from dagster import Config, RunConfig, RunRequest, sensor
+from src._utils.adls import ADLSFileClient
 from src.constants import constants
 from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
     school_master__run_successful_manual_checks_job,
 )
-from src.resources.adls_file_client import ADLSFileClient
 
 
 class FileConfig(Config):
@@ -15,11 +15,13 @@ class FileConfig(Config):
     file_size_bytes: int
 
 
-def get_dataset_type(filepath: str) -> str:
+def get_dataset_type(filepath: str) -> str | None:
     if "geolocation" in filepath:
         return "school-geolocation-data"
     elif "coverage" in filepath:
         return "school-coverage-data"
+    else:
+        return None
 
 
 @sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=30)
@@ -34,6 +36,9 @@ def school_master__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             properties = ADLSFileClient().get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
@@ -52,6 +57,7 @@ def school_master__raw_file_uploads_sensor():
                     ops={
                         "raw": file_config,
                         "bronze": file_config,
+                        "data_quality_results": file_config,
                         "dq_passed_rows": file_config,
                         # "dq_failed_rows": file_config,
                     }
@@ -73,6 +79,9 @@ def school_master__successful_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             properties = ADLSFileClient().get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
@@ -108,6 +117,9 @@ def school_master__failed_manual_checks_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
             properties = ADLSFileClient().get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
