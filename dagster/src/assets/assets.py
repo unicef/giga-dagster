@@ -1,4 +1,4 @@
-import pandas as pd
+from pyspark.sql import DataFrame
 
 from dagster import OpExecutionContext, Output, asset
 from src._utils.adls import get_output_filepath
@@ -9,7 +9,7 @@ from src._utils.datahub import emit_metadata_to_datahub
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def raw(context: OpExecutionContext) -> pd.DataFrame:
+def raw(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_adls_csv_to_pandas(
         context.run_tags["dagster/run_key"]
@@ -26,7 +26,7 @@ def raw(context: OpExecutionContext) -> pd.DataFrame:
 @asset(
     io_manager_key="adls_io_manager",
 )
-def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
+def bronze(context: OpExecutionContext, raw: DataFrame) -> DataFrame:
     # Run bronze layer transforms, standardize columns
 
     # Emit metadata of dataset to Datahub
@@ -41,7 +41,7 @@ def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
     required_resource_keys={"ge_data_context"},
     op_tags={"kind": "ge"},
 )
-def data_quality_results(context, bronze: pd.DataFrame):
+def data_quality_results(context, bronze: DataFrame):
     # Run data quality checks
     validations = [
         {
@@ -72,8 +72,8 @@ def data_quality_results(context, bronze: pd.DataFrame):
     io_manager_key="adls_io_manager",
 )
 def dq_passed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext, bronze: DataFrame, data_quality_results
+) -> DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
@@ -97,8 +97,8 @@ def dq_passed_rows(
     io_manager_key="adls_io_manager",
 )
 def dq_failed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext, bronze: DataFrame, data_quality_results
+) -> DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
@@ -129,7 +129,7 @@ def dq_failed_rows(
 #         ),
 #     },
 # )
-# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: pd.DataFrame) -> pd.DataFrame:
+# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: DataFrame) -> DataFrame:
 #     failed_rows_indices = set()
 #     for suite_result in data_quality_results["run_results"].values():
 #         for result in suite_result["validation_result"]["results"]:
@@ -149,7 +149,7 @@ def dq_failed_rows(
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
+def manual_review_passed_rows(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
@@ -167,7 +167,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
+def manual_review_failed_rows(context: OpExecutionContext) -> DataFrame:
     # Load data
     df = context.resources.adls_file_client.download_from_adls(
         context.run_tags["dagster/run_key"]
@@ -185,8 +185,8 @@ def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
     io_manager_key="adls_io_manager",
 )
 def silver(
-    context: OpExecutionContext, manual_review_passed_rows: pd.DataFrame
-) -> pd.DataFrame:
+    context: OpExecutionContext, manual_review_passed_rows: DataFrame
+) -> DataFrame:
     # Run silver layer transforms
 
     # Emit metadata of dataset to Datahub
@@ -201,7 +201,7 @@ def silver(
 @asset(
     io_manager_key="adls_io_manager",
 )
-def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
+def gold(context: OpExecutionContext, silver: DataFrame) -> DataFrame:
     # Run gold layer transforms - merge data
 
     # Emit metadata of dataset to Datahub
