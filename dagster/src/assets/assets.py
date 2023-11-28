@@ -13,8 +13,8 @@ from src.resources.datahub_emitter import create_domains, emit_metadata_to_datah
 )
 def raw(context: OpExecutionContext) -> DataFrame:
     # Load data
-    df = context.resources.adls_file_client.download_adls_csv_to_pandas(
-        context.run_tags["dagster/run_key"]
+    df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
+        context.resources.spark, context.run_tags["dagster/run_key"]
     )
     context.log.info(df.head())
 
@@ -115,7 +115,7 @@ def dq_failed_rows(
     df_failed = bronze.loc[list(failed_rows_indices)]
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context)
+    emit_metadata_to_datahub(context)
 
     # Yield output
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
@@ -153,10 +153,10 @@ def dq_failed_rows(
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client"},
 )
-def manual_review_passed_rows(context: OpExecutionContext) -> DataFrame:
+def fake_gold(context: OpExecutionContext) -> DataFrame:
     # Load data
-    df = context.resources.adls_file_client.download_from_adls(
-        context.run_tags["dagster/run_key"]
+    df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
+        context.resources.spark, context.run_tags["dagster/run_key"]
     )
     context.log.info(f"data={df}")
 

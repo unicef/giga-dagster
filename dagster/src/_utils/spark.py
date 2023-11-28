@@ -6,7 +6,7 @@ from pyspark.sql import SparkSession
 from src.settings import settings
 
 
-def get_spark_session():
+def get_spark_session() -> SparkSession:
     conf = SparkConf()
     conf.set(
         "spark.driver.extraJavaOptions",

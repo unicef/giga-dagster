@@ -19,7 +19,7 @@ class ADLSFileClient:
             file_system=settings.AZURE_BLOB_CONTAINER_NAME
         )
 
-    def download_adls_csv_to_spark_df(self, spark: SparkSession, filepath: str):
+    def download_adls_csv_to_spark_dataframe(self, spark: SparkSession, filepath: str):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
