@@ -5,6 +5,7 @@ from azure.storage.filedatalake import DataLakeServiceClient
 from pyspark.sql import DataFrame
 
 from dagster import OpExecutionContext
+from src.constants import constants
 from src.settings import settings
 
 
@@ -128,14 +129,18 @@ def _get_filepath(source_path: str, dataset_type: str, step: str):
     )
 
     step_destination_folder_map = {
-        "raw": f"adls-testing-raw/{dataset_type}",
+        "raw": f"{constants.raw_folder}/{dataset_type}",
         "bronze": f"bronze/{dataset_type}",
         "data_quality_results": "logs-gx",
         "dq_split_rows": "bronze/split-rows",
         "dq_passed_rows": f"staging/pending-review/{dataset_type}",
         "dq_failed_rows": "archive/gx-tests-failed",
-        "manual_review_passed_rows": f"staging/approved/{dataset_type}",
-        "manual_review_failed_rows": "archive/manual-review-rejected",
+        "manual_review_passed_rows": (
+            f"{constants.staging_approved_folder}/{dataset_type}"
+        ),
+        "manual_review_failed_rows": (
+            f"{constants.archive_manual_review_rejected_folder}"
+        ),
         "silver": f"silver/{dataset_type}",
         "gold": "gold",
     }
