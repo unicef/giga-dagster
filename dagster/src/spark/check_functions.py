@@ -319,8 +319,8 @@ def is_valid_range(value, min, max):
     if type(value) == str:
         return False
 
-    is_numeric_min = type(min) == int or type(min) == float
-    is_numeric_max = type(max) == int or type(max) == float
+    is_numeric_min = isinstance(min, int | float)
+    is_numeric_max = isinstance(max, int | float)
     if is_numeric_min and not is_numeric_max:
         return value >= min
     if not is_numeric_min and is_numeric_max:
