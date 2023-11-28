@@ -20,7 +20,7 @@ from datahub.metadata.schema_classes import (
 
 from dagster import OpExecutionContext, version
 from src._utils.adls import get_input_filepath, get_output_filepath
-from src.settings import DATAHUB_ACCESS_TOKEN, DATAHUB_METADATA_SERVER_URL
+from src.settings import settings
 
 
 def create_domains():
@@ -36,8 +36,8 @@ def create_domains():
         )
 
         datahub_emitter = DatahubRestEmitter(
-            gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}",
-            token=DATAHUB_ACCESS_TOKEN,
+            gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
         )
 
         datahub_emitter.emit(event)
@@ -168,7 +168,8 @@ def set_domain(context: OpExecutionContext):
 def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     # Instantiate a Datahub Rest Emitter client
     datahub_emitter = DatahubRestEmitter(
-        gms_server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
     # Set the dataset's URN
@@ -199,7 +200,8 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     # Instantiate a Datahub Graph client
     graph = DataHubGraph(
         DatahubClientConfig(
-            server=f"http://{DATAHUB_METADATA_SERVER_URL}", token=DATAHUB_ACCESS_TOKEN
+            server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
 
