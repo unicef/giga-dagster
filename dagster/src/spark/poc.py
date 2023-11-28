@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pyspark.pandas as pd
 
-from src.settings import AZURE_BLOB_CONNECTION_URI
+from src.settings import settings
 from src.spark.spark import get_spark_session
 
 spark = get_spark_session()
@@ -27,7 +27,7 @@ def create_test_table():
         coverage_availability STRING
     )
     USING DELTA
-    LOCATION '{AZURE_BLOB_CONNECTION_URI}/gold/delta-spark'
+    LOCATION '{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-spark'
     """
     )
     df = pd.DataFrame(

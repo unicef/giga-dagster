@@ -5,8 +5,7 @@ ENV PYTHONUNBUFFERED 1
 ENV PYTHONDONTWRITEBYTECODE 1
 ARG POETRY_VERSION=1.6.1
 
-# Java flags
-ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64
+# Spark flags
 ENV SPARK_HOME /opt/spark
 
 # Move to a temporary directory

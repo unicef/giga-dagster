@@ -10,20 +10,20 @@ from sentry_sdk.integrations.spark import SparkIntegration
 from sentry_sdk.integrations.stdlib import StdlibIntegration
 
 from dagster import OpExecutionContext, get_dagster_logger
-from src.settings import IN_PRODUCTION, PYTHON_ENV, SENTRY_DSN
+from src.settings import settings
 
 ignore_logger("dagster")
 
 
 def setup_sentry():
-    if not (IN_PRODUCTION and SENTRY_DSN):
+    if not (settings.IN_PRODUCTION and settings.SENTRY_DSN):
         return
 
     sentry_sdk.init(
-        dsn=SENTRY_DSN,
+        dsn=settings.SENTRY_DSN,
         traces_sample_rate=1.0,
         profiles_sample_rate=1.0,
-        environment=PYTHON_ENV,
+        environment=settings.PYTHON_ENV,
         default_integrations=False,
         integrations=[
             AtexitIntegration(),

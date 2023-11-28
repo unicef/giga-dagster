@@ -1,10 +1,10 @@
 from dagster import Config, RunConfig, RunRequest, sensor
+from src._utils.adls import ADLSFileClient
 from src.jobs import (
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
     school_master__run_successful_manual_checks_job,
 )
-from src.resources.adls_file_client import ADLSFileClient
 
 
 class FileConfig(Config):
@@ -30,7 +30,7 @@ def school_master__raw_file_uploads_sensor():
     for file_data in file_list:
         if file_data["is_directory"]:
             continue
-        else:
+        elif file_data["name"].endswith("test.csv"):
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
             if dataset_type is None:
@@ -46,7 +46,9 @@ def school_master__raw_file_uploads_sensor():
                     ops={
                         "raw": file_config,
                         "bronze": file_config,
+                        "data_quality_results": file_config,
                         "dq_passed_rows": file_config,
+                        # "dq_failed_rows": file_config
                         # "dq_failed_rows": file_config,
                     }
                 ),
