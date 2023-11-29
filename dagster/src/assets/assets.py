@@ -2,10 +2,7 @@ from pyspark import sql
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
 from src._utils.adls import get_output_filepath
-
-# from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
-
-# from dagster_ge import ge_validation_op_factory
+from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 
 
 @asset(
@@ -22,10 +19,10 @@ def raw(context: OpExecutionContext) -> sql.DataFrame:
     # Create domains in Datahub
     # Emit metadata! This is a blocking call
     context.log.info("CREATING DOMAINS IN DATAHUB")
-    # create_domains()
+    create_domains()
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df=df)
+    emit_metadata_to_datahub(context, df=df)
 
     # Yield output
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
@@ -38,7 +35,7 @@ def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
     # Run bronze layer transforms, standardize columns
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df=raw)
+    emit_metadata_to_datahub(context, df=raw)
 
     # Yield output
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
@@ -116,7 +113,7 @@ def dq_failed_rows(
     df_failed = bronze.loc[list(failed_rows_indices)]
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context)
+    emit_metadata_to_datahub(context)
 
     # Yield output
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
@@ -162,7 +159,7 @@ def manual_review_passed_rows(context: OpExecutionContext) -> sql.DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
 
     # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -180,7 +177,7 @@ def manual_review_failed_rows(context: OpExecutionContext) -> sql.DataFrame:
     context.log.info(f"data={df}")
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
 
     # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -195,7 +192,7 @@ def silver(
     # Run silver layer transforms
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
 
     # Yield output
     yield Output(
@@ -210,7 +207,7 @@ def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
     # Run gold layer transforms - merge data
 
     # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context, df=silver)
+    emit_metadata_to_datahub(context, df=silver)
 
     # Yield output
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})

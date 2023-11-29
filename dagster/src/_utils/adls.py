@@ -143,7 +143,6 @@ def _get_filepath(source_path: str, dataset_type: str, step: str):
         ),
         "silver": f"silver/{dataset_type}",
         "gold": "gold",
-        "fake_gold": "gold",
     }
 
     destination_folder = step_destination_folder_map[step]
