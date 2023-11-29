@@ -24,7 +24,10 @@ from pyspark.sql.utils import AnalysisException
 from pyspark.sql.window import Window
 
 # Auth
-from src.settings import AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
+from src.settings import Settings # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
+settings_instance = Settings()
+azure_sas_token = settings_instance.AZURE_SAS_TOKEN
+azure_blob_container_name = settings_instance.AZURE_BLOB_CONTAINER_NAME
 
 DUPLICATE_SCHOOL_DISTANCE_KM = .1
 
@@ -32,7 +35,7 @@ ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 
 # DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"
 DIRECTORY_LOCATION = "raw/geospatial-data/gadm_files/version4.1/"
-container_name = AZURE_BLOB_CONTAINER_NAME
+container_name = azure_blob_container_name
 
 
 # CHECK FUNCTIONS
@@ -40,7 +43,7 @@ container_name = AZURE_BLOB_CONTAINER_NAME
 # For getting the country GADM geometry
 def get_country_geometry(country_code_iso3):
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=AZURE_SAS_TOKEN)
+        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
         filename = "{}.gpkg".format(country_code_iso3)
         file = "{}{}".format(DIRECTORY_LOCATION, filename)
         blob_client = service.get_blob_client(container=container_name, blob=file)

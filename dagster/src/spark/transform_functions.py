@@ -31,9 +31,7 @@ from src.spark.config_expectations import (
     CONFIG_VALUES_RANGE_PRIO,
 )
 
-from .spark import get_spark_session
-
-# AZURE_SAS_TOKEN = os.environ.get("AZURE_SAS_TOKEN")
+from src._utils.spark import get_spark_session
 
 
 file_url = "wasbs://giga-dataops-dev@saunigiga.blob.core.windows.net/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
@@ -492,7 +490,7 @@ if __name__ == "__main__":
     df = df_spark
     # df = create_staging_layer_columns(df)
     df = create_bronze_layer_columns(df)
-    df = create_error_columns(df, "BLZ")
+    # df = create_error_columns(df, "BLZ")
     df.show()
     # df = has_critical_error(df)
     # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))    
