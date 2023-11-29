@@ -43,9 +43,3 @@ RUN curl -fL https://github.com/coursier/coursier/releases/latest/download/cs-x8
     ./cs install scalac:2.12.18
 
 WORKDIR /opt/bitnami/spark
-
-FROM base as master
-
-RUN /opt/bitnami/spark/sbin/start-thriftserver.sh \
-    --hiveconf hive.server2.thrift.port=$THRIFT_PORT \
-    --master "spark://localhost:$SPARK_MASTER_PORT"
