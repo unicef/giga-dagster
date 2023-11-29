@@ -41,7 +41,9 @@ pyspark = PySparkResource(
 )
 
 
-def transform_dataframe_for_deltatable(context: OutputContext, df: sql.DataFrame):
+def transform_dataframe_for_deltatable(
+    context: OutputContext, df: sql.DataFrame
+) -> sql.DataFrame:
     columns_convert_to_string = [
         "giga_id_school",
         "school_id",
@@ -148,3 +150,4 @@ def transform_dataframe_for_deltatable(context: OutputContext, df: sql.DataFrame
 
     df.show()
     df.printSchema()
+    return df
