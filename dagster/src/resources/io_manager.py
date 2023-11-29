@@ -3,6 +3,7 @@ from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src._utils.adls import ADLSFileClient, _get_filepath
+from src._utils.spark import transform_dataframe_for_deltatable
 
 adls_client = ADLSFileClient()
 
@@ -18,6 +19,7 @@ class StagingADLSIOManager(ConfigurableIOManager):
                     "Output DataFrame is empty. Skipping write operation."
                 )
                 return
+            output = transform_dataframe_for_deltatable(context, output)
             adls_client.upload_spark_dataframe_to_adls_deltatable(
                 output, filepath, self.pyspark.spark_session
             )

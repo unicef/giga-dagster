@@ -2,7 +2,6 @@ from dagster import Config, RunConfig, RunRequest, sensor
 from src._utils.adls import ADLSFileClient
 from src.constants import constants
 from src.jobs import (
-    school_master__get_gold_delta_tables_job,
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
     school_master__run_successful_manual_checks_job,
@@ -138,38 +137,6 @@ def school_master__failed_manual_checks_sensor():
                 run_config=RunConfig(
                     ops={
                         "manual_review_failed_rows": file_config,
-                    }
-                ),
-            )
-
-
-@sensor(job=school_master__get_gold_delta_tables_job, minimum_interval_seconds=30)
-def school_master__get_gold_delta_tables_sensor():
-    adls = ADLSFileClient()
-
-    file_list = adls.list_paths("raw/school_geolocation_coverage_data/gold/school_data")
-
-    for file_data in file_list:
-        if file_data["is_directory"] or file_data["name"].split("/")[-1].startswith(
-            ("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
-        ):
-            continue
-        else:
-            filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            file_config = FileConfig(
-                filepath=filepath,
-                dataset_type=dataset_type,
-                metadata={},
-                file_size_bytes=0,
-            )
-
-            print(f"FILE: {filepath}")
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "fake_gold": file_config,
                     }
                 ),
             )
