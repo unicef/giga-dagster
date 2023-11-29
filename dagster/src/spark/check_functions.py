@@ -170,12 +170,12 @@ def are_pair_points_beyond_minimum_distance(
 
 are_pair_points_beyond_minimum_distance_udf = f.udf(are_pair_points_beyond_minimum_distance)
 
-def are_all_points_beyond_minimum_distance(coordinates_list):
+# def are_all_points_beyond_minimum_distance(coordinates_list):
     # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
-    for i in range(len(coordinates_list)):
-        for j in range(i + 1, len(coordinates_list)):
-            if are_pair_points_beyond_minimum_distance(coordinates_list[i], coordinates_list[j]) is True:
-                return True
+    # for i in range(len(coordinates_list)):
+    #     for j in range(i + 1, len(coordinates_list)):
+    #         if are_pair_points_beyond_minimum_distance(coordinates_list[i], coordinates_list[j]) is True:
+    #             return True
     # row_coords_t = tuple(row_coords)
     # for i in coordinates_list:
     #     i_tuple = tuple(i)
@@ -186,9 +186,9 @@ def are_all_points_beyond_minimum_distance(coordinates_list):
     #         continue
     #     if geodesic(row_coords_t, i_tuple).km <= 0.1:
     #         return True
-    return False
+    # return False
 
-are_all_points_beyond_minimum_distance_udf = f.udf(are_all_points_beyond_minimum_distance)
+# are_all_points_beyond_minimum_distance_udf = f.udf(are_all_points_beyond_minimum_distance)
 
 # def are_all_points_beyond_minimum_distance(
 #     points, distance_km=DUPLICATE_SCHOOL_DISTANCE_KM
@@ -238,24 +238,24 @@ def has_similar_name(column, name_list):
 
 has_similar_name_udf = f.udf(has_similar_name)
 
-# Using thefuzz library
-def has_no_similar_name_fuzz(name_list):
-    is_unique = [True for i in range(len(name_list))]
+# # Using thefuzz library
+# def has_no_similar_name_fuzz(name_list):
+#     is_unique = [True for i in range(len(name_list))]
 
-    # Loop through the first and last index on the list
-    for i in range(len(name_list)):
-        # Skip those already marked with similar match
-        if is_unique[i]:
-            continue
+#     # Loop through the first and last index on the list
+#     for i in range(len(name_list)):
+#         # Skip those already marked with similar match
+#         if is_unique[i]:
+#             continue
 
-        # Loop through item after the current index on the list
-        for j in range(i + 1, len(name_list)):
-            # If there is a similar match, then it is no longer unique
-            if fuzz.ratio(name_list[i], name_list[j]) >= SIMILARITY_RATIO_CUTOFF:
-                is_unique[i] is False
-                is_unique[j] is False
+#         # Loop through item after the current index on the list
+#         for j in range(i + 1, len(name_list)):
+#             # If there is a similar match, then it is no longer unique
+#             if fuzz.ratio(name_list[i], name_list[j]) >= SIMILARITY_RATIO_CUTOFF:
+#                 is_unique[i] is False
+#                 is_unique[j] is False
 
-    return is_unique
+#     return is_unique
 
 
 def is_same_name_level_within_radius(row1, row2):

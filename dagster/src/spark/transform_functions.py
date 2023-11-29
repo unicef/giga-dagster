@@ -11,15 +11,12 @@ from src.spark.check_functions import (
     duplicate_check,
     get_decimal_places,
     get_decimal_places_udf,
-    has_no_similar_name_fuzz,
     is_same_name_level_within_radius,
     is_similar_name_level_within_radius,
     is_valid_range,
     is_within_boundary_distance_udf,
     is_within_country,
     is_within_country_udf,
-    are_all_points_beyond_minimum_distance_udf,
-    are_pair_points_beyond_minimum_distance_udf,
     has_similar_name_udf,
 )
 from src.spark.config_expectations import (
@@ -33,7 +30,7 @@ from src.spark.config_expectations import (
 
 from src._utils.spark import get_spark_session
 
-
+# make this dynamic
 file_url = "wasbs://giga-dataops-dev@saunigiga.blob.core.windows.net/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
 spark = get_spark_session()
 df_spark = spark.read.csv(file_url, header=True)
@@ -490,8 +487,12 @@ if __name__ == "__main__":
     df = df_spark
     # df = create_staging_layer_columns(df)
     df = create_bronze_layer_columns(df)
-    # df = create_error_columns(df, "BLZ")
+    # df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
+    df = create_error_columns(df, "BLZ")
+    # df = df.withColumn("country_code", f.lit("BLZ"))
+    # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
     df.show()
+    # print(is_within_country(16.99555, -88.3668, "BLZ"))
     # df = has_critical_error(df)
     # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))    
     # df = df.withColumn("long_110", point_110_udf(f.col("longitude")))    
