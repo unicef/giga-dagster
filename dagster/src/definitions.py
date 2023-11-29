@@ -6,7 +6,6 @@ from src._utils.adls import ADLSFileClient
 from src._utils.sentry import setup_sentry
 from src._utils.spark import pyspark
 from src.jobs import (
-    school_master__get_gold_delta_tables_job,
     school_master__run_automated_data_checks_job,
     school_master__run_failed_manual_checks_job,
     school_master__run_successful_manual_checks_job,
@@ -14,7 +13,6 @@ from src.jobs import (
 from src.resources.io_manager import StagingADLSIOManager
 from src.sensors import (
     school_master__failed_manual_checks_sensor,
-    school_master__get_gold_delta_tables_sensor,
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
@@ -40,12 +38,10 @@ defs = Definitions(
         school_master__run_automated_data_checks_job,
         school_master__run_successful_manual_checks_job,
         school_master__run_failed_manual_checks_job,
-        school_master__get_gold_delta_tables_job,
     ],
     sensors=[
         school_master__raw_file_uploads_sensor,
         school_master__successful_manual_checks_sensor,
         school_master__failed_manual_checks_sensor,
-        school_master__get_gold_delta_tables_sensor,
     ],
 )
