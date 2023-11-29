@@ -1,3 +1,15 @@
+FROM python:3.11-slim as deps
+
+ARG POETRY_VERSION=1.6.1
+
+RUN pip install "poetry==$POETRY_VERSION"
+
+WORKDIR /tmp
+
+COPY dagster/pyproject.toml dagster/poetry.lock ./
+
+RUN poetry export --without-hashes --with pipelines,spark -f requirements.txt > requirements.txt
+
 FROM bitnami/spark:3.5.0 as base
 
 USER root
@@ -8,7 +20,7 @@ RUN apt-get update && \
     apt-get install -y curl wget && \
     apt-get clean
 
-COPY requirements.txt .
+COPY --from=deps /tmp/requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir -r requirements.txt
 

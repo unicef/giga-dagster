@@ -46,20 +46,19 @@ def create_domains():
 
 
 def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
-    output_filepath = get_output_filepath(context)
-    input_filepath = get_input_filepath(context)
-
-    dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
-    dataset_urn_name = dataset_urn_name.replace("/", ".")  # Datahub reads '.' as folder
-
-    upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
-    upstream_urn_name = upstream_urn_name.replace(
-        "/", "."
-    )  # Datahub reads '.' as folder
-
     if upstream:
+        input_filepath = get_input_filepath(context)
+        upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
+        upstream_urn_name = upstream_urn_name.replace(
+            "/", "."
+        )  # Datahub reads '.' as folder
         return builder.make_dataset_urn(platform="adls", name=upstream_urn_name)
     else:
+        output_filepath = get_output_filepath(context)
+        dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
+        dataset_urn_name = dataset_urn_name.replace(
+            "/", "."
+        )  # Datahub reads '.' as folder
         return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
 
 

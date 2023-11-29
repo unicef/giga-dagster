@@ -22,9 +22,9 @@ CONFIG_FIVE_DECIMAL_PLACES = ["latitude", "longitude"]
 
 # Multi-column checks
 CONFIG_UNIQUE_SET_COLUMNS = [
-    ["school_id", "school_name", "education_level", "latitude", "longitude"],
-    ["school_name", "education_level", "latitude", "longitude"],
-    ["education_level", "latitude", "longitude"],
+    ["school_id", "school_name", "education_level", "location_id"],
+    ["school_name", "education_level", "location_id"],
+    ["education_level", "location_id"],
 ]
 
 CONFIG_COLUMN_SUM = [
@@ -35,10 +35,15 @@ CONFIG_COLUMN_SUM = [
 date_today = datetime.date.today()
 current_year = date_today.year
 
+CONFIG_VALUES_RANGE_PRIO = {
+    "internet_speed_mbps": {"min": 1, "max": 200},
+    "school_density": {"min": 0, "max": 5},
+}
+
 # For GOVERNMENT SCHOOL COLUMNS
 CONFIG_VALUES_RANGE = {
     # Mandatory
-    "internet_speed_mbps": {"min": 1, "max": 20},
+    "internet_speed_mbps": {"min": 1, "max": 200},
     "student_count": {"min": 20, "max": 2500},
     "latitude": {"min": -90, "max": 90},
     "longitude": {"min": -180, "max": 180},
