@@ -77,30 +77,29 @@ services:
       - "8070:8070"
       - "10000:10000"
 
-  spark-worker:
-    <<: *spark-common-config
-    build:
-      context: .
-      target: base
-      dockerfile: spark/Dockerfile
+  spark-worker-1:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
     environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_CORES: 1
-      SPARK_WORKER_MEMORY: 1024M
-      PYTHONPATH: /opt/bitnami/spark/app
-    deploy:
-      mode: replicated
-      replicas: 3
-      endpoint_mode: dnsrr
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
-    working_dir: /opt/bitnami/spark/app
-    volumes:
-      - ./dagster:/opt/bitnami/spark/app
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8071
+    ports:
+      - "8071:8071"
+
+  spark-worker-2:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
+    environment:
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8072
+    ports:
+      - "8072:8072"
+
+  spark-worker-3:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
+    environment:
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8073
+    ports:
+      - "8073:8073"
 
   #  authproxy:
   #    <<: *common-config
