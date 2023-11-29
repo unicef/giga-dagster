@@ -25,14 +25,6 @@ class ADLSFileClient:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         return spark.read.csv(adls_path, header=True)
 
-    # def upload_spark_df_to_adls_deltatable(self, filepath: str, data: pd.DataFrame):
-    #     file_client = self.adls.get_file_client(filepath)
-
-    #     with BytesIO() as buffer:
-    #         data.to_csv(buffer, index=False)
-    #         buffer.seek(0)
-    #         file_client.upload_data(buffer.getvalue(), overwrite=True)
-
     def download_adls_deltatable_to_spark_dataframe(
         self, filepath: str, spark: SparkSession
     ):
