@@ -17,13 +17,21 @@ class StagingADLSIOManager(ConfigurableIOManager):
             adls_client.upload_json_to_adls_json(filepath, output)
             return
         else:
-            if output.isEmpty():
-                context.log.warning(
-                    "Output DataFrame is empty. Skipping write operation."
-                )
-                return
-
             if context.step_key == "raw":
+                if output.empty():
+                    context.log.warning(
+                        "Output DataFrame is empty. Skipping write operation."
+                    )
+                    return
+                adls_client.upload_pandas_dataframe_to_adls_csv(
+                    context, filepath, output
+                )
+            elif context.step_key == "bronze":
+                if output.isEmpty():
+                    context.log.warning(
+                        "Output DataFrame is empty. Skipping write operation."
+                    )
+                    return
                 adls_client.upload_spark_dataframe_to_adls_csv(
                     output, filepath, self.pyspark.spark_session
                 )
@@ -47,6 +55,8 @@ class StagingADLSIOManager(ConfigurableIOManager):
         ):
             file = adls_client.download_adls_json_to_json(filepath)
         elif context.upstream_output.step_key == "raw":
+            file = adls_client.download_adls_csv_to_pandas(filepath)
+        elif context.upstream_output.step_key == "bronze":
             file = adls_client.download_adls_csv_to_spark_dataframe(
                 filepath, self.pyspark.spark_session
             )

@@ -1,3 +1,4 @@
+import pandas as pd
 from pyspark import sql
 
 from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
@@ -9,9 +10,9 @@ from src.resources.datahub_emitter import create_domains, emit_metadata_to_datah
     io_manager_key="adls_io_manager",
     required_resource_keys={"adls_file_client", "pyspark"},
 )
-def raw(context: OpExecutionContext) -> sql.DataFrame:
+def raw(context: OpExecutionContext) -> pd.DataFrame:
     # Load data
-    df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
+    df = context.resources.adls_file_client.download_adls_csv_to_pandas(
         context.run_tags["dagster/run_key"], context.resources.pyspark.spark_session
     )
     context.log.info(df.head())
