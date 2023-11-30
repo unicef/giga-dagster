@@ -2,9 +2,6 @@ from dagster_ge.factory import ge_data_context
 
 from dagster import Definitions, load_assets_from_package_module
 from src import assets
-from src._utils.adls import ADLSFileClient
-from src._utils.sentry import setup_sentry
-from src._utils.spark import pyspark
 from src.jobs import (
     school_master__automated_data_checks_job,
     school_master__convert_file_to_deltatable_job,
@@ -18,6 +15,9 @@ from src.sensors import (
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
+from src.utils.adls import ADLSFileClient
+from src.utils.sentry import setup_sentry
+from src.utils.spark import pyspark
 
 setup_sentry()
 

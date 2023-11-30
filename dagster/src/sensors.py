@@ -1,5 +1,4 @@
 from dagster import Config, RunConfig, RunRequest, sensor
-from src._utils.adls import ADLSFileClient
 from src.constants import constants
 from src.jobs import (
     school_master__automated_data_checks_job,
@@ -7,6 +6,7 @@ from src.jobs import (
     school_master__failed_manual_checks_job,
     school_master__successful_manual_checks_job,
 )
+from src.utils.adls import ADLSFileClient
 
 
 class FileConfig(Config):

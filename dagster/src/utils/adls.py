@@ -126,7 +126,7 @@ class ADLSFileClient:
         return properties
 
 
-def _get_filepath(source_path: str, dataset_type: str, step: str):
+def get_filepath(source_path: str, dataset_type: str, step: str):
     filename = source_path.split("/")[-1]
     filename = (
         filename.replace(".csv", ".json")
@@ -166,7 +166,7 @@ def get_output_filepath(context: OpExecutionContext):
     source_path = context.get_step_execution_context().op_config["filepath"]
     step = context.asset_key.to_user_string()
 
-    destination_filepath = _get_filepath(source_path, dataset_type, step)
+    destination_filepath = get_filepath(source_path, dataset_type, step)
 
     return destination_filepath
 

@@ -2,8 +2,8 @@ from dagster_pyspark import PySparkResource
 from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
-from src._utils.adls import ADLSFileClient, _get_filepath
-from src._utils.spark import transform_dataframe_for_deltatable
+from src.utils.adls import ADLSFileClient, get_filepath
+from src.utils.spark import transform_dataframe_for_deltatable
 
 adls_client = ADLSFileClient()
 
@@ -78,7 +78,7 @@ class StagingADLSIOManager(ConfigurableIOManager):
         parent_folder = context.step_context.op_config["dataset_type"]
         step = context.step_key
 
-        destination_filepath = _get_filepath(filepath, parent_folder, step)
+        destination_filepath = get_filepath(filepath, parent_folder, step)
 
         context.log.info(f"Moving from {filepath} to {destination_filepath}")
 
