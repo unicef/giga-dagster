@@ -10,8 +10,8 @@ from src.jobs import (
 )
 from src.resources.io_manager import StagingADLSIOManager
 from src.sensors import (
-    school_master__convert_file_to_deltatable_sensor,
     school_master__failed_manual_checks_sensor,
+    school_master__file_to_deltatable_sensor,
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
@@ -46,6 +46,6 @@ defs = Definitions(
         school_master__raw_file_uploads_sensor,
         school_master__successful_manual_checks_sensor,
         school_master__failed_manual_checks_sensor,
-        school_master__convert_file_to_deltatable_sensor,
+        school_master__file_to_deltatable_sensor,
     ],
 )

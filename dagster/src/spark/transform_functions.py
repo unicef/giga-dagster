@@ -5,6 +5,7 @@ from pyspark.sql import functions as f
 from pyspark.sql.types import ArrayType, StringType
 from pyspark.sql.window import Window
 
+from src.settings import settings
 from src.spark.check_functions import (
     get_decimal_places_udf,
     has_similar_name_udf,
@@ -20,8 +21,7 @@ from src.spark.config_expectations import (
 )
 from src.utils.spark import get_spark_session
 
-# make this dynamic
-file_url = "wasbs://giga-dataops-dev@saunigiga.blob.core.windows.net/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
 spark = get_spark_session()
 df_spark = spark.read.csv(file_url, header=True)
 
