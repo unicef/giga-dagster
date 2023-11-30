@@ -1,6 +1,7 @@
 import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from pyspark import sql
+from pyspark.sql import functions
 
 from dagster import OutputContext
 from src.settings import settings
@@ -103,50 +104,50 @@ def transform_dataframe_for_deltatable(
     for col_name in columns_convert_to_string:
         try:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.StringType())
+                col_name, functions.col(col_name).cast(sql.types.StringType())
             )
             context.log.info(">> TRANSFORMED STRING")
         except Exception as e:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.StringType())
+                col_name, functions.col(col_name).cast(sql.types.StringType())
             )
-            context.log.warn(f"Failed to cast '{col_name}' to String: {str(e)}")
+            context.log.warning(f"Failed to cast '{col_name}' to String: {str(e)}")
 
     for col_name in columns_convert_to_double:
         try:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.DoubleType())
+                col_name, functions.col(col_name).cast(sql.types.DoubleType())
             )
             context.log.info(">> TRANSFORMED DOUBLE")
         except Exception as e:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.StringType())
+                col_name, functions.col(col_name).cast(sql.types.StringType())
             )
-            context.log.warn(f"Failed to cast '{col_name}' to Double: {str(e)}")
+            context.log.warning(f"Failed to cast '{col_name}' to Double: {str(e)}")
 
     for col_name in columns_convert_to_int:
         try:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.IntegerType())
+                col_name, functions.col(col_name).cast(sql.types.IntegerType())
             )
             context.log.info(">> TRANSFORMED INT")
         except Exception as e:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.StringType())
+                col_name, functions.col(col_name).cast(sql.types.StringType())
             )
-            context.log.warn(f"Failed to cast '{col_name}' to Int: {str(e)}")
+            context.log.warning(f"Failed to cast '{col_name}' to Int: {str(e)}")
 
     for col_name in columns_convert_to_long:
         try:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.LongType())
+                col_name, functions.col(col_name).cast(sql.types.LongType())
             )
             context.log.info(">> TRANSFORMED LONG")
         except Exception as e:
             df = df.withColumn(
-                col_name, sql.functions.col(col_name).cast(sql.types.StringType())
+                col_name, functions.col(col_name).cast(sql.types.StringType())
             )
-            context.log.warn(f"Failed to cast '{col_name}' to Long: {str(e)}")
+            context.log.warning(f"Failed to cast '{col_name}' to Long: {str(e)}")
 
     df.show()
     df.printSchema()
