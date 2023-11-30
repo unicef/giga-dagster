@@ -2,9 +2,10 @@ from dagster import Config, RunConfig, RunRequest, sensor
 from src._utils.adls import ADLSFileClient
 from src.constants import constants
 from src.jobs import (
-    school_master__run_automated_data_checks_job,
-    school_master__run_failed_manual_checks_job,
-    school_master__run_successful_manual_checks_job,
+    school_master__automated_data_checks_job,
+    school_master__convert_file_to_deltatable_job,
+    school_master__failed_manual_checks_job,
+    school_master__successful_manual_checks_job,
 )
 
 
@@ -24,7 +25,7 @@ def get_dataset_type(filepath: str) -> str | None:
         return None
 
 
-@sensor(job=school_master__run_automated_data_checks_job, minimum_interval_seconds=30)
+@sensor(job=school_master__automated_data_checks_job, minimum_interval_seconds=30)
 def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
@@ -65,9 +66,7 @@ def school_master__raw_file_uploads_sensor():
             )
 
 
-@sensor(
-    job=school_master__run_successful_manual_checks_job, minimum_interval_seconds=60
-)
+@sensor(job=school_master__successful_manual_checks_job, minimum_interval_seconds=60)
 def school_master__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
@@ -105,7 +104,7 @@ def school_master__successful_manual_checks_sensor():
             )
 
 
-@sensor(job=school_master__run_failed_manual_checks_job, minimum_interval_seconds=60)
+@sensor(job=school_master__failed_manual_checks_job, minimum_interval_seconds=60)
 def school_master__failed_manual_checks_sensor():
     adls = ADLSFileClient()
 
@@ -136,6 +135,42 @@ def school_master__failed_manual_checks_sensor():
                 run_config=RunConfig(
                     ops={
                         "manual_review_failed_rows": file_config,
+                    }
+                ),
+            )
+
+
+@sensor(job=school_master__convert_file_to_deltatable_job, minimum_interval_seconds=30)
+def school_master__file_to_deltatable_sensor():
+    adls = ADLSFileClient()
+
+    file_list = adls.list_paths(f"{constants.fake_gold_folder}")
+
+    for file_data in file_list:
+        if file_data["is_directory"]:
+            continue
+        else:
+            filepath = file_data["name"]
+            dataset_type = get_dataset_type(filepath)
+            if dataset_type is None:
+                continue
+
+            properties = adls.get_file_metadata(filepath=filepath)
+            metadata = properties["metadata"]
+            size = properties["size"]
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type=dataset_type,
+                metadata=metadata,
+                file_size_bytes=size,
+            )
+
+            print(f"FILE: {filepath}")
+            yield RunRequest(
+                run_key=f"{filepath}",
+                run_config=RunConfig(
+                    ops={
+                        "deltatable": file_config,
                     }
                 ),
             )
