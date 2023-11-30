@@ -14,7 +14,7 @@ class StagingADLSIOManager(ConfigurableIOManager):
     def handle_output(self, context: OutputContext, output: DataFrame):
         filepath = self._get_filepath(context)
         if context.step_key == "data_quality_results":
-            adls_client.upload_json_to_adls_json(filepath, output)
+            adls_client.upload_json(filepath, output)
             return
         else:
             if context.step_key == "raw":
@@ -53,7 +53,7 @@ class StagingADLSIOManager(ConfigurableIOManager):
             context.upstream_output.step_key == "data_quality_results"
             and context.asset_key.to_user_string() == "data_quality_results"
         ):
-            file = adls_client.download_adls_json_to_json(filepath)
+            file = adls_client.download_json(filepath)
         elif context.upstream_output.step_key == "raw":
             file = adls_client.download_adls_csv_to_pandas(filepath)
         elif context.upstream_output.step_key == "bronze":

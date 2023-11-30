@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame, SparkSession
 from dagster import OpExecutionContext
 from src.constants import constants
 from src.settings import settings
+from src.utils.sql import load_sql_template
 
 
 class ADLSFileClient:
@@ -42,65 +43,28 @@ class ADLSFileClient:
     ):
         filename = filepath.split("/")[-1]
         country_code = filename.split("_")[0]
-        spark.sql("CREATE SCHEMA IF NOT EXISTS school_data")
-        spark.sql(
-            f"""
-        CREATE TABLE IF NOT EXISTS school_data.{country_code} (
-            giga_id_school STRING,
-            school_id STRING,
-            name STRING,
-            lat DOUBLE,
-            lon DOUBLE,
-            education_level STRING,
-            education_level_regional STRING,
-            school_type STRING,
-            connectivity STRING,
-            connectivity_speed DOUBLE,
-            type_connectivity STRING,
-            coverage_availability STRING,
-            coverage_type STRING,
-            latency_connectivity DOUBLE,
-            admin1 STRING,
-            admin2 STRING,
-            admin3 STRING,
-            admin4 STRING,
-            school_region STRING,
-            num_computers INT,
-            num_teachers INT,
-            num_students INT,
-            num_classroom INT,
-            computer_availability STRING,
-            computer_lab STRING,
-            electricity STRING,
-            water STRING,
-            address STRING,
-            fiber_node_distance DOUBLE,
-            microwave_node_distance DOUBLE,
-            nearest_school_distance DOUBLE,
-            schools_within_1km INT,
-            schools_within_2km INT,
-            schools_within_3km INT,
-            schools_within_10km INT,
-            nearest_LTE_id INT,
-            nearest_LTE_distance DOUBLE,
-            nearest_UMTS_id INT,
-            nearest_UMTS_distance DOUBLE,
-            nearest_GSM_id INT,
-            nearest_GSM_distance DOUBLE,
-            pop_within_1km LONG,
-            pop_within_2km LONG,
-            pop_within_3km LONG,
-            pop_within_10km LONG
+
+        # TODO: Get from context
+        schema_name = "school_data"
+        create_schema_sql = load_sql_template(
+            "create_gold_schema",
+            schema_name=schema_name,
         )
-        USING DELTA
-        LOCATION '{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}'
-            """
+        create_table_sql = load_sql_template(
+            "create_gold_table",
+            schema_name=schema_name,
+            table_name=country_code,
+            location=(
+                f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}"
+            ),
         )
+        spark.sql(create_schema_sql)
+        spark.sql(create_table_sql)
         data.write.format("delta").mode("overwrite").saveAsTable(
-            f"school_data.{country_code}"
+            f"{schema_name}.{country_code}"
         )
 
-    def download_adls_json_to_json(self, filepath: str):
+    def download_json(self, filepath: str):
         file_client = self.adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
@@ -108,7 +72,7 @@ class ADLSFileClient:
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json_to_adls_json(self, filepath: str, data):
+    def upload_json(self, filepath: str, data):
         file_client = self.adls.get_file_client(filepath)
         json_data = json.dumps(data).encode("utf-8")
 
@@ -185,7 +149,7 @@ def get_input_filepath(context: OpExecutionContext) -> str:
         "dq_failed_rows": "bronze",
         "manual_review_passed_rows": "bronze",
         "manual_review_failed_rows": "bronze",
-        "silver": "manuaL_review_passed",
+        "silver": "manual_review_passed",
         "gold": "silver",
     }
 
