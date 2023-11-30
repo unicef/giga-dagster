@@ -23,8 +23,9 @@ x-spark-common-config: &spark-common-config
 x-spark-worker-common-config: &spark-worker-common-config
   <<: *spark-common-config
   build:
-    context: ./spark
+    context: .
     target: base
+    dockerfile: spark/Dockerfile
 
 x-spark-worker-common-env: &spark-worker-common-env
   SPARK_MODE: worker
@@ -63,7 +64,6 @@ services:
     <<: *spark-common-config
     build:
       context: .
-      target: master
       dockerfile: spark/Dockerfile
     environment:
       SPARK_MODE: master
