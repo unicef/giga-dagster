@@ -2,7 +2,7 @@ from dagster import Config, RunConfig, RunRequest, sensor
 from src.constants import constants
 from src.jobs import (
     school_master__automated_data_checks_job,
-    school_master__convert_file_to_deltatable_job,
+    school_master__convert_gold_csv_to_deltatable_job,
     school_master__failed_manual_checks_job,
     school_master__successful_manual_checks_job,
 )
@@ -140,7 +140,9 @@ def school_master__failed_manual_checks_sensor():
             )
 
 
-@sensor(job=school_master__convert_file_to_deltatable_job, minimum_interval_seconds=30)
+@sensor(
+    job=school_master__convert_gold_csv_to_deltatable_job, minimum_interval_seconds=30
+)
 def school_master__file_to_deltatable_sensor():
     adls = ADLSFileClient()
 
