@@ -51,7 +51,7 @@ def data_quality_results(context, bronze: sql.DataFrame):
     validations = [
         {
             "batch_request": {
-                "datasource_name": "pandas_datasource",
+                "datasource_name": "spark_datasource",
                 "runtime_parameters": {"batch_data": bronze},
                 "data_connector_name": "runtime_data_connector",
                 "data_asset_name": "bronze_school_data",
@@ -211,3 +211,21 @@ def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
 
     # Yield output
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
+
+
+@asset(
+    io_manager_key="adls_io_manager",
+    required_resource_keys={"adls_file_client", "pyspark"},
+)
+def deltatable(context: OpExecutionContext) -> sql.DataFrame:
+    # Load data
+    df = context.resources.adls_file_client.download_adls_csv_to_spark_dataframe(
+        context.run_tags["dagster/run_key"], context.resources.pyspark.spark_session
+    )
+    context.log.info(f"data={df}")
+
+    # Emit metadata of dataset to Datahub
+    # emit_metadata_to_datahub(context, df)
+
+    # Yield output
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})
