@@ -28,7 +28,8 @@ class ADLSFileClient:
     def download_adls_deltatable_to_spark_dataframe(
         self, filepath: str, spark: SparkSession
     ):
-        df = spark.read.format("delta").load(filepath)
+        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+        df = spark.read.format("delta").load(adls_path)
         df.show()
 
     def upload_spark_dataframe_to_adls_deltatable(
