@@ -13,18 +13,25 @@ class StagingADLSIOManager(ConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: DataFrame):
         filepath = self._get_filepath(context)
-        if context.step_key != "data_quality_results":
+        if context.step_key == "data_quality_results":
+            adls_client.upload_json_to_adls_json(filepath, output)
+            return
+        else:
             if output.isEmpty():
                 context.log.warning(
                     "Output DataFrame is empty. Skipping write operation."
                 )
                 return
-            output = transform_dataframe_for_deltatable(context, output)
-            adls_client.upload_spark_dataframe_to_adls_deltatable(
-                output, filepath, self.pyspark.spark_session
-            )
-        else:
-            adls_client.upload_json_to_adls_json(filepath, output)
+
+            if context.step_key == "raw":
+                adls_client.upload_spark_dataframe_to_adls_csv(
+                    output, filepath, self.pyspark.spark_session
+                )
+            else:
+                output = transform_dataframe_for_deltatable(context, output)
+                adls_client.upload_spark_dataframe_to_adls_deltatable(
+                    output, filepath, self.pyspark.spark_session
+                )
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
@@ -39,6 +46,10 @@ class StagingADLSIOManager(ConfigurableIOManager):
             and context.asset_key.to_user_string() == "data_quality_results"
         ):
             file = adls_client.download_adls_json_to_json(filepath)
+        elif context.upstream_output.step_key == "raw":
+            file = adls_client.download_adls_csv_to_spark_dataframe(
+                filepath, self.pyspark.spark_session
+            )
         else:
             file = adls_client.download_adls_deltatable_to_spark_dataframe(
                 filepath, self.pyspark.spark_session
