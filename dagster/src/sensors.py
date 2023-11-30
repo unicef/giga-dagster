@@ -170,7 +170,7 @@ def school_master__file_to_deltatable_sensor():
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "deltatable": file_config,
+                        "gold_delta_table_from_csv": file_config,
                     }
                 ),
             )

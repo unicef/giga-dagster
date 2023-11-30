@@ -1,45 +1,66 @@
 import json
 from io import BytesIO
 
+import pandas as pd
 from azure.storage.filedatalake import DataLakeServiceClient
-from pyspark.sql import DataFrame, SparkSession
+from pyspark import sql
+from pyspark.sql import SparkSession
 
-from dagster import OpExecutionContext
+from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
 from src.utils.sql import load_sql_template
 
+_client = DataLakeServiceClient(
+    account_url=f"https://{settings.AZURE_DFS_SAS_HOST}",
+    credential=settings.AZURE_SAS_TOKEN,
+)
+_adls = _client.get_file_system_client(file_system=settings.AZURE_BLOB_CONTAINER_NAME)
 
-class ADLSFileClient:
-    def __init__(self):
-        self.client = DataLakeServiceClient(
-            account_url=f"https://{settings.AZURE_DFS_SAS_HOST}",
-            credential=settings.AZURE_SAS_TOKEN,
-        )
-        self.adls = self.client.get_file_system_client(
-            file_system=settings.AZURE_BLOB_CONTAINER_NAME
-        )
 
-    def download_adls_csv_to_spark_dataframe(
+class ADLSFileClient(ConfigurableResource):
+    def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
+        file_client = _adls.get_file_client(filepath)
+        with BytesIO() as buffer:
+            file_client.download_file().readinto(buffer)
+            buffer.seek(0)
+            return pd.read_csv(buffer)
+
+    def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
-    ) -> DataFrame:
+    ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         return spark.read.csv(adls_path, header=True)
 
-    def upload_spark_dataframe_to_adls_csv(
-        self, data: DataFrame, filepath: str, spark: SparkSession
-    ):
+    def upload_pandas_dataframe_as_file(self, filepath: str, data: pd.DataFrame):
+        if len(splits := filepath.split(".")) < 2:
+            raise RuntimeError(f"Cannot infer format of file {filepath}")
+
+        file_client = _adls.get_file_client(filepath)
+        match splits[-1]:
+            case "csv" | "xls" | "xlsx":
+                bytes_data = data.to_csv().encode("utf-8-sig")
+            case "json":
+                bytes_data = data.to_json().encode()
+            case _:
+                raise IOError(f"Unsupported format for file {filepath}")
+
+        with BytesIO(bytes_data) as buffer:
+            buffer.seek(0)
+            file_client.upload_data(buffer.getvalue(), overwrite=True)
+
+    def upload_spark_dataframe_as_csv(self, data: sql.DataFrame, filepath: str):
         data.write.csv(filepath, header=True, mode="overwrite")
 
-    def download_adls_deltatable_to_spark_dataframe(
+    def download_delta_table_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
     ):
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         df = spark.read.format("delta").load(adls_path)
         df.show()
 
-    def upload_spark_dataframe_to_adls_deltatable(
-        self, data: DataFrame, filepath: str, spark: SparkSession
+    def upload_spark_dataframe_as_delta_table(
+        self, data: sql.DataFrame, filepath: str, spark: SparkSession
     ):
         filename = filepath.split("/")[-1]
         country_code = filename.split("_")[0]
@@ -65,7 +86,7 @@ class ADLSFileClient:
         )
 
     def download_json(self, filepath: str):
-        file_client = self.adls.get_file_client(filepath)
+        file_client = _adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
@@ -73,7 +94,7 @@ class ADLSFileClient:
             return json.load(buffer)
 
     def upload_json(self, filepath: str, data):
-        file_client = self.adls.get_file_client(filepath)
+        file_client = _adls.get_file_client(filepath)
         json_data = json.dumps(data).encode("utf-8")
 
         with BytesIO(json_data) as buffer:
@@ -81,11 +102,11 @@ class ADLSFileClient:
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
     def list_paths(self, path: str, recursive=True):
-        paths = self.adls.get_paths(path=path, recursive=recursive)
+        paths = _adls.get_paths(path=path, recursive=recursive)
         return list(paths)
 
     def get_file_metadata(self, filepath: str):
-        file_client = self.adls.get_file_client(filepath)
+        file_client = _adls.get_file_client(filepath)
         properties = file_client.get_file_properties()
         return properties
 

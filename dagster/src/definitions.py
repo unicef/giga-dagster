@@ -1,4 +1,4 @@
-from dagster_ge.factory import ge_data_context
+from dagster_ge.factory import GEContextResource
 
 from dagster import Definitions, load_assets_from_package_module
 from src import assets
@@ -8,7 +8,9 @@ from src.jobs import (
     school_master__failed_manual_checks_job,
     school_master__successful_manual_checks_job,
 )
-from src.resources.io_manager import StagingADLSIOManager
+from src.resources.io_managers.adls_bronze import ADLSBronzeIOManager
+from src.resources.io_managers.adls_delta import ADLSDeltaIOManager
+from src.resources.io_managers.adls_raw import ADLSRawIOManager
 from src.sensors import (
     school_master__failed_manual_checks_sensor,
     school_master__file_to_deltatable_sensor,
@@ -29,12 +31,12 @@ defs = Definitions(
         ),
     ],
     resources={
-        "ge_data_context": ge_data_context.configured(
-            {"ge_root_dir": "src/resources/great_expectations"}
-        ),
-        "adls_io_manager": StagingADLSIOManager(pyspark=pyspark),
+        "adls_raw_io_manager": ADLSRawIOManager(pyspark=pyspark),
+        "adls_bronze_io_manager": ADLSBronzeIOManager(pyspark=pyspark),
+        "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
         "adls_file_client": ADLSFileClient(),
-        "pyspark": pyspark,
+        "gx": GEContextResource(ge_root_dir="src/resources/great_expectations"),
+        "spark": pyspark,
     },
     jobs=[
         school_master__automated_data_checks_job,
