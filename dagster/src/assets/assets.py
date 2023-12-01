@@ -64,7 +64,7 @@ def data_quality_results(
 def dq_passed_rows(
     context: OpExecutionContext,
     bronze: sql.DataFrame,
-    data_quality_results: sql.DataFrame,
+    data_quality_results,
 ) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     # failed_rows_indices = set()
@@ -84,7 +84,7 @@ def dq_passed_rows(
 def dq_failed_rows(
     context: OpExecutionContext,
     bronze: sql.DataFrame,
-    data_quality_results: sql.DataFrame,
+    data_quality_results,
 ) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
