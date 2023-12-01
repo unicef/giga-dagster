@@ -5,26 +5,14 @@
 
 # Datasources tell Great Expectations where your data lives and how to get it.
 # You can use the CLI command `great_expectations datasource new` to help you add a new datasource. Read more at https://docs.greatexpectations.io/en/latest/features/datasource.html
-fluent_datasources:
-  azure_blob_storage:
-    type: pandas_abs
-    assets:
-      school_geolocation_parquet:
-        type: csv
-        batching_regex: (.*).csv
-        connect_options:
-          abs_container: giga-dataops-dev
-          abs_name_starts_with: bronze/school-geolocation-data/
-    azure_options:
-      account_url: https://${AZURE_BLOB_SAS_HOST}
-      credential: ${AZURE_SAS_TOKEN}
+#fluent_datasources:
 config_version: 3.0
 datasources:
-  pandas_datasource:
+  spark_datasource:
     class_name: Datasource
     module_name: great_expectations.datasource
     execution_engine:
-      class_name: PandasExecutionEngine
+      class_name: SparkDFExecutionEngine
       module_name: great_expectations.execution_engine
     data_connectors:
       runtime_data_connector:

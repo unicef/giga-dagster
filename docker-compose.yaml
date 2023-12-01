@@ -9,14 +9,31 @@ x-dagster-common-config: &dagster-common-config
   env_file: ./dagster/.env
   build: ./dagster
   image: unicef/giga-dataops-platform/dagster
+  restart: unless-stopped
   environment:
     DAGSTER_HOME: /app
+    SHORT_SHA: ${SHORT_SHA}
 
 x-spark-common-config: &spark-common-config
   <<: *common-config
   user: "1001:1001"
   image: unicef/giga-dataops-platform/spark
   env_file: ./dagster/.env
+
+x-spark-worker-common-config: &spark-worker-common-config
+  <<: *spark-common-config
+  build:
+    context: .
+    target: base
+    dockerfile: spark/Dockerfile
+
+x-spark-worker-common-env: &spark-worker-common-env
+  SPARK_MODE: worker
+  SPARK_MASTER_URL: spark://spark-master:7077
+  SPARK_WORKER_HOST: 0.0.0.0
+  SPARK_WORKER_CORES: 1
+  SPARK_WORKER_MEMORY: 512M
+  SPARK_PUBLIC_DNS: localhost
 
 volumes:
   dagster-storage:
@@ -43,61 +60,46 @@ services:
     ports:
       - "3001:3002"
 
-  dagster-webserver-readonly:
-    <<: *dagster-common-config
-    command:
-      - "dagster-webserver"
-      - "-h"
-      - "0.0.0.0"
-      - "-p"
-      - "3003"
-      - "--read-only"
-    volumes:
-      - ./dagster:/app
-    depends_on:
-      - dagster-storage
-    ports:
-      - "3003:3003"
-
   spark-master:
     <<: *spark-common-config
     build:
       context: .
-      target: master
       dockerfile: spark/Dockerfile
     environment:
       SPARK_MODE: master
+      SPARK_MASTER_HOST: 0.0.0.0
       SPARK_MASTER_PORT: 7077
       SPARK_MASTER_WEBUI_PORT: 8070
+      SPARK_PUBLIC_DNS: localhost
       THRIFT_PORT: 10000
     ports:
+      - "7077:7077"
       - "8070:8070"
       - "10000:10000"
 
-  spark-worker:
-    <<: *spark-common-config
-    build:
-      context: .
-      target: base
-      dockerfile: spark/Dockerfile
+  spark-worker-1:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
     environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_CORES: 1
-      SPARK_WORKER_MEMORY: 1024M
-      PYTHONPATH: /opt/bitnami/spark/app
-    deploy:
-      mode: replicated
-      replicas: 3
-      endpoint_mode: dnsrr
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-        window: 120s
-    working_dir: /opt/bitnami/spark/app
-    volumes:
-      - ./dagster:/opt/bitnami/spark/app
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8071
+    ports:
+      - "8071:8071"
+
+  spark-worker-2:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
+    environment:
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8072
+    ports:
+      - "8072:8072"
+
+  spark-worker-3:
+    <<: [ *spark-common-config, *spark-worker-common-config ]
+    environment:
+      <<: *spark-worker-common-env
+      SPARK_WORKER_WEBUI_PORT: 8073
+    ports:
+      - "8073:8073"
 
   #  authproxy:
   #    <<: *common-config

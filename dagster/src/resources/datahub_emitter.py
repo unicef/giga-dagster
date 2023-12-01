@@ -19,8 +19,8 @@ from datahub.metadata.schema_classes import (
 )
 
 from dagster import OpExecutionContext, version
-from src._utils.adls import get_input_filepath, get_output_filepath
 from src.settings import settings
+from src.utils.adls import get_input_filepath, get_output_filepath
 
 
 def create_domains():

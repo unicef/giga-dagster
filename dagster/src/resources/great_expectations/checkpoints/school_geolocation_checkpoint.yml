@@ -27,12 +27,6 @@ runtime_configuration:
       unexpected_index_column_names:
       - school_id
 validations:
-  - batch_request:
-      datasource_name: azure_blob_storage
-      data_asset_name: school_geolocation_parquet
-      options: {}
-      batch_slice:
-    expectation_suite_name: expectation_school_geolocation
 profilers: []
 ge_cloud_id:
 expectation_suite_ge_cloud_id:

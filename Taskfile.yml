@@ -5,10 +5,12 @@ dotenv:
   - ./authproxy/.env
   - ./spark/.env
 
-vars:
-  PROJECT_NAME: giga-dataops-platform_dagster
+env:
   SHORT_SHA:
     sh: git rev-parse --short HEAD
+
+vars:
+  PROJECT_NAME: giga-dataops-platform_dagster
 
 tasks:
   default:

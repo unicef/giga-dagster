@@ -1,56 +1,46 @@
 import pandas as pd
+from dagster_ge.factory import GEContextResource
+from dagster_pyspark import PySparkResource
+from pyspark import sql
 
-from dagster import OpExecutionContext, Output, asset  # AssetsDefinition
-from src._utils.adls import get_output_filepath
+from dagster import OpExecutionContext, Output, asset
 from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
+from src.utils.adls import ADLSFileClient, get_output_filepath
 
-# from dagster_ge import ge_validation_op_factory
 
-
-@asset(io_manager_key="adls_io_manager", required_resource_keys={"adls_file_client"})
-def raw(context: OpExecutionContext) -> pd.DataFrame:
-    # Load data
-    df = context.resources.adls_file_client.download_adls_csv_to_pandas(
+@asset(io_manager_key="adls_raw_io_manager")
+def raw(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+) -> pd.DataFrame:
+    df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    context.log.info(df.head())
-
-    # Create domains in Datahub
-    # Emit metadata! This is a blocking call
     context.log.info("CREATING DOMAINS IN DATAHUB")
     create_domains()
-
-    # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, df=df)
-
-    # Yield output
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
-def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
-    # Run bronze layer transforms, standardize columns
-
-    # Emit metadata of dataset to Datahub
+@asset(io_manager_key="adls_bronze_io_manager")
+def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> sql.DataFrame:
     emit_metadata_to_datahub(context, df=raw)
-
-    # Yield output
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(
-    io_manager_key="adls_io_manager",
-    required_resource_keys={"ge_data_context"},
+    io_manager_key="adls_delta_io_manager",
     op_tags={"kind": "ge"},
 )
-def data_quality_results(context, bronze: pd.DataFrame):
-    # Run data quality checks
+def data_quality_results(
+    context,
+    bronze: sql.DataFrame,
+    gx: GEContextResource,
+):
     validations = [
         {
             "batch_request": {
-                "datasource_name": "pandas_datasource",
+                "datasource_name": "spark_datasource",
                 "runtime_parameters": {"batch_data": bronze},
                 "data_connector_name": "runtime_data_connector",
                 "data_asset_name": "bronze_school_data",
@@ -62,24 +52,22 @@ def data_quality_results(context, bronze: pd.DataFrame):
             "expectation_suite_name": "expectation_school_geolocation",
         },
     ]
-    dq_results = context.resources.ge_data_context.run_checkpoint(
+    dq_results = gx.get_data_context().run_checkpoint(
         checkpoint_name="school_geolocation_checkpoint", validations=validations
     )
-
-    # Yield output
     yield Output(
         dq_results.to_json_dict(), metadata={"filepath": get_output_filepath(context)}
     )
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
+@asset(io_manager_key="adls_delta_io_manager")
 def dq_passed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext,
+    bronze: sql.DataFrame,
+    data_quality_results,
+) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
-    failed_rows_indices = set()
+    # failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
     #     context.log.info(f"suite_result={suite_result}, {type(suite_result)}")
     #     validation_result = suite_result["validation_result"]
@@ -88,18 +76,16 @@ def dq_passed_rows(
     #             for unexpected_row in result.result.unexpected_index_list:
     #                 failed_rows_indices.add(unexpected_row)
 
-    df_passed = bronze.drop(index=list(failed_rows_indices))
-
-    # Yield output
+    df_passed = bronze.drop()
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
+@asset(io_manager_key="adls_delta_io_manager")
 def dq_failed_rows(
-    context: OpExecutionContext, bronze: pd.DataFrame, data_quality_results
-) -> pd.DataFrame:
+    context: OpExecutionContext,
+    bronze: sql.DataFrame,
+    data_quality_results,
+) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
     failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
@@ -110,11 +96,7 @@ def dq_failed_rows(
     #                 failed_rows_indices.add(unexpected_row)
 
     df_failed = bronze.loc[list(failed_rows_indices)]
-
-    # Emit metadata of dataset to Datahub
-    # emit_metadata_to_datahub(context)
-
-    # Yield output
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -123,14 +105,14 @@ def dq_failed_rows(
 #     deps={AssetKey("ge_data_docs")},
 #     outs={
 #         "dq_passed_rows": AssetOut(
-#             is_required=False, io_manager_key="adls_io_manager"
+#             is_required=False, io_manager_key="adls_delta_io_manager"
 #         ),
 #         "dq_failed_rows": AssetOut(
-#             is_required=False, io_manager_key="adls_io_manager"
+#             is_required=False, io_manager_key="adls_delta_io_manager"
 #         ),
 #     },
 # )
-# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: pd.DataFrame) -> pd.DataFrame:
+# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: DataFrame) -> DataFrame:
 #     failed_rows_indices = set()
 #     for suite_result in data_quality_results["run_results"].values():
 #         for result in suite_result["validation_result"]["results"]:
@@ -146,67 +128,57 @@ def dq_failed_rows(
 #     yield Output(df_failed, output_name="dq_failed_rows", metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client"},
-)
-def manual_review_passed_rows(context: OpExecutionContext) -> pd.DataFrame:
-    # Load data
-    df = context.resources.adls_file_client.download_from_adls(
-        context.run_tags["dagster/run_key"]
+@asset(io_manager_key="adls_delta_io_manager")
+def manual_review_passed_rows(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+) -> sql.DataFrame:
+    df = adls_file_client.download_csv_as_spark_dataframe(
+        context.run_tags["dagster/run_key"], spark.spark_session
     )
-    context.log.info(f"data={df}")
-
-    # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, df)
-
-    # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-    required_resource_keys={"adls_file_client"},
-)
-def manual_review_failed_rows(context: OpExecutionContext) -> pd.DataFrame:
-    # Load data
-    df = context.resources.adls_file_client.download_from_adls(
-        context.run_tags["dagster/run_key"]
+@asset(io_manager_key="adls_delta_io_manager")
+def manual_review_failed_rows(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+) -> sql.DataFrame:
+    df = adls_file_client.download_csv_as_spark_dataframe(
+        context.run_tags["dagster/run_key"], spark.spark_session
     )
     context.log.info(f"data={df}")
-
-    # Emit metadata of dataset to Datahub
     emit_metadata_to_datahub(context, df)
-
-    # Yield output
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
+@asset(io_manager_key="adls_delta_io_manager")
 def silver(
-    context: OpExecutionContext, manual_review_passed_rows: pd.DataFrame
-) -> pd.DataFrame:
-    # Run silver layer transforms
-
-    # Emit metadata of dataset to Datahub
+    context: OpExecutionContext,
+    manual_review_passed_rows: sql.DataFrame,
+) -> sql.DataFrame:
     emit_metadata_to_datahub(context, df=manual_review_passed_rows)
-
-    # Yield output
     yield Output(
         manual_review_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
 
 
-@asset(
-    io_manager_key="adls_io_manager",
-)
-def gold(context: OpExecutionContext, silver: pd.DataFrame) -> pd.DataFrame:
-    # Run gold layer transforms - merge data
-
-    # Emit metadata of dataset to Datahub
+@asset(io_manager_key="adls_delta_io_manager")
+def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
     emit_metadata_to_datahub(context, df=silver)
-
-    # Yield output
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
+
+
+@asset(io_manager_key="adls_delta_io_manager")
+def gold_delta_table_from_csv(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+) -> sql.DataFrame:
+    df = adls_file_client.download_csv_as_spark_dataframe(
+        context.run_tags["dagster/run_key"], spark.spark_session
+    )
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})

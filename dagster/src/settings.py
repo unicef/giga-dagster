@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
+    SPARK_MASTER_HOST: str = "spark-master:7077"
+    SHORT_SHA: str = ""
 
     # Derived settings
     @property

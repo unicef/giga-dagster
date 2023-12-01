@@ -113,6 +113,7 @@ stages:
                         DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                         KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                         SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
+                        SHORT_SHA: "$(Build.SourceVersion)"
 
                 - task: HelmDeploy@0
                   displayName: Add Dagster Helm Repo
