@@ -104,7 +104,6 @@ def define_dataset_properties(context: OpExecutionContext):
         "Dagster version": version.__version__,
     } | metadata
 
-    # Construct a dataset properties object
     dataset_properties = DatasetPropertiesClass(
         description=f"{step}",
         customProperties=custom_metadata,
@@ -165,46 +164,38 @@ def set_domain(context: OpExecutionContext):
 
 
 def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
-    # Instantiate a Datahub Rest Emitter client
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
-    # Set the dataset's URN
     dataset_urn = create_dataset_urn(context, upstream=False)
 
-    # Construct Dataset metadata MCP
     dataset_properties = define_dataset_properties(context)
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
         aspect=dataset_properties,
     )
 
-    # Emit Dataset metadata! This is a blocking call
     context.log.info("EMITTING DATASET METADATA")
     datahub_emitter.emit(dataset_metadata_event)
 
-    # Construct Schema metadata MCP
     schema_properties = define_schema_properties(df)
     schema_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
         aspect=schema_properties,
     )
 
-    # Emit Schema metadata! This is a blocking call
     context.log.info("EMITTING SCHEMA")
     datahub_emitter.emit(schema_metadata_event)
 
-    # Instantiate a Datahub Graph client
-    graph = DataHubGraph(
+    datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
 
-    # Create domain mutation query
     domain_urn = set_domain(context)
     domain_query = f"""
     mutation setDomain {{
@@ -212,11 +203,9 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     }}
     """
 
-    # Emit Domain metadata! This is a blocking call
     context.log.info("EMITTING DOMAIN METADATA")
-    graph.execute_graphql(query=domain_query)
+    datahub_graph_client.execute_graphql(query=domain_query)
 
-    # Construct a Lineage object
     step = context.asset_key.to_user_string()
     if step != "raw":
         upstream_dataset_urn = create_dataset_urn(context, upstream=True)
@@ -225,7 +214,6 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
             dataset_urn,  # Downstream URN
         )
 
-        # Emit lineage metadata!
         context.log.info("EMITTING LINEAGE METADATA")
         datahub_emitter.emit_mce(lineage_mce)
 
