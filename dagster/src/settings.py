@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
+    AUTH_OIDC_REDIRECT_URL: str
+    AUTH_OIDC_CLIENT_ID: str
+    AUTH_OIDC_TENANT_ID: str
+    AUTH_OIDC_CLIENT_SECRET: str
 
     # Settings with a default are not required to be in .env
     ENVIRONMENT: Environment = Environment.STAGING
