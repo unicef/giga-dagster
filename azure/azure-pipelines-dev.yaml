@@ -33,11 +33,11 @@ variables:
   system.debug: true
 
 stages:
-  - stage: Deploy
-    displayName: Deploy Dagster
+  - stage: BuildAndPushDagster
+    displayName: Build and push Dagster user code image
     jobs:
       - deployment: Deploy
-        displayName: Dagster Deployment
+        displayName: Build and push Dagster user code image
         environment: $(kubernetesEnvironment)
         strategy:
           runOnce:
@@ -52,7 +52,7 @@ stages:
                     containerRegistry: $(ACR_SERVICE_CONNECTION)
 
                 - task: Docker@2
-                  displayName: Build and push Dagster image to container registry
+                  displayName: Build and push Dagster user code image to container registry
                   inputs:
                     command: buildAndPush
                     repository: giga-dagster
@@ -61,8 +61,27 @@ stages:
                     tags: |
                       $(Build.SourceVersion)
 
+  - stage: BuildAndPushAuthProxy
+    displayName: Build and push auth proxy image
+    dependsOn: [ ]
+    jobs:
+      - deployment: Deploy
+        displayName: Build and push auth proxy image
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
                 - task: Docker@2
-                  displayName: Build and push authproxy image to container registry
+                  displayName: Login to container Registry
+                  inputs:
+                    command: login
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
+
+                - task: Docker@2
+                  displayName: Build and push auth proxy image to container registry
                   inputs:
                     command: buildAndPush
                     repository: giga-dagster-authproxy
@@ -70,6 +89,48 @@ stages:
                     containerRegistry: $(ACR_SERVICE_CONNECTION)
                     tags: |
                       $(Build.SourceVersion)
+
+  - stage: BuildAndPushSpark
+    displayName: Build and push Spark image
+    dependsOn: [ ]
+    jobs:
+      - deployment: Deploy
+        displayName: Build and push Spark image
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: Docker@2
+                  displayName: Login to container Registry
+                  inputs:
+                    command: login
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
+
+                - task: Docker@2
+                  displayName: Build and push Spark image to container registry
+                  inputs:
+                    command: buildAndPush
+                    repository: giga-dagster-spark
+                    dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
+                    containerRegistry: $(ACR_SERVICE_CONNECTION)
+                    tags: |
+                      $(Build.SourceVersion)
+
+  - stage: CreateConfig
+    displayName: Create/update K8s configuration resources
+    dependsOn: [ ]
+    jobs:
+      - deployment: Deploy
+        displayName: Create/update K8s configuration resources
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
 
                 - task: Kubernetes@1
                   displayName: Create configmap
@@ -115,6 +176,23 @@ stages:
                         SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                         SHORT_SHA: "$(Build.SourceVersion)"
 
+  - stage: Deploy
+    displayName: Deploy Dagster
+    dependsOn:
+      - BuildAndPushDagster
+      - BuildAndPushAuthProxy
+      - BuildAndPushSpark
+      - CreateConfig
+    jobs:
+      - deployment: Deploy
+        displayName: Deploy Dagster
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
                 - task: HelmDeploy@0
                   displayName: Add Dagster Helm Repo
                   inputs:
@@ -141,7 +219,7 @@ stages:
                       --set postgresql.postgresqlPassword=$(postgresqlPassword)
 
                 - task: HelmDeploy@0
-                  displayName: Helm deploy authproxy
+                  displayName: Helm deploy auth proxy
                   inputs:
                     command: upgrade
                     install: true
