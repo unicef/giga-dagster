@@ -30,6 +30,8 @@ variables:
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
+  datahubAzureAdClientSecret: $(DATAHUB_AZURE_CLIENT_SECRET)
+  datahubAzureAdRedirectUrl: $(DATAHUB_AZURE_REDIRECT_URL)
   system.debug: true
 
 stages:
@@ -175,6 +177,10 @@ stages:
                         DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                         KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                         SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
+                        AUTH_OIDC_REDIRECT_URL: "$(datahubAzureAdRedirectUrl)"
+                        AUTH_OIDC_CLIENT_ID: "$(azureAdClientId)"
+                        AUTH_OIDC_TENANT_ID: "$(azureAdTenantId)"
+                        AUTH_OIDC_CLIENT_SECRET: "$(datahubAzureAdClientSecret)"
                         SHORT_SHA: "$(Build.SourceVersion)"
 
   - stage: Deploy
