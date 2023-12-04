@@ -42,7 +42,9 @@ spark_common_config = {
 
 pyspark = PySparkResource(
     spark_config={
-        "spark.app.name": f"giga-dagster@{settings.SHORT_SHA}",
+        "spark.app.name": (
+            f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
+        ),
         "spark.master": f"spark://{settings.SPARK_MASTER_HOST}",
         **spark_common_config,
     }
