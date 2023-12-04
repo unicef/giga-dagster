@@ -4,9 +4,9 @@ from dagster_pyspark import PySparkResource
 from pyspark import sql
 
 from dagster import OpExecutionContext, Output, asset
-from scripts.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
 
 @asset
