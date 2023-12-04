@@ -202,6 +202,28 @@ stages:
                     namespace: $(kubernetesNamespace)
 
                 - task: HelmDeploy@0
+                  displayName: Add Bitnami Helm Repo
+                  inputs:
+                    command: repo
+                    arguments: add bitnami https://charts.bitnami.com/bitnami
+                    namespace: $(kubernetesNamespace)
+
+                - task: HelmDeploy@0
+                  displayName: Helm deploy Spark
+                  inputs:
+                    command: upgrade
+                    install: true
+                    chartType: Name
+                    chartName: bitnami/spark
+                    releaseName: spark
+                    namespace: $(kubernetesNamespace)
+                    arguments: >
+                      --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
+                      --set image.registry="$(containerRegistryName).azurecr.io"
+                      --set image.repository="giga-dagster-spark"
+                      --set image.tag="$(Build.SourceVersion)"
+
+                - task: HelmDeploy@0
                   displayName: Helm deploy Dagster
                   inputs:
                     command: upgrade
