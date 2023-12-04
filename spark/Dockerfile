@@ -1,4 +1,4 @@
-FROM python:3.11-slim as deps
+FROM python:3.11-slim AS deps
 
 ARG POETRY_VERSION=1.6.1
 
@@ -10,7 +10,7 @@ COPY dagster/pyproject.toml dagster/poetry.lock ./
 
 RUN poetry export --without-hashes --with pipelines,spark -f requirements.txt > requirements.txt
 
-FROM bitnami/spark:3.5.0 as base
+FROM bitnami/spark:3.5.0 AS base
 
 USER root
 

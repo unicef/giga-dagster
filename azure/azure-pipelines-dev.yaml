@@ -115,6 +115,7 @@ stages:
                     command: buildAndPush
                     repository: giga-dagster-spark
                     dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
+                    buildContext: $(Build.SourcesDirectory)
                     containerRegistry: $(ACR_SERVICE_CONNECTION)
                     tags: |
                       $(Build.SourceVersion)

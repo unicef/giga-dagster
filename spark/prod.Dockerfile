@@ -1,4 +1,4 @@
-FROM python:3.11-slim as deps
+FROM python:3.11-slim AS deps
 
 ARG POETRY_VERSION=1.6.1
 
