@@ -9,7 +9,6 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     DatasetPropertiesClass,
     DateTypeClass,
-    DomainPropertiesClass,
     NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
@@ -21,28 +20,6 @@ from datahub.metadata.schema_classes import (
 from dagster import OpExecutionContext, version
 from src.settings import settings
 from src.utils.adls import get_input_filepath, get_output_filepath
-
-
-def create_domains():
-    domains = ["Geospatial", "Infrastructure", "School", "Finance"]
-
-    for domain in domains:
-        domain_urn = make_domain_urn(domain)
-        domain_properties_aspect = DomainPropertiesClass(name=domain, description="")
-
-        event: MetadataChangeProposalWrapper = MetadataChangeProposalWrapper(
-            entityUrn=domain_urn,
-            aspect=domain_properties_aspect,
-        )
-
-        datahub_emitter = DatahubRestEmitter(
-            gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-        )
-
-        datahub_emitter.emit(event)
-
-    return
 
 
 def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:

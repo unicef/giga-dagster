@@ -42,3 +42,10 @@ datahub__ingest_azure_ad_users_groups_job = define_asset_job(
         "azure_ad_users_groups",
     ],
 )
+
+datahub__create_domains_job = define_asset_job(
+    name="datahub__create_domains_job",
+    selection=[
+        "datahub_domains",
+    ],
+)
