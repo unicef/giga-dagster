@@ -4,16 +4,17 @@ from dagster_pyspark import PySparkResource
 from pyspark import sql
 
 from dagster import OpExecutionContext, Output, asset
-from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
+
+# from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 from src.utils.adls import ADLSFileClient, get_output_filepath
-from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
+# from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
-@asset
-def azure_ad_users_groups(context: OpExecutionContext):
-    context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
-    run_azure_ad_to_datahub_pipeline()
-    yield Output(None)
+# @asset
+# def azure_ad_users_groups(context: OpExecutionContext):
+#     context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
+#     run_azure_ad_to_datahub_pipeline()
+#     yield Output(None)
 
 
 @asset(io_manager_key="adls_raw_io_manager")
@@ -25,14 +26,15 @@ def raw(
         context.run_tags["dagster/run_key"]
     )
     context.log.info("CREATING DOMAINS IN DATAHUB")
-    create_domains()
-    emit_metadata_to_datahub(context, df=df)
+    # create_domains()
+    # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
 @asset(io_manager_key="adls_bronze_io_manager")
-def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=raw)
+def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
+    # emit_metadata_to_datahub(context, df=raw)
+
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -104,7 +106,7 @@ def dq_failed_rows(
     #                 failed_rows_indices.add(unexpected_row)
 
     df_failed = bronze.loc[list(failed_rows_indices)]
-    emit_metadata_to_datahub(context, df_failed)
+    # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -145,7 +147,7 @@ def manual_review_passed_rows(
     df = adls_file_client.download_csv_as_spark_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -159,7 +161,7 @@ def manual_review_failed_rows(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
     context.log.info(f"data={df}")
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -168,7 +170,7 @@ def silver(
     context: OpExecutionContext,
     manual_review_passed_rows: sql.DataFrame,
 ) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
     yield Output(
         manual_review_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
@@ -176,7 +178,7 @@ def silver(
 
 @asset(io_manager_key="adls_delta_io_manager")
 def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=silver)
+    # emit_metadata_to_datahub(context, df=silver)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
