@@ -32,14 +32,14 @@ class ADLSFileClient(ConfigurableResource):
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         return spark.read.csv(adls_path, header=True)
 
-    def upload_pandas_dataframe_as_file(self, filepath: str, data: pd.DataFrame):
+    def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
         file_client = _adls.get_file_client(filepath)
         match splits[-1]:
             case "csv" | "xls" | "xlsx":
-                bytes_data = data.to_csv().encode("utf-8-sig")
+                bytes_data = data.to_csv(mode="w+").encode("utf-8-sig")
             case "json":
                 bytes_data = data.to_json().encode()
             case _:
@@ -50,7 +50,8 @@ class ADLSFileClient(ConfigurableResource):
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
     def upload_spark_dataframe_as_csv(self, data: sql.DataFrame, filepath: str):
-        data.write.csv(filepath, header=True, mode="overwrite")
+        data = data.toPandas()
+        self.upload_pandas_dataframe_as_file(data, filepath)
 
     def download_delta_table_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
