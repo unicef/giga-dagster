@@ -35,228 +35,48 @@ variables:
   system.debug: true
 
 stages:
-  - stage: BuildAndPushDagster
-    displayName: Build and push Dagster user code image
+  - stage: Delete
+    displayName: Delete Dagster
     jobs:
-      - deployment: Deploy
-        displayName: Build and push Dagster user code image
+      - deployment: Delete
+        displayName: Delete Dagster deployment
         environment: $(kubernetesEnvironment)
         strategy:
           runOnce:
             deploy:
               steps:
-                - checkout: self
-
-                - task: Docker@2
-                  displayName: Login to container Registry
+                - task: HelmDeploy@0
+                  displayName: Helm uninstall authproxy
                   inputs:
-                    command: login
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
+                    namespace: $(kubernetesNamespace)
+                    command: uninstall
+                    arguments: dagster-authproxy
 
-                - task: Docker@2
-                  displayName: Build and push Dagster user code image to container registry
+                - task: HelmDeploy@0
+                  displayName: Helm uninstall Dagster
                   inputs:
-                    command: buildAndPush
-                    repository: giga-dagster
-                    dockerfile: $(Build.SourcesDirectory)/dagster/prod.Dockerfile
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
-                    tags: |
-                      $(Build.SourceVersion)
+                    namespace: $(kubernetesNamespace)
+                    command: uninstall
+                    arguments: dagster
 
-  - stage: BuildAndPushAuthProxy
-    displayName: Build and push auth proxy image
-    dependsOn: [ ]
-    jobs:
-      - deployment: Deploy
-        displayName: Build and push auth proxy image
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-
-                - task: Docker@2
-                  displayName: Login to container Registry
+                - task: HelmDeploy@0
+                  displayName: Helm uninstall Spark
                   inputs:
-                    command: login
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
-
-                - task: Docker@2
-                  displayName: Build and push auth proxy image to container registry
-                  inputs:
-                    command: buildAndPush
-                    repository: giga-dagster-authproxy
-                    dockerfile: $(Build.SourcesDirectory)/authproxy/prod.Dockerfile
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
-                    tags: |
-                      $(Build.SourceVersion)
-
-  - stage: BuildAndPushSpark
-    displayName: Build and push Spark image
-    dependsOn: [ ]
-    jobs:
-      - deployment: Deploy
-        displayName: Build and push Spark image
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-
-                - task: Docker@2
-                  displayName: Login to container Registry
-                  inputs:
-                    command: login
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
-
-                - task: Docker@2
-                  displayName: Build and push Spark image to container registry
-                  inputs:
-                    command: buildAndPush
-                    repository: giga-dagster-spark
-                    dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
-                    buildContext: $(Build.SourcesDirectory)
-                    containerRegistry: $(ACR_SERVICE_CONNECTION)
-                    tags: |
-                      $(Build.SourceVersion)
-
-  - stage: CreateConfig
-    displayName: Create/update K8s configuration resources
-    dependsOn: [ ]
-    jobs:
-      - deployment: Deploy
-        displayName: Create/update K8s configuration resources
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
+                    namespace: $(kubernetesNamespace)
+                    command: uninstall
+                    arguments: spark
 
                 - task: Kubernetes@1
-                  displayName: Create configmap
+                  displayName: Delete resources in namespace
                   inputs:
+                    command: delete
+                    arguments: all --all
                     namespace: $(kubernetesNamespace)
-                    configurationType: configuration
-                    command: apply
-                    useConfigurationFile: true
-                    configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
 
                 - task: Kubernetes@1
-                  displayName: Create secret
+                  displayName: Delete PVCs in namespace
+                  continueOnError: true
                   inputs:
+                    command: delete
+                    arguments: pvc --all
                     namespace: $(kubernetesNamespace)
-                    configurationType: inline
-                    command: apply
-                    useConfigurationFile: true
-                    inline: |
-                      apiVersion: v1
-                      kind: Secret
-                      metadata:
-                        name: giga-dagster
-                        labels:
-                          app: giga-dagster
-                      stringData:
-                        POSTGRESQL_USERNAME: "$(postgresqlUsername)"
-                        POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
-                        SECRET_KEY: "$(secretKey)"
-                        AZURE_SAS_TOKEN: "$(azureSasToken)"
-                        AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
-                        AZURE_BLOB_SAS_HOST: "$(azureBlobSasHost)"
-                        AZURE_DFS_SAS_HOST: "$(azureDfsSasHost)"
-                        AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-                        AZURE_TENANT_ID: "$(azureAdTenantId)"
-                        AZURE_CLIENT_ID: "$(azureAdClientId)"
-                        AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-                        AZURE_TENANT_NAME: "$(azureAdTenantName)"
-                        AZURE_AUTH_POLICY_NAME: "$(azureAdPolicyName)"
-                        AZURE_REDIRECT_URI: "$(azureAdRedirectUri)"
-                        AZURE_LOGOUT_REDIRECT_URI: "$(azureAdLogoutRedirectUri)"
-                        DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
-                        KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
-                        SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
-                        AUTH_OIDC_REDIRECT_URL: "$(datahubAzureAdRedirectUrl)"
-                        AUTH_OIDC_CLIENT_ID: "$(azureAdClientId)"
-                        AUTH_OIDC_TENANT_ID: "$(azureAdTenantId)"
-                        AUTH_OIDC_CLIENT_SECRET: "$(datahubAzureAdClientSecret)"
-                        SHORT_SHA: "$(Build.SourceVersion)"
-
-  - stage: Deploy
-    displayName: Deploy Dagster
-    dependsOn:
-      - BuildAndPushDagster
-      - BuildAndPushAuthProxy
-      - BuildAndPushSpark
-      - CreateConfig
-    jobs:
-      - deployment: Deploy
-        displayName: Deploy Dagster
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-
-                - task: HelmDeploy@0
-                  displayName: Add Dagster Helm Repo
-                  inputs:
-                    command: repo
-                    arguments: add dagster https://dagster-io.github.io/helm
-                    namespace: $(kubernetesNamespace)
-
-                - task: HelmDeploy@0
-                  displayName: Add Bitnami Helm Repo
-                  inputs:
-                    command: repo
-                    arguments: add bitnami https://charts.bitnami.com/bitnami
-                    namespace: $(kubernetesNamespace)
-
-                - task: HelmDeploy@0
-                  displayName: Helm deploy Spark
-                  inputs:
-                    command: upgrade
-                    install: true
-                    chartType: Name
-                    chartName: bitnami/spark
-                    releaseName: spark
-                    namespace: $(kubernetesNamespace)
-                    arguments: >
-                      --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
-                      --set image.registry="$(containerRegistryName).azurecr.io"
-                      --set image.repository="giga-dagster-spark"
-                      --set image.tag="$(Build.SourceVersion)"
-
-                - task: HelmDeploy@0
-                  displayName: Helm deploy Dagster
-                  inputs:
-                    command: upgrade
-                    install: true
-                    chartType: Name
-                    chartName: dagster/dagster
-                    releaseName: dagster
-                    namespace: $(kubernetesNamespace)
-                    arguments: >
-                      --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
-                      --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
-                      --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
-                      --set pipelineRun.image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
-                      --set pipelineRun.image.tag=$(Build.SourceVersion)
-                      --set postgresql.postgresqlUsername=$(postgresqlUsername)
-                      --set postgresql.postgresqlPassword=$(postgresqlPassword)
-
-                - task: HelmDeploy@0
-                  displayName: Helm deploy auth proxy
-                  inputs:
-                    command: upgrade
-                    install: true
-                    chartType: FilePath
-                    chartPath: $(Build.SourcesDirectory)/infra/helm/authproxy
-                    releaseName: dagster-authproxy
-                    namespace: $(kubernetesNamespace)
-                    arguments: >
-                      --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
-                      --set image.tag=$(Build.SourceVersion)
-                      --set ingress.enabled=true
