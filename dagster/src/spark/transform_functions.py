@@ -2,7 +2,7 @@ import uuid
 
 import h3
 from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, StringType
+from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 from pyspark.sql.window import Window
 
 from src.settings import settings
@@ -19,11 +19,6 @@ from src.spark.config_expectations import (
     CONFIG_VALUES_RANGE,
     CONFIG_VALUES_RANGE_PRIO,
 )
-from src.utils.spark import get_spark_session
-
-file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-spark = get_spark_session()
-df_spark = spark.read.csv(file_url, header=True)
 
 
 # STANDARDIZATION FUNCTIONS
@@ -132,6 +127,8 @@ def create_bronze_layer_columns(df):
 
     # Special Cases
     # df = standardize_school_name(df)
+    bronze_columns = ["school_id" ,"school_name" ,"education_level" ,"latitude" ,"longitude" ,"student_count" ,"internet_availability" ,"internet_type" ,"mobile_internet_generation" ,"internet_speed_mbps" ,"electricity_availability" ,"computer_availability" ,"computer_count" ,"school_year", "hex8", "giga_id_school", "school_density"]
+    df = df.select(*bronze_columns)
 
     return df
 
@@ -365,10 +362,29 @@ def create_staging_layer_columns(df):
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
     # 
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
+    # schema = StructType([
+    # StructField("school_id", StringType(), True),
+    # StructField("school_name", StringType(), True),
+    # StructField("education_level", StringType(), True),
+    # StructField("latitude", StringType(), True),
+    # StructField("longitude", StringType(), True),
+    # StructField("student_count", StringType(), True),
+    # StructField("internet_availability", StringType(), True),
+    # StructField("internet_type", StringType(), True),
+    # StructField("mobile_internet_generation", StringType(), True),
+    # StructField("internet_speed_mbps", StringType(), True),
+    # StructField("electricity_availability", StringType(), True),
+    # StructField("computer_availability", StringType(), True),
+    # StructField("computer_count", StringType(), True),
+    # StructField("school_year", StringType(), True),
+    # # Add more fields as needed
+    # ])
     df = spark.read.csv(file_url, header=True)
-    df_bronze = create_bronze_layer_columns(df)
+    df.show()
+    df = create_bronze_layer_columns(df)
     df.show()
     
     # file_url = "https://@saunigiga.dfs.core.windows.net/giga-dataops-dev/bronze/school-geolocation-data/BLZ-school_geolocation-20230207.csv"
@@ -495,14 +511,14 @@ if __name__ == "__main__":
     # )
     # for value in CONFIG_VALUES_RANGE['internet_speed_mbps']:
     #     print(value)
-    df = df_spark
+    # df = df_spark
     # df = create_staging_layer_columns(df)
-    df = create_bronze_layer_columns(df)
+    # df = create_bronze_layer_columns(df)
     # df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
-    df = create_error_columns(df, "BLZ")
+    # df = create_error_columns(df, "BLZ")
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
-    df.show()
+    # df.show()
     # print(is_within_country(16.99555, -88.3668, "BLZ"))
     # df = has_critical_error(df)
     # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
