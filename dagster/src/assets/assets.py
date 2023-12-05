@@ -158,7 +158,6 @@ def manual_review_failed_rows(
     df = adls_file_client.download_csv_as_spark_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    context.log.info(f"data={df}")
     emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 

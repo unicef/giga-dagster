@@ -14,6 +14,8 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
 
         destination_filepath = get_filepath(filepath, parent_folder, step)
 
-        context.log.info(f"Moving from {filepath} to {destination_filepath}")
+        context.log.info(
+            f"Original filepath: {filepath}, new filepath: {destination_filepath}"
+        )
 
         return destination_filepath

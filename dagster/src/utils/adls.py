@@ -32,7 +32,7 @@ class ADLSFileClient(ConfigurableResource):
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         return spark.read.csv(adls_path, header=True)
 
-    def upload_pandas_dataframe_as_file(self, filepath: str, data: pd.DataFrame):
+    def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
