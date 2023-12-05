@@ -363,6 +363,14 @@ def create_staging_layer_columns(df):
 
 
 if __name__ == "__main__":
+    from src.utils.spark import get_spark_session
+    # 
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    spark = get_spark_session()
+    df = spark.read.csv(file_url, header=True)
+    df_bronze = create_bronze_layer_columns(df)
+    df.show()
+    
     # file_url = "https://@saunigiga.dfs.core.windows.net/giga-dataops-dev/bronze/school-geolocation-data/BLZ-school_geolocation-20230207.csv"
     # df = pd.read_csv(
     # "abfs://@saunigiga.dfs.core.windows.net/giga-dataops-dev/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv",
@@ -375,7 +383,6 @@ if __name__ == "__main__":
 
     # Standardize columns
     # print("Standardizing for Bronze Layer")
-    # df_bronze = create_bronze_layer_columns(df)
     # df_bronze.to_csv("bronze_school_geolocation.csv")
 
     # Perform data quality checks for identifying critical errors (dropping those rows)
@@ -436,7 +443,6 @@ if __name__ == "__main__":
     # df = df.withColumn("has_similar_name", has_no_similar_name_udf(f.col("school_name"), f.col("school_name_list")))
     # df.orderBy(f.desc("has_similar_name")).show(400)
 
-    # df.show(truncate = False)
     # name_list = df.rdd.map(lambda x: x.internet_speed_mbps).collect()
     # print(len(name_list))
     # print(range(len(name_list)))

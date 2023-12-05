@@ -7,6 +7,7 @@ from dagster import OpExecutionContext, Output, asset
 
 # from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 from src.utils.adls import ADLSFileClient, get_output_filepath
+import src.spark.transform_functions as tf
 
 # from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
@@ -34,8 +35,8 @@ def raw(
 @asset(io_manager_key="adls_bronze_io_manager")
 def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
     # emit_metadata_to_datahub(context, df=raw)
-
-    yield Output(raw, metadata={"filepath": get_output_filepath(context)})
+    df = tf.create_bronze_layer_columns(raw)
+    yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(
