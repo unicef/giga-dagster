@@ -1,7 +1,7 @@
 import great_expectations as gx
 import tools_expectations as gx_tools
 from config_expectations import (  # CONFIG_COLUMN_SUM,; CONFIG_FIVE_DECIMAL_PLACES,; CONFIG_NOT_SIMILAR_COLUMN,; CONFIG_PAIR_AVAILABILITY,; CONFIG_VALUES_RANGE_COVERAGE_ITU,; CONFIG_VALUES_TYPE,
-    CONFIG_NONEMPTY_COLUMNS,
+    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
     CONFIG_UNIQUE_COLUMNS,
     CONFIG_UNIQUE_SET_COLUMNS,
     CONFIG_VALUES_OPTIONS,
@@ -37,7 +37,7 @@ for column in CONFIG_UNIQUE_COLUMNS:
     )
     suite.add_expectation(expectation_configuration=gx_config)
 
-for column in CONFIG_NONEMPTY_COLUMNS:
+for column in CONFIG_NONEMPTY_COLUMNS_CRITICAL:
     gx_config = gx_tools.add_single_column_expectation(
         "expect_column_values_to_not_be_null", column
     )
