@@ -1,6 +1,7 @@
 import uuid
 
 import h3
+import json
 from pyspark.sql import functions as f
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType
 from pyspark.sql.window import Window
@@ -132,13 +133,13 @@ def create_bronze_layer_columns(df):
     w = Window().orderBy(f.lit('A'))
     df = df.withColumn("temp_pk", f.row_number().over(w))
     
-    df = df.withColumn("country_code", f.lit("BLZ"))
-    df = df.withColumn(
-        "is_within_country",
-        is_within_country_udf(
-            f.col("latitude"), f.col("longitude"), f.col("country_code")
-            ),
-        )
+    # df = df.withColumn("country_code", f.lit("BLZ"))
+    # df = df.withColumn(
+    #     "is_within_country",
+    #     is_within_country_udf(
+    #         f.col("latitude"), f.col("longitude"), f.col("country_code")
+    #         )
+    #     )
 
     bronze_columns = [
         "temp_pk", 
@@ -146,8 +147,9 @@ def create_bronze_layer_columns(df):
         "latitude" ,"longitude" ,"student_count" ,
         "internet_availability" ,"internet_type" ,"mobile_internet_generation" ,
         "internet_speed_mbps" ,"electricity_availability" ,"computer_availability" ,
-        "computer_count" ,"school_year", "hex8", "giga_id_school", "school_density" ,
-        "is_within_country"
+        "computer_count" ,"school_year", "hex8", "giga_id_school", "school_density"
+        # , "is_within_country"
+        # , "country_code"
     ]
     df = df.select(*bronze_columns)
 
@@ -379,6 +381,87 @@ def create_staging_layer_columns(df):
 
     return df
 
+def critical_error_indices_json_parse(data):
+    key_id = list(data["run_results"].keys())[0]
+    nest_results = data["run_results"][key_id]["validation_result"]["results"]
+    index = list(range(len([x for x in nest_results])))
+
+    ## critical error tags ##
+    for i in index:
+        expectation_config = nest_results[i]["expectation_config"]
+        result = nest_results[i]["result"]
+
+    # duplicate school_id "expect_column_values_to_be_unique"
+        if expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "school_id":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_dup_school_id_set = set(index_list)
+
+    # duplicate giga_id_school "expect_column_values_to_be_unique"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "giga_id_school":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_dup_gid_set = set(index_list)
+
+    # empty school_name "expect_column_values_to_not_be_null"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_not_be_null" and expectation_config["kwargs"]["column"] == "school_name":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_null_school_name_set = set(index_list)
+
+    # empty latitude "expect_column_values_to_not_be_null"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_not_be_null" and expectation_config["kwargs"]["column"] == "latitude":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_null_lat_set = set(index_list)
+
+    # empty longitude "expect_column_values_to_not_be_null"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_not_be_null" and expectation_config["kwargs"]["column"] == "longitude":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_null_long_set = set(index_list)
+
+    # empty education_level "expect_column_values_to_not_be_null"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_not_be_null" and expectation_config["kwargs"]["column"] == "education_level":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_null_educ_level_set = set(index_list)
+
+    # valid location values latitude "expect_column_values_to_be_between"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_be_between" and expectation_config["kwargs"]["column"] == "latitude":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_invalid_lat_set = set(index_list)
+
+    # valid location values longitude "expect_column_values_to_be_between"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_be_between" and expectation_config["kwargs"]["column"] == "longitude":
+            data = result["unexpected_index_list"]
+            index_list = [entry['temp_pk'] for entry in data]
+            index_invalid_long_set = set(index_list)
+
+    # # within country is_within_country "add_"expect_column_values_to_be_in_set"
+    #     elif expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "giga_id_school":
+    #         print(i)
+    #         data = result["unexpected_index_list"]
+    #         schema = StructType([StructField("temp_pk", StringType(), True)])
+    #         df_unique_giga_id_school = spark.createDataFrame(data, schema=schema)
+
+    critical_error_indices_string = list(index_dup_school_id_set | index_dup_gid_set | index_null_school_name_set | index_null_lat_set | index_null_long_set | index_null_educ_level_set | index_invalid_lat_set | index_invalid_long_set)
+    critical_error_indices = [int(x) for x in critical_error_indices_string]
+
+    return critical_error_indices
+
+def dq_passed_rows(bronze_df, json_results):
+    critical_error_indices = critical_error_indices_json_parse(json_results)
+    df = bronze_df.filter(f.col("temp_pk").isin(critical_error_indices))
+
+    return df
+    
+def dq_failed_rows(bronze_df, json_results):
+    critical_error_indices = critical_error_indices_json_parse(json_results)
+    df = bronze_df.filter(~f.col("temp_pk").isin(critical_error_indices))
+
+    return df
 
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
@@ -386,58 +469,23 @@ if __name__ == "__main__":
     file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
-    # schema = StructType([
-    # StructField("school_id", StringType(), True),
-    # StructField("school_name", StringType(), True),
-    # StructField("education_level", StringType(), True),
-    # StructField("latitude", StringType(), True),
-    # StructField("longitude", StringType(), True),
-    # StructField("student_count", StringType(), True),
-    # StructField("internet_availability", StringType(), True),
-    # StructField("internet_type", StringType(), True),
-    # StructField("mobile_internet_generation", StringType(), True),
-    # StructField("internet_speed_mbps", StringType(), True),
-    # StructField("electricity_availability", StringType(), True),
-    # StructField("computer_availability", StringType(), True),
-    # StructField("computer_count", StringType(), True),
-    # StructField("school_year", StringType(), True),
-    # # Add more fields as needed
-    # ])
     df = spark.read.csv(file_url, header=True)
+    df = create_bronze_layer_columns(df)
+    # df.show()
     # df.show()
     # df = df.limit(10)
-    # df = create_bronze_layer_columns(df)
-    # df.show()
     
     
     import json
 
-    json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
+    json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test (5).json"
+    # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
 
     with open(json_file_path, 'r') as file:
         data = json.load(file)
 
-
-    # def dq_passed_rows():
-        # dynamic result identifier
-        nest_results = data["run_results"]["ValidationResultIdentifier::expectation_school_geolocation/__none__/20231206T004054.099698Z/ab369d75cdfccd42dcc290d1dfd27171"]["validation_result"]["results"]
-        index = list(range(len([x for x in nest_results])))
-
-        for i in index:
-            if nest_results[i]["expectation_config"]["expectation_type"] == "expect_column_values_to_be_unique" and nest_results[i]["expectation_config"]["kwargs"]["column"] == "school_id":
-                print(i)
-                print(nest_results[i]["result"]["unexpected_index_list"])
-            else: 
-                print("ngek")
+    dq_passed_rows(df, data).show()
 
 
 
-        ## critical error tags ##
-        # duplicate school_id "expect_column_values_to_be_unique"
-        # duplicate giga_id_school "expect_column_values_to_be_unique"
-        # empty school_name  "expect_column_values_to_not_be_null"
-        # empty latitude "expect_column_values_to_not_be_null"
-        # empty longitude "expect_column_values_to_not_be_null"
-        # empty education_level "expect_column_values_to_not_be_null"
-        # valid location values latitude longitude "expect_column_values_to_be_between"
-        # within country is_within_country "add_"expect_column_values_to_be_in_set"
+    
