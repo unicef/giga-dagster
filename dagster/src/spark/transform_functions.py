@@ -127,7 +127,28 @@ def create_bronze_layer_columns(df):
 
     # Special Cases
     # df = standardize_school_name(df)
-    bronze_columns = ["school_id" ,"school_name" ,"education_level" ,"latitude" ,"longitude" ,"student_count" ,"internet_availability" ,"internet_type" ,"mobile_internet_generation" ,"internet_speed_mbps" ,"electricity_availability" ,"computer_availability" ,"computer_count" ,"school_year", "hex8", "giga_id_school", "school_density"]
+
+    # Temp key for index
+    w = Window().orderBy(f.lit('A'))
+    df = df.withColumn("temp_pk", f.row_number().over(w))
+    
+    df = df.withColumn("country_code", f.lit("BLZ"))
+    df = df.withColumn(
+        "is_within_country",
+        is_within_country_udf(
+            f.col("latitude"), f.col("longitude"), f.col("country_code")
+            ),
+        )
+
+    bronze_columns = [
+        "temp_pk", 
+        "school_id" ,"school_name" ,"education_level" ,
+        "latitude" ,"longitude" ,"student_count" ,
+        "internet_availability" ,"internet_type" ,"mobile_internet_generation" ,
+        "internet_speed_mbps" ,"electricity_availability" ,"computer_availability" ,
+        "computer_count" ,"school_year", "hex8", "giga_id_school", "school_density" ,
+        "is_within_country"
+    ]
     df = df.select(*bronze_columns)
 
     return df
@@ -211,7 +232,7 @@ def has_critical_error(df):
             "CASE "
             "WHEN duplicate_school_id = true "
             "   OR duplicate_giga_id_school = true "
-            "   OR size(critical_error_empty_column) > 0 "
+            "   OR size(critical_error_empty_column) > 0 " #schoolname, lat, long, educ level
             "   OR is_valid_location_values = false "
             "   OR is_within_country != true "
             "   THEN true "
@@ -362,8 +383,8 @@ def create_staging_layer_columns(df):
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
     # 
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
     # schema = StructType([
     # StructField("school_id", StringType(), True),
@@ -383,148 +404,40 @@ if __name__ == "__main__":
     # # Add more fields as needed
     # ])
     df = spark.read.csv(file_url, header=True)
-    df.show()
-    df = create_bronze_layer_columns(df)
-    df.show()
-    
-    # file_url = "https://@saunigiga.dfs.core.windows.net/giga-dataops-dev/bronze/school-geolocation-data/BLZ-school_geolocation-20230207.csv"
-    # df = pd.read_csv(
-    # "abfs://@saunigiga.dfs.core.windows.net/giga-dataops-dev/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv",
-    # storage_options={"sas_token": AZURE_SAS_TOKEN},
-    # )
-    # filepath = (
-    #     "./great_expectations/plugins/expectations/BLZ-school_geolocation-20230207.csv"
-    # )
-    # df = pd.read_csv(filepath)
-
-    # Standardize columns
-    # print("Standardizing for Bronze Layer")
-    # df_bronze.to_csv("bronze_school_geolocation.csv")
-
-    # Perform data quality checks for identifying critical errors (dropping those rows)
-    # print("Creating Staging Check Columns")
-    # To Do: Merge bronze + silver to create the complete staging data before running duplicate checks
-    # df_staging = create_error_columns(df_bronze, "BLZ")
-    # df_staging["has_critical_error"] = df.apply(
-    # lambda x: has_critical_error(x), axis="columns"
-    # )
-    # df_staging.to_csv("staging_flags.csv")
-
-    # Gather critical errors into error report
-    # df_critical_errors = df_staging[df_staging["has_critical_error"]]
-    # df_critical_errors.to_csv("critical_errors.csv")
-
-    # Filter out critical errors for clean staging data
-    # df_staging_clean = df_staging[~df_staging["has_critical_error"]]
-    # df_staging_clean.to_csv("staging_clean.csv")
-
-    # testing
-    # test_columns = ["school_id", "school_name", "education_level", "latitude", "longitude", "internet_speed_mbps"]
-    # test_columns_latitude = [
-    #     "latitude",
-    #     "longitude",
-    #     "mobile_internet_generation",
-    #     "internet_availability",
-    #     "internet_type",
-    #     "internet_speed_mbps",
-    # ]
-    # test_columns_unique_set = [
-    #     "school_id", "school_name", "education_level", "latitude", "longitude", "internet_speed_mbps"]
-    # df = df_spark.select(test_columns_unique_set)
-    # df = create_bronze_layer_columns(df)
-
-    #     data = [
-    #     ("School1", "District2", 90, 180),
-    #     ("School2", None, 8, -2),
-    #     ("School1", "District2", 90, 180),
-    #     ("School3", "ewna", 8, -2),
-    #     ("School1", "District2", 89, 180),
-    # ]
-    #     columns = ["school_name", "education_level", "latitude", "longitude"]
-    #     df = spark.createDataFrame(data, columns)
-    # df = df.withColumn("latitude", df["latitude"].cast("float"))
-    # df = df.withColumn("longitude", df["longitude"].cast("float"))
-
-    # df = df.withColumn("coordinates", f.array("latitude", "longitude"))
-
-    # window_spec = Window.partitionBy("school_name", "education_level")
-    # df = df.withColumn("coordinates_list", f.collect_list("coordinates").over(window_spec))
-
-    # df = df.withColumn("coordinates_list", coordinates_comp_udf(f.col("coordinates_list"), f.col("coordinates")))
-    # df = df.withColumn("duplicate_name_level_within_110m_radius", are_all_points_beyond_minimum_distance_udf(f.col("coordinates_list")))
-    # df.show(truncate=False)
-
-    # name_list = df.rdd.map(lambda x: x.school_name).collect()
-    # df = df.withColumn("school_name_list", f.lit(name_list))
-    # df = df.withColumn("has_similar_name", has_no_similar_name_udf(f.col("school_name"), f.col("school_name_list")))
-    # df.orderBy(f.desc("has_similar_name")).show(400)
-
-    # name_list = df.rdd.map(lambda x: x.internet_speed_mbps).collect()
-    # print(len(name_list))
-    # print(range(len(name_list)))
-    # print([True for i in range(len(name_list))])
-
-    # for value in CONFIG_VALUES_RANGE_PRIO:
-    # # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
-    #     df = df.withColumn(
-    #         "is_valid_{}".format(value),
-    #         f.when(
-    #             f.col(value).between(
-    #                 CONFIG_VALUES_RANGE[value]["min"],
-    #                 CONFIG_VALUES_RANGE[value]["max"],
-    #             ), True).otherwise(False)
-    #     )
-    # df.orderBy("school_density").show()
-    # print(CONFIG_VALUES_RANGE["internet_speed_mbps"]["min"])
-    # print(CONFIG_VALUES_RANGE["internet_speed_mbps"]["max"])
+    # df.show()
     # df = df.limit(10)
-    # df = create_error_columns(df, "BLZ")
-    # df.show()
-    # df = df.withColumn("country_code", f.lit("BLZ"))
-    # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
-    # # df.orderBy("school_name").show()
-    # data = [("School1", "District2", "Region1", "School", 181, 2),
-    #         ("School2", None, None, "School", 8, -2),
-    #         ("School1", "District2", "Region3", "School", 8, -222)]
-    # columns = ["school_id", "giga_id_school", "education_level", "school_name", "latitude", "longitude"]
-    # df = create_error_columns(df, "BLZ")
-    # df = has_critical_error(df)
-    # print(CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-    # df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
-    # df = create_staging_layer_columns(df)
-    # df = df.withColumn("country_code", f.lit("BLZ"))
-    # df = df.withColumn("is_within_country", is_within_country_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
-    # df.show(10, truncate=False)
-    # df = df.filter(df["school_name"] == "NAZARENE PRIMARY SCHOOL")
-    # df.filter(df["has_critical_error"] == True).show(30)
-    # print(is_within_country(1,1,"BLZ"))
-
-    # df = df.withColumn(
-    #     column_name,
-    #     f.when(
-    #         f.count("{}".format(column)).over(
-    #             Window.partitionBy("{}".format(column))
-    #         )
-    #         > 1,
-    #         True,
-    #     ).otherwise(False),
-    # )
-    # for value in CONFIG_VALUES_RANGE['internet_speed_mbps']:
-    #     print(value)
-    # df = df_spark
-    # df = create_staging_layer_columns(df)
     # df = create_bronze_layer_columns(df)
-    # df = df.withColumn("precision_longitude", get_decimal_places_udf(f.col("longitude")))
-    # df = create_error_columns(df, "BLZ")
-    # df = df.withColumn("country_code", f.lit("BLZ"))
-    # df = df.withColumn("is_within_country", is_within_boundary_distance_udf(f.col("latitude"), f.col("longitude"), f.col("country_code")))
     # df.show()
-    # print(is_within_country(16.99555, -88.3668, "BLZ"))
-    # df = has_critical_error(df)
-    # df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
-    # df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
+    
+    
+    import json
 
-    # duplicate_name_level_within_110m_radius
+    json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
 
-    # df.filter(df["duplicate"] == 1).show()
-    # df.filter(df["school_name"] == "Yo Creek Sacred Heart RC Primary School").show()
+    with open(json_file_path, 'r') as file:
+        data = json.load(file)
+
+
+    # def dq_passed_rows():
+        # dynamic result identifier
+        nest_results = data["run_results"]["ValidationResultIdentifier::expectation_school_geolocation/__none__/20231206T004054.099698Z/ab369d75cdfccd42dcc290d1dfd27171"]["validation_result"]["results"]
+        index = list(range(len([x for x in nest_results])))
+
+        for i in index:
+            if nest_results[i]["expectation_config"]["expectation_type"] == "expect_column_values_to_be_unique" and nest_results[i]["expectation_config"]["kwargs"]["column"] == "school_id":
+                print(i)
+                print(nest_results[i]["result"]["unexpected_index_list"])
+            else: 
+                print("ngek")
+
+
+
+        ## critical error tags ##
+        # duplicate school_id "expect_column_values_to_be_unique"
+        # duplicate giga_id_school "expect_column_values_to_be_unique"
+        # empty school_name  "expect_column_values_to_not_be_null"
+        # empty latitude "expect_column_values_to_not_be_null"
+        # empty longitude "expect_column_values_to_not_be_null"
+        # empty education_level "expect_column_values_to_not_be_null"
+        # valid location values latitude longitude "expect_column_values_to_be_between"
+        # within country is_within_country "add_"expect_column_values_to_be_in_set"
