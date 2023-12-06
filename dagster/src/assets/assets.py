@@ -87,7 +87,7 @@ def dq_passed_rows(
     #             for unexpected_row in result.result.unexpected_index_list:
     #                 failed_rows_indices.add(unexpected_row)
 
-    df_passed = bronze.drop()
+    df_passed = tf.dq_passed_rows(bronze, data_quality_results)
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -98,7 +98,7 @@ def dq_failed_rows(
     data_quality_results,
 ) -> sql.DataFrame:
     # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
-    failed_rows_indices = set()
+    # failed_rows_indices = set()
     # for suite_result in data_quality_results["run_results"].items():
     #     validation_result = suite_result["validation_result"]
     #     for result in validation_result.results:
@@ -106,7 +106,7 @@ def dq_failed_rows(
     #             for unexpected_row in result.result.unexpected_index_list:
     #                 failed_rows_indices.add(unexpected_row)
 
-    df_failed = bronze.loc[list(failed_rows_indices)]
+    df_failed = tf.dq_failed_rows(bronze, data_quality_results)
     # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
