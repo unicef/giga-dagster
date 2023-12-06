@@ -143,10 +143,10 @@ def school_master__failed_manual_checks_sensor():
 @sensor(
     job=school_master__convert_gold_csv_to_deltatable_job, minimum_interval_seconds=30
 )
-def school_master__file_to_deltatable_sensor():
+def school_master__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.fake_gold_folder}")
+    file_list = adls.list_paths(f"{constants.gold_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:

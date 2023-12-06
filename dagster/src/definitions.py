@@ -16,7 +16,7 @@ from src.resources.io_managers import (
 )
 from src.sensors import (
     school_master__failed_manual_checks_sensor,
-    school_master__file_to_deltatable_sensor,
+    school_master__gold_csv_to_deltatable_sensor,
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
 )
@@ -52,6 +52,6 @@ defs = Definitions(
         school_master__raw_file_uploads_sensor,
         school_master__successful_manual_checks_sensor,
         school_master__failed_manual_checks_sensor,
-        school_master__file_to_deltatable_sensor,
+        school_master__gold_csv_to_deltatable_sensor,
     ],
 )
