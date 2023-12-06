@@ -5,7 +5,7 @@ from pyspark import sql
 
 from dagster import OpExecutionContext, Output, asset
 
-# from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
+from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 from src.utils.adls import ADLSFileClient, get_output_filepath
 import src.spark.transform_functions as tf
 
@@ -27,14 +27,14 @@ def raw(
         context.run_tags["dagster/run_key"]
     )
     context.log.info("CREATING DOMAINS IN DATAHUB")
-    # create_domains()
-    # emit_metadata_to_datahub(context, df=df)
+    create_domains()
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
 @asset(io_manager_key="adls_bronze_io_manager")
 def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
-    # emit_metadata_to_datahub(context, df=raw)
+    emit_metadata_to_datahub(context, df=raw)
     df = tf.create_bronze_layer_columns(raw)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
@@ -107,7 +107,7 @@ def dq_failed_rows(
     #                 failed_rows_indices.add(unexpected_row)
 
     df_failed = tf.dq_failed_rows(bronze, data_quality_results)
-    # emit_metadata_to_datahub(context, df_failed)
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -148,7 +148,7 @@ def manual_review_passed_rows(
     df = adls_file_client.download_csv_as_spark_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -162,7 +162,7 @@ def manual_review_failed_rows(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
     context.log.info(f"data={df}")
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -179,7 +179,7 @@ def silver(
 
 @asset(io_manager_key="adls_delta_io_manager")
 def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
-    # emit_metadata_to_datahub(context, df=silver)
+    emit_metadata_to_datahub(context, df=silver)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
