@@ -478,7 +478,7 @@ if __name__ == "__main__":
     
     import json
 
-    json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test (5).json"
+    json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test.json"
     # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
 
     with open(json_file_path, 'r') as file:
