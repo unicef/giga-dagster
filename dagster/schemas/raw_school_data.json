@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://io-dagster-dev.unitst.org/school_data.json",
+  "title": "Raw School Data",
+  "description": "Giga Raw School Data Schema",
+  "type": "object",
+  "properties": {
+    "school_id": {
+      "description": "Unique school ID as followed by country's school system",
+      "type": "string"
+    },
+    "school_name": {
+      "description": "Name of the school",
+      "type": "string"
+    },
+    "education_level": {
+      "description": "Education level provided at the school",
+      "type": "string",
+      "enum": ["pre-primary", "primary", "secondary", "primary & secondary"]
+    },
+    "school_funding_type": {
+      "description": "Funding type of school",
+      "type": "string"
+    },
+    "school_establishment_year": {
+      "description": "Year when school was established",
+      "type": "integer",
+      "minimum": 0
+    },
+    "school_contact_email": {
+      "description": "Official email address of the school",
+      "type": "string"
+    },
+    "school_contact_phone": {
+      "description": "Official phone number of the school",
+      "type": "number"
+    },
+    "latitude": {
+      "description": "Latitude geolocation of the school",
+      "type": "number"
+    },
+    "longitude": {
+      "description": "Longitude geolocation of the school",
+      "type": "number"
+    },
+    "school_region": {
+      "description": "Type of region to which the school belongs",
+      "type": "string",
+      "enum": ["urban", "rural"]
+    },
+    "admin_1": {
+      "description": "Name of highest geographical admin level - country",
+      "type": "string"
+    },
+    "admin_2": {
+      "description": "Name of 2nd highest geographical admin level - states",
+      "type": "string"
+    },
+    "admin_3": {
+      "description": "Name of 3rd highest geographical admin level - districts/province/[country-specific name]",
+      "type": "string"
+    },
+    "admin_4": {
+      "description": "Name of 4th highest geographical admin level - town/village/[country-specific name]",
+      "type": "string"
+    },
+    "internet_availability": {
+      "description": "Availability of internet at the school",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "internet_type": {
+      "description": "Type of Internet connectivity available in the school",
+      "type": "string",
+      "enum": [
+        "fiber",
+        "xDSL",
+        "wired",
+        "cellular",
+        "WiFi",
+        "P2MP wireless",
+        "P2P wireless",
+        "satellite"
+      ]
+    },
+    "internet_generation": {
+      "description": "Type of internet generation at the school (if internet type = cellular)",
+      "type": "string",
+      "enum": ["5G", "4G", "3G", "2G"]
+    },
+    "internet_speed_Mbps": {
+      "description": "Average download speed of the internet measured at the school",
+      "type": "number"
+    },
+    "desired_internet_speed_Mbps": {
+      "description": "Desired internet access speed in the school based on students count, desired computer count & national standards",
+      "type": "integer"
+    },
+    "network_coverage": {
+      "description": "Whether internet coverage is available in and around school area.",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "network_coverage_type": {
+      "description": "Type of internet generation coverage available in and around school area.",
+      "type": "string",
+      "enum": ["5G", "4G", "3G", "2G"]
+    },
+    "electricity_availability": {
+      "description": "Availability of electricity",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "water_availability": {
+      "description": "Availability of drinking water at the school",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "electricity_type": {
+      "description": "Type of electricity source ",
+      "type": "string",
+      "enum": ["Electrical grid", "Diesel generator", "Solar power station", "Other"]
+    },
+    "classroom_count": {
+      "description": "Count of classrooms in the school",
+      "type": "integer"
+    },
+    "computer_availability": {
+      "description": "Availability of computer",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "computer_count": {
+      "description": "Count of computers in the school",
+      "type": "integer"
+    },
+    "desired_computer_count": {
+      "description": "Desired count of computers in the school based on students count & national standards",
+      "type": "integer"
+    },
+    "student_count": {
+      "description": "Count of students in the school",
+      "type": "integer"
+    },
+    "teacher_count": {
+      "description": "Count of teachers in the school",
+      "type": "integer"
+    },
+    "adm_personnel_count": {
+      "description": "Count of administrative personnel",
+      "type": "integer"
+    },
+    "student_count_girls": {
+      "description": "Count of girl students in the school",
+      "type": "integer"
+    },
+    "student_count_boys": {
+      "description": "Count of boys students in the school",
+      "type": "integer"
+    },
+    "student_count_other": {
+      "description": "Count of other students in the school",
+      "type": "integer"
+    },
+    "school_year": {
+      "description": "Year when school data was last updated",
+      "type": "integer",
+      "minimum": 0
+    },
+    "fiber_node_distance": {
+      "description": "Distance to the nearest fiber optical connection node, km",
+      "type": "number",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "school_id",
+    "school_name",
+    "education_level",
+    "latitude",
+    "longitude",
+    "internet_availability",
+    "internet_type",
+    "internet_speed_Mbps",
+    "electricity_availability",
+    "computer_availability",
+    "computer_count",
+    "student_count",
+    "school_year"
+  ]
+}

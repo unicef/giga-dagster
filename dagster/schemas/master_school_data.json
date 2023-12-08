@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://io-dagster-dev.unitst.org/school_data.json",
+  "title": "Master School Data",
+  "description": "Giga Master School Data Schema",
+  "type": "object",
+  "properties": {
+    "giga_id_school": {
+      "description": "Unique school ID for each school",
+      "type": "string"
+    },
+    "name": {
+      "description": "Name of the school",
+      "type": "string"
+    },
+    "lat": {
+      "description": "Latitude coordinate of the school",
+      "type": "number"
+    },
+    "lon": {
+      "description": "Longitude coordinate of the school",
+      "type": "number"
+    },
+    "education_level": {
+      "description": "The level of education the school is at",
+      "type": "string",
+      "enum": ["pre-primary", "primary", "secondary", "primary & secondary"]
+    },
+    "connectivity": {
+      "description": "Does the school have internet connectivity",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "school_region": {
+      "description": "Region the school is in",
+      "type": "string",
+      "enum": ["urban", "rural"]
+    },
+    "type_school": {
+      "description": "School Funding type",
+      "type": "string",
+      "enum": ["Public", "Private"]
+    },
+    "num_computers": {
+      "description": "Number of computers in the school",
+      "type": "integer"
+    },
+    "num_teachers": {
+      "description": "Number of teachers in the school",
+      "type": "integer"
+    },
+    "num_students": {
+      "description": "Number of students in the school",
+      "type": "integer"
+    },
+    "num_classroom": {
+      "description": "Number of classrooms in the school",
+      "type": "integer"
+    },
+    "computer_lab": {
+      "description": "Does the school have a functional computer laboratory",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "electricity": {
+      "description": "Does the school have electricity",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "address": {
+      "description": "Address of the school",
+      "type": "string"
+    },
+    "coverage_availability": {
+      "description": "Does the school have internet coverage",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "2G_coverage": {
+      "description": "Does the school have 2G coverage",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "3G_coverage": {
+      "description": "Does the school have 3G coverage",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "4G_coverage": {
+      "description": "Does the school have 4G coverage",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "is_open": {
+      "description": "Is school open or closed",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "is_daily_check_app_installed": {
+      "description": "Has the school installed our daily check app",
+      "type": "string",
+      "enum": ["Yes", "No"]
+    },
+    "phone_number": {
+      "description": "Phone number of the school",
+      "type": "number"
+    },
+    "email": {
+      "description": "Email of the school",
+      "type": "string"
+    },
+    "twitter": {
+      "description": "Twitter handle of the school",
+      "type": "string"
+    },
+    "youtube": {
+      "description": "Youtube channel (or video link) of the school",
+      "type": "string"
+    },
+    "wikipedia": {
+      "description": "Wikipedia page of the school",
+      "type": "string"
+    },
+    "google_map": {
+      "description": "Link to google map of the school",
+      "type": "string"
+    }
+  },
+  "required": [
+    "giga_id_school",
+    "name",
+    "lat",
+    "lon",
+    "education_level"
+  ]
+}
