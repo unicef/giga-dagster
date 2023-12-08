@@ -173,3 +173,15 @@ tasks:
       - helm uninstall dagster
       - kubectl delete all --all
       - kubectl delete pvc --all
+
+  python:
+    desc: >
+      Run a Python module inside the Dagster container.
+      Usage: `task python -- dotted.path.of.module`
+    cmds:
+      - task exec -- -it dagster-webserver python -m {{.CLI_ARGS}}
+
+  ipython:
+    desc: Spawn an IPython shell inside the Dagster container
+    cmds:
+      - task exec -- -it dagster-webserver ipython
