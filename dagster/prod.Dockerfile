@@ -46,7 +46,6 @@ FROM base AS prod
 
 # Copy the generated files from the previous stages
 COPY --from=deps /tmp/requirements.txt .
-COPY --from=spark-deps /opt/spark /opt/spark
 
 # Install packages defined in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
