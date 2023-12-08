@@ -34,6 +34,7 @@ spark_common_config = {
     "spark.authenticate.enableSaslEncryption": "true",
     "spark.databricks.delta.properties.defaults.enableChangeDataFeed": "true",
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
+    "spark.databricks.delta.schema.autoMerge.enabled": "false",
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
