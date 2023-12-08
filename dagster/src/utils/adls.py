@@ -30,7 +30,7 @@ class ADLSFileClient(ConfigurableResource):
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True, encoding="utf-8-sig")
+        return spark.read.csv(adls_path, header=True)
 
     def upload_pandas_dataframe_as_file(self, filepath: str, data: pd.DataFrame):
         if len(splits := filepath.split(".")) < 2:
@@ -50,7 +50,7 @@ class ADLSFileClient(ConfigurableResource):
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
     def upload_spark_dataframe_as_csv(self, data: sql.DataFrame, filepath: str):
-        data.write.csv(filepath, header=True, mode="overwrite", encoding="utf-8-sig")
+        data.write.csv(filepath, header=True, mode="overwrite")
 
     def download_delta_table_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
