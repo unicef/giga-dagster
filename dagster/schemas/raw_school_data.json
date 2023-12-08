@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://io-dagster-dev.unitst.org/school_data.json",
+  "$id": "https://io-dagster-dev.unitst.org/raw_school_data.json",
   "title": "Raw School Data",
   "description": "Giga Raw School Data Schema",
   "type": "object",
