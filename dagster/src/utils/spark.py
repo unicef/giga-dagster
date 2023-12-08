@@ -2,7 +2,8 @@ import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
-from pyspark.sql import SparkSession, functions
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 
 from dagster import OutputContext
 from src.settings import settings
@@ -33,6 +34,7 @@ spark_common_config = {
     "spark.authenticate.enableSaslEncryption": "true",
     "spark.databricks.delta.properties.defaults.enableChangeDataFeed": "true",
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
+    "spark.databricks.delta.schema.autoMerge.enabled": "false",
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
@@ -126,53 +128,20 @@ def transform_dataframe_for_deltatable(
     ]
 
     for col_name in columns_convert_to_string:
-        try:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.StringType())
-            )
-            context.log.info(">> TRANSFORMED STRING")
-        except Exception as e:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.StringType())
-            )
-            context.log.warning(f"Failed to cast '{col_name}' to String: {str(e)}")
+        df = df.withColumn(col_name, col(col_name).cast("string"))
+        context.log.info(">> TRANSFORMED STRING")
 
     for col_name in columns_convert_to_double:
-        try:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.DoubleType())
-            )
-            context.log.info(">> TRANSFORMED DOUBLE")
-        except Exception as e:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.StringType())
-            )
-            context.log.warning(f"Failed to cast '{col_name}' to Double: {str(e)}")
+        df = df.withColumn(col_name, col(col_name).cast("double"))
+        context.log.info(">> TRANSFORMED DOUBLE")
 
     for col_name in columns_convert_to_int:
-        try:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.IntegerType())
-            )
-            context.log.info(">> TRANSFORMED INT")
-        except Exception as e:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.StringType())
-            )
-            context.log.warning(f"Failed to cast '{col_name}' to Int: {str(e)}")
+        df = df.withColumn(col_name, col(col_name).cast("int"))
+        context.log.info(">> TRANSFORMED INT")
 
     for col_name in columns_convert_to_long:
-        try:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.LongType())
-            )
-            context.log.info(">> TRANSFORMED LONG")
-        except Exception as e:
-            df = df.withColumn(
-                col_name, functions.col(col_name).cast(sql.types.StringType())
-            )
-            context.log.warning(f"Failed to cast '{col_name}' to Long: {str(e)}")
+        df = df.withColumn(col_name, col(col_name).cast("long"))
+        context.log.info(">> TRANSFORMED LONG")
 
-    df.show()
     df.printSchema()
     return df

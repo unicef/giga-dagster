@@ -1,4 +1,4 @@
-from src._utils.adls import ADLSFileClient
+from src.utils.adls import ADLSFileClient
 
 gold_folder = "raw/school_geolocation_coverage_data/gold/school_data"
 silver_subfolders = [
@@ -45,6 +45,8 @@ for folder in silver_subfolders:
                     new_filepath = filepath.replace(
                         "_school-geolocation_coverage_", "_school-coverage_"
                     )
+                else:
+                    continue
                 adls.rename_file(old_filepath=filepath, new_filepath=new_filepath)
 
 # Rename files in bronze. Format: {country_code}_{dataset_type}_{source}_{last_modified}.{file-extension}
