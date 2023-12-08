@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from pydantic import BaseSettings
 
 
@@ -8,4 +10,9 @@ class Constants(BaseSettings):
     gold_folder = "raw/school_geolocation_coverage_data/gold/school_data"
 
 
-constants = Constants()
+@lru_cache
+def get_constants():
+    return Constants()
+
+
+constants = get_constants()
