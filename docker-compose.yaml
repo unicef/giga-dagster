@@ -126,5 +126,8 @@ services:
       OAUTH2_PROXY_COOKIE_EXPIRE: 168h
       OAUTH2_PROXY_COOKIE_SECURE: false
       OAUTH2_PROXY_COOKIE_HTTPONLY: false
+      OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: /app/static/dagster.svg
+    volumes:
+      - ./oauth2-proxy/dagster.svg:/app/static/dagster.svg
     ports:
       - "3001:3001"

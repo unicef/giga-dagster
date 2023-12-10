@@ -95,7 +95,7 @@ tasks:
     desc: Build Docker image
     cmds:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f dagster/prod.Dockerfile dagster
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f authproxy/prod.Dockerfile authproxy
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
       - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/Dockerfile --target base .
 
   push-cr:
@@ -132,8 +132,6 @@ tasks:
         --set pipelineRun.image.tag={{.SHORT_SHA}}
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
-        --set dagsterWebserver.service.type=LoadBalancer
-        --set dagsterWebserver.enableReadOnly=false
 
   helm-up-authproxy:
     internal: true

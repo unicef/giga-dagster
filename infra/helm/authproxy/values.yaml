@@ -83,7 +83,7 @@ tolerations: [ ]
 affinity: { }
 
 envConfigMaps:
-  - name: giga-dagster
+  - name: giga-dagster-configmap
 
 envSecrets:
-  - name: giga-dagster
+  - name: giga-dagster-secrets

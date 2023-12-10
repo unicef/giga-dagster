@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: giga-dagster
+  name: giga-dagster-configmap
   namespace: giga-dagster
   labels:
     app: giga-dagster
@@ -12,7 +12,7 @@ data:
   SPARK_MASTER_HOST: "spark-master-svc:7077"
   oauth2_proxy.cfg: |
     http_address = "0.0.0.0:3001"
-    upstreams = ["http://dagster-webserver:3002", "http://spark-master:8070/spark"]
+    upstreams = ["http://dagster-dagster-webserver:3002/dashboard", "http://spark-master-svc:8080/spark"]
     email_domains = ["thinkingmachin.es", "unicef.org"]
     api_routes = ["^/graphql"]
     cookie_name = "_oauth2_proxy"

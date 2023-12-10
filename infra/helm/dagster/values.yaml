@@ -346,7 +346,7 @@ dagster-user-deployments:
       # envConfigMaps:
       #   - name: config-map
       envConfigMaps:
-        - name: giga-dagster
+        - name: giga-dagster-configmap
 
       # Additional environment variables can be retrieved and set from Secrets. See:
       # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
@@ -356,7 +356,7 @@ dagster-user-deployments:
       # envSecrets:
       #   - name: secret
       envSecrets:
-        - name: giga-dagster
+        - name: giga-dagster-secrets
 
       # Additional labels that should be included. See:
       # https://kubernetes.io/docs/concepts/overview/working-with-objects/labels
