@@ -2,7 +2,7 @@ version: '3'
 
 dotenv:
   - ./dagster/.env
-  - ./authproxy/.env
+  - ./oauth2-proxy/.env
   - ./spark/.env
 
 env:
@@ -139,9 +139,8 @@ tasks:
     dir: infra/helm
     cmds:
       - >
-        helm upgrade --install dagster-authproxy oauth2-proxy/oauth2-proxy
+        helm upgrade --install dagster-authproxy ./oauth2-proxy
         --namespace giga-dagster
-        --values oauth2-values.yaml
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
         --set service.type=LoadBalancer

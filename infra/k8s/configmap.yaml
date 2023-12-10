@@ -11,8 +11,8 @@ data:
   SPARK_UI_URL: "http://spark-master-svc:8080"
   SPARK_MASTER_HOST: "spark-master-svc:7077"
   oauth2_proxy.cfg: |
-    http_address = "0.0.0.0:3001"
-    upstreams = ["http://dagster-dagster-webserver:3002/dashboard", "http://spark-master-svc:8080/spark"]
+    http_address = ":3001"
+    upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
     email_domains = ["thinkingmachin.es", "unicef.org"]
     api_routes = ["^/graphql"]
     cookie_name = "_oauth2_proxy"

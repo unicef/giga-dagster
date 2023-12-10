@@ -58,4 +58,4 @@ COPY src ./src
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
 
-CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT --path-prefix /dashboard" ]
+CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]

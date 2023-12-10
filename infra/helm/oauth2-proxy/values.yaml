@@ -19,7 +19,7 @@ config:
   # openssl rand -base64 32 | head -c 32 | base64
   # Use an existing secret for OAuth2 credentials (see secret.yaml for required fields)
   # Example:
-  existingSecret: giga-dagster
+  existingSecret: giga-dagster-secrets
   cookieSecret: ""
   # The name of the cookie that oauth2-proxy will create
   # If left empty, it will default to the release name
@@ -28,9 +28,9 @@ config:
     # adminEmail: xxxx
     # useApplicationDefaultCredentials: true
     # targetPrincipal: xxxx
-    # serviceAccountJson: xxxx
-    # Alternatively, use an existing secret (see google-secret.yaml for required fields)
-    # Example:
+  # serviceAccountJson: xxxx
+  # Alternatively, use an existing secret (see google-secret.yaml for required fields)
+  # Example:
   # existingSecret: google-secret
   # groups: []
   # Example:
@@ -46,7 +46,7 @@ config:
   #   pass_access_token = true
   # Use an existing config map (see configmap.yaml for required fields)
   # Example:
-  existingConfig: giga-dagster
+  existingConfig: giga-dagster-configmap
 
 alphaConfig:
   enabled: false
@@ -159,9 +159,9 @@ ingress:
   #       port:
   #         name: use-annotation
   labels: { }
-    # annotations:
-    #   kubernetes.io/ingress.class: nginx
-    #   kubernetes.io/tls-acme: "true"
+  # annotations:
+  #   kubernetes.io/ingress.class: nginx
+  #   kubernetes.io/tls-acme: "true"
   # tls:
   # Secrets must be manually created in the namespace.
   # - secretName: chart-example-tls
@@ -169,7 +169,7 @@ ingress:
   #     - chart-example.local
 
 resources: { }
-  # limits:
+# limits:
 #   cpu: 100m
 #   memory: 300Mi
 # requests:
@@ -293,7 +293,7 @@ initContainers:
         type: RuntimeDefault
     timeout: 180
     resources: { }
-      # limits:
+    # limits:
     #   cpu: 100m
     #   memory: 300Mi
     # requests:
@@ -439,9 +439,9 @@ extraObjects: [ ]
   #                 objectAlias: "cookie-secret"
   #     secretObjects:
   #     - data:
-  #       - key: client-id
-  #         objectName: client-id
-  #         - key: client-secret
+#       - key: client-id
+#         objectName: client-id
+#         - key: client-secret
 #           objectName: client-secret
 #         - key: cookie-secret
 #         objectName: cookie-secret
