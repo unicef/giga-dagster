@@ -10,7 +10,7 @@ env:
     sh: git rev-parse --short HEAD
 
 vars:
-  PROJECT_NAME: giga-dataops-platform_dagster
+  PROJECT_NAME: giga-dataops_dagster
 
 tasks:
   default:
@@ -110,6 +110,7 @@ tasks:
     desc: Install/upgrade Helm charts
     dir: infra
     cmds:
+      - kubectl apply -f k8s/namespace.yaml
       - kubectl apply -f k8s/secrets.yaml
       - kubectl apply -f k8s/configmap.yaml
       - task: helm-up-dagster
@@ -123,8 +124,7 @@ tasks:
     cmds:
       - >
         helm upgrade --install dagster dagster/dagster
-        --namespace giga-dataops
-        --create-namespace
+        --namespace giga-dagster
         --values dagster/values.yaml
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
         --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}}
@@ -141,10 +141,9 @@ tasks:
     dir: infra/helm
     cmds:
       - >
-        helm upgrade --install dagster-authproxy ./authproxy
-        --namespace giga-dataops
-        --create-namespace
-        --values authproxy/values.yaml
+        helm upgrade --install dagster-authproxy oauth2-proxy/oauth2-proxy
+        --namespace giga-dagster
+        --values oauth2-values.yaml
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
         --set service.type=LoadBalancer
@@ -156,8 +155,7 @@ tasks:
     cmds:
       - >
         helm upgrade --install spark bitnami/spark
-        --namespace giga-dataops
-        --create-namespace
+        --namespace giga-dagster
         --values spark/values.yaml
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
         --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
@@ -166,13 +164,16 @@ tasks:
 
   helm-down:
     desc: Uninstall Helm charts
-    ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy
       - helm uninstall spark
       - helm uninstall dagster
-      - kubectl delete all --all
-      - kubectl delete pvc --all
+
+  helm-clean:
+    desc: Clean K8s resources
+    dir: infra
+    cmds:
+      - kubectl delete -f k8s/namespace.yaml
 
   python:
     desc: >
