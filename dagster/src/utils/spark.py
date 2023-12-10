@@ -59,7 +59,7 @@ def get_spark_session() -> SparkSession:
         conf.set(key, value)
 
     builder = (
-        SparkSession.builder.master("spark://spark-master:7077")
+        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}")
         .appName("GigaDagsterSpark")
         .config(conf=conf)
         .enableHiveSupport()
