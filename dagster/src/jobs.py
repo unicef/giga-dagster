@@ -36,9 +36,9 @@ school_master__convert_gold_csv_to_deltatable_job = define_asset_job(
     ],
 )
 
-# datahub__ingest_azure_ad_users_groups_job = define_asset_job(
-#     name="datahub__ingest_azure_ad_users_job",
-#     selection=[
-#         "azure_ad_users_groups",
-#     ],
-# )
+datahub__ingest_azure_ad_users_groups_job = define_asset_job(
+    name="datahub__ingest_azure_ad_users_job",
+    selection=[
+        "azure_ad_users_groups",
+    ],
+)
