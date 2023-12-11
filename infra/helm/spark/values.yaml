@@ -690,7 +690,7 @@ security:
   ## @param security.passwordsSecretName Name of the secret that contains all the passwords
   ## This is optional, by default random passwords are generated
   ##
-  passwordsSecretName: ""
+  passwordsSecretName: giga-dagster-spark-secrets
   ## RPC configuration
   ## @param security.rpc.authenticationEnabled Enable the RPC authentication
   ## @param security.rpc.encryptionEnabled Enable the encryption for RPC

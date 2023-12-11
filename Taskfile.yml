@@ -96,7 +96,7 @@ tasks:
     cmds:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f dagster/prod.Dockerfile dagster
       - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
-      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/Dockerfile --target base .
+      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/prod.Dockerfile .
 
   push-cr:
     internal: true
