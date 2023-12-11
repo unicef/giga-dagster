@@ -56,3 +56,10 @@ datahub__create_tags_job = define_asset_job(
         "datahub_tags",
     ],
 )
+
+datahub__update_policies_job = define_asset_job(
+    name="datahub__update_policies_job",
+    selection=[
+        "datahub_policies",
+    ],
+)

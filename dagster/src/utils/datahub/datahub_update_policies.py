@@ -1,5 +1,6 @@
 from urllib import parse
 
+import country_converter as cc
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from src.settings import settings
@@ -89,6 +90,15 @@ def list_datasets_by_tag(tag):
     return urn_list
 
 
+def is_valid_country_name(country_name):
+    coco = cc.CountryConverter()
+    country_list = list(coco.data["name_short"])
+    if country_name in country_list:
+        return True
+    else:
+        return False
+
+
 def update_policies():
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
@@ -103,12 +113,12 @@ def update_policies():
         group_urn = group["urn"]
         country_name = parse.unquote(group["name"])
 
-        ### WIP: Will add a valid country name checker ###
-        query = policy_mutation_query(country_name=country_name, group_urn=group_urn)
-        datahub_graph_client.execute_graphql(query=query)
-        print(f"Policy of {country_name} - VIEWER updated successfully.")
-
-    return
+        if is_valid_country_name(country_name):
+            query = policy_mutation_query(
+                country_name=country_name, group_urn=group_urn
+            )
+            datahub_graph_client.execute_graphql(query=query)
+            # print(f"Policy of {country_name} - VIEWER updated successfully.")
 
 
 # update_policies()
