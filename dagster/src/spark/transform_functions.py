@@ -141,16 +141,54 @@ def create_bronze_layer_columns(df):
     #         )
     #     )
 
-    bronze_columns = [
-        "temp_pk", 
-        "school_id" ,"school_name" ,"education_level" ,
-        "latitude" ,"longitude" ,"student_count" ,
-        "internet_availability" ,"internet_type" ,"mobile_internet_generation" ,
-        "internet_speed_mbps" ,"electricity_availability" ,"computer_availability" ,
-        "computer_count" ,"school_year", "hex8", "giga_id_school", "school_density"
-        # , "is_within_country"
-        # , "country_code"
-    ]
+    columns_and_types = {
+        'temp_pk': 'integer',
+        'school_density': 'integer',
+        'hex8': 'string',
+        'giga_id_school': 'string',
+        'school_id': 'string',
+        'school_id_gov_type': 'string',
+        'school_name': 'string',
+        'school_establishment_year': 'integer',
+        'latitude': 'float',
+        'longitude': 'float',
+        'education_level': 'string',
+        'education_level_govt': 'string',
+        'internet_availability': 'string',
+        'internet_speed_mbps': 'float',
+        'connectivity_speed_contracted': 'float',
+        'internet_type': 'string',
+        'connectivity_latency_static': 'float',
+        'admin_1': 'string',
+        'admin_2': 'string',
+        'admin_3': 'string',
+        'admin_4': 'string',
+        'school_region': 'string',
+        'school_funding_type': 'string',
+        'school_funding_type transform': 'string',
+        'computer_count': 'integer',
+        'num_computers_desired': 'integer',
+        'num_teachers': 'integer',
+        'num_adm_personnel': 'integer',
+        'student_count': 'integer',
+        'num_classroom': 'integer',
+        'num_latrines': 'integer',
+        'computer_lab': 'string',
+        'electricity_availability': 'string',
+        'electricity_type': 'string',
+        'water_availability': 'string',
+        'school_address': 'string',
+        'school_data_source': 'string',
+        'school_data_collection_year': 'integer',
+        'school_data_collection_modality': 'string',
+    }
+
+    bronze_columns = list(columns_and_types.keys())
+
+    for column, data_type in columns_and_types.items():
+        if column not in df.columns:
+            df = df.withColumn(column, f.lit(None).cast(data_type))
+
     df = df.select(*bronze_columns)
 
     return df
@@ -471,20 +509,20 @@ if __name__ == "__main__":
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
     df = create_bronze_layer_columns(df)
-    # df.show()
+    df.show()
     # df.show()
     # df = df.limit(10)
     
     
-    import json
+    # import json
 
-    json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test.json"
-    # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
+    # json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test.json"
+    # # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
 
-    with open(json_file_path, 'r') as file:
-        data = json.load(file)
+    # with open(json_file_path, 'r') as file:
+    #     data = json.load(file)
 
-    dq_passed_rows(df, data).show()
+    # dq_passed_rows(df, data).show()
 
 
 
