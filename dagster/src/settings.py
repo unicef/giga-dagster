@@ -18,8 +18,6 @@ class Settings(BaseSettings):
 
     # Settings required to be in .env
     AZURE_SAS_TOKEN: str
-    AZURE_BLOB_SAS_HOST: str
-    AZURE_DFS_SAS_HOST: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
@@ -32,7 +30,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: Environment = Environment.STAGING
     PYTHON_ENV: Environment = Environment.PRODUCTION
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
-    KUBERNETES_NAMESPACE: str = ""
+    DATAHUB_KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master:7077"
@@ -44,16 +42,24 @@ class Settings(BaseSettings):
         return self.PYTHON_ENV == Environment.PRODUCTION
 
     @property
-    def AZURE_BLOB_CONNECTION_URI(self) -> str:
-        return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
-
-    @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
         return (
-            f"http://datahub-datahub-gms.{self.KUBERNETES_NAMESPACE}:8080"
+            f"http://datahub-datahub-gms.{self.DATAHUB_KUBERNETES_NAMESPACE}:8080"
             if self.IN_PRODUCTION
             else "http://datahub-gms:8080"
         )
+
+    @property
+    def AZURE_BLOB_SAS_HOST(self) -> str:
+        return f"{self.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+
+    @property
+    def AZURE_DFS_SAS_HOST(self) -> str:
+        return f"{self.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net"
+
+    @property
+    def AZURE_BLOB_CONNECTION_URI(self) -> str:
+        return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
 
 @lru_cache

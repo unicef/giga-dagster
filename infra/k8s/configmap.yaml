@@ -8,6 +8,7 @@ metadata:
 data:
   DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
   DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"
+  DATAHUB_METADATA_SERVER_URL: "datahub-datahub-gms:8080"
   SPARK_UI_URL: "http://spark-master-svc:8080"
   SPARK_MASTER_HOST: "spark-master-svc:7077"
   oauth2_proxy.cfg: |

@@ -19,15 +19,15 @@ config:
   # openssl rand -base64 32 | head -c 32 | base64
   # Use an existing secret for OAuth2 credentials (see secret.yaml for required fields)
   # Example:
-  existingSecret: giga-dagster-secrets
+  existingSecret: giga-dagster-authproxy-secrets
   cookieSecret: ""
   # The name of the cookie that oauth2-proxy will create
   # If left empty, it will default to the release name
   cookieName: ""
   google: { }
     # adminEmail: xxxx
-    # useApplicationDefaultCredentials: true
-    # targetPrincipal: xxxx
+  # useApplicationDefaultCredentials: true
+  # targetPrincipal: xxxx
   # serviceAccountJson: xxxx
   # Alternatively, use an existing secret (see google-secret.yaml for required fields)
   # Example:
@@ -437,8 +437,8 @@ extraObjects: [ ]
   #                 objectAlias: "client-secret"
   #               - path: "cookie_secret"
   #                 objectAlias: "cookie-secret"
-  #     secretObjects:
-  #     - data:
+#     secretObjects:
+#     - data:
 #       - key: client-id
 #         objectName: client-id
 #         - key: client-secret

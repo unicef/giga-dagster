@@ -86,4 +86,4 @@ envConfigMaps:
   - name: giga-dagster-configmap
 
 envSecrets:
-  - name: giga-dagster-secrets
+  - name: giga-dagster-authproxy-secrets
