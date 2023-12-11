@@ -131,7 +131,7 @@ def create_bronze_layer_columns(df):
 
     # Temp key for index
     w = Window().orderBy(f.lit('A'))
-    df = df.withColumn("temp_pk", f.row_number().over(w))
+    df = df.withColumn("gx_index", f.row_number().over(w))
     
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn(
@@ -142,7 +142,7 @@ def create_bronze_layer_columns(df):
     #     )
 
     columns_and_types = {
-        'temp_pk': 'integer',
+        'gx_index': 'integer',
         'school_density': 'integer',
         'hex8': 'string',
         'giga_id_school': 'string',
