@@ -165,7 +165,6 @@ def create_bronze_layer_columns(df):
         'admin_4': 'string',
         'school_region': 'string',
         'school_funding_type': 'string',
-        'school_funding_type transform': 'string',
         'computer_count': 'integer',
         'num_computers_desired': 'integer',
         'num_teachers': 'integer',
@@ -190,6 +189,10 @@ def create_bronze_layer_columns(df):
             df = df.withColumn(column, f.lit(None).cast(data_type))
 
     df = df.select(*bronze_columns)
+    df = df.withColumn(
+    'school_type_public',
+        f.when(f.col('school_funding_type') == 'public', 'public').otherwise('not public'))
+
 
     return df
 
