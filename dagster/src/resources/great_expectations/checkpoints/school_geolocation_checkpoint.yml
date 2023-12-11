@@ -25,7 +25,7 @@ runtime_configuration:
   result_format:
       result_format: COMPLETE
       unexpected_index_column_names:
-      - temp_pk
+      - gx_index
 validations:
 profilers: []
 ge_cloud_id:
