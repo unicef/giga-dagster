@@ -9,13 +9,13 @@ from src.resources.datahub_emitter import create_domains, emit_metadata_to_datah
 from src.utils.adls import ADLSFileClient, get_output_filepath
 import src.spark.transform_functions as tf
 
-# from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
+from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
-# @asset
-# def azure_ad_users_groups(context: OpExecutionContext):
-#     context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
-#     run_azure_ad_to_datahub_pipeline()
-#     yield Output(None)
+@asset
+def azure_ad_users_groups(context: OpExecutionContext):
+    context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
+    run_azure_ad_to_datahub_pipeline()
+    yield Output(None)
 
 
 @asset(io_manager_key="adls_raw_io_manager")
@@ -77,16 +77,6 @@ def dq_passed_rows(
     bronze: sql.DataFrame,
     data_quality_results,
 ) -> sql.DataFrame:
-    # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
-    # failed_rows_indices = set()
-    # for suite_result in data_quality_results["run_results"].items():
-    #     context.log.info(f"suite_result={suite_result}, {type(suite_result)}")
-    #     validation_result = suite_result["validation_result"]
-    #     for result in validation_result.results:
-    #         if not result.success:
-    #             for unexpected_row in result.result.unexpected_index_list:
-    #                 failed_rows_indices.add(unexpected_row)
-
     df_passed = tf.dq_passed_rows(bronze, data_quality_results)
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
@@ -97,46 +87,9 @@ def dq_failed_rows(
     bronze: sql.DataFrame,
     data_quality_results,
 ) -> sql.DataFrame:
-    # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results: https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
-    # failed_rows_indices = set()
-    # for suite_result in data_quality_results["run_results"].items():
-    #     validation_result = suite_result["validation_result"]
-    #     for result in validation_result.results:
-    #         if not result.success:
-    #             for unexpected_row in result.result.unexpected_index_list:
-    #                 failed_rows_indices.add(unexpected_row)
-
     df_failed = tf.dq_failed_rows(bronze, data_quality_results)
     emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
-
-
-# Would want to refactor the above code to a multi-asset, but it doesn't work yet. Have asked in Dagster slack, still waiting for response
-# @multi_asset(
-#     deps={AssetKey("ge_data_docs")},
-#     outs={
-#         "dq_passed_rows": AssetOut(
-#             is_required=False, io_manager_key="adls_delta_io_manager"
-#         ),
-#         "dq_failed_rows": AssetOut(
-#             is_required=False, io_manager_key="adls_delta_io_manager"
-#         ),
-#     },
-# )
-# def dq_split_rows(context: OpExecutionContext, data_quality_results, bronze: DataFrame) -> DataFrame:
-#     failed_rows_indices = set()
-#     for suite_result in data_quality_results["run_results"].values():
-#         for result in suite_result["validation_result"]["results"]:
-#             if not result["success"]:
-#                 for unexpected_row in result["result"]["unexpected_index_list"]:
-#                     failed_rows_indices.add(unexpected_row)
-
-#     df = bronze
-#     df_passed = df.drop(index=list(failed_rows_indices))
-#     df_failed = df.loc[list(failed_rows_indices)]
-
-#     yield Output(df_passed, output_name="dq_passed_rows", metadata={"filepath": get_output_filepath(context)})
-#     yield Output(df_failed, output_name="dq_failed_rows", metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
@@ -171,7 +124,7 @@ def silver(
     context: OpExecutionContext,
     manual_review_passed_rows: sql.DataFrame,
 ) -> sql.DataFrame:
-    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
     yield Output(
         manual_review_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
