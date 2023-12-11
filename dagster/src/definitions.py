@@ -4,6 +4,7 @@ from dagster import Definitions, load_assets_from_package_module
 from src.assets import assets, datahub_assets
 from src.jobs import (
     datahub__create_domains_job,
+    datahub__create_tags_job,
     datahub__ingest_azure_ad_users_groups_job,
     school_master__automated_data_checks_job,
     school_master__convert_gold_csv_to_deltatable_job,
@@ -52,6 +53,7 @@ defs = Definitions(
         school_master__convert_gold_csv_to_deltatable_job,
         datahub__ingest_azure_ad_users_groups_job,
         datahub__create_domains_job,
+        datahub__create_tags_job,
     ],
     sensors=[
         school_master__raw_file_uploads_sensor,

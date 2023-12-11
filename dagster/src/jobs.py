@@ -49,3 +49,10 @@ datahub__create_domains_job = define_asset_job(
         "datahub_domains",
     ],
 )
+
+datahub__create_tags_job = define_asset_job(
+    name="datahub__create_tags_job",
+    selection=[
+        "datahub_tags",
+    ],
+)
