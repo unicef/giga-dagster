@@ -24,7 +24,7 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
-            return pd.read_csv(buffer)
+            return pd.read_csv(buffer, encoding="utf-8-sig")
 
     def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
@@ -110,6 +110,13 @@ class ADLSFileClient(ConfigurableResource):
         properties = file_client.get_file_properties()
         return properties
 
+    def rename_file(self, old_filepath: str, new_filepath: str):
+        file_client = _adls.get_file_client(file_path=old_filepath)
+        new_path = file_client.file_system_name + "/" + new_filepath
+        renamed_file_client = file_client.rename_file(new_name=new_path)
+        print(f"File {old_filepath} renamed to {new_path}")
+        return renamed_file_client
+
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
     filename = source_path.split("/")[-1]
@@ -134,6 +141,7 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
         ),
         "silver": f"silver/{dataset_type}",
         "gold": "gold",
+        "gold_delta_table_from_csv": "gold/delta-tables",
     }
 
     destination_folder = step_destination_folder_map[step]

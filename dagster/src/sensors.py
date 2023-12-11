@@ -143,10 +143,11 @@ def school_master__failed_manual_checks_sensor():
 @sensor(
     job=school_master__convert_gold_csv_to_deltatable_job, minimum_interval_seconds=30
 )
-def school_master__file_to_deltatable_sensor():
+def school_master__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.fake_gold_folder}")
+    file_list = adls.list_paths(f"{constants.gold_folder}")
+    run_requests = []
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -166,13 +167,16 @@ def school_master__file_to_deltatable_sensor():
                 metadata=metadata,
                 file_size_bytes=size,
             )
-
-            print(f"FILE: {filepath}")
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "gold_delta_table_from_csv": file_config,
-                    }
-                ),
+            run_requests.append(
+                dict(
+                    run_key=filepath,
+                    run_config=RunConfig(
+                        ops={
+                            "gold_delta_table_from_csv": file_config,
+                        }
+                    ),
+                )
             )
+
+    for request in run_requests:
+        yield RunRequest(**request)

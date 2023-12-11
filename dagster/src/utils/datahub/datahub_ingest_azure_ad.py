@@ -34,5 +34,3 @@ def ingest_azure_ad_to_datahub_pipeline():
     # Run the pipeline and report the results.
     pipeline.run()
     pipeline.pretty_print_summary()
-
-    return
