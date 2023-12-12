@@ -160,7 +160,9 @@ master:
   ##  - name: SPARK_DAEMON_JAVA_OPTS
   ##    value: -Dx=y
   ##
-  extraEnvVars: [ ]
+  extraEnvVars:
+    - name: SPARK_PUBLIC_DNS
+      value: localhost
   ## @param master.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for master nodes
   ##
   extraEnvVarsCM: ""
@@ -438,7 +440,9 @@ worker:
   ##  - name: SPARK_DAEMON_JAVA_OPTS
   ##    value: -Dx=y
   ##
-  extraEnvVars: [ ]
+  extraEnvVars:
+    - name: SPARK_PUBLIC_DNS
+      value: localhost
   ## @param worker.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for worker nodes
   ##
   extraEnvVarsCM: ""

@@ -26,6 +26,7 @@ spark_common_config = {
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
+    "spark.driver.host": settings.SPARK_MASTER_HOST,
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
     "spark.shuffle.service.enabled": "false",
@@ -50,7 +51,7 @@ spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA e
 pyspark = PySparkResource(
     spark_config={
         "spark.app.name": spark_app_name,
-        "spark.master": f"spark://{settings.SPARK_MASTER_HOST}",
+        "spark.master": f"spark://{settings.SPARK_MASTER_HOST}:7077",
         **spark_common_config,
     }
 )
