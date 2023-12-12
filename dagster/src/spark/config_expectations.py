@@ -3,7 +3,7 @@ import datetime
 SIMILARITY_RATIO_CUTOFF = 0.7
 
 # Single column checks
-CONFIG_UNIQUE_COLUMNS = ["school_id", "giga_id_school"]
+CONFIG_UNIQUE_COLUMNS = ["school_id", "school_id_giga"]
 CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
     "school_name",
     "longitude",
