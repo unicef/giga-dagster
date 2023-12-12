@@ -20,17 +20,3 @@ data:
     cookie_expire = "168h"
     cookie_secure = false
     cookie_httponly = false
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: giga-dagster-spark-configmap
-  namespace: giga-dagster
-  labels:
-    app: giga-dagster
-data:
-  spark-defaults.conf: |
-    spark.ui.reverseProxy true
-    spark.ui.reverseProxyUrl http://localhost:3001/spark
-    spark.ui.proxyRedirectUri localhost:3001
-    spark.ui.showConsoleProgress true

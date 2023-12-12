@@ -127,7 +127,7 @@ hostNetwork: false
 master:
   ## @param master.existingConfigmap The name of an existing ConfigMap with your custom configuration for master
   ##
-  existingConfigmap: giga-dagster-spark-configmap
+  existingConfigmap: ""
   ## @param master.containerPorts.http Specify the port where the web interface will listen on the master over HTTP
   ## @param master.containerPorts.https Specify the port where the web interface will listen on the master over HTTPS
   ## @param master.containerPorts.cluster Specify the port where the master listens to communicate with workers
@@ -153,7 +153,11 @@ master:
   daemonMemoryLimit: ""
   ## @param master.configOptions Use a string to set the config options for in the form "-Dx=y"
   ##
-  configOptions: ""
+  configOptions:
+    -Dspark.ui.reverseProxy=true
+    -Dspark.ui.reverseProxyUrl=http://localhost:3001/spark
+    -Dspark.ui.proxyRedirectUri=localhost:3001
+    -Dspark.ui.showConsoleProgress=true
   ## @param master.extraEnvVars Extra environment variables to pass to the master container
   ## For example:
   ## extraEnvVars:
@@ -392,7 +396,7 @@ master:
 worker:
   ## @param worker.existingConfigmap The name of an existing ConfigMap with your custom configuration for workers
   ##
-  existingConfigmap: giga-dagster-spark-configmap
+  existingConfigmap: ""
   ## @param worker.containerPorts.http Specify the port where the web interface will listen on the worker over HTTP
   ## @param worker.containerPorts.https Specify the port where the web interface will listen on the worker over HTTPS
   ## @param worker.containerPorts.cluster Specify the port where the worker listens to communicate with workers
@@ -430,7 +434,10 @@ worker:
   javaOptions: ""
   ## @param worker.configOptions Set extra options to configure the worker in the form `-Dx=y`
   ##
-  configOptions: ""
+  configOptions:
+    -Dspark.ui.reverseProxy=true
+    -Dspark.ui.reverseProxyUrl=http://localhost:3001/spark
+    -Dspark.ui.showConsoleProgress=true
   ## @param worker.extraEnvVars An array to add extra env vars
   ## For example:
   ## extraEnvVars:
