@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 from dagster_ge.factory import GEContextResource
 from dagster_pyspark import PySparkResource
@@ -34,8 +36,8 @@ def raw(
 
 @asset(io_manager_key="adls_delta_io_manager")
 def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=raw)
     df = tf.create_bronze_layer_columns(raw)
+    emit_metadata_to_datahub(context, df=raw)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -107,6 +109,32 @@ def staging(
         context.run_tags["dagster/run_key"], dataset_type, "silver"
     )
 
+    filepaths_with_modified_date = []
+    for file_data in adls_file_client.list_paths(
+        f"staging/pending-review/{dataset_type}"
+    ):
+        if file_data["is_directory"]:
+            continue
+        else:
+            properties = adls_file_client.get_file_metadata(
+                context.run_tags["dagster/run_key"]
+            )
+            filepath = file_data["name"]
+            if (
+                filepath.split("/")[-1].split("_")[0]
+                == context.run_tags["dagster/run_key"].split("/")[-1].split("_")[0]
+            ):
+                date_modified = properties["metadata"]["Date_Modified"]
+                filepaths_with_modified_date.append(
+                    {"filepath": filepath, "date_modified": date_modified}
+                )
+
+    filepaths_with_modified_date.sort(
+        key=lambda x: time.mktime(
+            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
+        )
+    )
+
     if DeltaTable.isDeltaTable(spark, silver_table_path):
         # Clone silver table to staging folder
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
@@ -125,13 +153,26 @@ def staging(
             staging_table_path, spark.spark_session
         )
 
-        # Join silver table with df_passed (sql dataframe)
-        staging.alias("source").merge(
-            df_passed.alias("target"), "source.giga_id_school = target.giga_id_school"
-        ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+        # Merge each pending file for the same country
+        for file_date in filepaths_with_modified_date:
+            existing_file = adls_file_client.download_csv_as_spark_dataframe(
+                file_date["filepath"], spark.spark_session
+            )
+
+            staging.alias("source").merge(
+                existing_file.alias("target"),
+                "source.giga_id_school = target.giga_id_school",
+            ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
         staging = staging.toDF()
+
     else:
         staging = df_passed
+        # If no existing silver table, just merge the spark dataframes
+        for file_date in filepaths_with_modified_date:
+            existing_file = adls_file_client.download_csv_as_spark_dataframe(
+                file_date["filepath"], spark.spark_session
+            )
+            staging = staging.union(existing_file)
 
     emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})
@@ -168,16 +209,16 @@ def silver(
     context: OpExecutionContext,
     manual_review_passed_rows: sql.DataFrame,
 ) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
-    yield Output(
-        manual_review_passed_rows, metadata={"filepath": get_output_filepath(context)}
-    )
+    silver = manual_review_passed_rows
+    emit_metadata_to_datahub(context, silver)
+    yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=silver)
-    yield Output(silver, metadata={"filepath": get_output_filepath(context)})
+    gold = silver
+    emit_metadata_to_datahub(context, gold)
+    yield Output(gold, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
