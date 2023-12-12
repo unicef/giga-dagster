@@ -25,9 +25,9 @@ spark_common_config = {
     "spark.sql.warehouse.dir": "/opt/spark/warehouse",
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
-    "spark.driver.memory": "768m",
+    "spark.driver.memory": "1g",
     "spark.executor.cores": "1",
-    "spark.executor.memory": "768m",
+    "spark.executor.memory": "1g",
     "spark.shuffle.service.enabled": "false",
     "spark.dynamicAllocation.enabled": "false",
     "spark.dynamicAllocation.maxExecutors": "3",
@@ -45,11 +45,11 @@ spark_common_config = {
     # "spark.python.daemon.module": "src.utils.sentry",
 }
 
+spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
+
 pyspark = PySparkResource(
     spark_config={
-        "spark.app.name": (
-            f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
-        ),
+        "spark.app.name": spark_app_name,
         "spark.master": f"spark://{settings.SPARK_MASTER_HOST}",
         **spark_common_config,
     }
@@ -63,7 +63,7 @@ def get_spark_session() -> SparkSession:
 
     builder = (
         SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}")
-        .appName("GigaDagsterSpark")
+        .appName(spark_app_name)
         .config(conf=conf)
         .enableHiveSupport()
     )
