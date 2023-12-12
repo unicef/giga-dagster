@@ -27,7 +27,7 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return pd.read_csv(buffer, encoding="utf-8-sig")
 
-    def download_csv_as_spark_dataframe(
+    def download_csv_as_spark_dataframe(  # CAN BE REMOVED ONCE WE FINISH CONVERTING EXISTING FILES TO DELTA TABLE
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
@@ -49,10 +49,6 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
             file_client.upload_data(buffer.getvalue(), overwrite=True)
-
-    def upload_spark_dataframe_as_csv(self, data: sql.DataFrame, filepath: str):
-        data = data.toPandas()
-        self.upload_pandas_dataframe_as_file(data, filepath)
 
     def download_delta_table_as_delta_table(self, filepath: str, spark: SparkSession):
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
