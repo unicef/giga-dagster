@@ -598,8 +598,16 @@ runLauncher:
       #   jobMetadata: # raw config for the kubernetes job's metadata
       #     annotations:
       #       mykey: myvalue
-      runK8sConfig: { }
-
+      runK8sConfig:
+        containerConfig:
+          ports:
+            - name: grpc
+              containerPort: 3030
+              protocol: TCP
+            - name: spark-driver
+              containerPort: 4040
+              protocol: TCP
+    
     # This configuration will only be used if the CeleryK8sRunLauncher is selected
     celeryK8sRunLauncher:
       # Change with caution! If you're using a fixed tag for pipeline run images, changing the
