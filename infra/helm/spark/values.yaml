@@ -127,7 +127,7 @@ hostNetwork: false
 master:
   ## @param master.existingConfigmap The name of an existing ConfigMap with your custom configuration for master
   ##
-  existingConfigmap: ""
+  existingConfigmap: giga-dagster-spark-configmap
   ## @param master.containerPorts.http Specify the port where the web interface will listen on the master over HTTP
   ## @param master.containerPorts.https Specify the port where the web interface will listen on the master over HTTPS
   ## @param master.containerPorts.cluster Specify the port where the master listens to communicate with workers
@@ -392,7 +392,7 @@ master:
 worker:
   ## @param worker.existingConfigmap The name of an existing ConfigMap with your custom configuration for workers
   ##
-  existingConfigmap: ""
+  existingConfigmap: giga-dagster-spark-configmap
   ## @param worker.containerPorts.http Specify the port where the web interface will listen on the worker over HTTP
   ## @param worker.containerPorts.https Specify the port where the web interface will listen on the worker over HTTPS
   ## @param worker.containerPorts.cluster Specify the port where the worker listens to communicate with workers

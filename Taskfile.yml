@@ -31,14 +31,12 @@ tasks:
       - task: setup-authproxy
 
   setup-pre-commit:
-    internal: true
     desc: Run first-time setup tasks for pre-commit
     cmds:
       - pip install -U pre-commit
       - pre-commit install --install-hooks -t pre-commit -t commit-msg
 
   setup-dagster:
-    internal: true
     desc: Run first-time setup tasks for Dagster
     dir: dagster
     cmds:
@@ -46,7 +44,6 @@ tasks:
       - poetry install --with dev,dagster,pipelines,spark,notebook
 
   setup-authproxy:
-    internal: true
     desc: Run first-time setup tasks for authproxy
     dir: authproxy
     cmds:
@@ -116,7 +113,6 @@ tasks:
       - task: helm-up-authproxy
 
   helm-up-dagster:
-    internal: true
     desc: Install/upgrade Dagster Helm chart
     dir: infra/helm
     cmds:
@@ -132,7 +128,6 @@ tasks:
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
 
   helm-up-authproxy:
-    internal: true
     desc: Install/upgrade authproxy Helm chart
     dir: infra/helm
     cmds:
@@ -144,7 +139,6 @@ tasks:
         --set service.type=LoadBalancer
 
   helm-up-spark:
-    internal: true
     desc: Install/upgrade Spark Helm chart
     dir: infra/helm
     cmds:
