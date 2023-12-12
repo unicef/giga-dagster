@@ -25,13 +25,11 @@ from src.utils.adls import get_input_filepath, get_output_filepath
 
 def identify_country_name(country_code):
     coco = cc.CountryConverter()
-    country_name = (
+    country_name = list(
         coco.data.iloc[coco.data["ISO3"][coco.data["ISO3"].isin([country_code])].index][
             "name_short"
         ]
-        .to_string(header=False)
-        .split(" ")[-1]
-    )
+    )[0]
     return country_name
 
 
@@ -207,6 +205,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     }}
     """
 
+    context.log.info(domain_query)
     context.log.info("EMITTING DOMAIN METADATA")
     datahub_graph_client.execute_graphql(query=domain_query)
 
@@ -216,6 +215,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     tag_query = set_tag_mutation_query(
         country_name=country_name, dataset_urn=dataset_urn
     )
+    context.log.info(tag_query)
 
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
