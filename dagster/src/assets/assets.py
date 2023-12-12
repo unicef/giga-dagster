@@ -155,7 +155,7 @@ def staging(
 
         # Merge each pending file for the same country
         for file_date in filepaths_with_modified_date:
-            existing_file = adls_file_client.download_csv_as_spark_dataframe(
+            existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
                 file_date["filepath"], spark.spark_session
             )
 
@@ -169,7 +169,7 @@ def staging(
         staging = df_passed
         # If no existing silver table, just merge the spark dataframes
         for file_date in filepaths_with_modified_date:
-            existing_file = adls_file_client.download_csv_as_spark_dataframe(
+            existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
                 file_date["filepath"], spark.spark_session
             )
             staging = staging.union(existing_file)
@@ -184,8 +184,9 @@ def manual_review_passed_rows(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
-    df = adls_file_client.download_csv_as_spark_dataframe(
-        context.run_tags["dagster/run_key"], spark.spark_session
+    approved_table_path = get_output_filepath(context)
+    df = adls_file_client.download_delta_table_as_spark_dataframe(
+        approved_table_path, spark.spark_session
     )
     emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -197,8 +198,9 @@ def manual_review_failed_rows(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
-    df = adls_file_client.download_csv_as_spark_dataframe(
-        context.run_tags["dagster/run_key"], spark.spark_session
+    rejected_table_path = get_output_filepath(context)
+    df = adls_file_client.download_delta_table_as_spark_dataframe(
+        rejected_table_path, spark.spark_session
     )
     emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
