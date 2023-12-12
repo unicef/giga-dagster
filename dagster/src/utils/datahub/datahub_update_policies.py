@@ -1,3 +1,4 @@
+import json
 from urllib import parse
 
 import country_converter as cc
@@ -34,16 +35,8 @@ def policy_mutation_query(country_name, group_urn):
                 state: ACTIVE,
                 description: "Members can view datasets with country name: {country_name}.",
                 resources: {{
-                    type: "",
                     resources: {datasets_urns_list},
                     allResources: true,
-                    filter: {{
-                        criteria [{{
-                            field: "",
-                            values: [""],
-                            condition: EQUALS
-                        }}]
-                    }}
                 }},
                 privileges: ["VIEW_ENTITY_PAGE", "VIEW_DATASET_USAGE", "VIEW_DATASET_PROFILE"],
                 actors: {{
@@ -85,9 +78,9 @@ def list_datasets_by_tag(tag):
 
     urn_list = []
     for result in results:
-        urn_list.append(result["entity"]["urn"])
+        urn_list.append(f"{result['entity']['urn']}")
 
-    return urn_list
+    return json.dumps(urn_list)
 
 
 def is_valid_country_name(country_name):
@@ -118,8 +111,3 @@ def update_policies():
                 country_name=country_name, group_urn=group_urn
             )
             datahub_graph_client.execute_graphql(query=query)
-            # print(f"Policy of {country_name} - VIEWER updated successfully.")
-
-
-# update_policies()
-# print(list_datasets_by_tag(tag='Benin'))
