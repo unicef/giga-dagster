@@ -61,6 +61,8 @@ COPY src ./src
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
 
-USER 1001
+RUN useradd -Ms /bin/bash giga-dagster
+
+USER giga-dagster
 
 CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]
