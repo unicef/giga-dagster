@@ -155,9 +155,8 @@ master:
   ##
   configOptions:
     -Dspark.ui.reverseProxy=true
-    -Dspark.ui.reverseProxyUrl=http://localhost:3001/spark
-    -Dspark.ui.proxyRedirectUri=localhost:3001
-    -Dspark.ui.showConsoleProgress=true
+    -Dspark.ui.reverseProxyUrl=http://localhost:8080
+  #    -Dspark.ui.showConsoleProgress=true
   ## @param master.extraEnvVars Extra environment variables to pass to the master container
   ## For example:
   ## extraEnvVars:
@@ -436,8 +435,8 @@ worker:
   ##
   configOptions:
     -Dspark.ui.reverseProxy=true
-    -Dspark.ui.reverseProxyUrl=http://localhost:3001/spark
-    -Dspark.ui.showConsoleProgress=true
+    -Dspark.ui.reverseProxyUrl=http://localhost:8080
+  #    -Dspark.ui.showConsoleProgress=true
   ## @param worker.extraEnvVars An array to add extra env vars
   ## For example:
   ## extraEnvVars:

@@ -24,7 +24,6 @@ x-spark-worker-common-config: &spark-worker-common-config
   <<: *spark-common-config
   build:
     context: .
-    target: base
     dockerfile: spark/Dockerfile
   working_dir: /opt/bitnami/spark/app
   volumes:
@@ -35,7 +34,7 @@ x-spark-worker-common-env: &spark-worker-common-env
   SPARK_MASTER_URL: spark://spark-master:7077
   SPARK_WORKER_HOST: 0.0.0.0
   SPARK_WORKER_CORES: 1
-  SPARK_WORKER_MEMORY: 512M
+  SPARK_WORKER_MEMORY: 1G
   SPARK_PUBLIC_DNS: localhost
   PYTHONPATH: /opt/bitnami/spark/app
 

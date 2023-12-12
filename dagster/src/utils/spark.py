@@ -146,3 +146,80 @@ def transform_dataframe_for_deltatable(
 
     df.printSchema()
     return df
+
+
+def transform_dataframe_for_deltatable_no_context(df: sql.DataFrame) -> sql.DataFrame:
+    columns_convert_to_string = [
+        "giga_id_school",
+        "school_id",
+        "name",
+        "education_level",
+        "education_level_regional",
+        "school_type",
+        "connectivity",
+        "type_connectivity",
+        "coverage_availability",
+        "coverage_type",
+        "admin1",
+        "admin2",
+        "admin3",
+        "admin4",
+        "school_region",
+        "computer_availability",
+        "computer_lab",
+        "electricity",
+        "water",
+        "address",
+    ]
+
+    columns_convert_to_double = [
+        "lat",
+        "lon",
+        "connectivity_speed",
+        "latency_connectivity",
+        "fiber_node_distance",
+        "microwave_node_distance",
+        "nearest_school_distance",
+        "nearest_LTE_distance",
+        "nearest_UMTS_distance",
+        "nearest_GSM_distance",
+    ]
+
+    columns_convert_to_int = [
+        "num_computers",
+        "num_teachers",
+        "num_students",
+        "num_classroom",
+        "nearest_LTE_id",
+        "nearest_UMTS_id",
+        "nearest_GSM_id",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "schools_within_10km",
+    ]
+    columns_convert_to_long = [
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "pop_within_10km",
+    ]
+
+    for col_name in columns_convert_to_string:
+        df = df.withColumn(col_name, col(col_name).cast("string"))
+        print(">> TRANSFORMED STRING")
+
+    for col_name in columns_convert_to_double:
+        df = df.withColumn(col_name, col(col_name).cast("double"))
+        print(">> TRANSFORMED DOUBLE")
+
+    for col_name in columns_convert_to_int:
+        df = df.withColumn(col_name, col(col_name).cast("int"))
+        print(">> TRANSFORMED INT")
+
+    for col_name in columns_convert_to_long:
+        df = df.withColumn(col_name, col(col_name).cast("long"))
+        print(">> TRANSFORMED LONG")
+
+    df.printSchema()
+    return df
