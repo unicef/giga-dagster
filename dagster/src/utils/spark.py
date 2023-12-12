@@ -27,6 +27,7 @@ spark_common_config = {
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
     "spark.driver.host": settings.SPARK_MASTER_HOST,
+    "spark.driver.port": "7077",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
     "spark.shuffle.service.enabled": "false",

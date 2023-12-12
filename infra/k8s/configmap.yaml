@@ -10,7 +10,7 @@ data:
   DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"
   DATAHUB_METADATA_SERVER_URL: "datahub-datahub-gms:8080"
   SPARK_UI_URL: "http://spark-master-svc:8080"
-  SPARK_MASTER_HOST: "spark-master-svc:7077"
+  SPARK_MASTER_HOST: "spark-master-svc"
   oauth2_proxy.cfg: |
     http_address = ":3001"
     upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
