@@ -23,14 +23,14 @@ def datahub_tags(context: OpExecutionContext):
 
 
 @asset
-def datahub_policies(context: OpExecutionContext):
-    context.log.info("UPDATING POLICIES IN DATAHUB")
-    update_policies()
-    yield Output(None)
-
-
-@asset
 def azure_ad_users_groups(context: OpExecutionContext):
     context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
     ingest_azure_ad_to_datahub_pipeline()
+    yield Output(None)
+
+
+@asset(deps=[azure_ad_users_groups])
+def datahub_policies(context: OpExecutionContext):
+    context.log.info("UPDATING POLICIES IN DATAHUB")
+    update_policies()
     yield Output(None)
