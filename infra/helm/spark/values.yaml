@@ -153,10 +153,7 @@ master:
   daemonMemoryLimit: ""
   ## @param master.configOptions Use a string to set the config options for in the form "-Dx=y"
   ##
-  configOptions:
-    -Dspark.ui.reverseProxy=true
-    -Dspark.ui.reverseProxyUrl=http://localhost:8080
-  #    -Dspark.ui.showConsoleProgress=true
+  configOptions: ""
   ## @param master.extraEnvVars Extra environment variables to pass to the master container
   ## For example:
   ## extraEnvVars:
@@ -433,9 +430,7 @@ worker:
   javaOptions: ""
   ## @param worker.configOptions Set extra options to configure the worker in the form `-Dx=y`
   ##
-  configOptions:
-    -Dspark.ui.reverseProxy=true
-    -Dspark.ui.reverseProxyUrl=http://localhost:8080
+  configOptions: ""
   #    -Dspark.ui.showConsoleProgress=true
   ## @param worker.extraEnvVars An array to add extra env vars
   ## For example:
