@@ -112,7 +112,11 @@ class ADLSFileClient(ConfigurableResource):
 
         dataset_type = context.step_context.op_config["dataset_type"]
         filename = filepath.split("/")[-1]
-        country_code = filename.split("_")[0]
+        delta_table_name = (
+            filename.split("_")[0]
+            if context.step_key in ["silver", "gold"]
+            else filename
+        )
 
         # TODO: Get from context
         schema_name = f"{layer}_{dataset_type.replace('-', '_')}"
@@ -123,13 +127,15 @@ class ADLSFileClient(ConfigurableResource):
         create_table_sql = load_sql_template(
             f"create_{layer}_table",
             schema_name=schema_name,
-            table_name=country_code,
-            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}/{country_code}",
+            table_name=delta_table_name,
+            location=(
+                f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}/{delta_table_name}"
+            ),
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
         data.write.format("delta").mode("overwrite").saveAsTable(
-            f"{schema_name}.{country_code}"
+            f"{schema_name}.{delta_table_name}"
         )
 
     def download_json(self, filepath: str):
