@@ -61,7 +61,7 @@ COPY src ./src
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
 
-RUN useradd -Ms /bin/bash giga-dagster
+RUN useradd --create-home --shell /bin/bash --uid 1001 giga-dagster
 
 USER giga-dagster
 
