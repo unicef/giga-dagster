@@ -42,21 +42,22 @@ CONFIG_VALUES_RANGE = {
     "student_count": {"min": 20, "max": 2500},
     "latitude": {"min": -90, "max": 90},
     "longitude": {"min": -180, "max": 180},
-    "school_establishment_year": {"min": 1000, "max": current_year},
+    # "school_establishment_year": {"min": 1000, "max": current_year},
     # # Calculated
     "school_density": {"min": 0, "max": 5},
+
     # Optional
-    "connectivity_speed_static": {"min": 0, "max": 200},
-    "connectivity_speed_contracted": {"min": 0, "max": 500},
-    "connectivity_latency_static": {"min": 0, "max": 200},
     "num_computers": {"min": 0, "max": 500},
-    "num_computers_desired": {"min": 0, "max": 1000},
-    "num_teachers": {"min": 0, "max": 200},
-    "num_adm_personnel": {"min": 0, "max": 200},
     "num_students": {"min": 0, "max": 10000},
     "num_classrooms": {"min": 0, "max": 200},
-    "num_latrines": {"min": 0, "max": 200},
-    "school_data_collection_year": {"min": 1000, "max": current_year},
+    # "school_data_collection_year": {"min": 1000, "max": current_year},
+    # "connectivity_speed_static": {"min": 0, "max": 200},
+    # "connectivity_speed_contracted": {"min": 0, "max": 500},
+    # "connectivity_latency_static": {"min": 0, "max": 200},
+    # "num_computers_desired": {"min": 0, "max": 1000},
+    # "num_teachers": {"min": 0, "max": 200},
+    # "num_adm_personnel": {"min": 0, "max": 200},
+    # "num_latrines": {"min": 0, "max": 200},
 }
 
 CONFIG_VALUES_OPTIONS = {
@@ -96,6 +97,7 @@ CONFIG_VALUES_OPTIONS = {
     ],
     "school_data_collection_modality": ["online", "in-person", "phone", "other"],
     "cellular_network_type": ["2g", "3g", "4g", "5g"],
+    "is_within_country" : ["yes", "no"]
 }
 
 # For COVERAGE ITU dataset. To separate COVERAGE ITU expectations into different file.

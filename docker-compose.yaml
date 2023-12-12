@@ -26,6 +26,9 @@ x-spark-worker-common-config: &spark-worker-common-config
     context: .
     target: base
     dockerfile: spark/Dockerfile
+  working_dir: /opt/bitnami/spark/app
+  volumes:
+    - ./dagster:/opt/bitnami/spark/app
 
 x-spark-worker-common-env: &spark-worker-common-env
   SPARK_MODE: worker
@@ -34,6 +37,7 @@ x-spark-worker-common-env: &spark-worker-common-env
   SPARK_WORKER_CORES: 1
   SPARK_WORKER_MEMORY: 512M
   SPARK_PUBLIC_DNS: localhost
+  PYTHONPATH: /opt/bitnami/spark/app
 
 volumes:
   dagster-storage:

@@ -22,6 +22,13 @@ stages:
             deploy:
               steps:
                 - task: HelmDeploy@0
+                  displayName: Helm uninstall authproxy
+                  inputs:
+                    namespace: $(kubernetesNamespace)
+                    command: uninstall
+                    arguments: dagster-authproxy
+
+                - task: HelmDeploy@0
                   displayName: Helm uninstall Dagster
                   inputs:
                     namespace: $(kubernetesNamespace)
@@ -29,11 +36,11 @@ stages:
                     arguments: dagster
 
                 - task: HelmDeploy@0
-                  displayName: Helm uninstall authproxy
+                  displayName: Helm uninstall Spark
                   inputs:
                     namespace: $(kubernetesNamespace)
                     command: uninstall
-                    arguments: dagster-authproxy
+                    arguments: spark
 
                 - task: Kubernetes@1
                   displayName: Delete resources in namespace

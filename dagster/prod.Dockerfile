@@ -8,32 +8,25 @@ ARG POETRY_VERSION=1.6.1
 # Spark flags
 ENV SPARK_HOME /opt/spark
 
-# Update packages & install JDK
-RUN apt-get update && \
-    apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
-    apt-get clean
-
-FROM base as spark-deps
-
-# Move to a temporary directory
 WORKDIR /tmp
 
-# Download pre-built Spark w/ Hadoop
-RUN wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz
-
-# Extract Spark files to $SPARK_HOME
-RUN tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
+# Update packages & install JDK, Spark, Hadoop
+RUN apt-get update && \
+    apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
+    wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz && \
+    tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
     mkdir --parents /opt/spark && \
-    mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}"
+    mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}" && \
+    apt-get clean
 
 # Move to Spark JARs directory and download additional dependencies
 WORKDIR /opt/spark/jars
 
-RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar
-RUN wget https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar
-RUN wget https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
-RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar
-RUN wget https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
+RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar \
+    https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar \
+    https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar \
+    https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar \
+    https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar
 
 FROM base AS deps
 
@@ -53,7 +46,6 @@ FROM base AS prod
 
 # Copy the generated files from the previous stages
 COPY --from=deps /tmp/requirements.txt .
-COPY --from=spark-deps /opt/spark /opt/spark
 
 # Install packages defined in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
