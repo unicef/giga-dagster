@@ -121,6 +121,9 @@ is_within_boundary_distance_udf = f.udf(is_within_boundary_distance)
 
 # All the checks to verify if location is within the country
 def is_within_country(latitude, longitude, country_code_iso3):
+    if latitude is None or longitude is None or country_code_iso3 is None:
+        return False
+    
     is_valid_gadm = is_within_country_gadm(latitude, longitude, country_code_iso3)
     is_valid_geopy = is_within_country_geopy(latitude, longitude, country_code_iso3)
     is_valid_boundary = is_within_boundary_distance(
