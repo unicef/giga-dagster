@@ -41,7 +41,7 @@ def create_giga_school_id(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("giga_id_school", generate_uuid_udf(f.col("identifier_concat")))
+    df = df.withColumn("school_id_giga", generate_uuid_udf(f.col("identifier_concat")))
     return df.drop("identifier_concat")
 
 
@@ -120,7 +120,7 @@ def create_bronze_layer_columns(df):
     df = df.withColumn("longitude", df["longitude"].cast("float"))
     df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
     df = df.withColumn(
-        "school_density", f.count("giga_id_school").over(Window.partitionBy("hex8"))
+        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
     )
 
     # Clean up columns
@@ -141,57 +141,66 @@ def create_bronze_layer_columns(df):
     #         )
     #     )
 
-    columns_and_types = {
-        'gx_index': 'integer',
-        'school_density': 'integer',
-        'hex8': 'string',
-        'giga_id_school': 'string',
-        'school_id': 'string',
-        'school_id_gov_type': 'string',
-        'school_name': 'string',
-        'school_establishment_year': 'integer',
-        'latitude': 'float',
-        'longitude': 'float',
-        'education_level': 'string',
-        'education_level_govt': 'string',
-        'internet_availability': 'string',
-        'internet_speed_mbps': 'float',
-        'connectivity_speed_contracted': 'float',
-        'internet_type': 'string',
-        'connectivity_latency_static': 'float',
-        'admin_1': 'string',
-        'admin_2': 'string',
-        'admin_3': 'string',
-        'admin_4': 'string',
-        'school_region': 'string',
-        'school_funding_type': 'string',
-        'computer_count': 'integer',
-        'num_computers_desired': 'integer',
-        'num_teachers': 'integer',
-        'num_adm_personnel': 'integer',
-        'student_count': 'integer',
-        'num_classroom': 'integer',
-        'num_latrines': 'integer',
-        'computer_lab': 'string',
-        'electricity_availability': 'string',
-        'electricity_type': 'string',
-        'water_availability': 'string',
-        'school_address': 'string',
-        'school_data_source': 'string',
-        'school_data_collection_year': 'integer',
-        'school_data_collection_modality': 'string',
+    column_mapping = {
+        # raw, delta_col, dtype
+        ("gx_index", "gx_index", "integer"), 
+        ("school_density", "school_density", "integer"), 
+        ("hex8", "hex8", "string"), 
+        ("giga_id_school", "school_id_giga", "string"), 
+        ("school_id", "school_id_gov", "string"), 
+        ("school_id_gov_type", "school_id_gov_type", "string"), 
+        ("school_name", "school_name", "string"), 
+        ("school_establishment_year", "school_establishment_year", "integer"), 
+        ("latitude", "latitude", "float"), 
+        ("longitude", "longitude", "float"), 
+        ("education_level", "education_level", "string"), 
+        ("education_level_govt", "education_level_govt", "string"), 
+        ("internet_availability", "connectivity_availability", "string"), 
+        ("internet_speed_mbps", "connectivity_speed_static", "float"), 
+        ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"), 
+        ("internet_type", "connectivity_type", "string"), 
+        ("connectivity_latency_static", "connectivity_latency_static", "float"), 
+        ("admin_1", "admin1", "string"), 
+        ("admin_2", "admin2", "string"), 
+        ("admin_3", "admin3", "string"), 
+        ("admin_4", "admin4", "string"), 
+        ("school_region", "school_area_type", "string"), 
+        ("school_funding_type", "school_type", "string"),
+        ("computer_count", "num_computers", "integer"), 
+        ("num_computers_desired", "num_computers_desired", "integer"), 
+        ("num_teachers", "num_teachers", "integer"), 
+        ("num_adm_personnel", "num_adm_personnel", "integer"), 
+        ("student_count", "num_students", "integer"), 
+        ("num_classroom", "num_classrooms", "integer"), 
+        ("num_latrines", "num_latrines", "integer"), 
+        ("computer_lab_availability", "computer_lab_availability", "string"), 
+        ("electricity_availability", "electricity_availability", "string"), 
+        ("electricity_type", "electricity_type", "string"), 
+        ("water_availability", "water_availability", "string"), 
+        ("school_address", "school_address", "string"), 
+        ("school_data_source", "school_data_source", "string"), 
+        ("school_data_collection_year", "school_data_collection_year", "integer"), 
+        ("school_data_collection_modality", "school_data_collection_modality", "string"),
     }
 
-    bronze_columns = list(columns_and_types.keys())
+    bronze_columns = [delta_col for _, delta_col, _ in column_mapping]
 
-    for column, data_type in columns_and_types.items():
-        if column not in df.columns:
-            df = df.withColumn(column, f.lit(None).cast(data_type))
+    # Iterate over mapping set and perform actions
+    for raw_col, delta_col, dtype in column_mapping:
+    # Check if the raw column exists in the DataFrame
+        if raw_col in df.columns:
+        # If it exists in raw, rename it to the delta column
+            df = df.withColumnRenamed(raw_col, delta_col)
+        # If it doesn't exist in both, create a null column placeholder with the delta column name
+        elif delta_col in df.columns:
+            pass
+        else:
+            df = df.withColumn(delta_col, f.lit(None).cast(dtype))
 
     df = df.select(*bronze_columns)
     df = df.withColumn(
     'school_type_public',
-        f.when(f.col('school_funding_type') == 'public', 'public').otherwise('not public'))
+        f.when(f.col('school_type') == 'public', 'public').otherwise('not public'))
 
 
     return df
@@ -274,7 +283,7 @@ def has_critical_error(df):
         f.expr(
             "CASE "
             "WHEN duplicate_school_id = true "
-            "   OR duplicate_giga_id_school = true "
+            "   OR duplicate_school_id_giga = true "
             "   OR size(critical_error_empty_column) > 0 " #schoolname, lat, long, educ level
             "   OR is_valid_location_values = false "
             "   OR is_within_country != true "
@@ -438,8 +447,8 @@ def critical_error_indices_json_parse(data):
             index_list = [entry['temp_pk'] for entry in data]
             index_dup_school_id_set = set(index_list)
 
-    # duplicate giga_id_school "expect_column_values_to_be_unique"
-        elif expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "giga_id_school":
+    # duplicate school_id_giga "expect_column_values_to_be_unique"
+        elif expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "school_id_giga":
             data = result["unexpected_index_list"]
             index_list = [entry['temp_pk'] for entry in data]
             index_dup_gid_set = set(index_list)
