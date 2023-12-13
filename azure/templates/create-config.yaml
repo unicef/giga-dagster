@@ -65,7 +65,7 @@ jobs:
                     AZURE_CLIENT_ID: "$(azureAdClientId)"
                     AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
                     AZURE_REDIRECT_URI: "https://$(appDomain)/auth/callback"
-                    cookie-secret: "$(secretKey)"
+                    cookie-secret: "$(cookieSecret)"
                     client-id: "$(azureAdClientId)"
                     client-secret: "$(azureAdClientSecret)"
                     OAUTH2_PROXY_PROVIDER: "azure"

@@ -12,6 +12,7 @@ variables:
   azureAdTenantId: $(AZURE_TENANT_ID)
   azureAdClientId: $(AZURE_CLIENT_ID)
   azureAdClientSecret: $(AZURE_CLIENT_SECRET)
+  cookieSecret: $(AUTH_COOKIE_SECRET)
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
