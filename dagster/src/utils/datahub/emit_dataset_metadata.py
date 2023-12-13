@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import country_converter as cc
 import datahub.emitter.mce_builder as builder
 import pandas as pd
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
@@ -9,7 +10,6 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     DatasetPropertiesClass,
     DateTypeClass,
-    DomainPropertiesClass,
     NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
@@ -23,26 +23,14 @@ from src.settings import settings
 from src.utils.adls import get_input_filepath, get_output_filepath
 
 
-def create_domains():
-    domains = ["Geospatial", "Infrastructure", "School", "Finance"]
-
-    for domain in domains:
-        domain_urn = make_domain_urn(domain)
-        domain_properties_aspect = DomainPropertiesClass(name=domain, description="")
-
-        event: MetadataChangeProposalWrapper = MetadataChangeProposalWrapper(
-            entityUrn=domain_urn,
-            aspect=domain_properties_aspect,
-        )
-
-        datahub_emitter = DatahubRestEmitter(
-            gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-        )
-
-        datahub_emitter.emit(event)
-
-    return
+def identify_country_name(country_code):
+    coco = cc.CountryConverter()
+    country_name = list(
+        coco.data.iloc[coco.data["ISO3"][coco.data["ISO3"].isin([country_code])].index][
+            "name_short"
+        ]
+    )[0]
+    return country_name
 
 
 def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
@@ -71,7 +59,8 @@ def define_dataset_properties(context: OpExecutionContext):
     metadata = context.get_step_execution_context().op_config["metadata"]
 
     data_format = output_filepath.split(".")[-1]
-    country = output_filepath.split("/")[2].split("_")[0]
+    country_code = output_filepath.split("/")[2].split("_")[0]
+    country_name = identify_country_name(country_code=country_code)
     source = output_filepath.split("_")[2]
     date_modified = output_filepath.split(".")[0].split("_")[-1]
     asset_type = "Raw Data" if step == "raw" else "Table"
@@ -98,7 +87,7 @@ def define_dataset_properties(context: OpExecutionContext):
         "Data Size": f"{file_size_MB} MB",
         "Data Owner": "",
         "Data Schema": "",
-        "Country": f"{country}",
+        "Country": f"{country_name}",
         "School ID Type": "",
         "Description of file update": "",
         "Dagster version": version.__version__,
@@ -163,6 +152,19 @@ def set_domain(context: OpExecutionContext):
     return domain_urn
 
 
+def set_tag_mutation_query(country_name, dataset_urn):
+    query = f"""
+        mutation {{
+            addTag(input:{{
+                tagUrn: "urn:li:tag:{country_name}",
+                resourceUrn: "{dataset_urn}"
+            }})
+        }}
+    """
+
+    return query
+
+
 def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -203,8 +205,20 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     }}
     """
 
+    context.log.info(domain_query)
     context.log.info("EMITTING DOMAIN METADATA")
     datahub_graph_client.execute_graphql(query=domain_query)
+
+    output_filepath = get_output_filepath(context)
+    country_code = output_filepath.split("/")[2].split("_")[0]
+    country_name = identify_country_name(country_code=country_code)
+    tag_query = set_tag_mutation_query(
+        country_name=country_name, dataset_urn=dataset_urn
+    )
+    context.log.info(tag_query)
+
+    context.log.info("EMITTING TAG METADATA")
+    datahub_graph_client.execute_graphql(query=tag_query)
 
     step = context.asset_key.to_user_string()
     if step != "raw":
@@ -218,6 +232,6 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
         datahub_emitter.emit_mce(lineage_mce)
 
     return context.log.info(
-        f"Metadata of dataset {get_output_filepath(context)} has been successfully"
+        f"Metadata of dataset {output_filepath} has been successfully"
         " emitted to Datahub."
     )

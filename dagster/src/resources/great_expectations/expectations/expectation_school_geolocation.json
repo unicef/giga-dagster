@@ -17,12 +17,12 @@
     {
       "expectation_type": "expect_column_values_to_be_unique",
       "kwargs": {
-        "column": "giga_id_school"
+        "column": "school_id_giga"
       },
       "meta": {
         "notes": {
           "format": "markdown",
-          "content": "Indicates if the giga_id_school entries do not have an exact match"
+          "content": "Indicates if the school_id_giga entries do not have an exact match"
         }
       }
     },

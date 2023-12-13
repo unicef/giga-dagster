@@ -3,7 +3,7 @@ from datahub.ingestion.run.pipeline import Pipeline
 from src.settings import settings
 
 
-def run_azure_ad_to_datahub_pipeline():
+def ingest_azure_ad_to_datahub_pipeline():
     # The pipeline configuration is similar to the recipe YAML files provided to the CLI tool.
     pipeline = Pipeline.create(
         {

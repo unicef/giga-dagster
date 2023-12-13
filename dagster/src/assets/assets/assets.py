@@ -8,9 +8,13 @@ from pyspark import sql
 
 import src.spark.transform_functions as tf
 from dagster import OpExecutionContext, Output, asset
-from src.resources.datahub_emitter import create_domains, emit_metadata_to_datahub
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
-from src.utils.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
+
+# from src.utils.datahub.emit_dataset_metadata import (
+#     create_domains,
+#     emit_metadata_to_datahub,
+# )
+from src.utils.datahub.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
 
 
 @asset
@@ -28,16 +32,15 @@ def raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    context.log.info("CREATING DOMAINS IN DATAHUB")
-    create_domains()
-    emit_metadata_to_datahub(context, df=df)
+
+    # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def bronze(context: OpExecutionContext, raw: sql.DataFrame) -> sql.DataFrame:
     df = tf.create_bronze_layer_columns(raw)
-    emit_metadata_to_datahub(context, df=raw)
+    # emit_metadata_to_datahub(context, df=raw)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -81,7 +84,7 @@ def dq_passed_rows(
 ) -> sql.DataFrame:
     df_passed = tf.dq_passed_rows(bronze, data_quality_results)
     df_passed = df_passed.drop("gx_index")
-    emit_metadata_to_datahub(context, df_passed)
+    # emit_metadata_to_datahub(context, df_passed)
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -93,7 +96,7 @@ def dq_failed_rows(
 ) -> sql.DataFrame:
     df_failed = tf.dq_failed_rows(bronze, data_quality_results)
     df_failed = df_failed.drop("gx_index")
-    emit_metadata_to_datahub(context, df_failed)
+    # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -174,7 +177,7 @@ def staging(
             )
             staging = staging.union(existing_file)
 
-    emit_metadata_to_datahub(context, staging)
+    # emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -188,7 +191,7 @@ def manual_review_passed_rows(
     df = adls_file_client.download_delta_table_as_spark_dataframe(
         approved_table_path, spark.spark_session
     )
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -202,7 +205,7 @@ def manual_review_failed_rows(
     df = adls_file_client.download_delta_table_as_spark_dataframe(
         rejected_table_path, spark.spark_session
     )
-    emit_metadata_to_datahub(context, df)
+    # emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -212,14 +215,14 @@ def silver(
     manual_review_passed_rows: sql.DataFrame,
 ) -> sql.DataFrame:
     silver = manual_review_passed_rows
-    emit_metadata_to_datahub(context, silver)
+    # emit_metadata_to_datahub(context, silver)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
     gold = silver
-    emit_metadata_to_datahub(context, gold)
+    # emit_metadata_to_datahub(context, gold)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})
 
 
