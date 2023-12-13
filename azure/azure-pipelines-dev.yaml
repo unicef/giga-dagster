@@ -15,18 +15,13 @@ variables:
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
+  appDomain: $(APP_DOMAIN)
   azureSasToken: $(AZURE_SAS_TOKEN)
-  azureBlobSasHost: $(AZURE_BLOB_SAS_HOST)
-  azureDfsSasHost: $(AZURE_DFS_SAS_HOST)
   azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
   azureAdTenantId: $(AZURE_TENANT_ID)
   azureAdClientId: $(AZURE_CLIENT_ID)
   azureAdClientSecret: $(AZURE_CLIENT_SECRET)
-  azureAdTenantName: $(AZURE_TENANT_NAME)
-  azureAdPolicyName: $(AZURE_AUTH_POLICY_NAME)
-  azureAdRedirectUri: $(AZURE_REDIRECT_URI)
-  azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
@@ -191,7 +186,7 @@ stages:
                         AZURE_TENANT_ID: "$(azureAdTenantId)"
                         AZURE_CLIENT_ID: "$(azureAdClientId)"
                         AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-                        AZURE_REDIRECT_URI: "$(azureAdRedirectUri)"
+                        AZURE_REDIRECT_URI: "https://$(appDomain)/auth/callback"
                         cookie-secret: "$(secretKey)"
                         client-id: "$(azureAdClientId)"
                         client-secret: "$(azureAdClientSecret)"
@@ -200,7 +195,7 @@ stages:
                         OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
                         OAUTH2_PROXY_CODE_CHALLENGE_METHOD: "S256"
                         OAUTH2_PROXY_PROXY_PREFIX: "/auth"
-                        OAUTH2_PROXY_REDIRECT_URL: "https://$(azureAdLogoutRedirectUri)/auth/callback"
+                        OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
                         OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: "/app/static/dagster.svg"
 
                 - task: Kubernetes@1
