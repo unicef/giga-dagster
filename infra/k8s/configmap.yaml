@@ -19,3 +19,12 @@ data:
     cookie_expire = "168h"
     cookie_secure = false
     cookie_httponly = false
+    provider = "azure"
+    code_challenge_method = "S256"
+    proxy_prefix = "/auth"
+    custom_sign_in_logo = "/app/static/dagster.svg"
+    scope = "openid profile email"
+    proxy_websockets = true
+    insecure_oidc_skip_issuer_verification = true
+    oidc_email_claim = "preferred_username"
+    oidc_issuer_url = "https://login.microsoftonline.com/common/v2.0"
