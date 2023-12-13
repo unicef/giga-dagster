@@ -14,7 +14,7 @@ data:
     http_address = ":3001"
     upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
     email_domains = ["thinkingmachin.es", "unicef.org"]
-    api_routes = ["^/graphql"]
+    api_routes = ["^/graphql", "^/favicon.ico"]
     cookie_name = "_oauth2_proxy"
     cookie_expire = "168h"
     cookie_secure = false

@@ -121,7 +121,7 @@ services:
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:3001
       OAUTH2_PROXY_UPSTREAMS: "http://dagster-webserver:3002,http://spark-master:8070/spark"
       OAUTH2_PROXY_EMAIL_DOMAINS: "thinkingmachin.es,unicef.org"
-      OAUTH2_PROXY_API_ROUTES: ^/graphql
+      OAUTH2_PROXY_API_ROUTES: "^/graphql,^/favicon.ico"
       OAUTH2_PROXY_PROXY_WEBSOCKETS: true
       OAUTH2_PROXY_COOKIE_NAME: _oauth2_proxy
       OAUTH2_PROXY_COOKIE_EXPIRE: 168h
