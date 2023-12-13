@@ -1,10 +1,9 @@
-# from dagster_pyspark import PySparkResource
+from dagster_pyspark import PySparkResource
 from pyspark import sql
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.utils.adls import ADLSFileClient
-from src.utils.spark import PySparkCustomResource as PySparkResource
 from src.utils.spark import transform_dataframe_for_deltatable
 
 adls_client = ADLSFileClient()
