@@ -27,6 +27,8 @@ spark_common_config = {
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
+    "spark.driver.host": "dagstersparkdriver",
+    "spark.driver.port": "4040",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
     "spark.authenticate": "true",
@@ -41,10 +43,6 @@ spark_common_config = {
     # "spark.python.use.daemon": "true",
     # "spark.python.daemon.module": "src.utils.sentry",
 }
-
-# if settings.IN_PRODUCTION:
-#     spark_common_config["spark.driver.host"] = "k8s-giga-dataops"
-#     spark_common_config["spark.driver.port"] = "3030"
 
 spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
 

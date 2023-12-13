@@ -106,8 +106,9 @@ tasks:
     dir: infra
     cmds:
       - kubectl apply -f k8s/namespace.yaml
-      - kubectl apply -f k8s/secrets.yaml
+      - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
       - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
+      - kubectl apply -f k8s/svc.yaml --namespace giga-dagster
       - task: helm-up-dagster
       - task: helm-up-spark
       - task: helm-up-authproxy
@@ -157,9 +158,9 @@ tasks:
   helm-down:
     desc: Uninstall Helm charts
     cmds:
-      - helm uninstall dagster-authproxy
-      - helm uninstall spark
-      - helm uninstall dagster
+      - helm uninstall dagster-authproxy --namespace giga-dagster
+      - helm uninstall spark --namespace giga-dagster
+      - helm uninstall dagster --namespace giga-dagster
 
   helm-clean:
     desc: Clean K8s resources

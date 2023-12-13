@@ -607,6 +607,11 @@ runLauncher:
             - name: spark-driver
               containerPort: 4040
               protocol: TCP
+        jobMetadata:
+          labels:
+            giga-dataops/name: dagster-spark-run-job
+        jobSpecConfig:
+          ttlSecondsAfterFinished: 7200
     
     # This configuration will only be used if the CeleryK8sRunLauncher is selected
     celeryK8sRunLauncher:
