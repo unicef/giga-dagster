@@ -43,6 +43,7 @@ spark_common_config = {
 
 if settings.IN_PRODUCTION:
     spark_common_config["spark.driver.host"] = "k8s-giga-dataops"
+    spark_common_config["spark.driver.port"] = "3030"
 
 spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
 
