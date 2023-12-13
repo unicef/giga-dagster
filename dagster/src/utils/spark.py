@@ -26,7 +26,6 @@ spark_common_config = {
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
-    "spark.driver.bindAddress": f"{settings.SPARK_MASTER_HOST}:4040",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
     "spark.shuffle.service.enabled": "false",
