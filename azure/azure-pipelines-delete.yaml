@@ -6,53 +6,15 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  kubernetesEnvironment: $(KUBERNETES_ENVIRONMENT)
-  kubernetesNamespace: $(KUBERNETES_NAMESPACE)
-  system.debug: true
+  - template: templates/variables.yaml
 
 stages:
-  - stage: Delete
-    displayName: Delete Dagster
+  - stage: UninstallHelm
+    displayName: Uninstall Helm charts
     jobs:
-      - deployment: Delete
-        displayName: Delete Dagster deployment
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: HelmDeploy@0
-                  displayName: Helm uninstall authproxy
-                  inputs:
-                    namespace: $(kubernetesNamespace)
-                    command: uninstall
-                    arguments: dagster-authproxy
+      - template: templates/helm-uninstall.yaml
 
-                - task: HelmDeploy@0
-                  displayName: Helm uninstall Dagster
-                  inputs:
-                    namespace: $(kubernetesNamespace)
-                    command: uninstall
-                    arguments: dagster
-
-                - task: HelmDeploy@0
-                  displayName: Helm uninstall Spark
-                  inputs:
-                    namespace: $(kubernetesNamespace)
-                    command: uninstall
-                    arguments: spark
-
-                - task: Kubernetes@1
-                  displayName: Delete resources in namespace
-                  inputs:
-                    command: delete
-                    arguments: all --all
-                    namespace: $(kubernetesNamespace)
-
-                - task: Kubernetes@1
-                  displayName: Delete PVCs in namespace
-                  continueOnError: true
-                  inputs:
-                    command: delete
-                    arguments: pvc --all
-                    namespace: $(kubernetesNamespace)
+  - stage: DeleteResources
+    displayName: Delete K8s resources
+    jobs:
+      - template: templates/delete-resources.yaml

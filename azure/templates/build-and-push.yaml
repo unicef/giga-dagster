@@ -2,6 +2,8 @@ parameters:
   - name: displayName
   - name: repository
   - name: dockerfile
+  - name: buildContext
+    default: "**"
 
 jobs:
   - deployment: Deploy
@@ -25,6 +27,7 @@ jobs:
                 command: buildAndPush
                 repository: ${{ parameters.repository }}
                 dockerfile: ${{ parameters.dockerfile }}
+                buildContext: ${{ parameters.buildContext }}
                 containerRegistry: $(ACR_SERVICE_CONNECTION)
                 tags: |
                   $(Build.SourceVersion)

@@ -40,6 +40,7 @@ stages:
           displayName: Spark
           repository: giga-dagster-spark
           dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
+          buildContext: $(Build.SourcesDirectory)
 
   - stage: CreateConfig
     displayName: Create/update K8s configuration resources
