@@ -15,18 +15,13 @@ variables:
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
+  appDomain: $(APP_DOMAIN)
   azureSasToken: $(AZURE_SAS_TOKEN)
-  azureBlobSasHost: $(AZURE_BLOB_SAS_HOST)
-  azureDfsSasHost: $(AZURE_DFS_SAS_HOST)
   azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
   azureAdTenantId: $(AZURE_TENANT_ID)
   azureAdClientId: $(AZURE_CLIENT_ID)
   azureAdClientSecret: $(AZURE_CLIENT_SECRET)
-  azureAdTenantName: $(AZURE_TENANT_NAME)
-  azureAdPolicyName: $(AZURE_AUTH_POLICY_NAME)
-  azureAdRedirectUri: $(AZURE_REDIRECT_URI)
-  azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
@@ -145,7 +140,7 @@ stages:
                     configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
 
                 - task: Kubernetes@1
-                  displayName: Create secret
+                  displayName: Create Dagster secrets
                   inputs:
                     namespace: $(kubernetesNamespace)
                     configurationType: inline
@@ -155,33 +150,73 @@ stages:
                       apiVersion: v1
                       kind: Secret
                       metadata:
-                        name: giga-dagster
+                        name: giga-dagster-secrets
                         labels:
                           app: giga-dagster
                       stringData:
                         POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                         POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
-                        SECRET_KEY: "$(secretKey)"
                         AZURE_SAS_TOKEN: "$(azureSasToken)"
                         AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
-                        AZURE_BLOB_SAS_HOST: "$(azureBlobSasHost)"
-                        AZURE_DFS_SAS_HOST: "$(azureDfsSasHost)"
                         AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-                        AZURE_TENANT_ID: "$(azureAdTenantId)"
-                        AZURE_CLIENT_ID: "$(azureAdClientId)"
-                        AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-                        AZURE_TENANT_NAME: "$(azureAdTenantName)"
-                        AZURE_AUTH_POLICY_NAME: "$(azureAdPolicyName)"
-                        AZURE_REDIRECT_URI: "$(azureAdRedirectUri)"
-                        AZURE_LOGOUT_REDIRECT_URI: "$(azureAdLogoutRedirectUri)"
-                        DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
-                        KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
-                        SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                         AUTH_OIDC_REDIRECT_URL: "$(datahubAzureAdRedirectUrl)"
                         AUTH_OIDC_CLIENT_ID: "$(azureAdClientId)"
                         AUTH_OIDC_TENANT_ID: "$(azureAdTenantId)"
                         AUTH_OIDC_CLIENT_SECRET: "$(datahubAzureAdClientSecret)"
+                        DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
+                        DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
+                        SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                         SHORT_SHA: "$(Build.SourceVersion)"
+
+                - task: Kubernetes@1
+                  displayName: Create authproxy secrets
+                  inputs:
+                    namespace: $(kubernetesNamespace)
+                    configurationType: inline
+                    command: apply
+                    useConfigurationFile: true
+                    inline: |
+                      apiVersion: v1
+                      kind: Secret
+                      metadata:
+                        name: giga-dagster-authproxy-secrets
+                        labels:
+                          app: giga-dagster
+                      stringData:
+                        AZURE_TENANT_ID: "$(azureAdTenantId)"
+                        AZURE_CLIENT_ID: "$(azureAdClientId)"
+                        AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
+                        AZURE_REDIRECT_URI: "https://$(appDomain)/auth/callback"
+                        cookie-secret: "$(secretKey)"
+                        client-id: "$(azureAdClientId)"
+                        client-secret: "$(azureAdClientSecret)"
+                        OAUTH2_PROXY_PROVIDER: "azure"
+                        OAUTH2_PROXY_AZURE_TENANT: "$(azureAdTenantId)"
+                        OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
+                        OAUTH2_PROXY_CODE_CHALLENGE_METHOD: "S256"
+                        OAUTH2_PROXY_PROXY_PREFIX: "/auth"
+                        OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
+                        OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: "/app/static/dagster.svg"
+
+                - task: Kubernetes@1
+                  displayName: Create Spark secrets
+                  inputs:
+                    namespace: $(kubernetesNamespace)
+                    configurationType: inline
+                    command: apply
+                    useConfigurationFile: true
+                    inline: |
+                      apiVersion: v1
+                      kind: Secret
+                      metadata:
+                        name: giga-dagster-spark-secrets
+                        labels:
+                          app: giga-dagster
+                      stringData:
+                        SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
+                        rpc-authentication-secret: "$(sparkRpcAuthSecret)"
+                        SPARK_SSL_NEED_CLIENT_AUTH: "yes"
+                        SPARK_PUBLIC_DNS: "$(azureAdLogoutRedirectUri)"
 
   - stage: Deploy
     displayName: Deploy Dagster

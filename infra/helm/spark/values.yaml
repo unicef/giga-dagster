@@ -160,7 +160,9 @@ master:
   ##  - name: SPARK_DAEMON_JAVA_OPTS
   ##    value: -Dx=y
   ##
-  extraEnvVars: [ ]
+  extraEnvVars:
+    - name: SPARK_PUBLIC_DNS
+      value: localhost
   ## @param master.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for master nodes
   ##
   extraEnvVarsCM: ""
@@ -418,7 +420,7 @@ worker:
   daemonMemoryLimit: ""
   ## @param worker.memoryLimit Set the maximum memory the worker is allowed to use
   ##
-  memoryLimit: 512m
+  memoryLimit: 1g
   ## @param worker.coreLimit Se the maximum number of cores that the worker can use
   ##
   coreLimit: 1
@@ -431,13 +433,16 @@ worker:
   ## @param worker.configOptions Set extra options to configure the worker in the form `-Dx=y`
   ##
   configOptions: ""
+  #    -Dspark.ui.showConsoleProgress=true
   ## @param worker.extraEnvVars An array to add extra env vars
   ## For example:
   ## extraEnvVars:
   ##  - name: SPARK_DAEMON_JAVA_OPTS
   ##    value: -Dx=y
   ##
-  extraEnvVars: [ ]
+  extraEnvVars:
+    - name: SPARK_PUBLIC_DNS
+      value: localhost
   ## @param worker.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for worker nodes
   ##
   extraEnvVarsCM: ""
@@ -690,7 +695,7 @@ security:
   ## @param security.passwordsSecretName Name of the secret that contains all the passwords
   ## This is optional, by default random passwords are generated
   ##
-  passwordsSecretName: ""
+  passwordsSecretName: giga-dagster-spark-secrets
   ## RPC configuration
   ## @param security.rpc.authenticationEnabled Enable the RPC authentication
   ## @param security.rpc.encryptionEnabled Enable the encryption for RPC

@@ -25,10 +25,14 @@ spark_common_config = {
     "spark.sql.warehouse.dir": "/opt/spark/warehouse",
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
-    "spark.driver.memory": "512m",
+    "spark.driver.memory": "1g",
+    "spark.driver.bindAddress": f"{settings.SPARK_MASTER_HOST}:4040",
     "spark.executor.cores": "1",
-    "spark.executor.memory": "512m",
-    "spark.executor.instances": "1",
+    "spark.executor.memory": "1g",
+    "spark.shuffle.service.enabled": "false",
+    "spark.dynamicAllocation.enabled": "false",
+    "spark.dynamicAllocation.maxExecutors": "3",
+    "spark.dynamicAllocation.executorAllocationRatio": "0.333",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -42,12 +46,12 @@ spark_common_config = {
     # "spark.python.daemon.module": "src.utils.sentry",
 }
 
+spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
+
 pyspark = PySparkResource(
     spark_config={
-        "spark.app.name": (
-            f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
-        ),
-        "spark.master": f"spark://{settings.SPARK_MASTER_HOST}",
+        "spark.app.name": spark_app_name,
+        "spark.master": f"spark://{settings.SPARK_MASTER_HOST}:7077",
         **spark_common_config,
     }
 )
@@ -59,8 +63,8 @@ def get_spark_session() -> SparkSession:
         conf.set(key, value)
 
     builder = (
-        SparkSession.builder.master("spark://spark-master:7077")
-        .appName("GigaDagsterSpark")
+        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}")
+        .appName(spark_app_name)
         .config(conf=conf)
         .enableHiveSupport()
     )
@@ -142,6 +146,83 @@ def transform_dataframe_for_deltatable(
     for col_name in columns_convert_to_long:
         df = df.withColumn(col_name, col(col_name).cast("long"))
         context.log.info(">> TRANSFORMED LONG")
+
+    df.printSchema()
+    return df
+
+
+def transform_dataframe_for_deltatable_no_context(df: sql.DataFrame) -> sql.DataFrame:
+    columns_convert_to_string = [
+        "giga_id_school",
+        "school_id",
+        "name",
+        "education_level",
+        "education_level_regional",
+        "school_type",
+        "connectivity",
+        "type_connectivity",
+        "coverage_availability",
+        "coverage_type",
+        "admin1",
+        "admin2",
+        "admin3",
+        "admin4",
+        "school_region",
+        "computer_availability",
+        "computer_lab",
+        "electricity",
+        "water",
+        "address",
+    ]
+
+    columns_convert_to_double = [
+        "lat",
+        "lon",
+        "connectivity_speed",
+        "latency_connectivity",
+        "fiber_node_distance",
+        "microwave_node_distance",
+        "nearest_school_distance",
+        "nearest_LTE_distance",
+        "nearest_UMTS_distance",
+        "nearest_GSM_distance",
+    ]
+
+    columns_convert_to_int = [
+        "num_computers",
+        "num_teachers",
+        "num_students",
+        "num_classroom",
+        "nearest_LTE_id",
+        "nearest_UMTS_id",
+        "nearest_GSM_id",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "schools_within_10km",
+    ]
+    columns_convert_to_long = [
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "pop_within_10km",
+    ]
+
+    for col_name in columns_convert_to_string:
+        df = df.withColumn(col_name, col(col_name).cast("string"))
+        print(">> TRANSFORMED STRING")
+
+    for col_name in columns_convert_to_double:
+        df = df.withColumn(col_name, col(col_name).cast("double"))
+        print(">> TRANSFORMED DOUBLE")
+
+    for col_name in columns_convert_to_int:
+        df = df.withColumn(col_name, col(col_name).cast("int"))
+        print(">> TRANSFORMED INT")
+
+    for col_name in columns_convert_to_long:
+        df = df.withColumn(col_name, col(col_name).cast("long"))
+        print(">> TRANSFORMED LONG")
 
     df.printSchema()
     return df
