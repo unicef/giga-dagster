@@ -15,18 +15,13 @@ variables:
   kubernetesNamespace: $(KUBERNETES_NAMESPACE)
   postgresqlUsername: $(POSTGRESQL_USERNAME)
   postgresqlPassword: $(POSTGRESQL_PASSWORD)
+  appDomain: $(APP_DOMAIN)
   azureSasToken: $(AZURE_SAS_TOKEN)
-  azureBlobSasHost: $(AZURE_BLOB_SAS_HOST)
-  azureDfsSasHost: $(AZURE_DFS_SAS_HOST)
   azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
   azureAdTenantId: $(AZURE_TENANT_ID)
   azureAdClientId: $(AZURE_CLIENT_ID)
   azureAdClientSecret: $(AZURE_CLIENT_SECRET)
-  azureAdTenantName: $(AZURE_TENANT_NAME)
-  azureAdPolicyName: $(AZURE_AUTH_POLICY_NAME)
-  azureAdRedirectUri: $(AZURE_REDIRECT_URI)
-  azureAdLogoutRedirectUri: $(AZURE_LOGOUT_REDIRECT_URI)
   secretKey: $(AUTHPROXY_SECRET_KEY)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
@@ -87,7 +82,7 @@ stages:
                   inputs:
                     command: buildAndPush
                     repository: giga-dagster-authproxy
-                    dockerfile: $(Build.SourcesDirectory)/authproxy/prod.Dockerfile
+                    dockerfile: $(Build.SourcesDirectory)/oauth2-proxy/prod.Dockerfile
                     containerRegistry: $(ACR_SERVICE_CONNECTION)
                     tags: |
                       $(Build.SourceVersion)
@@ -300,6 +295,6 @@ stages:
                       --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
                       --set image.tag=$(Build.SourceVersion)
                       --set ingress.enabled=true
-                      --set ingress.hosts[0].host="io-dagster-stg.unitst.org"
+                      --set ingress.hosts[0].host="$(appDomain)"
                       --set ingress.hosts[0].paths[0].path="/"
                       --set ingress.hosts[0].paths[0].pathType="Exact"
