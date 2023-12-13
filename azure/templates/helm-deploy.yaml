@@ -1,0 +1,73 @@
+jobs:
+  - deployment: Deploy
+    displayName: Deploy Dagster
+    environment: $(kubernetesEnvironment)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: HelmDeploy@0
+              displayName: Add Dagster Helm Repo
+              inputs:
+                command: repo
+                arguments: add dagster https://dagster-io.github.io/helm
+                namespace: $(kubernetesNamespace)
+
+            - task: HelmDeploy@0
+              displayName: Add Bitnami Helm Repo
+              inputs:
+                command: repo
+                arguments: add bitnami https://charts.bitnami.com/bitnami
+                namespace: $(kubernetesNamespace)
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy Spark
+              inputs:
+                command: upgrade
+                install: true
+                chartType: Name
+                chartName: bitnami/spark
+                releaseName: spark
+                namespace: $(kubernetesNamespace)
+                arguments: >
+                  --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
+                  --set image.registry="$(containerRegistryName).azurecr.io"
+                  --set image.repository="giga-dagster-spark"
+                  --set image.tag="$(Build.SourceVersion)"
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy Dagster
+              inputs:
+                command: upgrade
+                install: true
+                chartType: Name
+                chartName: dagster/dagster
+                releaseName: dagster
+                namespace: $(kubernetesNamespace)
+                arguments: >
+                  --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
+                  --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
+                  --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
+                  --set pipelineRun.image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
+                  --set pipelineRun.image.tag=$(Build.SourceVersion)
+                  --set postgresql.postgresqlUsername=$(postgresqlUsername)
+                  --set postgresql.postgresqlPassword=$(postgresqlPassword)
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy auth proxy
+              inputs:
+                command: upgrade
+                install: true
+                chartType: FilePath
+                chartPath: $(Build.SourcesDirectory)/infra/helm/oauth2-proxy
+                releaseName: dagster-authproxy
+                namespace: $(kubernetesNamespace)
+                arguments: >
+                  --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
+                  --set image.tag=$(Build.SourceVersion)
+                  --set ingress.enabled=true
+                  --set ingress.hosts[0].host="$(appDomain)"
+                  --set ingress.hosts[0].paths[0].path="/"
+                  --set ingress.hosts[0].paths[0].pathType="Exact"

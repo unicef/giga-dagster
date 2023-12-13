@@ -9,25 +9,7 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
-  containerRegistryName: $(ACR_NAME)
-  containerRegistryServiceConnection: $(ACR_SERVICE_CONNECTION)
-  kubernetesEnvironment: $(KUBERNETES_ENVIRONMENT)
-  kubernetesNamespace: $(KUBERNETES_NAMESPACE)
-  postgresqlUsername: $(POSTGRESQL_USERNAME)
-  postgresqlPassword: $(POSTGRESQL_PASSWORD)
-  appDomain: $(APP_DOMAIN)
-  azureSasToken: $(AZURE_SAS_TOKEN)
-  azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
-  azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
-  azureAdTenantId: $(AZURE_TENANT_ID)
-  azureAdClientId: $(AZURE_CLIENT_ID)
-  azureAdClientSecret: $(AZURE_CLIENT_SECRET)
-  secretKey: $(AUTHPROXY_SECRET_KEY)
-  datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
-  sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
-  datahubAzureAdClientSecret: $(DATAHUB_AZURE_CLIENT_SECRET)
-  datahubAzureAdRedirectUrl: $(DATAHUB_AZURE_REDIRECT_URL)
-  system.debug: true
+  - template: templates/variables.yaml
 
 stages:
   - stage: BuildAndPushDagster
