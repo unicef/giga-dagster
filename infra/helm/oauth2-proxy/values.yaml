@@ -24,7 +24,7 @@ config:
   # The name of the cookie that oauth2-proxy will create
   # If left empty, it will default to the release name
   cookieName: ""
-  google: { }
+  # google: { }
   # adminEmail: xxxx
   # useApplicationDefaultCredentials: true
   # targetPrincipal: xxxx
@@ -434,7 +434,7 @@ extraObjects: [ ]
   #           jmesPath:
   #               - path: "client_id"
   #                 objectAlias: "client-id"
-  #               - path: "client_secret"
+#               - path: "client_secret"
 #                 objectAlias: "client-secret"
 #               - path: "cookie_secret"
 #                 objectAlias: "cookie-secret"
