@@ -1,8 +1,10 @@
 import pandas as pd
-from dagster_pyspark import PySparkResource
 
 from dagster import InputContext, OutputContext
 from src.utils.adls import ADLSFileClient
+
+# from dagster_pyspark import PySparkResource
+from src.utils.spark import PySparkCustomResource as PySparkResource
 
 from .base import BaseConfigurableIOManager
 

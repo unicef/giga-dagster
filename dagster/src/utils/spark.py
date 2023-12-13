@@ -1,11 +1,12 @@
 import pyarrow_hotfix  # noqa: F401
-from dagster_pyspark import PySparkResource
+
+# from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
 from pyspark.sql.functions import col
 
-from dagster import OutputContext
+from dagster import ConfigurableResource, OutputContext
 from src.settings import settings
 
 spark_common_config = {
@@ -47,14 +48,6 @@ if settings.IN_PRODUCTION:
 
 spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
 
-pyspark = PySparkResource(
-    spark_config={
-        "spark.app.name": spark_app_name,
-        "spark.master": f"spark://{settings.SPARK_MASTER_HOST}:7077",
-        **spark_common_config,
-    }
-)
-
 
 def get_spark_session() -> SparkSession:
     conf = SparkConf()
@@ -69,6 +62,23 @@ def get_spark_session() -> SparkSession:
     )
     spark = configure_spark_with_delta_pip(builder)
     return spark.getOrCreate()
+
+
+class PySparkCustomResource(ConfigurableResource):
+    @property
+    def spark_session(self):
+        return get_spark_session()
+
+
+pyspark = PySparkCustomResource()
+
+# pyspark = PySparkResource(
+#     spark_config={
+#         "spark.app.name": spark_app_name,
+#         "spark.master": f"spark://{settings.SPARK_MASTER_HOST}:7077",
+#         **spark_common_config,
+#     }
+# )
 
 
 def transform_dataframe_for_deltatable(
