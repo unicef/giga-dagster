@@ -59,6 +59,7 @@ class ADLSFileClient(ConfigurableResource):
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         df = spark.read.format("delta").load(adls_path)
         df.show()
+        return df
 
     def upload_spark_dataframe_as_delta_table(
         self, data: sql.DataFrame, filepath: str, spark: SparkSession

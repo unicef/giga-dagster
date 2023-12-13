@@ -2,7 +2,7 @@ version: '3'
 
 dotenv:
   - ./dagster/.env
-  - ./authproxy/.env
+  - ./oauth2-proxy/.env
   - ./spark/.env
 
 env:
@@ -10,7 +10,7 @@ env:
     sh: git rev-parse --short HEAD
 
 vars:
-  PROJECT_NAME: giga-dataops-platform_dagster
+  PROJECT_NAME: giga-dataops_dagster
 
 tasks:
   default:
@@ -31,14 +31,12 @@ tasks:
       - task: setup-authproxy
 
   setup-pre-commit:
-    internal: true
     desc: Run first-time setup tasks for pre-commit
     cmds:
       - pip install -U pre-commit
       - pre-commit install --install-hooks -t pre-commit -t commit-msg
 
   setup-dagster:
-    internal: true
     desc: Run first-time setup tasks for Dagster
     dir: dagster
     cmds:
@@ -46,7 +44,6 @@ tasks:
       - poetry install --with dev,dagster,pipelines,spark,notebook
 
   setup-authproxy:
-    internal: true
     desc: Run first-time setup tasks for authproxy
     dir: authproxy
     cmds:
@@ -87,20 +84,18 @@ tasks:
   build-and-push:
     desc: Build and push Docker image
     cmds:
-      - task: build-cr
-      - task: push-cr
+      - task: build
+      - task: push
 
-  build-cr:
-    internal: true
+  build:
     desc: Build Docker image
     cmds:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f dagster/prod.Dockerfile dagster
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f authproxy/prod.Dockerfile authproxy
-      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/Dockerfile --target base .
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
+      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/prod.Dockerfile .
 
-  push-cr:
-    internal: true
-    desc: Build Docker image
+  push:
+    desc: Push Docker image to container registry
     cmds:
       - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
       - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
@@ -110,21 +105,20 @@ tasks:
     desc: Install/upgrade Helm charts
     dir: infra
     cmds:
+      - kubectl apply -f k8s/namespace.yaml
       - kubectl apply -f k8s/secrets.yaml
-      - kubectl apply -f k8s/configmap.yaml
+      - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
       - task: helm-up-dagster
       - task: helm-up-spark
       - task: helm-up-authproxy
 
   helm-up-dagster:
-    internal: true
     desc: Install/upgrade Dagster Helm chart
     dir: infra/helm
     cmds:
       - >
         helm upgrade --install dagster dagster/dagster
-        --namespace giga-dataops
-        --create-namespace
+        --namespace giga-dagster
         --values dagster/values.yaml
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
         --set dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}}
@@ -132,32 +126,25 @@ tasks:
         --set pipelineRun.image.tag={{.SHORT_SHA}}
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
-        --set dagsterWebserver.service.type=LoadBalancer
-        --set dagsterWebserver.enableReadOnly=false
 
   helm-up-authproxy:
-    internal: true
     desc: Install/upgrade authproxy Helm chart
     dir: infra/helm
     cmds:
       - >
-        helm upgrade --install dagster-authproxy ./authproxy
-        --namespace giga-dataops
-        --create-namespace
-        --values authproxy/values.yaml
+        helm upgrade --install dagster-authproxy ./oauth2-proxy
+        --namespace giga-dagster
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
         --set service.type=LoadBalancer
 
   helm-up-spark:
-    internal: true
     desc: Install/upgrade Spark Helm chart
     dir: infra/helm
     cmds:
       - >
         helm upgrade --install spark bitnami/spark
-        --namespace giga-dataops
-        --create-namespace
+        --namespace giga-dagster
         --values spark/values.yaml
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
         --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
@@ -166,13 +153,16 @@ tasks:
 
   helm-down:
     desc: Uninstall Helm charts
-    ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy
       - helm uninstall spark
       - helm uninstall dagster
-      - kubectl delete all --all
-      - kubectl delete pvc --all
+
+  helm-clean:
+    desc: Clean K8s resources
+    dir: infra
+    cmds:
+      - kubectl delete -f k8s/namespace.yaml
 
   python:
     desc: >

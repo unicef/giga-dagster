@@ -1,0 +1,28 @@
+jobs:
+  - deployment: Deploy
+    displayName: Uninstall all Helm charts
+    environment: $(kubernetesEnvironment)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: HelmDeploy@0
+              displayName: Helm uninstall authproxy
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: dagster-authproxy
+
+            - task: HelmDeploy@0
+              displayName: Helm uninstall Dagster
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: dagster
+
+            - task: HelmDeploy@0
+              displayName: Helm uninstall Spark
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: spark
