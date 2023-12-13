@@ -18,6 +18,14 @@ jobs:
                 configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
+              displayName: Delete existing authproxy secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: configuration
+                command: delete
+                arguments: secret giga-dagster-authproxy-secrets
+
+            - task: Kubernetes@1
               displayName: Create Dagster secrets
               inputs:
                 namespace: $(kubernetesNamespace)
