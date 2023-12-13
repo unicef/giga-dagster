@@ -154,7 +154,7 @@ def create_bronze_layer_columns(df):
         ("latitude", "latitude", "float"), 
         ("longitude", "longitude", "float"), 
         ("education_level", "education_level", "string"), 
-        ("education_level_govt", "education_level_govt", "string"), 
+        ("education_level_gov", "education_level_gov", "string"), 
         ("internet_availability", "connectivity_availability", "string"), 
         ("internet_speed_mbps", "connectivity_speed_static", "float"), 
         ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"), 
