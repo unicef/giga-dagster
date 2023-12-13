@@ -1,4 +1,4 @@
-import country_converter as cc
+from country_converter import CountryConverter
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from src.settings import settings
@@ -18,7 +18,7 @@ def set_tag_mutation_query(country_name):
 
 
 def create_tags():
-    coco = cc.CountryConverter()
+    coco = CountryConverter()
     country_list = list(coco.data["name_short"])
 
     datahub_graph_client = DataHubGraph(
