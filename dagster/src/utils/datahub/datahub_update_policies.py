@@ -7,21 +7,6 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from src.settings import settings
 
 
-def list_allgroups_query():
-    query = """
-        query {
-            listGroups(input: {}) {
-                groups {
-                    urn
-                    name
-                }
-            }
-        }
-    """
-
-    return query
-
-
 def policy_mutation_query(country_name, group_urn):
     datasets_urns_list = list_datasets_by_tag(tag=country_name)
 
@@ -100,7 +85,18 @@ def update_policies():
         )
     )
 
-    groups_list = datahub_graph_client.execute_graphql(query=list_allgroups_query())
+    list_allgroups_query = """
+        query {
+            listGroups(input: {}) {
+                groups {
+                    urn
+                    name
+                }
+            }
+        }
+    """
+
+    groups_list = datahub_graph_client.execute_graphql(query=list_allgroups_query)
 
     for group in groups_list["listGroups"]["groups"]:
         group_urn = group["urn"]
