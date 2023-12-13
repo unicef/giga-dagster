@@ -32,8 +32,9 @@ def raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-
-    # emit_metadata_to_datahub(context, df=df)
+    # context.log.info("CREATING DOMAINS IN DATAHUB")
+    # create_domains()
+    # # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
