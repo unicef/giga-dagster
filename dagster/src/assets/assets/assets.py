@@ -14,14 +14,6 @@ from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 #     create_domains,
 #     emit_metadata_to_datahub,
 # )
-from src.utils.datahub.ingest_azure_ad import run_azure_ad_to_datahub_pipeline
-
-
-@asset
-def azure_ad_users_groups(context: OpExecutionContext):
-    context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
-    run_azure_ad_to_datahub_pipeline()
-    yield Output(None)
 
 
 @asset(io_manager_key="adls_raw_io_manager")
@@ -32,8 +24,6 @@ def raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    # context.log.info("CREATING DOMAINS IN DATAHUB")
-    # create_domains()
     # # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
@@ -104,7 +94,7 @@ def dq_failed_rows(
 @asset(io_manager_key="adls_delta_io_manager")
 def staging(
     context: OpExecutionContext,
-    df_passed: sql.DataFrame,
+    dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
@@ -170,7 +160,7 @@ def staging(
         staging = staging.toDF()
 
     else:
-        staging = df_passed
+        staging = dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
         for file_date in filepaths_with_modified_date:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(

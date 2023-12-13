@@ -37,7 +37,7 @@ def school_master__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            if dataset_type is None:
+            if dataset_type is None or "test" in filepath:
                 continue
 
             properties = adls.get_file_metadata(filepath=filepath)

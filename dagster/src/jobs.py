@@ -5,9 +5,9 @@ school_master__automated_data_checks_job = define_asset_job(
     selection=[
         "raw",
         "bronze",
-        # "data_quality_results",
-        # "dq_passed_rows",
-        # "dq_failed_rows",
+        "data_quality_results",
+        "dq_passed_rows",
+        "dq_failed_rows",
         # "staging",
     ],
 )

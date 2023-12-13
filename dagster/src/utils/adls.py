@@ -112,7 +112,7 @@ class ADLSFileClient(ConfigurableResource):
         delta_table_name = (
             filename.split("_")[0]
             if context.step_key in ["silver", "gold"]
-            else filename
+            else filename.split(".")[0]
         )
 
         # TODO: Get from context
