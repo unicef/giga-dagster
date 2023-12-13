@@ -28,10 +28,6 @@ spark_common_config = {
     "spark.driver.memory": "1g",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
-    "spark.shuffle.service.enabled": "false",
-    "spark.dynamicAllocation.enabled": "false",
-    "spark.dynamicAllocation.maxExecutors": "3",
-    "spark.dynamicAllocation.executorAllocationRatio": "0.333",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -44,6 +40,9 @@ spark_common_config = {
     # "spark.python.use.daemon": "true",
     # "spark.python.daemon.module": "src.utils.sentry",
 }
+
+if settings.IN_PRODUCTION:
+    spark_common_config["spark.driver.host"] = "k8s-giga-dataops"
 
 spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
 
