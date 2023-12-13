@@ -18,6 +18,15 @@ jobs:
                 configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
+              displayName: Delete existing Dagster secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: configuration
+                command: delete
+                useConfigurationFile: true
+                configuration: $(Build.SourcesDirectory)/infra/k8s/secrets.yaml
+
+            - task: Kubernetes@1
               displayName: Create Dagster secrets
               inputs:
                 namespace: $(kubernetesNamespace)
@@ -68,13 +77,8 @@ jobs:
                     cookie-secret: "$(cookieSecret)"
                     client-id: "$(azureAdClientId)"
                     client-secret: "$(azureAdClientSecret)"
-                    OAUTH2_PROXY_PROVIDER: "azure"
                     OAUTH2_PROXY_AZURE_TENANT: "$(azureAdTenantId)"
-                    OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
-                    OAUTH2_PROXY_CODE_CHALLENGE_METHOD: "S256"
-                    OAUTH2_PROXY_PROXY_PREFIX: "/auth"
                     OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
-                    OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: "/app/static/dagster.svg"
 
             - task: Kubernetes@1
               displayName: Create Spark secrets
