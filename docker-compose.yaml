@@ -60,8 +60,6 @@ services:
       - ./dagster/.tmp/warehouse:/opt/spark/warehouse
     depends_on:
       - dagster-storage
-  #    ports:
-  #      - "3001:3002"
 
   spark-master:
     <<: *spark-common-config
