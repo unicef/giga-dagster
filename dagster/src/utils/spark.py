@@ -62,7 +62,7 @@ def get_spark_session() -> SparkSession:
         conf.set(key, value)
 
     builder = (
-        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}")
+        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}:7077")
         .appName(spark_app_name)
         .config(conf=conf)
         .enableHiveSupport()
