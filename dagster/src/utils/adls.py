@@ -68,18 +68,16 @@ class ADLSFileClient(ConfigurableResource):
         country_code = filename.split("_")[0]
 
         # TODO: Get from context
-        schema_name = "school_data"
+        schema_name = "school_data_v2"
         create_schema_sql = load_sql_template(
-            "create_gold_schema",
+            "create_schema",
             schema_name=schema_name,
         )
         create_table_sql = load_sql_template(
             "create_gold_table",
             schema_name=schema_name,
             table_name=country_code,
-            location=(
-                f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables-v2/{country_code}"
-            ),
+            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables-v2/{country_code}",
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
@@ -143,7 +141,7 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
         ),
         "silver": f"silver/{dataset_type}",
         "gold": "gold",
-        "gold_delta_table_from_csv": "gold/delta-tables",
+        "gold_delta_table_from_csv": "gold/delta-tables-v2",
     }
 
     destination_folder = step_destination_folder_map[step]

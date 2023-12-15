@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
-    school_id_giga STRING,
+    school_id_giga STRING NOT NULL,
     school_id_gov STRING,
     school_name STRING,
     school_establishment_year INT,
@@ -39,18 +39,18 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     pop_within_1km LONG,
     pop_within_2km LONG,
     pop_within_3km LONG,
-    school_location_ingestion_timestamp DATETIME,
+    school_location_ingestion_timestamp TIMESTAMP,
     connectivity_govt STRING,
     connectivity STRING,
     connectivity_RT STRING,
     connectivity_RT_datasource STRING,
-    connectivity_RT_ingestion_timestamp DATETIME,
-    connectivity_govt_ingestion_timestamp DATETIME,
+    connectivity_RT_ingestion_timestamp TIMESTAMP,
+    connectivity_govt_ingestion_timestamp TIMESTAMP,
     connectivity_govt_collection_year INT,
     disputed_region STRING,
     nearest_NR_id STRING,
     nearest_NR_distance DOUBLE,
-    connectivity_static STRING,
+    connectivity_static STRING
 )
 USING DELTA
 LOCATION '${location}';

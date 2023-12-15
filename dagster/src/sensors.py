@@ -146,7 +146,7 @@ def school_master__failed_manual_checks_sensor():
 def school_master__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.gold_folder}")
+    file_list = adls.list_paths(f"{constants.gold_folder_v2}")
     run_requests = []
 
     for file_data in file_list:

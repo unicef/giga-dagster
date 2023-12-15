@@ -8,6 +8,7 @@ class Constants(BaseSettings):
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_folder = "raw/school_geolocation_coverage_data/gold/school_data"
+    gold_folder_v2 = "updated_master_schema/master"
 
 
 @lru_cache

@@ -2,7 +2,7 @@ import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, types
 from pyspark.sql.functions import col
 
 from dagster import OutputContext
@@ -75,26 +75,6 @@ def transform_dataframe_for_deltatable(
     context: OutputContext, df: sql.DataFrame
 ) -> sql.DataFrame:
     columns_convert_to_string = [
-        # "giga_id_school",
-        # "school_id",
-        # "name",
-        # "education_level",
-        # "education_level_regional",
-        # "school_type",
-        # "connectivity",
-        # "type_connectivity",
-        # "coverage_availability",
-        # "coverage_type",
-        # "admin1",
-        # "admin2",
-        # "admin3",
-        # "admin4",
-        # "school_region",
-        # "computer_availability",
-        # "computer_lab",
-        # "electricity",
-        # "water",
-        # "address",
         "school_id_giga",
         "school_id_gov",
         "school_name",
@@ -122,16 +102,6 @@ def transform_dataframe_for_deltatable(
     ]
 
     columns_convert_to_double = [
-        # "lat",
-        # "lon",
-        # "connectivity_speed",
-        # "latency_connectivity",
-        # "fiber_node_distance",
-        # "microwave_node_distance",
-        # "nearest_school_distance",
-        # "nearest_LTE_distance",
-        # "nearest_UMTS_distance",
-        # "nearest_GSM_distance",
         "latitude",
         "longitude",
         "download_speed_contracted",
@@ -144,36 +114,24 @@ def transform_dataframe_for_deltatable(
     ]
 
     columns_convert_to_int = [
-        # "num_computers",
-        # "num_teachers",
-        # "num_students",
-        # "num_classroom",
-        # "nearest_LTE_id",
-        # "nearest_UMTS_id",
-        # "nearest_GSM_id",
-        # "schools_within_1km",
-        # "schools_within_2km",
-        # "schools_within_3km",
-        # "schools_within_10km",
-        "school_establishment_year", 
-        "num_computers", 
-        "num_computers_desired", 
-        "num_teachers", 
-        "num_adm_personnel", 
-        "num_students", 
-        "num_classroom", 
-        "num_latrines", 
-        "school_data_collection_year", 
-        "schools_within_1km", 
-        "schools_within_2km", 
-        "schools_within_3km", 
-        "connectivity_govt_collection_year", 
+        "school_establishment_year",
+        "num_computers",
+        "num_computers_desired",
+        "num_teachers",
+        "num_adm_personnel",
+        "num_students",
+        "num_classroom",
+        "num_latrines",
+        "school_data_collection_year",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "connectivity_govt_collection_year",
     ]
     columns_convert_to_long = [
         "pop_within_1km",
         "pop_within_2km",
         "pop_within_3km",
-        # "pop_within_10km",
     ]
     columns_convert_to_timestamp = [
         "school_location_ingestion_timestamp",
@@ -182,23 +140,23 @@ def transform_dataframe_for_deltatable(
     ]
 
     for col_name in columns_convert_to_string:
-        df = df.withColumn(col_name, col(col_name).cast("string"))
+        df = df.withColumn(col_name, col(col_name).cast(types.StringType()))
         context.log.info(">> TRANSFORMED STRING")
 
     for col_name in columns_convert_to_double:
-        df = df.withColumn(col_name, col(col_name).cast("double"))
+        df = df.withColumn(col_name, col(col_name).cast(types.DoubleType()))
         context.log.info(">> TRANSFORMED DOUBLE")
 
     for col_name in columns_convert_to_int:
-        df = df.withColumn(col_name, col(col_name).cast("int"))
+        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
         context.log.info(">> TRANSFORMED INT")
 
     for col_name in columns_convert_to_long:
-        df = df.withColumn(col_name, col(col_name).cast("long"))
+        df = df.withColumn(col_name, col(col_name).cast(types.LongType()))
         context.log.info(">> TRANSFORMED LONG")
 
     for col_name in columns_convert_to_timestamp:
-        df = df.withColumn(col_name, col(col_name).cast("timestamp"))
+        df = df.withColumn(col_name, col(col_name).cast(types.TimestampType()))
         context.log.info(">> TRANSFORMED TIMESTAMP")
 
     df.printSchema()
