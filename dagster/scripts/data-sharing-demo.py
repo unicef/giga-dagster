@@ -22,6 +22,7 @@ def upload_spark_dataframe_as_delta_table(
         "create_gold_schema",
         schema_name=schema_name,
     )
+    print(create_schema_sql)
     create_table_sql = load_sql_template(
         "create_gold_table",
         schema_name=schema_name,
@@ -50,17 +51,32 @@ def download_delta_table_as_delta_table(filepath: str, spark: SparkSession):
     return DeltaTable.forPath(spark, f"{adls_path}")
 
 
-def update_values(adls_path, spark: SparkSession):
+def update_values_u1(adls_path, spark: SparkSession):
     delta_table = download_delta_table_as_delta_table(
         filepath=f"{adls_path}", spark=spark
     )
 
     delta_table.update(
-        condition=expr("coverage_availability == 'No'"),
-        set={"coverage_availability": expr("'Yes'")},
+        condition=expr("cellular_coverage_availability == 'No'"),
+        set={"cellular_coverage_availability": expr("'Yes'")},
     )
 
-    delta_table.delete(condition=expr("connectivity is NULL"))
+    delta_table.delete(condition=expr("cellular_coverage_type == 'no coverage'"))
+
+    return delta_table.toDF().show()
+
+
+def update_values_u2(adls_path, spark: SparkSession):
+    delta_table = download_delta_table_as_delta_table(
+        filepath=f"{adls_path}", spark=spark
+    )
+
+    delta_table.update(
+        condition=expr("connectivity == 'Yes'"),
+        set={"cellular_coverage_availability": expr("'No'")},
+    )
+
+    delta_table.delete(condition=expr("cellular_coverage_type == '2G'"))
 
     return delta_table.toDF().show()
 
@@ -74,13 +90,25 @@ if __name__ == "__main__":
 
     # PRINT TABLE COLUMNS
     delta_table = download_delta_table_as_delta_table(filepath=v2_clone, spark=spark)
-    delta_table.toDF().select("connectivity").show()
-    delta_table.toDF().select("coverage_availability").show()
+    delta_table.toDF().show()
+    delta_table.toDF().select("cellular_coverage_availability").show()
+    delta_table.toDF().select("cellular_coverage_type").show()
 
-    # UPDATE TABLE
-    update_values(adls_path=v2_clone, spark=spark)
+    # UPDATE TABLE U1
+    update_values_u1(adls_path=v2_clone, spark=spark)
 
-    # PRINT UPDATED TABLE
+    # PRINT UPDATED TABLE U1
     delta_table = download_delta_table_as_delta_table(filepath=v2_clone, spark=spark)
+    delta_table.toDF().show()
+    delta_table.toDF().select("cellular_coverage_availability").show()
+    delta_table.toDF().select("cellular_coverage_type").show()
     delta_table.toDF().select("connectivity").show()
-    delta_table.toDF().select("coverage_availability").show()
+
+    # UPDATE TABLE U2
+    update_values_u2(adls_path=v2_clone, spark=spark)
+
+    # PRINT UPDATED TABLE U2
+    delta_table = download_delta_table_as_delta_table(filepath=v2_clone, spark=spark)
+    delta_table.toDF().show()
+    delta_table.toDF().select("connectivity").show()
+    delta_table.toDF().select("cellular_coverage_type").show()
