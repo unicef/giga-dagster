@@ -78,7 +78,7 @@ class ADLSFileClient(ConfigurableResource):
             schema_name=schema_name,
             table_name=country_code,
             location=(
-                f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}"
+                f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables-v2/{country_code}"
             ),
         )
         spark.sql(create_schema_sql)
