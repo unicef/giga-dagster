@@ -13,7 +13,7 @@ data:
   oauth2_proxy.cfg: |
     http_address = ":3001"
     upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
-    email_domains = ["thinkingmachin.es", "unicef.org"]
+    email_domains = ["*"]
     api_routes = ["^/graphql", "^/favicon.ico"]
     cookie_name = "_oauth2_proxy"
     cookie_expire = "168h"
@@ -26,5 +26,3 @@ data:
     scope = "openid profile email"
     proxy_websockets = true
     insecure_oidc_skip_issuer_verification = true
-    oidc_email_claim = "preferred_username"
-    oidc_issuer_url = "https://login.microsoftonline.com/common/v2.0"
