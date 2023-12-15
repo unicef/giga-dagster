@@ -15,6 +15,15 @@ config:
   clientID: ""
   # OAuth client secret
   clientSecret: ""
+
+  clientIdRef:
+    secretRef: ""
+    secretKey: AZURE_CLIENT_ID
+  clientSecretRef:
+    secretRef: ""
+    secretKey: AZURE_CLIENT_SECRET
+  tenantId: ""
+
   # Create a new secret with the following command
   # openssl rand -base64 32 | head -c 32 | base64
   # Use an existing secret for OAuth2 credentials (see secret.yaml for required fields)
@@ -429,11 +438,11 @@ extraObjects: [ ]
   #     provider: aws
   #     parameters:
   #       objects: |
-  #         - objectName: "oauth2-proxy"
-  #           objectType: "secretsmanager"
-  #           jmesPath:
-  #               - path: "client_id"
-  #                 objectAlias: "client-id"
+#         - objectName: "oauth2-proxy"
+#           objectType: "secretsmanager"
+#           jmesPath:
+#               - path: "client_id"
+#                 objectAlias: "client-id"
 #               - path: "client_secret"
 #                 objectAlias: "client-secret"
 #               - path: "cookie_secret"

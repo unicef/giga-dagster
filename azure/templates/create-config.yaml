@@ -70,6 +70,7 @@ jobs:
                     client-secret: "$(azureAdClientSecret)"
                     OAUTH2_PROXY_AZURE_TENANT: "$(azureAdTenantId)"
                     OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
+                    OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
             - task: Kubernetes@1
               displayName: Create Spark secrets

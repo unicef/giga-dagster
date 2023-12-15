@@ -137,6 +137,9 @@ tasks:
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set image.tag={{.SHORT_SHA}}
         --set service.type=LoadBalancer
+        --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
+        --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
+        --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
 
   helm-up-spark:
     desc: Install/upgrade Spark Helm chart
