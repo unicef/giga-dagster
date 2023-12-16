@@ -37,8 +37,8 @@ class Constants(BaseSettings):
             ),
             "silver": f"silver/{dataset_type}",
             "gold": "gold",
-            "master_csv_to_gold": "gold/delta-tables-v1/school-master",
-            "reference_csv_to_gold": "gold/delta-tables-v1/school-reference",
+            "master_csv_to_gold": "gold/delta-tables/school-master",
+            "reference_csv_to_gold": "gold/delta-tables/school-reference",
         }
 
 
