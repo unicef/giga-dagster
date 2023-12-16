@@ -604,10 +604,13 @@ runLauncher:
             - name: grpc
               containerPort: 3030
               protocol: TCP
-            - name: spark-driver
+            - name: sparkdriver
               containerPort: 4040
               protocol: TCP
         jobMetadata:
+          labels:
+            giga-dataops/name: dagster-spark-run-job
+        podTemplateSpecMetadata:
           labels:
             giga-dataops/name: dagster-spark-run-job
         jobSpecConfig:

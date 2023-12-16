@@ -108,7 +108,6 @@ tasks:
       - kubectl apply -f k8s/namespace.yaml
       - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
       - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
-      - kubectl apply -f k8s/svc.yaml --namespace giga-dagster
       - task: helm-up-dagster
       - task: helm-up-spark
       - task: helm-up-authproxy
