@@ -54,6 +54,7 @@ def school_master__raw_file_uploads_sensor():
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
+                # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=f"{layer}_{dataset_type.replace('-', '_')}",
             )
 
@@ -97,6 +98,7 @@ def school_master__successful_manual_checks_sensor():
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
+                # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=(
                     f"manual_check_success_{dataset_type.replace('-', '_')}"
                 ),
@@ -140,6 +142,7 @@ def school_master__failed_manual_checks_sensor():
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
+                # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=(
                     f"manual_review_failed_{dataset_type.replace('-', '_')}"
                 ),
