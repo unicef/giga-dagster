@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     def AZURE_BLOB_CONNECTION_URI(self) -> str:
         return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
+    @property
+    def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
+        return 60 * 5 if self.IN_PRODUCTION else 30
+
 
 @lru_cache
 def get_settings():

@@ -32,7 +32,14 @@ school_master__failed_manual_checks_job = define_asset_job(
 school_master__convert_gold_csv_to_deltatable_job = define_asset_job(
     name="school_master__convert_gold_csv_to_deltatable_job",
     selection=[
-        "gold_delta_table_from_csv",
+        "master_csv_to_gold",
+    ],
+)
+
+school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
+    name="school_reference__convert_gold_csv_to_deltatable_job",
+    selection=[
+        "reference_csv_to_gold",
     ],
 )
 

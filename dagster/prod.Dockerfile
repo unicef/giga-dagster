@@ -57,6 +57,9 @@ WORKDIR /app
 
 # Copy source code into the container
 COPY src ./src
+COPY scripts ./scripts
+COPY schemas ./schemas
+COPY sql ./sql
 
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002

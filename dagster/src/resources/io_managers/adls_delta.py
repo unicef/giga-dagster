@@ -4,7 +4,6 @@ from pyspark import sql
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.utils.adls import ADLSFileClient
-from src.utils.spark import transform_dataframe_for_deltatable
 
 adls_client = ADLSFileClient()
 
@@ -26,9 +25,16 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                 )
                 return
 
-            output = transform_dataframe_for_deltatable(context, output)
+            schema_name = self._get_schema(context)
+            table_schema_definition = self._get_table_schema_definition(context)
+            type_transform_function = self._get_type_transform_function(context)
+            output = type_transform_function(output, context)
             adls_client.upload_spark_dataframe_as_delta_table(
-                output, filepath, self.pyspark.spark_session
+                output,
+                filepath,
+                schema_name,
+                table_schema_definition,
+                self.pyspark.spark_session,
             )
 
         context.log.info(
