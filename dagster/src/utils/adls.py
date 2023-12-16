@@ -70,7 +70,7 @@ class ADLSFileClient(ConfigurableResource):
         # TODO: Get from context
         schema_name = "school_data"
         create_schema_sql = load_sql_template(
-            "create_gold_schema",
+            "create_schema",
             schema_name=schema_name,
         )
         create_table_sql = load_sql_template(

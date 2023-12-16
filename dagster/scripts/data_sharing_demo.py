@@ -19,7 +19,7 @@ def upload_spark_dataframe_as_delta_table(
     # TODO: Get from context
     schema_name = "school_data_v2"
     create_schema_sql = load_sql_template(
-        "create_gold_schema",
+        "create_schema",
         schema_name=schema_name,
     )
     print(create_schema_sql)

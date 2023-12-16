@@ -26,7 +26,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                 )
                 return
 
-            output = transform_dataframe_for_deltatable(context, output)
+            output = transform_dataframe_for_deltatable(output, context)
             adls_client.upload_spark_dataframe_as_delta_table(
                 output, filepath, self.pyspark.spark_session
             )
