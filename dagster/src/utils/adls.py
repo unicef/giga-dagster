@@ -62,24 +62,26 @@ class ADLSFileClient(ConfigurableResource):
         return df
 
     def upload_spark_dataframe_as_delta_table(
-        self, data: sql.DataFrame, filepath: str, spark: SparkSession
+        self,
+        data: sql.DataFrame,
+        filepath: str,
+        schema_name: str,
+        table_schema_definition: str,
+        spark: SparkSession,
     ):
-        filename = filepath.split("/")[-1]
+        *directory_list, filename = filepath.split("/")
+        directory = "/".join(directory_list)
         country_code = filename.split("_")[0]
 
-        # TODO: Get from context
-        schema_name = "school_data"
         create_schema_sql = load_sql_template(
             "create_schema",
             schema_name=schema_name,
         )
         create_table_sql = load_sql_template(
-            "create_gold_table",
+            table_schema_definition,
             schema_name=schema_name,
             table_name=country_code,
-            location=(
-                f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/delta-tables/{country_code}"
-            ),
+            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory}/{country_code}",
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
@@ -128,25 +130,7 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
         else filename
     )
 
-    step_destination_folder_map = {
-        "raw": f"{constants.raw_folder}/{dataset_type}",
-        "bronze": f"bronze/{dataset_type}",
-        "data_quality_results": "logs-gx",
-        "dq_split_rows": "bronze/split-rows",
-        "dq_passed_rows": f"staging/pending-review/{dataset_type}",
-        "dq_failed_rows": "archive/gx-tests-failed",
-        "manual_review_passed_rows": (
-            f"{constants.staging_approved_folder}/{dataset_type}"
-        ),
-        "manual_review_failed_rows": (
-            f"{constants.archive_manual_review_rejected_folder}"
-        ),
-        "silver": f"silver/{dataset_type}",
-        "gold": "gold",
-        "gold_delta_table_from_csv": "gold/delta-tables",
-    }
-
-    destination_folder = step_destination_folder_map[step]
+    destination_folder = constants.step_destination_folder_map(dataset_type)[step]
 
     if not destination_folder:
         raise ValueError(f"Unknown filepath: {source_path}")
@@ -172,19 +156,7 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     filename = source_path.split("/")[-1]
     step = context.asset_key.to_user_string()
 
-    step_origin_folder_map = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
-
-    upstream_step = step_origin_folder_map[step]
+    upstream_step = constants.step_origin_folder_map[step]
     upstream_path = f"{upstream_step}/{dataset_type}/{filename}"
 
     return upstream_path

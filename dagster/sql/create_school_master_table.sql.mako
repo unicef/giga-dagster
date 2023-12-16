@@ -53,4 +53,4 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     connectivity_static STRING
 )
 USING DELTA
-LOCATION '${location}';
+LOCATION '${location}'

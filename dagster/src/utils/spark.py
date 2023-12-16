@@ -86,7 +86,7 @@ def get_spark_session() -> SparkSession:
     return spark.getOrCreate()
 
 
-def transform_dataframe_for_deltatable(
+def transform_school_master_types(
     df: sql.DataFrame, context: OutputContext = None
 ) -> sql.DataFrame:
     log_func = print if context is None else context.log.info
@@ -175,6 +175,33 @@ def transform_dataframe_for_deltatable(
     for col_name in columns_convert_to_timestamp:
         df = df.withColumn(col_name, col(col_name).cast(types.TimestampType()))
         log_func(">> TRANSFORMED TIMESTAMP")
+
+    df.printSchema()
+    return df
+
+
+def transform_school_reference_types(
+    df: sql.DataFrame, context: OutputContext = None
+) -> sql.DataFrame:
+    log_func = print if context is None else context.log.info
+
+    columns_convert_to_int = [
+        "pop_within_10km",
+        "schools_within_10km",
+    ]
+    columns_convert_to_float = [
+        "download_speed_govt1",
+        "download_speed_govt5",
+        "nearest_school_distance",
+    ]
+
+    for col_name in columns_convert_to_int:
+        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
+        log_func(">> TRANSFORMED INT")
+
+    for col_name in columns_convert_to_float:
+        df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
+        log_func(">> TRANSFORMED FLOAT")
 
     df.printSchema()
     return df

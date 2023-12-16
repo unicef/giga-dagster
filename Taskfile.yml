@@ -172,9 +172,9 @@ tasks:
       Run a Python module inside the Dagster container.
       Usage: `task python -- dotted.path.of.module`
     cmds:
-      - task exec -- -it dagster-webserver python -m {{.CLI_ARGS}}
+      - task exec -- -it dagster-webserver poetry run python -m {{.CLI_ARGS}}
 
   ipython:
     desc: Spawn an IPython shell inside the Dagster container
     cmds:
-      - task exec -- -it dagster-webserver ipython
+      - task exec -- -it dagster-webserver poetry run ipython

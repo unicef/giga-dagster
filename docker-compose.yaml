@@ -58,6 +58,7 @@ services:
     volumes:
       - ./dagster:/app
       - ./dagster/.tmp/warehouse:/opt/spark/warehouse
+      - ./dagster/.venv-docker:/app/.venv
     depends_on:
       - dagster-storage
 

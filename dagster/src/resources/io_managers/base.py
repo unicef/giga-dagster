@@ -1,7 +1,14 @@
 from abc import ABC
+from typing import Callable
+
+from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src.utils.adls import get_filepath
+from src.utils.spark import (
+    transform_school_master_types,
+    transform_school_reference_types,
+)
 
 
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
@@ -17,3 +24,20 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         context.log.info(f"Moving from {filepath} to {destination_filepath}")
 
         return destination_filepath
+
+    @staticmethod
+    def _get_schema(context: InputContext | OutputContext):
+        return context.step_context.op_config["metastore_schema"]
+
+    @staticmethod
+    def _get_table_schema_definition(context: InputContext | OutputContext):
+        return context.step_context.op_config["table_schema_definition"]
+
+    @staticmethod
+    def _get_type_transform_function(
+        context: InputContext | OutputContext,
+    ) -> Callable[[DataFrame, OutputContext | None], DataFrame]:
+        dataset_type = context.step_context.op_config["dataset_type"]
+        if dataset_type == "school-reference":
+            return transform_school_reference_types
+        return transform_school_master_types

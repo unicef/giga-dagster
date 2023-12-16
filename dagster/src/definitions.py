@@ -11,6 +11,7 @@ from src.jobs import (
     school_master__convert_gold_csv_to_deltatable_job,
     school_master__failed_manual_checks_job,
     school_master__successful_manual_checks_job,
+    school_reference__convert_gold_csv_to_deltatable_job,
 )
 from src.resources.io_managers import (
     ADLSBronzeIOManager,
@@ -22,6 +23,7 @@ from src.sensors import (
     school_master__gold_csv_to_deltatable_sensor,
     school_master__raw_file_uploads_sensor,
     school_master__successful_manual_checks_sensor,
+    school_reference__gold_csv_to_deltatable_sensor,
 )
 from src.utils.adls import ADLSFileClient
 from src.utils.sentry import setup_sentry
@@ -52,6 +54,7 @@ defs = Definitions(
         school_master__successful_manual_checks_job,
         school_master__failed_manual_checks_job,
         school_master__convert_gold_csv_to_deltatable_job,
+        school_reference__convert_gold_csv_to_deltatable_job,
         datahub__ingest_azure_ad_users_groups_job,
         datahub__create_domains_job,
         datahub__create_tags_job,
@@ -62,5 +65,6 @@ defs = Definitions(
         school_master__successful_manual_checks_sensor,
         school_master__failed_manual_checks_sensor,
         school_master__gold_csv_to_deltatable_sensor,
+        school_reference__gold_csv_to_deltatable_sensor,
     ],
 )
