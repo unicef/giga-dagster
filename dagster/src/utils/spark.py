@@ -1,3 +1,6 @@
+import subprocess
+from subprocess import PIPE
+
 import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
@@ -7,6 +10,13 @@ from pyspark.sql.functions import col
 
 from dagster import OutputContext
 from src.settings import settings
+
+
+def _get_host_ip():
+    completed_process = subprocess.run(["hostname", "-i"], stdout=PIPE, stderr=PIPE)
+    ip = completed_process.stdout.strip().decode("utf-8")
+    return "127.0.0.1" if ip == "127.0.1.1" else ip
+
 
 spark_common_config = {
     "spark.driver.extraJavaOptions": str.join(
@@ -26,6 +36,7 @@ spark_common_config = {
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
+    "spark.driver.host": _get_host_ip(),
     "spark.driver.port": "4040",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
