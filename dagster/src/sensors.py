@@ -7,6 +7,7 @@ from src.jobs import (
     school_master__successful_manual_checks_job,
     school_reference__convert_gold_csv_to_deltatable_job,
 )
+from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
 
@@ -30,7 +31,10 @@ def get_dataset_type(filepath: str) -> str | None:
         return None
 
 
-@sensor(job=school_master__automated_data_checks_job, minimum_interval_seconds=30)
+@sensor(
+    job=school_master__automated_data_checks_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
 def school_master__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
@@ -74,7 +78,10 @@ def school_master__raw_file_uploads_sensor():
             )
 
 
-@sensor(job=school_master__successful_manual_checks_job, minimum_interval_seconds=60)
+@sensor(
+    job=school_master__successful_manual_checks_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
 def school_master__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
@@ -119,7 +126,10 @@ def school_master__successful_manual_checks_sensor():
             )
 
 
-@sensor(job=school_master__failed_manual_checks_job, minimum_interval_seconds=60)
+@sensor(
+    job=school_master__failed_manual_checks_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
 def school_master__failed_manual_checks_sensor():
     adls = ADLSFileClient()
 
@@ -160,7 +170,8 @@ def school_master__failed_manual_checks_sensor():
 
 
 @sensor(
-    job=school_master__convert_gold_csv_to_deltatable_job, minimum_interval_seconds=30
+    job=school_master__convert_gold_csv_to_deltatable_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
 def school_master__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
@@ -205,7 +216,7 @@ def school_master__gold_csv_to_deltatable_sensor():
 
 @sensor(
     job=school_reference__convert_gold_csv_to_deltatable_job,
-    minimum_interval_seconds=30,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
 def school_reference__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
