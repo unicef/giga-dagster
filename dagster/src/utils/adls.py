@@ -25,7 +25,11 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
-            return pd.read_csv(buffer, encoding="utf-8-sig")
+
+            if filepath.endswith(".csv"):
+                return pd.read_csv(buffer)
+            elif filepath.endswith(".xls") or filepath.endswith(".xlsx"):
+                return pd.read_excel(buffer)
 
     def download_csv_as_spark_dataframe(  # CAN BE REMOVED ONCE WE FINISH CONVERTING EXISTING FILES TO DELTA TABLE
         self, filepath: str, spark: SparkSession
@@ -112,7 +116,7 @@ class ADLSFileClient(ConfigurableResource):
         delta_table_name = (
             filename.split("_")[0]
             if context.step_key in ["silver", "gold"]
-            else filename.split(".")[0]
+            else filename.split(".")[0].replace("-", "_")
         )
 
         # TODO: Get from context
@@ -177,7 +181,7 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
     )
 
     step_destination_folder_map = {
-        "raw": f"{constants.raw_folder}/{dataset_type}",
+        "raw": f"{constants.raw_folder}",
         "bronze": f"bronze/{dataset_type}",
         "data_quality_results": "logs-gx",
         "dq_passed_rows": f"staging/gx-tests-passed/{dataset_type}",
