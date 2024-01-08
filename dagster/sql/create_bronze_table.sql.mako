@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     gx_index INT,
-    school_density INT,
+    school_density LONG,
     hex8 STRING,
     giga_id_school STRING,
     school_id STRING,
-    school_id_gov_type STRING, ## ALIGN ABBR OF GOVT
+    school_id_gov_type STRING,
     school_name STRING,
     school_establishment_year INT,
     latitude DOUBLE,
@@ -12,10 +12,10 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     education_level STRING,
     education_level_govt STRING,
     internet_availability STRING,
-    internet_speed_mbps DOUBLE,
+    connectivity_speed_static DOUBLE,
     connectivity_speed_contracted DOUBLE,
     connectivity_type STRING,
-    connectivity_latency_static DOUBLE
+    connectivity_latency_static DOUBLE,
     admin1 STRING,
     admin2 STRING,
     admin3 STRING,
