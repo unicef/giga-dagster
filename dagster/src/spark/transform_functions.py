@@ -34,7 +34,7 @@ def create_giga_school_id(df):
     df = df.withColumn(
         "identifier_concat",
         f.concat(
-            f.col("school_id"),
+            f.col("school_id_gov"),
             f.col("school_name"),
             f.col("education_level"),
             f.col("latitude"),
@@ -93,8 +93,8 @@ def standardize_school_name(df):
 
 def standardize_internet_speed(df):
     df = df.withColumn(
-        "internet_speed_mbps",
-        f.expr("regexp_replace(internet_speed_mbps, '[^0-9.]', '')").cast("float"),
+        "download_speed_govt",
+        f.expr("regexp_replace(download_speed_govt, '[^0-9.]', '')").cast("float"),
     )
     return df
 
@@ -141,47 +141,42 @@ def create_bronze_layer_columns(df):
     #         )
     #     )
 
-    # column_mapping = {
-    #     # raw, delta_col, dtype
-    #     ("gx_index", "gx_index", "integer"), 
-    #     ("school_density", "school_density", "integer"), 
-    #     ("hex8", "hex8", "string"), 
-    #     ("giga_id_school", "school_id_giga", "string"), 
-    #     ("school_id", "school_id_gov", "string"), 
-    #     ("school_id_gov_type", "school_id_gov_type", "string"), 
-    #     ("school_name", "school_name", "string"), 
-    #     ("school_establishment_year", "school_establishment_year", "integer"), 
-    #     ("latitude", "latitude", "float"), 
-    #     ("longitude", "longitude", "float"), 
-    #     ("education_level", "education_level", "string"), 
-    #     ("education_level_gov", "education_level_gov", "string"), 
-    #     ("internet_availability", "connectivity_availability", "string"), 
-    #     ("internet_speed_mbps", "connectivity_speed_static", "float"), 
-    #     ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"), 
-    #     ("internet_type", "connectivity_type", "string"), 
-    #     ("connectivity_latency_static", "connectivity_latency_static", "float"), 
-    #     ("admin_1", "admin1", "string"), 
-    #     ("admin_2", "admin2", "string"), 
-    #     ("admin_3", "admin3", "string"), 
-    #     ("admin_4", "admin4", "string"), 
-    #     ("school_region", "school_area_type", "string"), 
-    #     ("school_funding_type", "school_type", "string"),
-    #     ("computer_count", "num_computers", "integer"), 
-    #     ("num_computers_desired", "num_computers_desired", "integer"), 
-    #     ("num_teachers", "num_teachers", "integer"), 
-    #     ("num_adm_personnel", "num_adm_personnel", "integer"), 
-    #     ("student_count", "num_students", "integer"), 
-    #     ("num_classroom", "num_classrooms", "integer"), 
-    #     ("num_latrines", "num_latrines", "integer"), 
-    #     ("computer_lab_availability", "computer_lab_availability", "string"), 
-    #     ("electricity_availability", "electricity_availability", "string"), 
-    #     ("electricity_type", "electricity_type", "string"), 
-    #     ("water_availability", "water_availability", "string"), 
-    #     ("school_address", "school_address", "string"), 
-    #     ("school_data_source", "school_data_source", "string"), 
-    #     ("school_data_collection_year", "school_data_collection_year", "integer"), 
-    #     ("school_data_collection_modality", "school_data_collection_modality", "string"),
-    # }
+    column_mapping = {
+        # raw, delta_col, dtype
+        ("school_id", "school_id_gov", "string"), 
+        ("school_name", "school_name", "string"), 
+        ("school_id_gov_type", "school_id_gov_type", "string"), 
+        ("school_establishment_year", "school_establishment_year", "integer"), 
+        ("latitude", "latitude", "float"), 
+        ("longitude", "longitude", "float"), 
+        ("education_level", "education_level", "string"), 
+        ("education_level_govt", "education_level_govt", "string"), 
+        ("internet_availability", "connectivity_govt", "string"), 
+        ("connectivity_govt_ingestion_timestamp", "connectivity_govt_ingestion_timestamp", "timestamp"),
+        ("internet_speed_mbps", "download_speed_govt", "float"), 
+        ("download_speed_contracted", "download_speed_contracted", "float"), 
+        ("internet_type", "connectivity_type_govt", "string"), 
+        ("admin1", "admin1", "string"), 
+        ("admin2", "admin2", "string"), 
+        ("school_region", "school_area_type", "string"), 
+        ("school_funding_type", "school_funding_type", "string"),
+        ("computer_count", "num_computers", "integer"), 
+        ("desired_computer_count", "num_computers_desired", "integer"), 
+        ("teacher_count", "num_teachers", "integer"), 
+        ("adm_personnel_count", "num_adm_personnel", "integer"), 
+        ("student_count", "num_students", "integer"), 
+        ("classroom_count", "num_classrooms", "integer"), 
+        ("num_latrines", "num_latrines", "integer"), 
+        ("computer_lab", "computer_lab", "string"), 
+        ("electricity", "electricity_availability", "string"), 
+        ("electricity_type", "electricity_type", "string"), 
+        ("water", "water_availability", "string"), 
+        ("address", "school_address", "string"), 
+        ("school_data_source", "school_data_source", "string"), 
+        ("school_data_collection_year", "school_data_collection_year", "integer"), 
+        ("school_data_collection_modality", "school_data_collection_modality", "string"),
+        ("is_open", "is_school_open", "string"),
+        }
 
     # bronze_columns = [delta_col for _, delta_col, _ in column_mapping]
 
@@ -198,10 +193,6 @@ def create_bronze_layer_columns(df):
     #         df = df.withColumn(delta_col, f.lit(None).cast(dtype))
 
     # df = df.select(*bronze_columns)
-    df = df.withColumn(
-    'school_type_public',
-        f.when(f.col('school_type') == 'public', 'public').otherwise('not public'))
-
 
     return df
 
@@ -442,7 +433,7 @@ def critical_error_indices_json_parse(data):
         result = nest_results[i]["result"]
 
     # duplicate school_id "expect_column_values_to_be_unique"
-        if expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "school_id":
+        if expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "school_id_gov":
             data = result["unexpected_index_list"]
             index_list = [entry['gx_index'] for entry in data]
             index_dup_school_id_set = set(index_list)
