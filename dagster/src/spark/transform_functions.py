@@ -141,63 +141,63 @@ def create_bronze_layer_columns(df):
     #         )
     #     )
 
-    column_mapping = {
-        # raw, delta_col, dtype
-        ("gx_index", "gx_index", "integer"), 
-        ("school_density", "school_density", "integer"), 
-        ("hex8", "hex8", "string"), 
-        ("giga_id_school", "school_id_giga", "string"), 
-        ("school_id", "school_id_gov", "string"), 
-        ("school_id_gov_type", "school_id_gov_type", "string"), 
-        ("school_name", "school_name", "string"), 
-        ("school_establishment_year", "school_establishment_year", "integer"), 
-        ("latitude", "latitude", "float"), 
-        ("longitude", "longitude", "float"), 
-        ("education_level", "education_level", "string"), 
-        ("education_level_gov", "education_level_gov", "string"), 
-        ("internet_availability", "connectivity_availability", "string"), 
-        ("internet_speed_mbps", "connectivity_speed_static", "float"), 
-        ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"), 
-        ("internet_type", "connectivity_type", "string"), 
-        ("connectivity_latency_static", "connectivity_latency_static", "float"), 
-        ("admin_1", "admin1", "string"), 
-        ("admin_2", "admin2", "string"), 
-        ("admin_3", "admin3", "string"), 
-        ("admin_4", "admin4", "string"), 
-        ("school_region", "school_area_type", "string"), 
-        ("school_funding_type", "school_type", "string"),
-        ("computer_count", "num_computers", "integer"), 
-        ("num_computers_desired", "num_computers_desired", "integer"), 
-        ("num_teachers", "num_teachers", "integer"), 
-        ("num_adm_personnel", "num_adm_personnel", "integer"), 
-        ("student_count", "num_students", "integer"), 
-        ("num_classroom", "num_classrooms", "integer"), 
-        ("num_latrines", "num_latrines", "integer"), 
-        ("computer_lab_availability", "computer_lab_availability", "string"), 
-        ("electricity_availability", "electricity_availability", "string"), 
-        ("electricity_type", "electricity_type", "string"), 
-        ("water_availability", "water_availability", "string"), 
-        ("school_address", "school_address", "string"), 
-        ("school_data_source", "school_data_source", "string"), 
-        ("school_data_collection_year", "school_data_collection_year", "integer"), 
-        ("school_data_collection_modality", "school_data_collection_modality", "string"),
-    }
+    # column_mapping = {
+    #     # raw, delta_col, dtype
+    #     ("gx_index", "gx_index", "integer"), 
+    #     ("school_density", "school_density", "integer"), 
+    #     ("hex8", "hex8", "string"), 
+    #     ("giga_id_school", "school_id_giga", "string"), 
+    #     ("school_id", "school_id_gov", "string"), 
+    #     ("school_id_gov_type", "school_id_gov_type", "string"), 
+    #     ("school_name", "school_name", "string"), 
+    #     ("school_establishment_year", "school_establishment_year", "integer"), 
+    #     ("latitude", "latitude", "float"), 
+    #     ("longitude", "longitude", "float"), 
+    #     ("education_level", "education_level", "string"), 
+    #     ("education_level_gov", "education_level_gov", "string"), 
+    #     ("internet_availability", "connectivity_availability", "string"), 
+    #     ("internet_speed_mbps", "connectivity_speed_static", "float"), 
+    #     ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"), 
+    #     ("internet_type", "connectivity_type", "string"), 
+    #     ("connectivity_latency_static", "connectivity_latency_static", "float"), 
+    #     ("admin_1", "admin1", "string"), 
+    #     ("admin_2", "admin2", "string"), 
+    #     ("admin_3", "admin3", "string"), 
+    #     ("admin_4", "admin4", "string"), 
+    #     ("school_region", "school_area_type", "string"), 
+    #     ("school_funding_type", "school_type", "string"),
+    #     ("computer_count", "num_computers", "integer"), 
+    #     ("num_computers_desired", "num_computers_desired", "integer"), 
+    #     ("num_teachers", "num_teachers", "integer"), 
+    #     ("num_adm_personnel", "num_adm_personnel", "integer"), 
+    #     ("student_count", "num_students", "integer"), 
+    #     ("num_classroom", "num_classrooms", "integer"), 
+    #     ("num_latrines", "num_latrines", "integer"), 
+    #     ("computer_lab_availability", "computer_lab_availability", "string"), 
+    #     ("electricity_availability", "electricity_availability", "string"), 
+    #     ("electricity_type", "electricity_type", "string"), 
+    #     ("water_availability", "water_availability", "string"), 
+    #     ("school_address", "school_address", "string"), 
+    #     ("school_data_source", "school_data_source", "string"), 
+    #     ("school_data_collection_year", "school_data_collection_year", "integer"), 
+    #     ("school_data_collection_modality", "school_data_collection_modality", "string"),
+    # }
 
-    bronze_columns = [delta_col for _, delta_col, _ in column_mapping]
+    # bronze_columns = [delta_col for _, delta_col, _ in column_mapping]
 
-    # Iterate over mapping set and perform actions
-    for raw_col, delta_col, dtype in column_mapping:
-    # Check if the raw column exists in the DataFrame
-        if raw_col in df.columns:
-        # If it exists in raw, rename it to the delta column
-            df = df.withColumnRenamed(raw_col, delta_col)
-        # If it doesn't exist in both, create a null column placeholder with the delta column name
-        elif delta_col in df.columns:
-            pass
-        else:
-            df = df.withColumn(delta_col, f.lit(None).cast(dtype))
+    # # Iterate over mapping set and perform actions
+    # for raw_col, delta_col, dtype in column_mapping:
+    # # Check if the raw column exists in the DataFrame
+    #     if raw_col in df.columns:
+    #     # If it exists in raw, rename it to the delta column
+    #         df = df.withColumnRenamed(raw_col, delta_col)
+    #     # If it doesn't exist in both, create a null column placeholder with the delta column name
+    #     elif delta_col in df.columns:
+    #         pass
+    #     else:
+    #         df = df.withColumn(delta_col, f.lit(None).cast(dtype))
 
-    df = df.select(*bronze_columns)
+    # df = df.select(*bronze_columns)
     df = df.withColumn(
     'school_type_public',
         f.when(f.col('school_type') == 'public', 'public').otherwise('not public'))
