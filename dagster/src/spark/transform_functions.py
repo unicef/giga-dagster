@@ -108,6 +108,63 @@ def h3_geo_to_h3(latitude, longitude):
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
+column_mapping = {
+    # raw, delta_col
+    ("school_id", "school_id_gov"), 
+    ("school_name", "school_name"), 
+    ("school_id_gov_type", "school_id_gov_type"), 
+    ("school_establishment_year", "school_establishment_year"), 
+    ("latitude", "latitude"), 
+    ("longitude", "longitude"), 
+    ("education_level", "education_level"), 
+    ("education_level_govt", "education_level_govt"), 
+    ("internet_availability", "connectivity_govt"), 
+    ("connectivity_govt_ingestion_timestamp", "connectivity_govt_ingestion_timestamp"),
+    ("internet_speed_mbps", "download_speed_govt"), 
+    ("download_speed_contracted", "download_speed_contracted"), 
+    ("internet_type", "connectivity_type_govt"), 
+    ("admin1", "admin1"), 
+    ("admin2", "admin2"), 
+    ("school_region", "school_area_type"), 
+    ("school_funding_type", "school_funding_type"),
+    ("computer_count", "num_computers"), 
+    ("desired_computer_count", "num_computers_desired"), 
+    ("teacher_count", "num_teachers"), 
+    ("adm_personnel_count", "num_adm_personnel"), 
+    ("student_count", "num_students"), 
+    ("classroom_count", "num_classrooms"), 
+    ("num_latrines", "num_latrines"), 
+    ("computer_lab", "computer_lab"), 
+    ("electricity", "electricity_availability"), 
+    ("electricity_type", "electricity_type"), 
+    ("water", "water_availability"), 
+    ("address", "school_address"), 
+    ("school_data_source", "school_data_source"), 
+    ("school_data_collection_year", "school_data_collection_year"), 
+    ("school_data_collection_modality", "school_data_collection_modality"),
+    ("is_open", "is_school_open"),
+    }
+
+
+def rename_raw_columns(df):
+    # Iterate over mapping set and perform actions
+    for raw_col, delta_col in column_mapping:
+    # Check if the raw column exists in the DataFrame
+        if raw_col in df.columns:
+        # If it exists in raw, rename it to the delta column
+            df = df.withColumnRenamed(raw_col, delta_col)
+        # If it doesn't exist in both, create a null column placeholder with the delta column name
+        elif delta_col in df.columns:
+            pass
+        else:
+            df = df.withColumn(delta_col, f.lit(None))
+    
+    bronze_columns = [delta_col for _, delta_col in column_mapping]
+    df = df.select(*bronze_columns)
+    
+    return df
+
+
 # Note: Temporary function for transforming raw files to standardized columns.
 # This should eventually be converted to dbt transformations.
 def create_bronze_layer_columns(df):
@@ -139,7 +196,6 @@ def create_bronze_layer_columns(df):
     #         f.col("latitude"), f.col("longitude"), f.col("country_code")
     #         )
     #     )
-
     
 
     return df
@@ -459,8 +515,9 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
+    df = rename_raw_columns(df)
     df = create_bronze_layer_columns(df)
-    df.show()
+    df.sort("school_name").limit(10).show()
     # df.show()
     # df = df.limit(10)
     
