@@ -1,11 +1,12 @@
 import subprocess
+from uuid import uuid4
 
 import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
-from pyspark.sql.functions import col
+from pyspark.sql.functions import col, udf
 
 from dagster import OutputContext
 from src.settings import settings
@@ -200,6 +201,52 @@ def transform_school_reference_types(
     for col_name in columns_convert_to_float:
         df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
         log_func(">> TRANSFORMED FLOAT")
+
+    df.printSchema()
+    return df
+
+
+def transform_qos_bra_types(
+    df: sql.DataFrame, context: OutputContext = None
+) -> sql.DataFrame:
+    log_func = print if context is None else context.log.info
+
+    columns_convert_to_int = [
+        "ip_family",
+    ]
+
+    columns_convert_to_float = [
+        "speed_upload",
+        "speed_download",
+        "roundtrip_time",
+        "jitter_upload",
+        "jitter_download",
+        "rtt_packet_loss_pct",
+        "latency",
+    ]
+
+    columns_convert_to_timestamp = [
+        "timestamp",
+    ]
+
+    for col_name in columns_convert_to_int:
+        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
+        log_func(">> TRANSFORMED INT")
+
+    for col_name in columns_convert_to_float:
+        df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
+        log_func(">> TRANSFORMED FLOAT")
+
+    for col_name in columns_convert_to_timestamp:
+        df = df.withColumn(col_name, col(col_name).cast(types.TimestampType()))
+        log_func(">> TRANSFORMED TIMESTAMP")
+
+    @udf(returnType=types.StringType())
+    def generate_uuid():
+        return str(uuid4())
+
+    df = df.withColumn("id", generate_uuid())
+    df = df.withColumn("date", col("timestamp").cast(types.DateType()))
 
     df.printSchema()
     return df
