@@ -246,6 +246,7 @@ def transform_qos_bra_types(
         return str(uuid4())
 
     df = df.withColumn("id", generate_uuid())
+    df = df.withColumn("date", col("timestamp").cast(types.DateType()))
 
     df.printSchema()
     return df

@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     id STRING NOT NULL,
     timestamp TIMESTAMP NOT NULL,
+    date DATE NOT NULL,
     country_id STRING NOT NULL,
     school_id_gov STRING NOT NULL,
     school_id_giga STRING NOT NULL,
@@ -18,3 +19,4 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
 )
 USING DELTA
 LOCATION '${location}'
+PARTITIONED BY (date)
