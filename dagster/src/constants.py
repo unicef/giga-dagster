@@ -9,7 +9,7 @@ class Constants(BaseSettings):
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_folder = "updated_master_schema"
 
-    step_origin_folder_map = {
+    step_origin_folder_map: dict[str, str] = {
         "bronze": "raw",
         "data_quality_results": "bronze",
         "dq_split_rows": "bronze",
@@ -21,7 +21,7 @@ class Constants(BaseSettings):
         "gold": "silver",
     }
 
-    def step_destination_folder_map(self, dataset_type: str):
+    def step_destination_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
             "raw": f"{self.raw_folder}/{dataset_type}",
             "bronze": f"bronze/{dataset_type}",
@@ -39,6 +39,7 @@ class Constants(BaseSettings):
             "gold": "gold",
             "master_csv_to_gold": "gold/delta-tables/school-master",
             "reference_csv_to_gold": "gold/delta-tables/school-reference",
+            "qos_csv_to_gold": "gold/delta-tables/qos",
         }
 
 
