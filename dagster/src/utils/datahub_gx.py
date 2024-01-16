@@ -22,7 +22,7 @@ from sqlalchemy.engine.base import Connection, Engine
 
 
 class CustomDataHubValidationAction(DataHubValidationAction):
-    def get_dataset_partitions(self, batch_identifier, data_asset):
+    def get_dataset_partitions(self, batch_identifier, data_asset):  # noqa: C901
         dataset_partitions = []
 
         logger.debug("Finding datasets being validated")
@@ -148,9 +148,7 @@ class CustomDataHubValidationAction(DataHubValidationAction):
             else:
                 warn(
                     "DataHubValidationAction does not recognize this GE batch spec"
-                    " type- {batch_spec_type}.".format(
-                        batch_spec_type=type(ge_batch_spec)
-                    )
+                    f" type- {type(ge_batch_spec)}."
                 )
         else:
             # TODO - v2-spec - SqlAlchemyDataset support

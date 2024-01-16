@@ -60,20 +60,32 @@ notebook = "^7.0.6"
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
-black = "^23.7.0"
-flake8 = "^6.1.0"
-isort = "^5.12.0"
+ruff = "^0.1.13"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.black]
-target-version = ["py311"]
-preview = true
-
-[tool.isort]
-profile = "black"
-
 [tool.dagster]
 module_name = "src.definitions"
+
+[tool.ruff]
+target-version = "py311"
+ignore-init-module-imports = true
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "C", "B", "UP"]
+ignore = ["E203", "E266", "E501", "E402", "C408"]
+
+[tool.ruff.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-builtins]
+builtins-ignorelist = ["id"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-wrap-aliases = true
+
+[tool.ruff.lint.pep8-naming]
+classmethod-decorators = ["pydantic.validator"]

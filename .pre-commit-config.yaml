@@ -4,22 +4,22 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [ commit-msg ]
-  - repo: https://github.com/psf/black
-    rev: 23.1.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.12
     hooks:
-      - id: black
-        language_version: python3
-        args: [ '--config', 'dagster/pyproject.toml' ]
-  - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: [ '--profile', 'black' ]
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
-    hooks:
-      - id: flake8
-        args: [ '--config', 'dagster/.flake8' ]
+      - id: ruff
+        args:
+          - --fix
+          - --config
+          - ./dagster/pyproject.toml
+          - --exclude
+          - "**/great_expectations/*"
+      - id: ruff-format
+        args:
+          - --config
+          - ./dagster/pyproject.toml
+          - --exclude
+          - "**/great_expectations/*"
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:

@@ -43,13 +43,11 @@ def get_content_single_column_expectation(expectation, column_name):
                 column_name
             )
         case "expect_column_values_to_not_be_null":
-            content = "This expects the column {} to have a value.".format(column_name)
+            content = f"This expects the column {column_name} to have a value."
         case "expect_column_values_to_be_not_similar":
-            content = "Indicates if {} is without any similar name.".format(column_name)
+            content = f"Indicates if {column_name} is without any similar name."
         case "expect_column_values_to_have_min_decimal_digits":
-            content = "Indicates if {} has at least 5 decimal places.".format(
-                column_name
-            )
+            content = f"Indicates if {column_name} has at least 5 decimal places."
     return content
 
 
@@ -77,9 +75,7 @@ def add_unique_columns_expectation(column_names):
             "notes": {
                 "format": "markdown",
                 "content": (
-                    "This indicates the uniqueness of compound columns {}".format(
-                        column_names
-                    )
+                    f"This indicates the uniqueness of compound columns {column_names}"
                 ),
             }
         },
@@ -98,8 +94,9 @@ def add_expect_column_values_to_be_in_set(column, value_set):
             "notes": {
                 "format": "markdown",
                 "content": (
-                    "This expects the column {} to have a value within the set {}."
-                    .format(column, value_set)
+                    "This expects the column {} to have a value within the set {}.".format(
+                        column, value_set
+                    )
                 ),
             }
         },
@@ -113,7 +110,7 @@ def add_expect_column_values_to_be_between(column_name, min_value, max_value):
         kwargs={
             "column": column_name,
             "min_value": min_value,
-            "max_value": max_value
+            "max_value": max_value,
             # column (str): The column name.
             # min_value (comparable type or None): The minimum value for a column entry.
             # max_value (comparable type or None): The maximum value for a column entry.
@@ -124,8 +121,9 @@ def add_expect_column_values_to_be_between(column_name, min_value, max_value):
             "notes": {
                 "format": "markdown",
                 "content": (
-                    "This expects the column {} to have a value between {} and {}."
-                    .format(column_name, min_value, max_value)
+                    "This expects the column {} to have a value between {} and {}.".format(
+                        column_name, min_value, max_value
+                    )
                 ),
             }
         },
@@ -161,7 +159,7 @@ def add_expect_column_values_to_be_of_type(column, type):
         meta={
             "notes": {
                 "format": "markdown",
-                "content": "Indicates if {} has date type of {}".format(column, type),
+                "content": f"Indicates if {column} has date type of {type}",
             }
         },
     )

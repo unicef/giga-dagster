@@ -12,9 +12,7 @@ from src.settings import settings
 
 
 def _get_host_ip():
-    completed_process = subprocess.run(
-        ["hostname", "-i"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
+    completed_process = subprocess.run(["hostname", "-i"], capture_output=True)
     ip = completed_process.stdout.strip().decode("utf-8")
     return "127.0.0.1" if ip == "127.0.1.1" else ip
 

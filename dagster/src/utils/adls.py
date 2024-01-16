@@ -2,10 +2,10 @@ import json
 from io import BytesIO
 
 import pandas as pd
-from azure.storage.filedatalake import DataLakeServiceClient
 from pyspark import sql
 from pyspark.sql import SparkSession
 
+from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
@@ -43,7 +43,7 @@ class ADLSFileClient(ConfigurableResource):
             case "json":
                 bytes_data = data.to_json().encode()
             case _:
-                raise IOError(f"Unsupported format for file {filepath}")
+                raise OSError(f"Unsupported format for file {filepath}")
 
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
