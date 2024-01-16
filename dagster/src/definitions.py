@@ -1,7 +1,7 @@
 from dagster_ge.factory import GEContextResource
 
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import assets, datahub_assets
+from src.assets import assets, datahub_assets, qos
 from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
@@ -37,6 +37,7 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=assets, group_name="school_master_data"
         ),
+        *load_assets_from_package_module(package_module=qos, group_name="qos"),
         *load_assets_from_package_module(
             package_module=datahub_assets, group_name="datahub"
         ),
