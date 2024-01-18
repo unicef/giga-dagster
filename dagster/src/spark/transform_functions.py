@@ -132,7 +132,7 @@ column_mapping = {
     ("teacher_count", "num_teachers"), 
     ("adm_personnel_count", "num_adm_personnel"), 
     ("student_count", "num_students"), 
-    ("classroom_count", "num_classrooms"), 
+    ("classroom_count", "num_classroom"), 
     ("num_latrines", "num_latrines"), 
     ("computer_lab", "computer_lab"), 
     ("electricity", "electricity_availability"), 
@@ -186,7 +186,7 @@ def create_bronze_layer_columns(df):
     # df = standardize_school_name(df)
 
     # Temp key for index
-    w = Window().orderBy(f.lit('A'))
+    w = Window().orderBy(f.lit("A"))
     df = df.withColumn("gx_index", f.row_number().over(w))
     
     # df = df.withColumn("country_code", f.lit("BLZ"))
@@ -205,7 +205,7 @@ def get_critical_errors_empty_column(*args):
     empty_errors = []
 
     # Only critical null errors
-    for column, value in zip(CONFIG_NONEMPTY_COLUMNS_CRITICAL, args):
+    for column, value in zip(CONFIG_NONEMPTY_COLUMNS_CRITICAL, args, strict=False):
         if value is None:  # If empty (None in PySpark)
             empty_errors.append(column)
 
@@ -231,14 +231,11 @@ def create_error_columns(df, country_code_iso3):
     # 4. School id should be unique
     # 5. Giga School ID should be unique
     for column in CONFIG_UNIQUE_COLUMNS:
-        column_name = "duplicate_{}".format(column)
+        column_name = f"duplicate_{column}"
         df = df.withColumn(
             column_name,
             f.when(
-                f.count("{}".format(column)).over(
-                    Window.partitionBy("{}".format(column))
-                )
-                > 1,
+                f.count(f"{column}").over(Window.partitionBy(f"{column}")) > 1,
                 1,
             ).otherwise(0),
         )
@@ -279,7 +276,7 @@ def has_critical_error(df):
             "CASE "
             "WHEN duplicate_school_id = true "
             "   OR duplicate_school_id_giga = true "
-            "   OR size(critical_error_empty_column) > 0 " #schoolname, lat, long, educ level
+            "   OR size(critical_error_empty_column) > 0 "  # schoolname, lat, long, educ level
             "   OR is_valid_location_values = false "
             "   OR is_within_country != true "
             "   THEN true "
@@ -319,7 +316,7 @@ def create_staging_layer_columns(df):
     df = df.withColumn("precision_latitude", get_decimal_places_udf(f.col("latitude")))
 
     for column in CONFIG_NONEMPTY_COLUMNS_WARNING:
-        column_name = "missing_{}_flag".format(column)
+        column_name = f"missing_{column}_flag"
         df = df.withColumn(column_name, f.when(f.col(column).isNull(), 1).otherwise(0))
 
     df = df.withColumn(
@@ -332,7 +329,7 @@ def create_staging_layer_columns(df):
     for column_set in CONFIG_UNIQUE_SET_COLUMNS:
         set_name = "_".join(column_set)
         df = df.withColumn(
-            "duplicate_{}".format(set_name),
+            f"duplicate_{set_name}",
             f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
                 0
             ),
@@ -341,7 +338,7 @@ def create_staging_layer_columns(df):
     for value in CONFIG_VALUES_RANGE_PRIO:
         # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
         df = df.withColumn(
-            "is_valid_{}".format(value),
+            f"is_valid_{value}",
             f.when(
                 f.col("latitude").between(
                     CONFIG_VALUES_RANGE[value]["min"],
@@ -425,6 +422,7 @@ def create_staging_layer_columns(df):
     )
 
     return df
+
 
 def critical_error_indices_json_parse(data):
     key_id = list(data["run_results"].keys())[0]
@@ -531,7 +529,3 @@ if __name__ == "__main__":
     #     data = json.load(file)
 
     # dq_passed_rows(df, data).show()
-
-
-
-    

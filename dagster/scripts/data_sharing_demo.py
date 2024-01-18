@@ -1,7 +1,6 @@
 from delta.tables import DeltaTable, SparkSession
 from pyspark import sql
 from pyspark.sql.functions import expr
-
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.spark import get_spark_session

@@ -1,5 +1,4 @@
 from datahub.ingestion.run.pipeline import Pipeline
-
 from src.settings import settings
 
 

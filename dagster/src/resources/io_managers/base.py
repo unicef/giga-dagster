@@ -1,11 +1,12 @@
 from abc import ABC
-from typing import Callable
+from collections.abc import Callable
 
 from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src.utils.adls import get_filepath
 from src.utils.spark import (
+    transform_qos_bra_types,
     transform_school_master_types,
     transform_school_reference_types,
 )
@@ -39,6 +40,10 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     ) -> Callable[[DataFrame, OutputContext | None], DataFrame]:
         dataset_type = context.step_context.op_config["dataset_type"]
         # TODO: Add the correct transform functions for the other datasets/layers
-        if dataset_type == "school-reference":
-            return transform_school_reference_types
-        return transform_school_master_types
+        match dataset_type:
+            case "school-reference":
+                return transform_school_reference_types
+            case "qos":
+                return transform_qos_bra_types
+            case _:
+                return transform_school_master_types

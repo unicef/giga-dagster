@@ -17,10 +17,10 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
-
-from dagster import OpExecutionContext, version
 from src.settings import settings
 from src.utils.adls import get_input_filepath, get_output_filepath
+
+from dagster import OpExecutionContext, version
 
 
 def identify_country_name(country_code):
@@ -106,7 +106,7 @@ def define_schema_properties(df: pd.DataFrame):
     dtypes = list(df.dtypes)
     fields = []
 
-    for column, dtype in list(zip(columns, dtypes)):
+    for column, dtype in list(zip(columns, dtypes, strict=False)):
         if dtype == "float64" or dtype == "int64":
             type_class = NumberTypeClass()
         elif dtype == "datetime64[ns]":

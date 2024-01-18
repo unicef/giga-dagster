@@ -42,7 +42,7 @@ class ColumnPairValuesToBeWithinGeometry(ColumnPairMapMetricProvider):
     def _pandas(cls, column_A, column_B, **kwargs):
         results = []
         country_code_iso3 = kwargs.get("country_code", None)
-        for latitude, longitude in zip(column_A, column_B):
+        for latitude, longitude in zip(column_A, column_B, strict=False):
             is_within = (
                 is_within_country_gadm(latitude, longitude, country_code_iso3)
                 or is_within_country_geopy(latitude, longitude, country_code_iso3)

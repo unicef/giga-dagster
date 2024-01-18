@@ -31,7 +31,7 @@ class ColumnPairValuesSameAvailability(ColumnPairMapMetricProvider):
     @column_pair_condition_partial(engine=PandasExecutionEngine)
     def _pandas(cls, column_A, column_B, **kwargs):
         results = []
-        for availability, value in zip(column_A, column_B):
+        for availability, value in zip(column_A, column_B, strict=False):
             result = has_same_availability(availability, value)
             results.append(result)
         print(results)

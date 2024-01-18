@@ -43,6 +43,13 @@ school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
     ],
 )
 
+qos__convert_csv_to_deltatable_job = define_asset_job(
+    name="qos__convert_csv_to_deltatable_job",
+    selection=[
+        "qos_csv_to_gold",
+    ],
+)
+
 datahub__ingest_azure_ad_users_groups_job = define_asset_job(
     name="datahub__ingest_azure_ad_users_job",
     selection=[

@@ -1,6 +1,5 @@
 from country_converter import CountryConverter
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
-
 from src.settings import settings
 
 

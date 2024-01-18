@@ -26,9 +26,7 @@ def get_country_geometry(country_code_iso3):
     # To Do: Read file from ADLS storage
     directory_location = "great_expectations/uncommitted/notebooks/data/"
     try:
-        gdf_boundaries = gpd.read_file(
-            "{}{}.gpkg".format(directory_location, country_code_iso3)
-        )
+        gdf_boundaries = gpd.read_file(f"{directory_location}{country_code_iso3}.gpkg")
         country_geometry = gdf_boundaries[gdf_boundaries["GID_0"] == country_code_iso3][
             "geometry"
         ][0]

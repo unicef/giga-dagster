@@ -10,6 +10,8 @@ pool:
 
 variables:
   - template: templates/variables.yaml
+  - name: environment
+    value: stg
 
 stages:
   - stage: BuildAndPushDagster
@@ -57,5 +59,3 @@ stages:
       - CreateConfig
     jobs:
       - template: templates/helm-deploy.yaml
-        parameters:
-          environment: stg

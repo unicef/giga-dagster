@@ -11,7 +11,7 @@ def load_sql_template(sql_file: str, **kwargs) -> str:
     :param kwargs: The keyword arguments to be passed to the template.
     :return: The rendered SQL statement.
     """
-    with open(settings.BASE_DIR / "sql" / f"{sql_file}.sql.mako", "r") as f:
+    with open(settings.BASE_DIR / "sql" / f"{sql_file}.sql.mako") as f:
         template = f.read()
 
     text = Template(text=template, default_filters=["h"])

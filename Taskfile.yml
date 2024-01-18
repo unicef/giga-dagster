@@ -27,6 +27,7 @@ tasks:
     desc: Run all first-time setup tasks
     cmds:
       - task: setup-pre-commit
+      - task: setup-helm-repos
       - task: setup-dagster
       - task: setup-authproxy
 
@@ -49,6 +50,13 @@ tasks:
     cmds:
       - poetry env use 3.11
       - poetry install --with dev
+
+  setup-helm-repos:
+    desc: Register all Helm chart repositories
+    cmds:
+      - helm repo add bitnami https://charts.bitnami.com/bitnami
+      - helm repo add dagster https://dagster-io.github.io/helm
+      - helm repo update
 
   logs:
     desc: Attach to Docker logs
@@ -79,7 +87,6 @@ tasks:
     desc: Remove containers
     cmds:
       - docker compose --project-name {{.PROJECT_NAME}} down --volumes --remove-orphans {{.CLI_ARGS}}
-      - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml down --volumes --remove-orphans {{.CLI_ARGS}}
 
   build-and-push:
     desc: Build and push Docker image

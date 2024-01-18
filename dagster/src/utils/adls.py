@@ -2,10 +2,10 @@ import json
 from io import BytesIO
 
 import pandas as pd
-from azure.storage.filedatalake import DataLakeServiceClient
 from pyspark import sql
 from pyspark.sql import SparkSession
 
+from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
@@ -30,7 +30,7 @@ class ADLSFileClient(ConfigurableResource):
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True)
+        return spark.read.csv(adls_path, header=True, escape='"')
 
     def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
@@ -43,7 +43,7 @@ class ADLSFileClient(ConfigurableResource):
             case "json":
                 bytes_data = data.to_json().encode()
             case _:
-                raise IOError(f"Unsupported format for file {filepath}")
+                raise OSError(f"Unsupported format for file {filepath}")
 
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
