@@ -6,7 +6,7 @@ from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, count, udf
 
 from dagster import OutputContext
 from src.settings import settings
@@ -85,11 +85,37 @@ def get_spark_session() -> SparkSession:
     return spark.getOrCreate()
 
 
-def transform_school_master_types(
-    df: sql.DataFrame, context: OutputContext = None
+def count_nulls_for_column(df, column_name):
+    return df.select(
+        count(col(column_name).isNull()).alias(f"{column_name}_null_count")
+    ).first()[0]
+
+
+def transform_columns(
+    df: sql.DataFrame,
+    columns: list[str],
+    target_type: types.DataType,
+    context: OutputContext = None,
 ) -> sql.DataFrame:
     log_func = print if context is None else context.log.info
 
+    for col_name in columns:
+        nulls_before = count_nulls_for_column(df, col_name)
+        df = df.withColumn(col_name, col(col_name).cast(target_type))
+        log_func(f">> TRANSFORMED {target_type} for column {col_name}")
+        nulls_after = count_nulls_for_column(df, col_name)
+
+        if nulls_before != nulls_after:
+            raise ValueError(
+                f"Error: NULL count mismatch for column {col_name} after the cast."
+            )
+
+    return df
+
+
+def transform_school_master_types(
+    df: sql.DataFrame, context: OutputContext = None
+) -> sql.DataFrame:
     columns_convert_to_string = [
         "school_id_giga",
         "school_id_gov",
@@ -155,25 +181,13 @@ def transform_school_master_types(
         "connectivity_govt_ingestion_timestamp",
     ]
 
-    for col_name in columns_convert_to_string:
-        df = df.withColumn(col_name, col(col_name).cast(types.StringType()))
-        log_func(">> TRANSFORMED STRING")
-
-    for col_name in columns_convert_to_double:
-        df = df.withColumn(col_name, col(col_name).cast(types.DoubleType()))
-        log_func(">> TRANSFORMED DOUBLE")
-
-    for col_name in columns_convert_to_int:
-        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
-        log_func(">> TRANSFORMED INT")
-
-    for col_name in columns_convert_to_long:
-        df = df.withColumn(col_name, col(col_name).cast(types.LongType()))
-        log_func(">> TRANSFORMED LONG")
-
-    for col_name in columns_convert_to_timestamp:
-        df = df.withColumn(col_name, col(col_name).cast(types.TimestampType()))
-        log_func(">> TRANSFORMED TIMESTAMP")
+    df = transform_columns(df, columns_convert_to_string, types.StringType(), context)
+    df = transform_columns(df, columns_convert_to_double, types.DoubleType(), context)
+    df = transform_columns(df, columns_convert_to_int, types.IntegerType(), context)
+    df = transform_columns(df, columns_convert_to_long, types.LongType(), context)
+    df = transform_columns(
+        df, columns_convert_to_timestamp, types.TimestampType(), context
+    )
 
     df.printSchema()
     return df

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
+CREATE OR REPLACE TABLE `${schema_name}`.`${table_name}` (
     school_id_giga STRING NOT NULL,
     school_id_gov STRING,
     school_name STRING,

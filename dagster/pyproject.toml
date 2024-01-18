@@ -18,6 +18,7 @@ dagster-webserver = "1.5.0"
 dagster_docker = "0.21.0"
 dagster-postgres = "0.21.0"
 dagster-pyspark = "0.21.0"
+pendulum = "<3"
 
 [tool.poetry.group.pipelines.dependencies]
 dagster = "1.5.0"
