@@ -159,15 +159,23 @@ def rename_raw_columns(df):
         else:
             df = df.withColumn(delta_col, f.lit(None))
     
-    bronze_columns = [delta_col for _, delta_col in column_mapping]
-    df = df.select(*bronze_columns)
-    
+    df = bronze_prereq_columns(df)
+
     return df
 
 
+def bronze_prereq_columns(df):
+    bronze_prereq_columns = [delta_col for _, delta_col in column_mapping]
+    df = df.select(*bronze_prereq_columns)
+    
+    return df 
+
+
 # Note: Temporary function for transforming raw files to standardized columns.
-# This should eventually be converted to dbt transformations.
 def create_bronze_layer_columns(df):
+    # Select required columns for bronze
+    df = bronze_prereq_columns(df)
+    
     # ID
     df = create_giga_school_id(df)
 
@@ -188,6 +196,9 @@ def create_bronze_layer_columns(df):
     # Temp key for index
     w = Window().orderBy(f.lit("A"))
     df = df.withColumn("gx_index", f.row_number().over(w))
+
+    # Timestamp of ingestion
+    df = df.withColumn("school_location_ingestion_timestamp", f.current_timestamp())
     
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn(
