@@ -2,7 +2,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseSettings, Field
+from pydantic import BaseSettings
 
 
 class Environment(StrEnum):
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
     SHORT_SHA: str = ""
-    _DATAHUB_METADATA_SERVER: str = Field("", alias="DATAHUB_METADATA_SERVER")
+    DATAHUB_METADATA_SERVER: str = ""
 
     # Derived settings
     @property
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
         return (
             f"http://datahub-datahub-gms.{self.DATAHUB_KUBERNETES_NAMESPACE}:8080"
             if self.IN_PRODUCTION
-            else self._DATAHUB_METADATA_SERVER
+            else self.DATAHUB_METADATA_SERVER
         )
 
     @property
