@@ -33,7 +33,6 @@ from datahub.metadata.schema_classes import (
     StringTypeClass,
 )
 from loguru import logger
-
 from src.settings import settings
 
 
@@ -72,16 +71,21 @@ class CustomDatahubValidationAction:
             builder.make_assertion_urn(
                 builder.make_assertion_urn("6f1a7c23-56de-45bb-834b-4a8250eed8c9")
             ),
+            builder.make_assertion_urn(
+                builder.make_assertion_urn("0ad9d1f0-eb0c-450f-a18d-d0751af3883c")
+            ),
         ]
         self.assertion_run_ids = [
             "3beb3b05-7e79-48a6-8004-3e9eb44177bb",
             "ff54f46b-7b02-42da-b10e-9c77bbe33ef4",
             "6ce102d1-b754-456a-9bcd-8c95311138ef",
+            "d92fb100-31ec-4935-b660-b485287cbf89",
         ]
         self.assertion_run_timestamps = [
             1705912435342,
             1705912436342,
             1705912437342,
+            1705912438342,
         ]
         logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
@@ -220,6 +224,7 @@ class CustomDatahubValidationAction:
             },
             {
                 "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.IDENTITY,
                 "operator": AssertionStdOperator.BETWEEN,
                 "fields": [self.latitude_field_urn],
                 "dataset": self.dataset_urn,
@@ -238,6 +243,7 @@ class CustomDatahubValidationAction:
             },
             {
                 "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.IDENTITY,
                 "operator": AssertionStdOperator.BETWEEN,
                 "fields": [self.longitude_field_urn],
                 "dataset": self.dataset_urn,
@@ -254,6 +260,14 @@ class CustomDatahubValidationAction:
                     ),
                 ),
             },
+            {
+                "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.IDENTITY,
+                "operator": AssertionStdOperator._NATIVE_,
+                "fields": [self.school_id_giga_field_urn],
+                "dataset": self.dataset_urn,
+                "nativeType": "expect_valid_uuid3",
+            },
         ]
         assertions = [
             AssertionInfo(
@@ -267,7 +281,7 @@ class CustomDatahubValidationAction:
         ]
         assertions_mcps = [
             MetadataChangeProposalWrapper(entityUrn=urn, aspect=ass)
-            for urn, ass in zip(self.assertion_urns, assertions)
+            for urn, ass in zip(self.assertion_urns, assertions, strict=True)
         ]
         for mcp in assertions_mcps:
             self.emitter.emit_mcp(mcp)
@@ -306,11 +320,14 @@ class CustomDatahubValidationAction:
                 self.assertion_run_timestamps,
                 self.assertion_urns,
                 self.assertion_run_ids,
+                strict=True,
             )
         ]
         assertion_unique_ids_run_mcps = [
             MetadataChangeProposalWrapper(entityUrn=urn, aspect=run)
-            for urn, run in zip(self.assertion_urns, assertion_unique_ids_runs)
+            for urn, run in zip(
+                self.assertion_urns, assertion_unique_ids_runs, strict=True
+            )
         ]
         for mcp in assertion_unique_ids_run_mcps:
             self.emitter.emit_mcp(mcp)
