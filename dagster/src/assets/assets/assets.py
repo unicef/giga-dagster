@@ -129,6 +129,7 @@ def staging(
         )
     )
 
+    # fix this, .execute() is inplace in ADLS
     if DeltaTable.isDeltaTable(spark, silver_table_path):
         # Clone silver table to staging folder
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
