@@ -66,6 +66,12 @@ class CustomDatahubValidationAction:
                 builder.make_assertion_urn("f0338dc2-985d-490c-9a95-6bf6530d024c")
             ),
             builder.make_assertion_urn(
+                builder.make_assertion_urn("b2c99733-c100-4dd7-89f8-ffc9393f9cdd")
+            ),
+            builder.make_assertion_urn(
+                builder.make_assertion_urn("42bb89e4-4dfa-4975-b35e-f30060bc908b")
+            ),
+            builder.make_assertion_urn(
                 builder.make_assertion_urn("646dd84c-3eeb-48e4-91bb-a5846df2bb7b")
             ),
             builder.make_assertion_urn(
@@ -77,6 +83,8 @@ class CustomDatahubValidationAction:
         ]
         self.assertion_run_ids = [
             "3beb3b05-7e79-48a6-8004-3e9eb44177bb",
+            "804040c9-ea8d-4cd7-98d5-2d9b60fcc025",
+            "fa4a8c70-d232-4a92-8dcb-35c3547cf6e8",
             "ff54f46b-7b02-42da-b10e-9c77bbe33ef4",
             "6ce102d1-b754-456a-9bcd-8c95311138ef",
             "d92fb100-31ec-4935-b660-b485287cbf89",
@@ -86,6 +94,8 @@ class CustomDatahubValidationAction:
             1705912436342,
             1705912437342,
             1705912438342,
+            1705912439342,
+            1705912440342,
         ]
         logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
@@ -207,13 +217,41 @@ class CustomDatahubValidationAction:
                 "scope": DatasetAssertionScope.DATASET_COLUMN,
                 "aggregation": AssertionStdAggregation.UNIQUE_PROPOTION,
                 "operator": AssertionStdOperator.EQUAL_TO,
-                "fields": [
-                    self.id_field_urn,
-                    self.school_id_giga_field_urn,
-                    self.school_id_gov_field_urn,
-                ],
+                "fields": [self.id_field_urn],
                 "dataset": self.dataset_urn,
                 "nativeType": "expect_ids_to_be_unique",
+                "nativeParameters": {"value": "1"},
+                "parameters": AssertionStdParameters(
+                    value=AssertionStdParameter(
+                        type=AssertionStdParameterType.NUMBER,
+                        value="1",
+                    )
+                ),
+            },
+            {
+                "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.UNIQUE_PROPOTION,
+                "operator": AssertionStdOperator.EQUAL_TO,
+                "fields": [
+                    self.school_id_giga_field_urn,
+                ],
+                "dataset": self.dataset_urn,
+                "nativeType": "expect_school_ids_giga_to_be_unique",
+                "nativeParameters": {"value": "1"},
+                "parameters": AssertionStdParameters(
+                    value=AssertionStdParameter(
+                        type=AssertionStdParameterType.NUMBER,
+                        value="1",
+                    )
+                ),
+            },
+            {
+                "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.UNIQUE_PROPOTION,
+                "operator": AssertionStdOperator.EQUAL_TO,
+                "fields": [self.school_id_gov_field_urn],
+                "dataset": self.dataset_urn,
+                "nativeType": "expect_school_ids_gov_to_be_unique",
                 "nativeParameters": {"value": "1"},
                 "parameters": AssertionStdParameters(
                     value=AssertionStdParameter(
