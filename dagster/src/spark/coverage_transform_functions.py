@@ -19,13 +19,16 @@ from src.spark.config_expectations import (
     CONFIG_UNIQUE_SET_COLUMNS,
     CONFIG_VALUES_RANGE,
     CONFIG_VALUES_RANGE_PRIO,
+    CONFIG_ITU_COLUMNS_TO_RENAME,
+    CONFIG_FB_COLUMNS,
+    CONFIG_ITU_COLUMNS,
 )
 
 ## facebook
 
 # transform percent_-g column from raw to boolean
 
-def percent_to_boolean(df):
+def fb_percent_to_boolean(df):
     df = df.withColumn("2G_coverage", f.col("percent_2G") > 0)
     df = df.withColumn("3G_coverage", f.col("percent_3G") > 0)
     df = df.withColumn("4G_coverage", f.col("percent_4G") > 0)
@@ -35,36 +38,71 @@ def percent_to_boolean(df):
     df = df.drop("percent_4G")
     return df
 
+def itu_binary_to_boolean(df):
+    df = df.withColumn("2G_coverage", f.col("2G") >= 1)
+    df = df.withColumn("3G_coverage", f.col("3G") == 1)
+    df = df.withColumn("4G_coverage", f.col("4G") == 1)
+    
+    df = df.drop("2G")
+    df = df.drop("3G")
+    df = df.drop("4G")
+    return df
+
 # standardize functions
 
 def itu_lower_columns(df):
-    # to do: config
-    itu_cols_to_rename = ['Schools_within_1km', 'Schools_within_2km', 'Schools_within_3km', 'Schools_within_10km']
-    for col_name in itu_cols_to_rename:
+    for col_name in CONFIG_ITU_COLUMNS_TO_RENAME:
         df = df.withColumnRenamed(col_name, col_name.lower())
     return df
 
-fb_cols_to_keep = ['giga_id_school', '2G_coverage', '3G_coverage', '4G_coverage']
-itu_cols_to_keep = ['giga_id_school', '2G_coverage', '3G_coverage', 'fiber_node_distance',
-                        'microwave_node_distance', 'nearest_school_distance', 'schools_within_1km', 'schools_within_2km',
-                        'schools_within_3km', 'schools_within_10km', 'nearest_LTE_id', 'nearest_LTE_distance',
-                        'nearest_UMTS_id', 'nearest_UMTS_distance', 'nearest_GSM_id', 'nearest_GSM_distance',
-                        '2G_coverage', '3G_coverage', '4G_coverage', 'pop_within_1km', 'pop_within_2km',
-                        'pop_within_3km', 'pop_within_10km']
+def coverage_column_filter(df, CONFIG_COLUMNS_TO_KEEP):
+    df = df.select(*CONFIG_COLUMNS_TO_KEEP)
+    return df
 
-# def itu_columns_to_keep(df):
+def coverage_row_filter(df):
+    df = df.filter(f.col("giga_id_school").isNotNull())
+    return df
+
+def coverage_pipeline(fb, itu):
+
+    # fb
+    fb = fb_percent_to_boolean(fb)
+    fb = coverage_column_filter(fb, CONFIG_FB_COLUMNS)
+    fb = coverage_row_filter(fb)
+
+    # itu
+    itu = itu_binary_to_boolean(itu)
+    itu = itu_lower_columns(itu)
+    itu = coverage_column_filter(itu)
+    itu = coverage_row_filter(itu)
+
+    # add suffixes
+    for col in itu.columns:
+        if col != 'giga_id_school' and col in fb.columns:
+            itu = itu.withColumnRenamed(col, col + '_itu')
+
+    coverage_df = fb.join(itu, on="giga_id_school", how="outer")
+
+    return coverage_df
+
+
+
 
 
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
     # 
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
+    file_url_fb = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
+    file_url_itu = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_itu_20230927-091823.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
-    df = spark.read.csv(file_url, header=True)
+    fb = spark.read.csv(file_url_fb, header=True)
+    itu = spark.read.csv(file_url_itu, header=True)
     # df = rename_raw_columns(df)
     # df = create_bronze_layer_columns(df)
     # df.sort("school_name").limit(10).show()
-    df = percent_to_boolean(df)
+    # df = itu_lower_columns(df)
+    # df = fb_percent_to_boolean(df)
+    # df = column_filter(df, CONFIG_FB_COLUMNS_TO_KEEP)
+    df = coverage_pipeline(fb, itu)
     df.show()
-
