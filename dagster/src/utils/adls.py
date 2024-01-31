@@ -30,7 +30,7 @@ class ADLSFileClient(ConfigurableResource):
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True, escape='"')
+        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
 
     def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
