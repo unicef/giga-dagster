@@ -13,13 +13,11 @@ repos:
           - --config
           - ./dagster/pyproject.toml
           - --exclude
-          - "**/great_expectations/*"
       - id: ruff-format
         args:
           - --config
           - ./dagster/pyproject.toml
           - --exclude
-          - "**/great_expectations/*"
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
     hooks:
