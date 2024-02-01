@@ -30,7 +30,6 @@ DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 
-# DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"
 DIRECTORY_LOCATION = "raw/geospatial-data/gadm_files/version4.1/"
 container_name = azure_blob_container_name
 

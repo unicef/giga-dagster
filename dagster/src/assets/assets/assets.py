@@ -83,15 +83,6 @@ def dq_failed_rows(
     bronze: sql.DataFrame,
     data_quality_results,
 ) -> sql.DataFrame:
-    # Parse results, add column 'has_critical_error' to dataframe. Refer to this for dealing with results:
-    # https://docs.greatexpectations.io/docs/reference/api/checkpoint/types/checkpoint_result/checkpointresult_class/
-    failed_rows_indices = set()
-    # for suite_result in data_quality_results["run_results"].items():
-    #     validation_result = suite_result["validation_result"]
-    #     for result in validation_result.results:
-    #         if not result.success:
-    #             for unexpected_row in result.result.unexpected_index_list:
-    #                 failed_rows_indices.add(unexpected_row)
 
     df_failed = bronze.loc[list(failed_rows_indices)]
     emit_metadata_to_datahub(context, df_failed)
