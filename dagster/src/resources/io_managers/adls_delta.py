@@ -25,8 +25,16 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                 )
                 return
 
+            schema_name = self._get_schema(context)
+            table_schema_definition = self._get_table_schema_definition(context)
+            type_transform_function = self._get_type_transform_function(context)
+            output = type_transform_function(output, context)
             adls_client.upload_spark_dataframe_as_delta_table(
-                context, output, filepath, self.pyspark.spark_session
+                output,
+                filepath,
+                schema_name,
+                table_schema_definition,
+                self.pyspark.spark_session,
             )
 
         context.log.info(

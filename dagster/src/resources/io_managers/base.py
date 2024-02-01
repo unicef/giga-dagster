@@ -1,7 +1,15 @@
 from abc import ABC
+from collections.abc import Callable
+
+from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src.utils.adls import get_filepath
+from src.utils.spark import (
+    transform_qos_bra_types,
+    transform_school_master_types,
+    transform_school_reference_types,
+)
 
 
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
@@ -19,3 +27,25 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         )
 
         return destination_filepath
+
+    @staticmethod
+    def _get_schema(context: InputContext | OutputContext):
+        return context.step_context.op_config["metastore_schema"]
+
+    @staticmethod
+    def _get_table_schema_definition(context: InputContext | OutputContext):
+        return context.step_context.op_config["table_schema_definition"]
+
+    @staticmethod
+    def _get_type_transform_function(
+        context: InputContext | OutputContext,
+    ) -> Callable[[DataFrame, OutputContext | None], DataFrame]:
+        dataset_type = context.step_context.op_config["dataset_type"]
+        # TODO: Add the correct transform functions for the other datasets/layers
+        match dataset_type:
+            case "school-reference":
+                return transform_school_reference_types
+            case "qos":
+                return transform_qos_bra_types
+            case _:
+                return transform_school_master_types

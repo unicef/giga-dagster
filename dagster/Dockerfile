@@ -40,19 +40,13 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
 # set to not create an additional virtualenv (we are already in a container),
 # enable parallel installs
 RUN pip install "poetry==$POETRY_VERSION" && \
-    poetry config virtualenvs.create false && \
+    poetry config virtualenvs.create true && \
+    poetry config virtualenvs.in-project true && \
     poetry config installer.max-workers 4 && \
     poetry config installer.no-binary shapely,fiona
-
-# Copy package manifests inside the container
-COPY pyproject.toml poetry.lock ./
-
-# Install packages based on package manifests
-# This is an automated process: do not ask for user input
-RUN poetry install --no-interaction --no-ansi --with dagster,pipelines,spark,notebook
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
 WORKDIR /app
 
 # Run the development server and listen on the specified port
-CMD [ "dagster", "dev", "-h", "0.0.0.0", "-p", "3002" ]
+CMD [ "./docker-entrypoint.dev.sh" ]

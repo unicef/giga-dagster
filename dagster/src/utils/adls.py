@@ -2,11 +2,11 @@ import json
 from io import BytesIO
 
 import pandas as pd
-from azure.storage.filedatalake import DataLakeServiceClient
 from delta.tables import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
 
+from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
@@ -35,7 +35,7 @@ class ADLSFileClient(ConfigurableResource):
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True)
+        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
 
     def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
@@ -48,7 +48,7 @@ class ADLSFileClient(ConfigurableResource):
             case "json":
                 bytes_data = data.to_json().encode()
             case _:
-                raise IOError(f"Unsupported format for file {filepath}")
+                raise OSError(f"Unsupported format for file {filepath}")
 
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
@@ -67,30 +67,43 @@ class ADLSFileClient(ConfigurableResource):
         df.show()
         return df
 
-    def upload_spark_dataframe_as_delta_table_within_dagster(
+    # def upload_spark_dataframe_as_delta_table_within_dagster(
+    #     self,
+    #     context: OpExecutionContext,
+    #     data: sql.DataFrame,
+    #     filepath: str,
+    #     spark: SparkSession,
+    # ):
+    #     # layer = "silver"
+    #     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+
+    #     filename = filepath.split("/")[-1]
+    #     # country_code = filename.split("_")[0]
+
+    #     # TODO: Get from context
+    #     # schema_name = f"{layer}_{dataset_type.replace('-', '_')}"
+
+    def upload_spark_dataframe_as_delta_table(
         self,
-        context: OpExecutionContext,
         data: sql.DataFrame,
         filepath: str,
+        schema_name: str,
+        table_schema_definition: str,
         spark: SparkSession,
     ):
-        layer = "silver"
-        dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-
-        filename = filepath.split("/")[-1]
+        *directory_list, filename = filepath.split("/")
+        directory = "/".join(directory_list)
         country_code = filename.split("_")[0]
 
-        # TODO: Get from context
-        schema_name = f"{layer}_{dataset_type.replace('-', '_')}"
         create_schema_sql = load_sql_template(
             "create_schema",
             schema_name=schema_name,
         )
         create_table_sql = load_sql_template(
-            f"create_{layer}_table",
+            table_schema_definition,
             schema_name=schema_name,
             table_name=country_code,
-            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}/{country_code}",
+            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory}/{country_code}",
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
@@ -98,7 +111,7 @@ class ADLSFileClient(ConfigurableResource):
             f"{schema_name}.{country_code}"
         )
 
-    def upload_spark_dataframe_as_delta_table(
+    def upload_spark_dataframe_as_delta_table_in_dagster(
         self,
         context: OutputContext,
         data: sql.DataFrame,
@@ -106,7 +119,13 @@ class ADLSFileClient(ConfigurableResource):
         spark: SparkSession,
     ):
         match context.step_key:
-            case "staging" | "dq_passed_rows" | "dq_failed_rows" | "manual_review_passed_rows" | "manual_review_failed_rows":
+            case (
+                "staging"
+                | "dq_passed_rows"
+                | "dq_failed_rows"
+                | "manual_review_passed_rows"
+                | "manual_review_failed_rows"
+            ):
                 layer = "silver"
             case _:
                 layer = context.step_key
@@ -180,25 +199,7 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
         else filename
     )
 
-    step_destination_folder_map = {
-        "raw": f"{constants.raw_folder}",
-        "bronze": f"bronze/{dataset_type}",
-        "data_quality_results": "logs-gx",
-        "dq_passed_rows": f"staging/gx-tests-passed/{dataset_type}",
-        "dq_failed_rows": "archive/gx-tests-failed",
-        "staging": f"staging/pending-review/{dataset_type}",
-        "manual_review_passed_rows": (
-            f"{constants.staging_approved_folder}/{dataset_type}"
-        ),
-        "manual_review_failed_rows": (
-            f"{constants.archive_manual_review_rejected_folder}"
-        ),
-        "silver": f"silver/{dataset_type}",
-        "gold": "gold",
-        "gold_delta_table_from_csv": "gold/delta-tables",
-    }
-
-    destination_folder = step_destination_folder_map[step]
+    destination_folder = constants.step_destination_folder_map(dataset_type)[step]
 
     if not destination_folder:
         raise ValueError(f"Unknown filepath: {source_path}")
@@ -224,19 +225,7 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     filename = source_path.split("/")[-1]
     step = context.asset_key.to_user_string()
 
-    step_origin_folder_map = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
-
-    upstream_step = step_origin_folder_map[step]
+    upstream_step = constants.step_origin_folder_map[step]
     upstream_path = f"{upstream_step}/{dataset_type}/{filename}"
 
     return upstream_path

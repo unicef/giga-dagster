@@ -33,7 +33,7 @@ def create_giga_school_id(df):
     df = df.withColumn(
         "identifier_concat",
         f.concat(
-            f.col("school_id"),
+            f.col("school_id_gov"),
             f.col("school_name"),
             f.col("education_level"),
             f.col("latitude"),
@@ -92,8 +92,8 @@ def standardize_school_name(df):
 
 def standardize_internet_speed(df):
     df = df.withColumn(
-        "internet_speed_mbps",
-        f.expr("regexp_replace(internet_speed_mbps, '[^0-9.]', '')").cast("float"),
+        "download_speed_govt",
+        f.expr("regexp_replace(download_speed_govt, '[^0-9.]', '')").cast("float"),
     )
     return df
 
@@ -108,9 +108,74 @@ def h3_geo_to_h3(latitude, longitude):
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
+column_mapping = {
+    # raw, delta_col
+    ("school_id", "school_id_gov"),
+    ("school_name", "school_name"),
+    ("school_id_gov_type", "school_id_gov_type"),
+    ("school_establishment_year", "school_establishment_year"),
+    ("latitude", "latitude"),
+    ("longitude", "longitude"),
+    ("education_level", "education_level"),
+    ("education_level_govt", "education_level_govt"),
+    ("internet_availability", "connectivity_govt"),
+    ("connectivity_govt_ingestion_timestamp", "connectivity_govt_ingestion_timestamp"),
+    ("internet_speed_mbps", "download_speed_govt"),
+    ("download_speed_contracted", "download_speed_contracted"),
+    ("internet_type", "connectivity_type_govt"),
+    ("admin1", "admin1"),
+    ("admin2", "admin2"),
+    ("school_region", "school_area_type"),
+    ("school_funding_type", "school_funding_type"),
+    ("computer_count", "num_computers"),
+    ("desired_computer_count", "num_computers_desired"),
+    ("teacher_count", "num_teachers"),
+    ("adm_personnel_count", "num_adm_personnel"),
+    ("student_count", "num_students"),
+    ("classroom_count", "num_classroom"),
+    ("num_latrines", "num_latrines"),
+    ("computer_lab", "computer_lab"),
+    ("electricity", "electricity_availability"),
+    ("electricity_type", "electricity_type"),
+    ("water", "water_availability"),
+    ("address", "school_address"),
+    ("school_data_source", "school_data_source"),
+    ("school_data_collection_year", "school_data_collection_year"),
+    ("school_data_collection_modality", "school_data_collection_modality"),
+    ("is_open", "is_school_open"),
+}
+
+
+def rename_raw_columns(df):
+    # Iterate over mapping set and perform actions
+    for raw_col, delta_col in column_mapping:
+        # Check if the raw column exists in the DataFrame
+        if raw_col in df.columns:
+            # If it exists in raw, rename it to the delta column
+            df = df.withColumnRenamed(raw_col, delta_col)
+        # If it doesn't exist in both, create a null column placeholder with the delta column name
+        elif delta_col in df.columns:
+            pass
+        else:
+            df = df.withColumn(delta_col, f.lit(None))
+
+    df = bronze_prereq_columns(df)
+
+    return df
+
+
+def bronze_prereq_columns(df):
+    bronze_prereq_columns = [delta_col for _, delta_col in column_mapping]
+    df = df.select(*bronze_prereq_columns)
+
+    return df
+
+
 # Note: Temporary function for transforming raw files to standardized columns.
-# This should eventually be converted to dbt transformations.
 def create_bronze_layer_columns(df):
+    # Select required columns for bronze
+    df = bronze_prereq_columns(df)
+
     # ID
     df = create_giga_school_id(df)
 
@@ -132,6 +197,9 @@ def create_bronze_layer_columns(df):
     w = Window().orderBy(f.lit("A"))
     df = df.withColumn("gx_index", f.row_number().over(w))
 
+    # Timestamp of ingestion
+    df = df.withColumn("school_location_ingestion_timestamp", f.current_timestamp())
+
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn(
     #     "is_within_country",
@@ -140,72 +208,6 @@ def create_bronze_layer_columns(df):
     #         )
     #     )
 
-    column_mapping = {
-        # raw, delta_col, dtype
-        ("gx_index", "gx_index", "integer"),
-        ("school_density", "school_density", "integer"),
-        ("hex8", "hex8", "string"),
-        ("giga_id_school", "school_id_giga", "string"),
-        ("school_id", "school_id_gov", "string"),
-        ("school_id_gov_type", "school_id_gov_type", "string"),
-        ("school_name", "school_name", "string"),
-        ("school_establishment_year", "school_establishment_year", "integer"),
-        ("latitude", "latitude", "float"),
-        ("longitude", "longitude", "float"),
-        ("education_level", "education_level", "string"),
-        ("education_level_gov", "education_level_gov", "string"),
-        ("internet_availability", "connectivity_availability", "string"),
-        ("internet_speed_mbps", "connectivity_speed_static", "float"),
-        ("connectivity_speed_contracted", "connectivity_speed_contracted", "float"),
-        ("internet_type", "connectivity_type", "string"),
-        ("connectivity_latency_static", "connectivity_latency_static", "float"),
-        ("admin_1", "admin1", "string"),
-        ("admin_2", "admin2", "string"),
-        ("admin_3", "admin3", "string"),
-        ("admin_4", "admin4", "string"),
-        ("school_region", "school_area_type", "string"),
-        ("school_funding_type", "school_type", "string"),
-        ("computer_count", "num_computers", "integer"),
-        ("num_computers_desired", "num_computers_desired", "integer"),
-        ("num_teachers", "num_teachers", "integer"),
-        ("num_adm_personnel", "num_adm_personnel", "integer"),
-        ("student_count", "num_students", "integer"),
-        ("num_classroom", "num_classrooms", "integer"),
-        ("num_latrines", "num_latrines", "integer"),
-        ("computer_lab_availability", "computer_lab_availability", "string"),
-        ("electricity_availability", "electricity_availability", "string"),
-        ("electricity_type", "electricity_type", "string"),
-        ("water_availability", "water_availability", "string"),
-        ("school_address", "school_address", "string"),
-        ("school_data_source", "school_data_source", "string"),
-        ("school_data_collection_year", "school_data_collection_year", "integer"),
-        (
-            "school_data_collection_modality",
-            "school_data_collection_modality",
-            "string",
-        ),
-    }
-
-    bronze_columns = [delta_col for _, delta_col, _ in column_mapping]
-
-    # Iterate over mapping set and perform actions
-    for raw_col, delta_col, dtype in column_mapping:
-        # Check if the raw column exists in the DataFrame
-        if raw_col in df.columns:
-            # If it exists in raw, rename it to the delta column
-            df = df.withColumnRenamed(raw_col, delta_col)
-        # If it doesn't exist in both, create a null column placeholder with the delta column name
-        elif delta_col in df.columns:
-            pass
-        else:
-            df = df.withColumn(delta_col, f.lit(None).cast(dtype))
-
-    df = df.select(*bronze_columns)
-    df = df.withColumn(
-        "school_type_public",
-        f.when(f.col("school_type") == "public", "public").otherwise("not public"),
-    )
-
     return df
 
 
@@ -213,7 +215,7 @@ def get_critical_errors_empty_column(*args):
     empty_errors = []
 
     # Only critical null errors
-    for column, value in zip(CONFIG_NONEMPTY_COLUMNS_CRITICAL, args):
+    for column, value in zip(CONFIG_NONEMPTY_COLUMNS_CRITICAL, args, strict=False):
         if value is None:  # If empty (None in PySpark)
             empty_errors.append(column)
 
@@ -239,14 +241,11 @@ def create_error_columns(df, country_code_iso3):
     # 4. School id should be unique
     # 5. Giga School ID should be unique
     for column in CONFIG_UNIQUE_COLUMNS:
-        column_name = "duplicate_{}".format(column)
+        column_name = f"duplicate_{column}"
         df = df.withColumn(
             column_name,
             f.when(
-                f.count("{}".format(column)).over(
-                    Window.partitionBy("{}".format(column))
-                )
-                > 1,
+                f.count(f"{column}").over(Window.partitionBy(f"{column}")) > 1,
                 1,
             ).otherwise(0),
         )
@@ -327,7 +326,7 @@ def create_staging_layer_columns(df):
     df = df.withColumn("precision_latitude", get_decimal_places_udf(f.col("latitude")))
 
     for column in CONFIG_NONEMPTY_COLUMNS_WARNING:
-        column_name = "missing_{}_flag".format(column)
+        column_name = f"missing_{column}_flag"
         df = df.withColumn(column_name, f.when(f.col(column).isNull(), 1).otherwise(0))
 
     df = df.withColumn(
@@ -340,7 +339,7 @@ def create_staging_layer_columns(df):
     for column_set in CONFIG_UNIQUE_SET_COLUMNS:
         set_name = "_".join(column_set)
         df = df.withColumn(
-            "duplicate_{}".format(set_name),
+            f"duplicate_{set_name}",
             f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
                 0
             ),
@@ -349,7 +348,7 @@ def create_staging_layer_columns(df):
     for value in CONFIG_VALUES_RANGE_PRIO:
         # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
         df = df.withColumn(
-            "is_valid_{}".format(value),
+            f"is_valid_{value}",
             f.when(
                 f.col("latitude").between(
                     CONFIG_VALUES_RANGE[value]["min"],
@@ -438,7 +437,7 @@ def create_staging_layer_columns(df):
 def critical_error_indices_json_parse(data):
     key_id = list(data["run_results"].keys())[0]
     nest_results = data["run_results"][key_id]["validation_result"]["results"]
-    index = list(range(len([x for x in nest_results])))
+    index = list(range(len(nest_results)))
 
     ## critical error tags ##
     for i in index:
@@ -449,7 +448,7 @@ def critical_error_indices_json_parse(data):
         if (
             expectation_config["expectation_type"]
             == "expect_column_values_to_be_unique"
-            and expectation_config["kwargs"]["column"] == "school_id"
+            and expectation_config["kwargs"]["column"] == "school_id_gov"
         ):
             data = result["unexpected_index_list"]
             index_list = [entry["gx_index"] for entry in data]
@@ -569,8 +568,9 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
+    df = rename_raw_columns(df)
     df = create_bronze_layer_columns(df)
-    df.show()
+    df.sort("school_name").limit(10).show()
     # df.show()
     # df = df.limit(10)
 

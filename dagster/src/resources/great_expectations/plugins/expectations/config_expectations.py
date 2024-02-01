@@ -45,7 +45,6 @@ CONFIG_VALUES_RANGE = {
     # "school_establishment_year": {"min": 1000, "max": current_year},
     # # Calculated
     "school_density": {"min": 0, "max": 5},
-
     # Optional
     "num_computers": {"min": 0, "max": 500},
     "num_students": {"min": 0, "max": 10000},
@@ -97,7 +96,7 @@ CONFIG_VALUES_OPTIONS = {
     ],
     "school_data_collection_modality": ["online", "in-person", "phone", "other"],
     "cellular_network_type": ["2g", "3g", "4g", "5g"],
-    "is_within_country" : ["yes", "no"]
+    "is_within_country": ["yes", "no"],
 }
 
 # For COVERAGE ITU dataset. To separate COVERAGE ITU expectations into different file.

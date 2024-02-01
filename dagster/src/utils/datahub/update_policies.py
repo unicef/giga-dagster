@@ -3,7 +3,6 @@ from urllib import parse
 
 import country_converter as cc
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
-
 from src.settings import settings
 
 

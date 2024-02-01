@@ -1,12 +1,22 @@
+import subprocess
+from uuid import uuid4
+
 import pyarrow_hotfix  # noqa: F401
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
+from pyspark.sql import SparkSession, types
+from pyspark.sql.functions import col, count, udf
 
 from dagster import OutputContext
 from src.settings import settings
+
+
+def _get_host_ip():
+    completed_process = subprocess.run(["hostname", "-i"], capture_output=True)
+    ip = completed_process.stdout.strip().decode("utf-8")
+    return "127.0.0.1" if ip == "127.0.1.1" else ip
+
 
 spark_common_config = {
     "spark.driver.extraJavaOptions": str.join(
@@ -26,13 +36,8 @@ spark_common_config = {
     "spark.sql.catalogImplementation": "hive",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
-    # "spark.driver.bindAddress": f"{settings.SPARK_MASTER_HOST}:4040",
     "spark.executor.cores": "1",
     "spark.executor.memory": "1g",
-    "spark.shuffle.service.enabled": "false",
-    "spark.dynamicAllocation.enabled": "false",
-    "spark.dynamicAllocation.maxExecutors": "3",
-    "spark.dynamicAllocation.executorAllocationRatio": "0.333",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -45,6 +50,14 @@ spark_common_config = {
     # "spark.python.use.daemon": "true",
     # "spark.python.daemon.module": "src.utils.sentry",
 }
+
+if settings.IN_PRODUCTION:
+    spark_common_config.update(
+        {
+            "spark.driver.host": _get_host_ip(),
+            "spark.driver.port": "4040",
+        }
+    )
 
 spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
 
@@ -63,7 +76,7 @@ def get_spark_session() -> SparkSession:
         conf.set(key, value)
 
     builder = (
-        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}")
+        SparkSession.builder.master(f"spark://{settings.SPARK_MASTER_HOST}:7077")
         .appName(spark_app_name)
         .config(conf=conf)
         .enableHiveSupport()
@@ -72,157 +85,182 @@ def get_spark_session() -> SparkSession:
     return spark.getOrCreate()
 
 
-def transform_dataframe_for_deltatable(
-    context: OutputContext, df: sql.DataFrame
+def count_nulls_for_column(df, column_name):
+    return df.select(
+        count(col(column_name).isNull()).alias(f"{column_name}_null_count")
+    ).first()[0]
+
+
+def transform_columns(
+    df: sql.DataFrame,
+    columns: list[str],
+    target_type: types.DataType,
+    context: OutputContext = None,
+) -> sql.DataFrame:
+    log_func = print if context is None else context.log.info
+
+    for col_name in columns:
+        nulls_before = count_nulls_for_column(df, col_name)
+        df = df.withColumn(col_name, col(col_name).cast(target_type))
+        log_func(f">> TRANSFORMED {target_type} for column {col_name}")
+        nulls_after = count_nulls_for_column(df, col_name)
+
+        if nulls_before != nulls_after:
+            raise ValueError(
+                f"Error: NULL count mismatch for column {col_name} after the cast."
+            )
+
+    return df
+
+
+def transform_school_master_types(
+    df: sql.DataFrame, context: OutputContext = None
 ) -> sql.DataFrame:
     columns_convert_to_string = [
-        "giga_id_school",
-        "school_id",
-        "name",
+        "school_id_giga",
+        "school_id_gov",
+        "school_name",
         "education_level",
-        "education_level_regional",
-        "school_type",
-        "connectivity",
-        "type_connectivity",
-        "coverage_availability",
-        "coverage_type",
+        "connectivity_type_govt",
         "admin1",
         "admin2",
-        "admin3",
-        "admin4",
-        "school_region",
-        "computer_availability",
+        "school_area_type",
+        "school_funding_type",
         "computer_lab",
-        "electricity",
-        "water",
-        "address",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_modality",
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "connectivity_govt",
+        "connectivity",
+        "connectivity_RT",
+        "connectivity_RT_datasource",
+        "disputed_region",
+        "nearest_NR_id",
+        "connectivity_static",
     ]
 
     columns_convert_to_double = [
-        "lat",
-        "lon",
-        "connectivity_speed",
-        "latency_connectivity",
+        "latitude",
+        "longitude",
+        "download_speed_contracted",
         "fiber_node_distance",
         "microwave_node_distance",
-        "nearest_school_distance",
         "nearest_LTE_distance",
         "nearest_UMTS_distance",
         "nearest_GSM_distance",
+        "nearest_NR_distance",
     ]
 
     columns_convert_to_int = [
+        "school_establishment_year",
         "num_computers",
+        "num_computers_desired",
         "num_teachers",
+        "num_adm_personnel",
         "num_students",
         "num_classroom",
-        "nearest_LTE_id",
-        "nearest_UMTS_id",
-        "nearest_GSM_id",
+        "num_latrines",
+        "school_data_collection_year",
         "schools_within_1km",
         "schools_within_2km",
         "schools_within_3km",
-        "schools_within_10km",
+        "connectivity_govt_collection_year",
     ]
     columns_convert_to_long = [
         "pop_within_1km",
         "pop_within_2km",
         "pop_within_3km",
-        "pop_within_10km",
+    ]
+    columns_convert_to_timestamp = [
+        "school_location_ingestion_timestamp",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_govt_ingestion_timestamp",
     ]
 
-    for col_name in columns_convert_to_string:
-        df = df.withColumn(col_name, col(col_name).cast("string"))
-        context.log.info(">> TRANSFORMED STRING")
-
-    for col_name in columns_convert_to_double:
-        df = df.withColumn(col_name, col(col_name).cast("double"))
-        context.log.info(">> TRANSFORMED DOUBLE")
-
-    for col_name in columns_convert_to_int:
-        df = df.withColumn(col_name, col(col_name).cast("int"))
-        context.log.info(">> TRANSFORMED INT")
-
-    for col_name in columns_convert_to_long:
-        df = df.withColumn(col_name, col(col_name).cast("long"))
-        context.log.info(">> TRANSFORMED LONG")
+    df = transform_columns(df, columns_convert_to_string, types.StringType(), context)
+    df = transform_columns(df, columns_convert_to_double, types.DoubleType(), context)
+    df = transform_columns(df, columns_convert_to_int, types.IntegerType(), context)
+    df = transform_columns(df, columns_convert_to_long, types.LongType(), context)
+    df = transform_columns(
+        df, columns_convert_to_timestamp, types.TimestampType(), context
+    )
 
     df.printSchema()
     return df
 
 
-def transform_dataframe_for_deltatable_no_context(df: sql.DataFrame) -> sql.DataFrame:
-    columns_convert_to_string = [
-        "giga_id_school",
-        "school_id",
-        "name",
-        "education_level",
-        "education_level_regional",
-        "school_type",
-        "connectivity",
-        "type_connectivity",
-        "coverage_availability",
-        "coverage_type",
-        "admin1",
-        "admin2",
-        "admin3",
-        "admin4",
-        "school_region",
-        "computer_availability",
-        "computer_lab",
-        "electricity",
-        "water",
-        "address",
-    ]
-
-    columns_convert_to_double = [
-        "lat",
-        "lon",
-        "connectivity_speed",
-        "latency_connectivity",
-        "fiber_node_distance",
-        "microwave_node_distance",
-        "nearest_school_distance",
-        "nearest_LTE_distance",
-        "nearest_UMTS_distance",
-        "nearest_GSM_distance",
-    ]
+def transform_school_reference_types(
+    df: sql.DataFrame, context: OutputContext = None
+) -> sql.DataFrame:
+    log_func = print if context is None else context.log.info
 
     columns_convert_to_int = [
-        "num_computers",
-        "num_teachers",
-        "num_students",
-        "num_classroom",
-        "nearest_LTE_id",
-        "nearest_UMTS_id",
-        "nearest_GSM_id",
-        "schools_within_1km",
-        "schools_within_2km",
-        "schools_within_3km",
+        "pop_within_10km",
         "schools_within_10km",
     ]
-    columns_convert_to_long = [
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "pop_within_10km",
+    columns_convert_to_float = [
+        "download_speed_govt1",
+        "download_speed_govt5",
+        "nearest_school_distance",
     ]
 
-    for col_name in columns_convert_to_string:
-        df = df.withColumn(col_name, col(col_name).cast("string"))
-        print(">> TRANSFORMED STRING")
+    for col_name in columns_convert_to_int:
+        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
+        log_func(">> TRANSFORMED INT")
 
-    for col_name in columns_convert_to_double:
-        df = df.withColumn(col_name, col(col_name).cast("double"))
-        print(">> TRANSFORMED DOUBLE")
+    for col_name in columns_convert_to_float:
+        df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
+        log_func(">> TRANSFORMED FLOAT")
+
+    df.printSchema()
+    return df
+
+
+def transform_qos_bra_types(
+    df: sql.DataFrame, context: OutputContext = None
+) -> sql.DataFrame:
+    log_func = print if context is None else context.log.info
+
+    columns_convert_to_int = [
+        "ip_family",
+    ]
+
+    columns_convert_to_float = [
+        "speed_upload",
+        "speed_download",
+        "roundtrip_time",
+        "jitter_upload",
+        "jitter_download",
+        "rtt_packet_loss_pct",
+        "latency",
+    ]
+
+    columns_convert_to_timestamp = [
+        "timestamp",
+    ]
 
     for col_name in columns_convert_to_int:
-        df = df.withColumn(col_name, col(col_name).cast("int"))
-        print(">> TRANSFORMED INT")
+        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
+        log_func(">> TRANSFORMED INT")
 
-    for col_name in columns_convert_to_long:
-        df = df.withColumn(col_name, col(col_name).cast("long"))
-        print(">> TRANSFORMED LONG")
+    for col_name in columns_convert_to_float:
+        df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
+        log_func(">> TRANSFORMED FLOAT")
+
+    for col_name in columns_convert_to_timestamp:
+        df = df.withColumn(col_name, col(col_name).cast(types.TimestampType()))
+        log_func(">> TRANSFORMED TIMESTAMP")
+
+    @udf(returnType=types.StringType())
+    def generate_uuid():
+        return str(uuid4())
+
+    df = df.withColumn("id", generate_uuid())
+    df = df.withColumn("date", col("timestamp").cast(types.DateType()))
 
     df.printSchema()
     return df

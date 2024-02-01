@@ -1,35 +1,32 @@
 import decimal
 import difflib
-import os
 import io
 
 # Geospatial
 import country_converter as coco
 import geopandas as gpd
-from azure.storage.blob import BlobServiceClient
-from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+
+# Spark functions
+from pyspark.sql import functions as f
 from shapely.geometry import Point
 from shapely.ops import nearest_points
-import pandas as pd
 
 # Name Similarity
 from thefuzz import fuzz
 
-# Spark functions
-from pyspark.sql import functions as f
-from pyspark.sql.types import StringType, BooleanType, ArrayType
-from pyspark.sql.utils import AnalysisException
-from pyspark.sql.window import Window
+from azure.storage.blob import BlobServiceClient
 
 # Auth
-from src.settings import Settings # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
+from src.settings import Settings  # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
+from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
+
 settings_instance = Settings()
 azure_sas_token = settings_instance.AZURE_SAS_TOKEN
 azure_blob_container_name = settings_instance.AZURE_BLOB_CONTAINER_NAME
 
-DUPLICATE_SCHOOL_DISTANCE_KM = .1
+DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 
@@ -44,8 +41,8 @@ container_name = azure_blob_container_name
 def get_country_geometry(country_code_iso3):
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
-        filename = "{}.gpkg".format(country_code_iso3)
-        file = "{}{}".format(DIRECTORY_LOCATION, filename)
+        filename = f"{country_code_iso3}.gpkg"
+        file = f"{DIRECTORY_LOCATION}{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
@@ -58,7 +55,7 @@ def get_country_geometry(country_code_iso3):
         ][0]
     except ValueError as e:
         if str(e) == "Must be a coordinate pair or Point":
-            country_geometry is None
+            country_geometry is None  # noqa: B015
         else:
             raise e
 
@@ -117,13 +114,15 @@ def is_within_boundary_distance(latitude, longitude, country_code_iso3):
 
     return None
 
+
 is_within_boundary_distance_udf = f.udf(is_within_boundary_distance)
+
 
 # All the checks to verify if location is within the country
 def is_within_country(latitude, longitude, country_code_iso3):
     if latitude is None or longitude is None or country_code_iso3 is None:
         return False
-    
+
     is_valid_gadm = is_within_country_gadm(latitude, longitude, country_code_iso3)
     is_valid_geopy = is_within_country_geopy(latitude, longitude, country_code_iso3)
     is_valid_boundary = is_within_boundary_distance(
@@ -132,6 +131,7 @@ def is_within_country(latitude, longitude, country_code_iso3):
 
     # Note: Check if valid lat/long values
     return is_valid_gadm | is_valid_geopy | is_valid_boundary
+
 
 is_within_country_udf = f.udf(is_within_country)
 
@@ -156,7 +156,9 @@ def get_decimal_places(number):
     decimal_places = -decimal.Decimal(str(number)).as_tuple().exponent
     return decimal_places
 
+
 get_decimal_places_udf = f.udf(get_decimal_places)
+
 
 def has_at_least_n_decimal_places(number, places):
     return get_decimal_places(number) >= places
@@ -167,29 +169,33 @@ def has_at_least_n_decimal_places(number, places):
 # coords_2 = (latitude, longitude)
 # distance_km is a float number that indicates the minimum distane
 def are_pair_points_beyond_minimum_distance(
-    coords_1, coords_2 #, distance_km=DUPLICATE_SCHOOL_DISTANCE
+    coords_1,
+    coords_2,  # , distance_km=DUPLICATE_SCHOOL_DISTANCE
 ):
     return geodesic(coords_1, coords_2).km <= DUPLICATE_SCHOOL_DISTANCE_KM
 
-are_pair_points_beyond_minimum_distance_udf = f.udf(are_pair_points_beyond_minimum_distance)
+
+are_pair_points_beyond_minimum_distance_udf = f.udf(
+    are_pair_points_beyond_minimum_distance
+)
 
 # def are_all_points_beyond_minimum_distance(coordinates_list):
-    # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
-    # for i in range(len(coordinates_list)):
-    #     for j in range(i + 1, len(coordinates_list)):
-    #         if are_pair_points_beyond_minimum_distance(coordinates_list[i], coordinates_list[j]) is True:
-    #             return True
-    # row_coords_t = tuple(row_coords)
-    # for i in coordinates_list:
-    #     i_tuple = tuple(i)
-    #     try:
-    #         geodesic(row_coords_t, i_tuple).km
-    #     except ValueError:
-    #         print(f"Invalid coordinates: {row_coords_t}, {i_tuple}")
-    #         continue
-    #     if geodesic(row_coords_t, i_tuple).km <= 0.1:
-    #         return True
-    # return False
+# coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
+# for i in range(len(coordinates_list)):
+#     for j in range(i + 1, len(coordinates_list)):
+#         if are_pair_points_beyond_minimum_distance(coordinates_list[i], coordinates_list[j]) is True:
+#             return True
+# row_coords_t = tuple(row_coords)
+# for i in coordinates_list:
+#     i_tuple = tuple(i)
+#     try:
+#         geodesic(row_coords_t, i_tuple).km
+#     except ValueError:
+#         print(f"Invalid coordinates: {row_coords_t}, {i_tuple}")
+#         continue
+#     if geodesic(row_coords_t, i_tuple).km <= 0.1:
+#         return True
+# return False
 
 # are_all_points_beyond_minimum_distance_udf = f.udf(are_all_points_beyond_minimum_distance)
 
@@ -233,11 +239,17 @@ are_pair_points_beyond_minimum_distance_udf = f.udf(are_pair_points_beyond_minim
 
 #     return is_unique
 
+
 def has_similar_name(column, name_list):
-        for name in name_list:
-            if 1 > difflib.SequenceMatcher(None, column, name).ratio() >= SIMILARITY_RATIO_CUTOFF:
-                return True
-        return False
+    for name in name_list:
+        if (
+            1
+            > difflib.SequenceMatcher(None, column, name).ratio()
+            >= SIMILARITY_RATIO_CUTOFF
+        ):
+            return True
+    return False
+
 
 has_similar_name_udf = f.udf(has_similar_name)
 
@@ -324,7 +336,7 @@ def duplicate_check(df, check_function):
 
 
 def is_valid_range(value, min, max):
-    if type(value) == str:
+    if isinstance(value, str):
         return False
 
     is_numeric_min = isinstance(min, int | float)
