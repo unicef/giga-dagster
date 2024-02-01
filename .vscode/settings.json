@@ -1,6 +1,3 @@
 {
-    "python.analysis.extraPaths": [
-        "./great_expectations/plugins"
-    ],
     "python.defaultInterpreterPath": "../dagster/.venv/bin/python"
 }
