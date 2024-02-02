@@ -11,6 +11,13 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
+class DeploymentEnvironment(StrEnum):
+    LOCAL = "local"
+    DEVELOPMENT = "dev"
+    STAGING = "stg"
+    PRODUCTION = "prd"
+
+
 class Settings(BaseSettings):
     class Config:
         env_file = ".env"
@@ -29,6 +36,7 @@ class Settings(BaseSettings):
     # Settings with a default are not required to be in .env
     ENVIRONMENT: Environment = Environment.STAGING
     PYTHON_ENV: Environment = Environment.PRODUCTION
+    DEPLOYMENT_ENV: Environment = DeploymentEnvironment.LOCAL
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DATAHUB_KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
@@ -48,6 +56,14 @@ class Settings(BaseSettings):
             f"http://datahub-datahub-gms.{self.DATAHUB_KUBERNETES_NAMESPACE}:8080"
             if self.IN_PRODUCTION
             else self.DATAHUB_METADATA_SERVER
+        )
+
+    @property
+    def ADLS_ENVIRONMENT(self) -> Environment:
+        return (
+            DeploymentEnvironment.DEVELOPMENT
+            if self.DEPLOYMENT_ENV == DeploymentEnvironment.LOCAL
+            else self.DEPLOYMENT_ENV
         )
 
     @property

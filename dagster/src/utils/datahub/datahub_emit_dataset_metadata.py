@@ -22,8 +22,6 @@ from src.utils.adls import get_input_filepath, get_output_filepath
 
 from dagster import OpExecutionContext, version
 
-env = settings.ENVIRONMENT.DEVELOPMENT
-
 
 def identify_country_name(country_code):
     coco = cc.CountryConverter()
@@ -43,7 +41,7 @@ def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
             "/", "."
         )  # Datahub reads '.' as folder
         return builder.make_dataset_urn(
-            platform="adls", name=upstream_urn_name, env=env
+            platform="adls", name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
         output_filepath = get_output_filepath(context)
