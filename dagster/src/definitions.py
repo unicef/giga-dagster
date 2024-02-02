@@ -1,15 +1,18 @@
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import assets, datahub_assets, qos
+from src.assets import school_geolocation, school_coverage, datahub_assets, qos
 from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
     datahub__ingest_azure_ad_users_groups_job,
     datahub__update_policies_job,
     qos__convert_csv_to_deltatable_job,
-    school_master__automated_data_checks_job,
+    school_master_coverage__automated_data_checks_job,
+    school_master_coverage__failed_manual_checks_job,
+    school_master_coverage__successful_manual_checks_job,
+    school_master_geolocation__automated_data_checks_job,
+    school_master_geolocation__failed_manual_checks_job,
+    school_master_geolocation__successful_manual_checks_job,
     school_master__convert_gold_csv_to_deltatable_job,
-    school_master__failed_manual_checks_job,
-    school_master__successful_manual_checks_job,
     school_reference__convert_gold_csv_to_deltatable_job,
 )
 from src.resources.io_managers import ADLSDeltaIOManager, ADLSRawIOManager
@@ -31,7 +34,10 @@ setup_sentry()
 defs = Definitions(
     assets=[
         *load_assets_from_package_module(
-            package_module=assets, group_name="school_master_data"
+            package_module=school_geolocation, group_name="school_geolocation_data"
+        ),
+        *load_assets_from_package_module(
+            package_module=school_coverage, group_name="school_coverage_data"
         ),
         *load_assets_from_package_module(package_module=qos, group_name="qos_data"),
         *load_assets_from_package_module(
@@ -45,9 +51,12 @@ defs = Definitions(
         "spark": pyspark,
     },
     jobs=[
-        school_master__automated_data_checks_job,
-        school_master__successful_manual_checks_job,
-        school_master__failed_manual_checks_job,
+        school_master_coverage__automated_data_checks_job,
+        school_master_coverage__failed_manual_checks_job,
+        school_master_coverage__successful_manual_checks_job,
+        school_master_geolocation__automated_data_checks_job,
+        school_master_geolocation__failed_manual_checks_job,
+        school_master_geolocation__successful_manual_checks_job,
         school_master__convert_gold_csv_to_deltatable_job,
         school_reference__convert_gold_csv_to_deltatable_job,
         qos__convert_csv_to_deltatable_job,
