@@ -1,18 +1,18 @@
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import school_geolocation, school_coverage, datahub_assets, qos
+from src.assets import datahub_assets, qos, school_coverage, school_geolocation
 from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
     datahub__ingest_azure_ad_users_groups_job,
     datahub__update_policies_job,
     qos__convert_csv_to_deltatable_job,
+    school_master__convert_gold_csv_to_deltatable_job,
     school_master_coverage__automated_data_checks_job,
     school_master_coverage__failed_manual_checks_job,
     school_master_coverage__successful_manual_checks_job,
     school_master_geolocation__automated_data_checks_job,
     school_master_geolocation__failed_manual_checks_job,
     school_master_geolocation__successful_manual_checks_job,
-    school_master__convert_gold_csv_to_deltatable_job,
     school_reference__convert_gold_csv_to_deltatable_job,
 )
 from src.resources.io_managers import ADLSDeltaIOManager, ADLSRawIOManager

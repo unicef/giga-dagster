@@ -192,11 +192,10 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    filename = source_path.split("/")[-1]
     filename = (
-        filename.replace(".csv", ".json")
+        source_path.split("/")[-1].replace(".csv", ".json")
         if step == "data_quality_results"
-        else filename
+        else source_path.split("/")[-1]
     )
 
     destination_folder = constants.step_destination_folder_map(dataset_type)[step]
