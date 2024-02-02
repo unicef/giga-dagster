@@ -128,21 +128,44 @@ CONFIG_PAIR_AVAILABILITY = [
 # Coverage Column Configs
 
 # Lower Columns
-CONFIG_ITU_COLUMNS_TO_RENAME = ['Schools_within_1km', 'Schools_within_2km', 'Schools_within_3km', 'Schools_within_10km']
+CONFIG_ITU_COLUMNS_TO_RENAME = ["Schools_within_1km", "Schools_within_2km", "Schools_within_3km", "Schools_within_10km"]
 
 # Columns To Keep From Dataset
-CONFIG_FB_COLUMNS = ['giga_id_school', '2G_coverage', '3G_coverage', '4G_coverage']
-CONFIG_ITU_COLUMNS = ['giga_id_school', '2G_coverage', '3G_coverage', '4G_coverage', 
-                      'fiber_node_distance', 'microwave_node_distance', 'nearest_school_distance', 'schools_within_1km', 'schools_within_2km',
-                        'schools_within_3km', 'schools_within_10km', 'nearest_LTE_id', 'nearest_LTE_distance',
-                        'nearest_UMTS_id', 'nearest_UMTS_distance', 'nearest_GSM_id', 'nearest_GSM_distance',
-                        # '2G_coverage', '3G_coverage', '4G_coverage', 
-                        'pop_within_1km', 'pop_within_2km',
-                        'pop_within_3km', 'pop_within_10km']
-CONFIG_COV_COLUMNS = ['giga_id_school', 'coverage_availability', 'coverage_type',
-                      'fiber_node_distance', 'microwave_node_distance', 'nearest_school_distance', 'schools_within_1km', 'schools_within_2km',
-                        'schools_within_3km', 'schools_within_10km', 'nearest_LTE_id', 'nearest_LTE_distance',
-                        'nearest_UMTS_id', 'nearest_UMTS_distance', 'nearest_GSM_id', 'nearest_GSM_distance',
-                        # '2G_coverage', '3G_coverage', '4G_coverage', 
-                        'pop_within_1km', 'pop_within_2km',
-                        'pop_within_3km', 'pop_within_10km']
+CONFIG_FB_COLUMNS = ["school_id_giga", "2G_coverage", "3G_coverage", "4G_coverage"]
+CONFIG_ITU_COLUMNS = ["school_id_giga", "2G_coverage", "3G_coverage", "4G_coverage", 
+                      "fiber_node_distance", "microwave_node_distance", "nearest_school_distance", "schools_within_1km", "schools_within_2km",
+                        "schools_within_3km", "schools_within_10km", "nearest_LTE_id", "nearest_LTE_distance",
+                        "nearest_UMTS_id", "nearest_UMTS_distance", "nearest_GSM_id", "nearest_GSM_distance",
+                        "pop_within_1km", "pop_within_2km",
+                        "pop_within_3km", "pop_within_10km"]
+CONFIG_COV_COLUMNS = ["school_id_giga", "cellular_coverage_availability", "cellular_coverage_type",
+                      "fiber_node_distance", "microwave_node_distance", "nearest_school_distance", "schools_within_1km", "schools_within_2km",
+                        "schools_within_3km", "schools_within_10km", "nearest_LTE_id", "nearest_LTE_distance",
+                        "nearest_UMTS_id", "nearest_UMTS_distance", "nearest_GSM_id", "nearest_GSM_distance",
+                        "pop_within_1km", "pop_within_2km",
+                        "pop_within_3km", "pop_within_10km"]
+
+CONFIG_COV_COLUMN_RENAME = {
+    ("giga_id_school", "school_id_giga"),
+    ("coverage_availability", "cellular_coverage_availability"),
+    ("coverage_type", "cellular_coverage_type"),
+    ("fiber_node_distance", "fiber_node_distance"), 
+    ("microwave_node_distance", "microwave_node_distance"), 
+    ("nearest_school_distance", "nearest_school_distance"), 
+    ("schools_within_1km", "schools_within_1km"), 
+    ("schools_within_2km", "schools_within_2km"),
+    ("schools_within_3km", "schools_within_3km"), 
+    ("schools_within_10km", "schools_within_10km"), 
+    ("nearest_LTE_id", "nearest_LTE_id"), 
+    ("nearest_LTE_distance", "nearest_LTE_distance"),
+    ("nearest_UMTS_id", "nearest_UMTS_id"), 
+    ("nearest_UMTS_distance", "nearest_UMTS_distance"), 
+    ("nearest_GSM_id", "nearest_GSM_id"), 
+    ("nearest_GSM_distance", "nearest_GSM_distance"),
+    ("pop_within_1km", "pop_within_1km"), 
+    ("pop_within_2km", "pop_within_2km"),
+    ("pop_within_3km", "pop_within_3km"), 
+    ("pop_within_10km", "pop_within_10km"),
+    }
+
+CONFIG_COV_COLUMN_MERGE_LOGIC = ["cellular_coverage_availability", "cellular_coverage_type"]
