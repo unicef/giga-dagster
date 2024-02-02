@@ -266,17 +266,19 @@ if __name__ == "__main__":
     itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
     cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
 
-    ## DAGSTER WORKFLOW
+    ## DAGSTER WORKFLOW ##
 
     ## TRANSFORM STEP
     # FB
     fb = fb_transforms(fb)
     df = fb_coverage_merge(fb, cov) # NEED SILVER COVERAGE INPUT
+    print("Merged FB and (Silver) Coverage Dataset")
     df.show()
 
     #ITU
     itu = itu_transforms(itu)
-    df = itu_coverage_merge(itu, cov)
+    df = itu_coverage_merge(itu, cov) # NEED SILVER COVERAGE INPUT
+    print("Merged ITU and (Silver) Coverage Dataset")
     df.show()
 
 
