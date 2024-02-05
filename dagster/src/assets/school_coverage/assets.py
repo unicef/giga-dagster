@@ -30,6 +30,10 @@ def coverage_data_quality_results(
     context,
     coverage_raw: sql.DataFrame,
 ):
+    # Output is a spark dataframe (bronze + extra columns with dq results)
+    # Output is a spark dataframe(?) with summary statistics (for Ger)
+    # Output is a JSON with a list of checks (no results - Ger asked for)
+    # Use multiassets
     yield Output(
         coverage_raw.to_json_dict(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -38,24 +42,23 @@ def coverage_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
-    bronze: sql.DataFrame,
+    coverage_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = bronze
+    df_passed = coverage_data_quality_results
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
-    bronze: sql.DataFrame,
+    coverage_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = bronze
+    df_failed = coverage_data_quality_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
 # OUTPUT OF THIS IS A STAGING DATAFRAME COMPOSED OF INCOMING COVERAGE DATA + CURRENT SILVER COVERAGE
-
 
 # SOME QUESTIONS:
 # 1. What if multiple raw files
@@ -63,11 +66,22 @@ def coverage_dq_failed_rows(
 def coverage_bronze(
     context: OpExecutionContext, coverage_dq_passed_rows: pd.DataFrame
 ) -> sql.DataFrame:
+    # fb data - add missing columns in ITU dataset
+    # special transform ni renz - use existing silver table - fb transform & ITU transform
+    # output is fb + silver or ITU + silver
     # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
     yield Output(
         coverage_dq_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
 
+    # silver - 0
+    # fb 0 - 1
+    # fb 1 - 0
+    # fb 2 - 0
+
+    # silver + fb 0 -> 1
+    # silver + fb 1 -> 0
+    # silver + fb 2 -> 0
 
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_staging(
@@ -76,6 +90,7 @@ def coverage_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
+    # one staging dataset for fb/itu both
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     incoming_data_filepath = context.run_tags["dagster/run_key"]
     country_code = incoming_data_filepath.split("/")[-1].split("_")[0]
@@ -130,7 +145,7 @@ def coverage_staging(
 
             staging.alias("source").merge(
                 existing_file.alias("target"),
-                "source.giga_id_school = target.giga_id_school",
+                "source.school_id_giga = target.school_id_giga",
             ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
             context.log.info(f"Staging: table {staging}")

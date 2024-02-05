@@ -23,11 +23,12 @@ def geolocation_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key="adls_delta_io_manager")  # this is wrong
 def geolocation_bronze(
     context: OpExecutionContext, geolocation_raw: pd.DataFrame
 ) -> sql.DataFrame:
     # Transform columns added here, all column renaming done here
+    # Output should be stored as a spark dataframe
     # emit_metadata_to_datahub(context, df=raw)
     yield Output(geolocation_raw, metadata={"filepath": get_output_filepath(context)})
 
@@ -39,6 +40,10 @@ def geolocation_data_quality_results(
     context,
     geolocation_bronze: sql.DataFrame,
 ):
+    # Output is a spark dataframe (bronze + extra columns with dq results)
+    # Output is a spark dataframe(?) with summary statistics (for Ger)
+    # Output is a JSON with a list of checks (no results - Ger asked for)
+    # Use multiassets
     yield Output(
         geolocation_bronze.to_json_dict(),
         metadata={"filepath": get_output_filepath(context)},
@@ -48,18 +53,18 @@ def geolocation_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = geolocation_bronze
+    df_passed = geolocation_data_quality_results
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = geolocation_bronze
+    df_failed = geolocation_data_quality_results
     # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
@@ -125,7 +130,7 @@ def geolocation_staging(
 
             staging.alias("source").merge(
                 existing_file.alias("target"),
-                "source.giga_id_school = target.giga_id_school",
+                "source.school_id_giga = target.school_id_giga",
             ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
             context.log.info(f"Staging: table {staging}")
