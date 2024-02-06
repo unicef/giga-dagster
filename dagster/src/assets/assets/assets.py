@@ -174,7 +174,7 @@ def master_csv_to_gold(
         context.run_tags["dagster/run_key"]
     )
 
-    df_pandas.fillna(None, inplace=True)
+    df_pandas = df_pandas.fillna(None)
     df_pandas.replace(np.nan, None)
     adls_file_client.upload_pandas_dataframe_as_file(
         df_pandas, context.run_tags["dagster/run_key"]
