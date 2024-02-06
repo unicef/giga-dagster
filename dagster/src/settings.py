@@ -11,7 +11,7 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
-class DeploymentEnvironment(Environment):
+class DeploymentEnvironment(StrEnum):
     LOCAL = "local"
     DEVELOPMENT = "dev"
     STAGING = "stg"
@@ -59,7 +59,7 @@ class Settings(BaseSettings):
         )
 
     @property
-    def ADLS_ENVIRONMENT(self) -> Environment:
+    def ADLS_ENVIRONMENT(self) -> DeploymentEnvironment:
         return (
             DeploymentEnvironment.DEVELOPMENT
             if self.DEPLOYMENT_ENV == DeploymentEnvironment.LOCAL
