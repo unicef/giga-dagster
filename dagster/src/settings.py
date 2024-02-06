@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     SHORT_SHA: str = ""
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
+    GITHUB_ACCESS_TOKEN: str = ""
 
     # Derived settings
     @property
