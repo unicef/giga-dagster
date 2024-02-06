@@ -11,7 +11,7 @@ class Environment(StrEnum):
     PRODUCTION = "production"
 
 
-class DeploymentEnvironment(StrEnum):
+class DeploymentEnvironment(Environment):
     LOCAL = "local"
     DEVELOPMENT = "dev"
     STAGING = "stg"
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Settings with a default are not required to be in .env
     ENVIRONMENT: Environment = Environment.STAGING
     PYTHON_ENV: Environment = Environment.PRODUCTION
-    DEPLOYMENT_ENV: Environment = DeploymentEnvironment.LOCAL
+    DEPLOYMENT_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DATAHUB_KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
