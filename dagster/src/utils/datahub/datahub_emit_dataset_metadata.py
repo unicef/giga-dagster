@@ -40,7 +40,9 @@ def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
-        return builder.make_dataset_urn(platform="adls", name=upstream_urn_name)
+        return builder.make_dataset_urn(
+            platform="adls", name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
+        )
     else:
         output_filepath = get_output_filepath(context)
         dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
