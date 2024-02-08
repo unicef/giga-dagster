@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # CLONE TABLE
     spark = get_spark_session()
     v2_filepath = "gold/delta-tables-v2/BLZ"
-    v2_clone = "gold/delta-tables-v2/ZCDFTESTBLZ"
+    v2_clone = "gold/delta-tables-v2/ZCDF"
     clone_table(spark=spark, filepath=v2_filepath, cloned_filepath=v2_clone)
 
     # PRINT TABLE COLUMNS
