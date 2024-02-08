@@ -47,6 +47,7 @@ jobs:
                     SHORT_SHA: "$(Build.SourceVersion)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
+                    SENTRY_DSN: "$(sentryDsn)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

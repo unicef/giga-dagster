@@ -19,4 +19,5 @@ variables:
   datahubAzureAdClientSecret: $(DATAHUB_AZURE_CLIENT_SECRET)
   datahubAzureAdRedirectUrl: $(DATAHUB_AZURE_REDIRECT_URL)
   deployEnv: $(DEPLOY_ENV)
+  sentryDsn: $(SENTRY_DSN)
   system.debug: true
