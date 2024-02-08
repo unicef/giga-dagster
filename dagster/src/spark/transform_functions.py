@@ -66,12 +66,14 @@ def create_uzbekistan_school_name(df):
     df = df.withColumn(
         "school_name",
         f.expr(
-            "CASE WHEN district IS NOT NULL AND region IS NOT NULL THEN"
-            " CONCAT(school_name, ',', district, ',', region) WHEN district IS NOT NULL"
-            " AND city IS NOT NULL THEN CONCAT(school_name, ',', city, ',', district)"
-            " WHEN city IS NOT NULL AND region IS NOT NULL THEN CONCAT(school_name,"
-            " ',', city, ',', region) ELSE CONCAT(COALESCE(school_name, ''), ',',"
-            " COALESCE(region, ''), ',', COALESCE(region, '')) END"
+            "CASE "
+            "WHEN district IS NOT NULL AND region IS NOT NULL THEN "
+            "CONCAT(school_name, ',', district, ',', region) "
+            "WHEN district IS NOT NULL AND city IS NOT NULL THEN "
+            "CONCAT(school_name, ',', city, ',', district) "
+            "WHEN city IS NOT NULL AND region IS NOT NULL THEN "
+            "CONCAT(school_name, ',', city, ',', region) "
+            " ELSE CONCAT(COALESCE(school_name, ''), ',', COALESCE(region, ''), ',', COALESCE(region, '')) END"
         ),
     )
 

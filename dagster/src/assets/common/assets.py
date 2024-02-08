@@ -1,3 +1,4 @@
+import numpy as np
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_output_filepath
@@ -58,6 +59,11 @@ def master_csv_to_gold(
 ) -> sql.DataFrame:
     df_pandas = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
+    )
+
+    df_pandas.replace(np.nan, None)
+    adls_file_client.upload_pandas_dataframe_as_file(
+        df_pandas, context.run_tags["dagster/run_key"]
     )
 
     df_spark = adls_file_client.download_csv_as_spark_dataframe(

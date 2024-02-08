@@ -45,6 +45,7 @@ jobs:
                     DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     SHORT_SHA: "$(Build.SourceVersion)"
+                    DEPLOYMENT_ENV: "$(deploymentEnvironment)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

@@ -44,7 +44,7 @@ class ADLSFileClient(ConfigurableResource):
         file_client = _adls.get_file_client(filepath)
         match splits[-1]:
             case "csv" | "xls" | "xlsx":
-                bytes_data = data.to_csv().encode("utf-8-sig")
+                bytes_data = data.to_csv(mode="w+", index=False).encode("utf-8-sig")
             case "json":
                 bytes_data = data.to_json().encode()
             case _:
