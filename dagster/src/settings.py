@@ -1,3 +1,4 @@
+from datetime import timedelta
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -6,6 +7,7 @@ from pydantic import BaseSettings
 
 
 class Environment(StrEnum):
+    LOCAL = "local"
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
@@ -34,21 +36,21 @@ class Settings(BaseSettings):
     AUTH_OIDC_CLIENT_SECRET: str
 
     # Settings with a default are not required to be in .env
-    ENVIRONMENT: Environment = Environment.STAGING
     PYTHON_ENV: Environment = Environment.PRODUCTION
-    DEPLOYMENT_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
+    DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     DATAHUB_KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
     SHORT_SHA: str = ""
+    COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
 
     # Derived settings
     @property
     def IN_PRODUCTION(self) -> bool:
-        return self.PYTHON_ENV == Environment.PRODUCTION
+        return self.PYTHON_ENV != Environment.LOCAL
 
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
@@ -62,8 +64,8 @@ class Settings(BaseSettings):
     def ADLS_ENVIRONMENT(self) -> DeploymentEnvironment:
         return (
             DeploymentEnvironment.DEVELOPMENT
-            if self.DEPLOYMENT_ENV == DeploymentEnvironment.LOCAL
-            else self.DEPLOYMENT_ENV
+            if self.DEPLOY_ENV == DeploymentEnvironment.LOCAL
+            else self.DEPLOY_ENV
         )
 
     @property
@@ -80,7 +82,7 @@ class Settings(BaseSettings):
 
     @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
-        return 60 * 5 if self.IN_PRODUCTION else 30
+        return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
 
 
 @lru_cache
