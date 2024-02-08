@@ -34,8 +34,18 @@ V2_SCHEMA_FIELDS = [
 ]
 V2_SCHEMA = StructType(V2_SCHEMA_FIELDS)
 
+TABLE_PROPERTIES = {
+    "delta.appendOnly": "false",
+    "delta.enableChangeDataFeed": "true",
+    # "delta.columnMapping.mode": "name",
+    # "delta.minReaderVersion": "2",
+    # "delta.minWriterVersion": "5",
+}
+
 
 def step_v0():
+    """Generate v1 table"""
+
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_NAME}").show()
     spark.sql(f"DROP TABLE IF EXISTS {FULL_TABLE_NAME}").show()
 
@@ -43,46 +53,30 @@ def step_v0():
     for field in V1_SCHEMA_FIELDS:
         dt.addColumn(field.name, field.dataType)
 
-    (
-        dt.property("description", "This is a test table for schema versioning")
-        .property("delta.appendOnly", "false")
-        .property("delta.enableChangeDataFeed", "true")
-        .location(TABLE_LOCATION)
-        .execute()
-    )
+    for key, value in TABLE_PROPERTIES.items():
+        dt.property(key, value)
+
+    dt.location(TABLE_LOCATION).execute()
 
 
 def step_v1():
+    """Initial 10 rows"""
+
     pdf = pd.read_csv(settings.BASE_DIR / "scripts" / "fake.csv", encoding="utf-8-sig")
     sdf = spark.createDataFrame(pdf, schema=V1_SCHEMA)
     sdf.write.format("delta").mode("append").saveAsTable(FULL_TABLE_NAME)
 
 
 def step_v2():
+    """Append 5 new rows + add 1 new column"""
+
     pdf = pd.read_csv(
         settings.BASE_DIR / "scripts" / "fake_v2.csv", encoding="utf-8-sig"
     )
     sdf = spark.createDataFrame(pdf, schema=V2_SCHEMA)
 
-    dt = DeltaTable.replace(spark).tableName(FULL_TABLE_NAME)
-    for field in V2_SCHEMA_FIELDS:
-        dt.addColumn(field.name, field.dataType)
-
-    (
-        dt.property("description", "This is a test table for schema versioning")
-        .property("delta.appendOnly", "false")
-        .property("delta.enableChangeDataFeed", "true")
-        .location(TABLE_LOCATION)
-        .execute()
-    )
-
-    dt = DeltaTable.forName(spark, FULL_TABLE_NAME)
-    (
-        dt.alias("master")
-        .merge(sdf.alias("new"), "master.id = new.id")
-        .whenMatchedUpdateAll()
-        .whenNotMatchedInsertAll()
-        .execute()
+    sdf.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
+        FULL_TABLE_NAME
     )
 
 
