@@ -18,5 +18,5 @@ variables:
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   datahubAzureAdClientSecret: $(DATAHUB_AZURE_CLIENT_SECRET)
   datahubAzureAdRedirectUrl: $(DATAHUB_AZURE_REDIRECT_URL)
-  deploymentEnvironment: $(DEPLOYMENT_ENV)
+  deployEnv: $(DEPLOY_ENV)
   system.debug: true

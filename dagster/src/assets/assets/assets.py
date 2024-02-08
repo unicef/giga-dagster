@@ -5,8 +5,15 @@ from dagster_pyspark import PySparkResource
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.datahub.datahub_emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
+
+
+@asset
+@capture_op_exceptions
+def might_explode(_context: OpExecutionContext):
+    raise ValueError("oops!")
 
 
 @asset(io_manager_key="adls_raw_io_manager")

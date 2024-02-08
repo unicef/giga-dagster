@@ -1,23 +1,8 @@
-trigger:
-  branches:
-    include:
-      - staging
-
-pr: none
-
-pool:
-  vmImage: ubuntu-latest
-
-variables:
-  - template: templates/variables.yaml
-  - name: environment
-    value: stg
-
 stages:
   - stage: BuildAndPushDagster
     displayName: Build and push Dagster user code image
     jobs:
-      - template: templates/build-and-push.yaml
+      - template: build-and-push.yaml
         parameters:
           displayName: Dagster user code
           repository: giga-dagster
@@ -27,7 +12,7 @@ stages:
     displayName: Build and push auth proxy image
     dependsOn: [ ]
     jobs:
-      - template: templates/build-and-push.yaml
+      - template: build-and-push.yaml
         parameters:
           displayName: auth proxy
           repository: giga-dagster-authproxy
@@ -37,7 +22,7 @@ stages:
     displayName: Build and push Spark image
     dependsOn: [ ]
     jobs:
-      - template: templates/build-and-push.yaml
+      - template: build-and-push.yaml
         parameters:
           displayName: Spark
           repository: giga-dagster-spark
@@ -48,7 +33,7 @@ stages:
     displayName: Create/update K8s configuration resources
     dependsOn: [ ]
     jobs:
-      - template: templates/create-config.yaml
+      - template: create-config.yaml
 
   - stage: Deploy
     displayName: Deploy Dagster
@@ -58,4 +43,4 @@ stages:
       - BuildAndPushSpark
       - CreateConfig
     jobs:
-      - template: templates/helm-deploy.yaml
+      - template: helm-deploy.yaml
