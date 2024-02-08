@@ -1,5 +1,3 @@
-from dagster_ge.factory import GEContextResource
-
 from dagster import Definitions, load_assets_from_package_module
 from src.assets import assets, datahub_assets, qos
 from src.jobs import (
@@ -49,7 +47,6 @@ defs = Definitions(
         "adls_bronze_io_manager": ADLSBronzeIOManager(pyspark=pyspark),
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
         "adls_file_client": ADLSFileClient(),
-        "gx": GEContextResource(ge_root_dir="src/resources/great_expectations"),
         "spark": pyspark,
     },
     jobs=[

@@ -42,8 +42,6 @@ to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 - `azure/` - Contains all configuration for Azure DevOps pipelines.
 - `dagster/` - Contains all custom Dagster code.
 - `docs/` - This folder contains all Markdown files for creating Backstage TechDocs.
-- `great_expectations/` - Contains GX configuration.
-- `gx_codes/` - Contains custom GX code.
 - `infra/` - Contains all Kubernetes & Helm configuration.
 - `spark/` - Contains Docker build items for custom Spark image.
 
