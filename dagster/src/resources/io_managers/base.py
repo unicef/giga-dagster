@@ -33,8 +33,15 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         return context.step_context.op_config["metastore_schema"]
 
     @staticmethod
-    def _get_table_schema_definition(context: InputContext | OutputContext):
-        return context.step_context.op_config["table_schema_definition"]
+    def _get_table_schema_definition(context: OutputContext):
+        if "gold" in context.step_key:
+            context.log.info(f"printing gold case: {context.step_key}")
+            return (
+                f"create_school_{context.step_context.op_config['dataset_type']}_table"
+            )
+        else:
+            context.log.info(f"printing non-gold case: {context.step_key}")
+            return f"create_{context.step_context.op_config['dataset_type']}_table"
 
     @staticmethod
     def _get_type_transform_function(
