@@ -5,7 +5,7 @@ from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
-from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -19,7 +19,7 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    emit_metadata_to_datahub(context, df=df)
+    # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -35,7 +35,7 @@ def coverage_data_quality_results(
     # Output is a JSON with a list of checks (no results - Ger asked for)
     # Use multiassets
     yield Output(
-        coverage_raw.to_json_dict(), metadata={"filepath": get_output_filepath(context)}
+        coverage_raw, metadata={"filepath": get_output_filepath(context)}
     )
 
 
@@ -54,7 +54,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = coverage_data_quality_results
-    emit_metadata_to_datahub(context, df_failed)
+    # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -70,7 +70,7 @@ def coverage_bronze(
     # fb data - add missing columns in ITU dataset
     # special transform ni renz - use existing silver table - fb transform & ITU transform
     # output is fb + silver or ITU + silver
-    # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
+    # # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
     yield Output(
         coverage_dq_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
@@ -88,7 +88,7 @@ def coverage_bronze(
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_staging(
     context: OpExecutionContext,
-    geolocation_dq_passed_rows: sql.DataFrame,
+    coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
@@ -156,7 +156,7 @@ def coverage_staging(
         )  # not sure if this is needed, seems like merge is in place
 
     else:
-        staging = geolocation_dq_passed_rows
+        staging = coverage_bronze
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
@@ -164,5 +164,5 @@ def coverage_staging(
             )
             staging = staging.union(existing_file)
 
-    # # emit_metadata_to_datahub(context, staging)
+    # # # emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})

@@ -23,9 +23,9 @@ def geolocation_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_delta_io_manager")  # this is wrong
+@asset(io_manager_key="adls_bronze_io_manager")  # this is wrong
 def geolocation_bronze(
-    context: OpExecutionContext, geolocation_raw: pd.DataFrame
+    context: OpExecutionContext, geolocation_raw: sql.DataFrame
 ) -> sql.DataFrame:
     # Transform columns added here, all column renaming done here
     # Output should be stored as a spark dataframe
@@ -45,7 +45,7 @@ def geolocation_data_quality_results(
     # Output is a JSON with a list of checks (no results - Ger asked for)
     # Use multiassets
     yield Output(
-        geolocation_bronze.to_json_dict(),
+        geolocation_bronze,
         metadata={"filepath": get_output_filepath(context)},
     )
 
