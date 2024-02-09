@@ -21,16 +21,17 @@ class FileConfig(Config):
     metadata: dict
     file_size_bytes: int
     metastore_schema: str
-    table_schema_definition: str
 
 
 def get_dataset_type(filepath: str) -> str | None:
     if "geolocation" in filepath:
-        return "school-geolocation-data"
+        return "geolocation"
     elif "coverage" in filepath:
-        return "school-coverage-data"
+        return "coverage"
     elif "reference" in filepath:
-        return "school-reference"
+        return "reference"
+    elif "master" in filepath:
+        return "master"
     elif "qos" in filepath:
         return "qos"
     else:
@@ -52,7 +53,10 @@ def school_master_geolocation__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            if dataset_type is None or "test" in filepath.split("/")[-1]:
+            if (
+                dataset_type != "geolocation"
+                or "test_pipeline" not in filepath.split("/")[-1]
+            ):
                 continue
 
             properties = adls.get_file_metadata(filepath=filepath)
@@ -61,10 +65,9 @@ def school_master_geolocation__raw_file_uploads_sensor():
 
             file_config_params = {
                 "filepath": filepath,
-                "dataset_type": dataset_type,
+                "dataset_type": "geolocation",
                 "metadata": metadata,
                 "file_size_bytes": size,
-                "table_schema_definition": "",
             }
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
@@ -79,8 +82,12 @@ def school_master_geolocation__raw_file_uploads_sensor():
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "geolocation_raw": get_file_config("geolocation_raw", file_config_params),
-                        "geolocation_bronze": get_file_config("geolocation_bronze", file_config_params),
+                        "geolocation_raw": get_file_config(
+                            "geolocation_raw", file_config_params
+                        ),
+                        "geolocation_bronze": get_file_config(
+                            "geolocation_bronze", file_config_params
+                        ),
                         "geolocation_data_quality_results": get_file_config(
                             "geolocation_data_quality_results", file_config_params
                         ),
@@ -110,7 +117,10 @@ def school_master_coverage__raw_file_uploads_sensor():
         else:
             filepath = file_data["name"]
             dataset_type = get_dataset_type(filepath)
-            if dataset_type is None or "test" in filepath.split("/")[-1]:
+            if (
+                dataset_type != "coverage"
+                or "test_pipeline" not in filepath.split("/")[-1]
+            ):
                 continue
 
             properties = adls.get_file_metadata(filepath=filepath)
@@ -119,10 +129,9 @@ def school_master_coverage__raw_file_uploads_sensor():
 
             file_config_params = {
                 "filepath": filepath,
-                "dataset_type": dataset_type,
+                "dataset_type": "coverage",
                 "metadata": metadata,
                 "file_size_bytes": size,
-                "table_schema_definition": "",
             }
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
@@ -137,8 +146,12 @@ def school_master_coverage__raw_file_uploads_sensor():
                 run_key=f"{filepath}",
                 run_config=RunConfig(
                     ops={
-                        "coverage_raw": get_file_config("coverage_raw", file_config_params),
-                        "coverage_bronze": get_file_config("coverage_bronze", file_config_params),
+                        "coverage_raw": get_file_config(
+                            "coverage_raw", file_config_params
+                        ),
+                        "coverage_bronze": get_file_config(
+                            "coverage_bronze", file_config_params
+                        ),
                         "coverage_data_quality_results": get_file_config(
                             "coverage_data_quality_results", file_config_params
                         ),
@@ -180,7 +193,6 @@ def school_master_geolocation__successful_manual_checks_sensor():
                 "dataset_type": dataset_type,
                 "metadata": metadata,
                 "file_size_bytes": size,
-                "table_schema_definition": "",
             }
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
@@ -233,7 +245,6 @@ def school_master_coverage__successful_manual_checks_sensor():
                 "dataset_type": dataset_type,
                 "metadata": metadata,
                 "file_size_bytes": size,
-                "table_schema_definition": "",
             }
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
@@ -285,7 +296,6 @@ def school_master_geolocation__failed_manual_checks_sensor():
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
-                table_schema_definition="",
                 # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=(
                     f"manual_review_failed_{dataset_type.replace('-', '_')}"
@@ -329,7 +339,6 @@ def school_master_coverage__failed_manual_checks_sensor():
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
-                table_schema_definition="",
                 # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=(
                     f"manual_review_failed_{dataset_type.replace('-', '_')}"
@@ -375,7 +384,6 @@ def school_master__gold_csv_to_deltatable_sensor():
                 metadata=metadata,
                 file_size_bytes=size,
                 metastore_schema=f"gold_master_{dataset_type.replace('-', '_')}",
-                table_schema_definition="create_school_master_table",
             )
             run_requests.append(
                 dict(
@@ -420,7 +428,6 @@ def school_reference__gold_csv_to_deltatable_sensor():
                 metadata=metadata,
                 file_size_bytes=size,
                 metastore_schema=f"gold_reference_{dataset_type.replace('-', '_')}",
-                table_schema_definition="create_school_reference_table",
             )
             run_requests.append(
                 dict(
@@ -462,7 +469,6 @@ def qos__csv_to_deltatable_sensor():
                 metadata=metadata,
                 file_size_bytes=size,
                 metastore_schema="qos",
-                table_schema_definition="create_qos_bra_table",
             )
             run_requests.append(
                 dict(

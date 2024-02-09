@@ -15,7 +15,11 @@ from src.jobs import (
     school_master_geolocation__successful_manual_checks_job,
     school_reference__convert_gold_csv_to_deltatable_job,
 )
-from src.resources.io_managers import ADLSDeltaIOManager, ADLSRawIOManager
+from src.resources.io_managers import (
+    ADLSBronzeIOManager,
+    ADLSDeltaIOManager,
+    ADLSRawIOManager,
+)
 from src.sensors import (
     qos__csv_to_deltatable_sensor,
     school_master__gold_csv_to_deltatable_sensor,
@@ -50,6 +54,7 @@ defs = Definitions(
     ],
     resources={
         "adls_raw_io_manager": ADLSRawIOManager(pyspark=pyspark),
+        "adls_bronze_io_manager": ADLSBronzeIOManager(pyspark=pyspark),
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,

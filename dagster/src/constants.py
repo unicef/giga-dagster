@@ -4,7 +4,7 @@ from pydantic import BaseSettings
 
 
 class Constants(BaseSettings):
-    raw_folder = "adls-testing-raw/bronze-testing"
+    raw_folder = "adls-testing-raw"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_folder = "updated_master_schema"
@@ -23,22 +23,25 @@ class Constants(BaseSettings):
 
     def step_destination_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
-            "raw": f"{self.raw_folder}/{dataset_type}",
-            "bronze": f"bronze/{dataset_type}",
-            "data_quality_results": "logs-gx",
+            "geolocation_raw": f"{self.raw_folder}/school-{dataset_type}-data",
+            "coverage_raw": f"{self.raw_folder}/school-{dataset_type}-data",
+            "geolocation_bronze": f"bronze/school-{dataset_type}-data",
+            "coverage_bronze": f"bronze/school-{dataset_type}-data",
+            "geolocation_data_quality_results": f"logs-gx/school-{dataset_type}-data",
+            "coverage_data_quality_results": f"logs-gx/school-{dataset_type}-data",
             "dq_split_rows": "bronze/split-rows",
-            "dq_passed_rows": f"staging/pending-review/{dataset_type}",
+            "dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "dq_failed_rows": "archive/gx-tests-failed",
             "manual_review_passed_rows": (
-                f"{constants.staging_approved_folder}/{dataset_type}"
+                f"{constants.staging_approved_folder}/school-{dataset_type}-data"
             ),
             "manual_review_failed_rows": (
                 f"{constants.archive_manual_review_rejected_folder}"
             ),
             "silver": f"silver/{dataset_type}",
             "gold": "gold",
-            "master_csv_to_gold": "gold/delta-tables/school-master",
-            "reference_csv_to_gold": "gold/delta-tables/school-reference",
+            "master_csv_to_gold": "gold/delta-tables/school-{dataset_type}",
+            "reference_csv_to_gold": "gold/delta-tables/school-{dataset_type}",
             "qos_csv_to_gold": "gold/delta-tables/qos",
         }
 
