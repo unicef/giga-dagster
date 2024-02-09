@@ -60,9 +60,10 @@ def coverage_dq_failed_rows(
 
 # OUTPUT OF THIS IS A STAGING DATAFRAME COMPOSED OF INCOMING COVERAGE DATA + CURRENT SILVER COVERAGE
 
+
 # SOME QUESTIONS:
 # 1. What if multiple raw files
-@asset(io_manager_key="adls_bronze_io_manager")
+@asset(io_manager_key="adls_delta_io_manager")
 def coverage_bronze(
     context: OpExecutionContext, coverage_dq_passed_rows: pd.DataFrame
 ) -> sql.DataFrame:
@@ -82,6 +83,7 @@ def coverage_bronze(
     # silver + fb 0 -> 1
     # silver + fb 1 -> 0
     # silver + fb 2 -> 0
+
 
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_staging(

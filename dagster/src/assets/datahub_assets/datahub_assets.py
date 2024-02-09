@@ -1,9 +1,9 @@
-from src.utils.datahub.datahub_create_domains import create_domains
-from src.utils.datahub.datahub_create_tags import create_tags
-from src.utils.datahub.datahub_ingest_azure_ad import (
+from src.utils.datahub.create_domains import create_domains
+from src.utils.datahub.create_tags import create_tags
+from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
-from src.utils.datahub.datahub_update_policies import update_policies
+from src.utils.datahub.update_policies import update_policies
 
 from dagster import OpExecutionContext, Output, asset
 

@@ -1,5 +1,5 @@
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import datahub_assets, qos, school_coverage, school_geolocation
+from src.assets import common, datahub_assets, qos, school_coverage, school_geolocation
 from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
@@ -18,10 +18,13 @@ from src.jobs import (
 from src.resources.io_managers import ADLSDeltaIOManager, ADLSRawIOManager
 from src.sensors import (
     qos__csv_to_deltatable_sensor,
-    school_master__failed_manual_checks_sensor,
     school_master__gold_csv_to_deltatable_sensor,
-    school_master__raw_file_uploads_sensor,
-    school_master__successful_manual_checks_sensor,
+    school_master_coverage__failed_manual_checks_sensor,
+    school_master_coverage__raw_file_uploads_sensor,
+    school_master_coverage__successful_manual_checks_sensor,
+    school_master_geolocation__failed_manual_checks_sensor,
+    school_master_geolocation__raw_file_uploads_sensor,
+    school_master_geolocation__successful_manual_checks_sensor,
     school_reference__gold_csv_to_deltatable_sensor,
 )
 from src.utils.adls import ADLSFileClient
@@ -39,6 +42,7 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=school_coverage, group_name="school_coverage_data"
         ),
+        *load_assets_from_package_module(package_module=common, group_name="common"),
         *load_assets_from_package_module(package_module=qos, group_name="qos_data"),
         *load_assets_from_package_module(
             package_module=datahub_assets, group_name="datahub"
@@ -66,11 +70,14 @@ defs = Definitions(
         datahub__update_policies_job,
     ],
     sensors=[
-        school_master__raw_file_uploads_sensor,
-        school_master__successful_manual_checks_sensor,
-        school_master__failed_manual_checks_sensor,
+        qos__csv_to_deltatable_sensor,
         school_master__gold_csv_to_deltatable_sensor,
         school_reference__gold_csv_to_deltatable_sensor,
-        qos__csv_to_deltatable_sensor,
+        school_master_geolocation__raw_file_uploads_sensor,
+        school_master_coverage__raw_file_uploads_sensor,
+        school_master_geolocation__successful_manual_checks_sensor,
+        school_master_coverage__successful_manual_checks_sensor,
+        school_master_geolocation__failed_manual_checks_sensor,
+        school_master_coverage__failed_manual_checks_sensor,
     ],
 )
