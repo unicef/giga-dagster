@@ -32,8 +32,9 @@ spark_common_config = {
         "org.apache.spark.sql.delta.catalog.DeltaCatalog"
     ),
     "spark.sql.execution.arrow.pyspark.enabled": "true",
-    "spark.sql.warehouse.dir": "/opt/spark/warehouse",
+    "spark.sql.warehouse.dir": f"{settings.AZURE_BLOB_CONNECTION_URI}/warehouse",
     "spark.sql.catalogImplementation": "hive",
+    "hive.metastore.uris": "thrift://hive-metastore:9083",
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
     "spark.executor.cores": "1",
