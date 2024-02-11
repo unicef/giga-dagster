@@ -114,14 +114,11 @@ services:
     environment:
       DB_DRIVER: postgres
       SERVICE_NAME: metastore
-      SERVICE_OPTS: >
-        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver
-        -Djavax.jdo.option.ConnectionURL=${HMS_DATABASE_URL}
-        -Djavax.jdo.option.ConnectionUserName=${HMS_POSTGRESQL_USERNAME}
-        -Djavax.jdo.option.ConnectionPassword=${HMS_POSTGRESQL_PASSWORD}
-      HIVE_CUSTOM_CONF_DIR: /hive_conf
+      METASTORE_HOME: /opt/hive
+    #      HIVE_CUSTOM_CONF_DIR: /hive_conf
     volumes:
-      - ./hive/metastore-site.xml:/opt/hive/tpl/hive-site.template.xml
+      - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
+      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
       - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
     ports:
       - "9083:9083"

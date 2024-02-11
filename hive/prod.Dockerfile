@@ -13,7 +13,7 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
     https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
 
 COPY ./hms-entrypoint.sh /opt/hive/bin/hms-entrypoint.sh
-COPY ./hive-site.xml /opt/hive/tpl/hive-site.template.xml
+COPY ./metastore-site.template.xml /opt/hive/tpl/metastore-site.template.xml
 
 USER 1000
 

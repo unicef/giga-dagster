@@ -16,15 +16,15 @@
     </property>
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
-        <value>{ENV:DATABASE_URL}</value>
+        <value>{ENV:HMS_DATABASE_URL}</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionUserName</name>
-        <value>metastore</value>
+        <value>{ENV:HMS_POSTGRESQL_USERNAME}</value>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionPassword</name>
-        <value>metastore</value>
+        <value>{ENV:HMS_POSTGRESQL_PASSWORD}</value>
     </property>
     <property>
         <name>fs.azure.sas.giga-dataops-dev.saunigiga.blob.core.windows.net</name>

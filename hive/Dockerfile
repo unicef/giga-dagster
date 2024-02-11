@@ -12,7 +12,7 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
     https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar \
     https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar
 
-USER 1000
+#USER 1000
 
 WORKDIR /opt/hive
 
