@@ -29,9 +29,10 @@ class Constants(BaseSettings):
             "coverage_bronze": f"bronze/school-{dataset_type}-data",
             "geolocation_data_quality_results": f"logs-gx/school-{dataset_type}-data",
             "coverage_data_quality_results": f"logs-gx/school-{dataset_type}-data",
-            "dq_split_rows": "bronze/split-rows",
-            "dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
-            "dq_failed_rows": "archive/gx-tests-failed",
+            "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
+            "geolocation_dq_failed_rows": "archive/gx-tests-failed/school-{dataset_type}-data",
+            "coverage_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
+            "coverage_dq_failed_rows": "archive/gx-tests-failed/school-{dataset_type}-data",
             "manual_review_passed_rows": (
                 f"{constants.staging_approved_folder}/school-{dataset_type}-data"
             ),

@@ -50,7 +50,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if (
             context.upstream_output.step_key == "data_quality_results"
-          and context.asset_key.to_user_string() == "data_quality_results"
+            and context.asset_key.to_user_string() == "data_quality_results"
         ):
             file = adls_client.download_json(filepath)
         else:
