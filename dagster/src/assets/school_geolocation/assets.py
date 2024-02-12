@@ -4,6 +4,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 
 # from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
@@ -18,7 +19,7 @@ def geolocation_raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-
+    # IN: pandas df, OUT: csv file
     # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
@@ -27,6 +28,7 @@ def geolocation_raw(
 def geolocation_bronze(
     context: OpExecutionContext, geolocation_raw: sql.DataFrame
 ) -> sql.DataFrame:
+    # IN: spark datafame, OUT: csv file
     # Transform columns added here, all column renaming done here
     # Output should be stored as a spark dataframe
     # emit_metadata_to_datahub(context, df=raw)
@@ -34,12 +36,13 @@ def geolocation_bronze(
 
 
 @asset(
-    io_manager_key="adls_delta_io_manager",
+    io_manager_key="adls_bronze_io_manager",
 )
 def geolocation_data_quality_results(
     context,
     geolocation_bronze: sql.DataFrame,
 ):
+    # IN: spark dataframe, OUT: csv or delta table?
     # Output is a spark dataframe (bronze + extra columns with dq results)
     # Output is a spark dataframe(?) with summary statistics (for Ger)
     # Output is a JSON with a list of checks (no results - Ger asked for)
@@ -77,9 +80,9 @@ def geolocation_staging(
     spark: PySparkResource,
 ) -> sql.DataFrame:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    incoming_data_filepath = context.run_tags["dagster/run_key"]
-    country_code = incoming_data_filepath.split("/")[-1].split("_")[0]
-    silver_table_path = get_filepath(incoming_data_filepath, dataset_type, "silver")
+    filepath = context.run_tags["dagster/run_key"]
+    silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
+    country_code = filepath.split("/")[-1].split("_")[0]
 
     # {filepath: str, date_modified: str}
     files_for_review = []
@@ -94,6 +97,9 @@ def geolocation_staging(
         else:
             properties = adls_file_client.get_file_metadata(file_data["name"])
             date_modified = properties["metadata"]["Date_Modified"]
+            context.log.info(
+                f"filepath: {file_data['name']}, date_modified: {date_modified}"
+            )
             files_for_review.append(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
@@ -104,17 +110,22 @@ def geolocation_staging(
         )
     )
 
+    context.log.info(f"files_for_review: {files_for_review}")
+
     if DeltaTable.isDeltaTable(spark, silver_table_path):
         # Clone silver table to staging folder
+        filepath = context.run_tags["dagster/run_key"]
+        staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
+
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
             silver_table_path, spark.spark_session
         )
 
-        staging_table_path = get_filepath(
-            incoming_data_filepath, dataset_type, "staging"
-        )
-        adls_file_client.upload_spark_dataframe_as_delta_table_within_dagster(
-            context, silver, staging_table_path, spark.spark_session
+        adls_file_client.upload_spark_dataframe_as_delta_table(
+            silver,
+            staging_table_path,
+            context.op_config["dataset_type"],
+            spark.spark_session,
         )
 
         # Load new table (silver clone in staging) as a deltatable

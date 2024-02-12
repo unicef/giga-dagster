@@ -5,8 +5,8 @@ from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
+# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -34,9 +34,7 @@ def coverage_data_quality_results(
     # Output is a spark dataframe(?) with summary statistics (for Ger)
     # Output is a JSON with a list of checks (no results - Ger asked for)
     # Use multiassets
-    yield Output(
-        coverage_raw, metadata={"filepath": get_output_filepath(context)}
-    )
+    yield Output(coverage_raw, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
@@ -123,8 +121,11 @@ def coverage_staging(
 
     if DeltaTable.isDeltaTable(spark, silver_table_path):
         # Clone silver table to staging folder
+        filepath = context.run_tags["dagster/run_key"]
+        table_name = filepath.split("/")[-1].split(".")[0] if "gold" not in context.step_key else filepath.split("/").split("_")[0],
+
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
-            silver_table_path, spark.spark_session
+            silver_table_path, table_name, spark.spark_session
         )
 
         staging_table_path = get_filepath(
