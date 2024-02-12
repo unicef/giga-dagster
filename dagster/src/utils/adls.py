@@ -7,7 +7,7 @@ from pyspark import sql
 from pyspark.sql import SparkSession
 
 from azure.storage.filedatalake import DataLakeServiceClient
-from dagster import ConfigurableResource, OpExecutionContext, OutputContext
+from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
 from src.utils.sql import load_sql_template
@@ -77,6 +77,7 @@ class ADLSFileClient(ConfigurableResource):
         )
 
         table_name = table_path.split("/")[-1]
+        print(f"tablename: {table_name}, table path: {table_path}")
 
         create_table_sql = load_sql_template(
             f"create_{dataset_type}_table",
@@ -88,53 +89,6 @@ class ADLSFileClient(ConfigurableResource):
         spark.sql(create_table_sql)
         data.write.format("delta").mode("overwrite").saveAsTable(
             f"{dataset_type}.{table_name}"
-        )
-
-    def upload_spark_dataframe_as_delta_table_in_dagster(
-        self,
-        context: OutputContext,
-        data: sql.DataFrame,
-        filepath: str,
-        spark: SparkSession,
-    ):
-        match context.step_key:
-            case (
-                "staging"
-                | "dq_passed_rows"
-                | "dq_failed_rows"
-                | "manual_review_passed_rows"
-                | "manual_review_failed_rows"
-            ):
-                layer = "silver"
-            case _:
-                layer = context.step_key
-
-        dataset_type = context.step_context.op_config["dataset_type"]
-        filename = filepath.split("/")[-1]
-        delta_table_name = (
-            filename.split("_")[0]
-            if context.step_key in ["silver", "gold"]
-            else filename.split(".")[0].replace("-", "_")
-        )
-
-        # TODO: Get from context
-        schema_name = f"{layer}_{dataset_type.replace('-', '_')}"
-        create_schema_sql = load_sql_template(
-            "create_schema",
-            schema_name=schema_name,
-        )
-        create_table_sql = load_sql_template(
-            f"create_{layer}_table",
-            schema_name=schema_name,
-            table_name=delta_table_name,
-            location=(
-                f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}/{delta_table_name}"
-            ),
-        )
-        spark.sql(create_schema_sql)
-        spark.sql(create_table_sql)
-        data.write.format("delta").mode("overwrite").saveAsTable(
-            f"{schema_name}.{delta_table_name}"
         )
 
     def download_json(self, filepath: str):

@@ -97,6 +97,9 @@ def school_master_geolocation__raw_file_uploads_sensor():
                         "geolocation_dq_failed_rows": get_file_config(
                             "geolocation_dq_failed_rows", file_config_params
                         ),
+                        "geolocation_staging": get_file_config(
+                            "geolocation_staging", file_config_params
+                        ),
                     }
                 ),
             )
