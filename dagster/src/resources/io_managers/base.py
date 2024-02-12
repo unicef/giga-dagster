@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
+from src.settings import settings
 from src.utils.adls import get_filepath
 from src.utils.spark import (
     transform_qos_bra_types,
@@ -15,6 +16,7 @@ from src.utils.spark import (
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
     def _get_filepath(context: InputContext | OutputContext):
+        context.log.info(context.step_context.op_config["filepath"])
         filepath = context.step_context.op_config["filepath"]
 
         parent_folder = context.step_context.op_config["dataset_type"]
@@ -30,18 +32,20 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
 
     @staticmethod
     def _get_schema(context: InputContext | OutputContext):
-        return context.step_context.op_config["metastore_schema"]
+        return context.step_context.op_config["dataset_type"]
 
     @staticmethod
-    def _get_table_schema_definition(context: OutputContext):
-        if "gold" in context.step_key:
-            context.log.info(f"printing gold case: {context.step_key}")
-            return (
-                f"create_school_{context.step_context.op_config['dataset_type']}_table"
-            )
+    def _get_table_path(context: OutputContext, filepath: str):
+        if (
+            "gold" not in context.step_key
+            or "silver" not in context.step_key
+            or "staging" not in context.step_key
+        ):
+            table_name = filepath.split("/")[-1].split(".")[0]
         else:
-            context.log.info(f"printing non-gold case: {context.step_key}")
-            return f"create_{context.step_context.op_config['dataset_type']}_table"
+            table_name = filepath.split("/").split("_")[0]
+
+        return f"{settings.AZURE_BLOB_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/{table_name}"
 
     @staticmethod
     def _get_type_transform_function(

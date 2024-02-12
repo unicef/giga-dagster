@@ -54,61 +54,40 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
-    def download_delta_table_as_delta_table(self, filepath: str, spark: SparkSession):
-        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-
-        return DeltaTable.forPath(spark, f"{adls_path}")
+    def download_delta_table_as_delta_table(self, table_path: str, spark: SparkSession):
+        return DeltaTable.forPath(spark, f"{table_path}")
 
     def download_delta_table_as_spark_dataframe(
-        self, filepath: str, spark: SparkSession
+        self, table_path: str, spark: SparkSession
     ):
-        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        df = spark.read.format("delta").load(adls_path)
+        df = spark.read.format("delta").load(table_path)
         df.show()
         return df
-
-    # def upload_spark_dataframe_as_delta_table_within_dagster(
-    #     self,
-    #     context: OpExecutionContext,
-    #     data: sql.DataFrame,
-    #     filepath: str,
-    #     spark: SparkSession,
-    # ):
-    #     # layer = "silver"
-    #     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-
-    #     filename = filepath.split("/")[-1]
-    #     # country_code = filename.split("_")[0]
-
-    #     # TODO: Get from context
-    #     # schema_name = f"{layer}_{dataset_type.replace('-', '_')}"
 
     def upload_spark_dataframe_as_delta_table(
         self,
         data: sql.DataFrame,
-        filepath: str,
-        schema_name: str,
-        table_schema_definition: str,
+        table_path: str,
+        dataset_type: str,
         spark: SparkSession,
     ):
-        *directory_list, filename = filepath.split("/")
-        directory = "/".join(directory_list)
-        country_code = filename.split("_")[0]
-
         create_schema_sql = load_sql_template(
             "create_schema",
-            schema_name=schema_name,
+            schema_name=dataset_type,
         )
+
+        table_name = table_path.split("/")[-1]
+
         create_table_sql = load_sql_template(
-            table_schema_definition,
-            schema_name=schema_name,
-            table_name=country_code,
-            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory}/{country_code}",
+            f"create_{dataset_type}_table",
+            schema_name=dataset_type,
+            table_name=table_name,
+            location=table_path,
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
         data.write.format("delta").mode("overwrite").saveAsTable(
-            f"{schema_name}.{country_code}"
+            f"{dataset_type}.{table_name}"
         )
 
     def upload_spark_dataframe_as_delta_table_in_dagster(

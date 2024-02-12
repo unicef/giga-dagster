@@ -100,6 +100,9 @@ def transform_columns(
     log_func = print if context is None else context.log.info
 
     for col_name in columns:
+        if col_name not in df.columns:
+            continue
+
         nulls_before = count_nulls_for_column(df, col_name)
         df = df.withColumn(col_name, col(col_name).cast(target_type))
         log_func(f">> TRANSFORMED {target_type} for column {col_name}")
@@ -147,6 +150,7 @@ def transform_school_master_types(
         "latitude",
         "longitude",
         "download_speed_contracted",
+        "download_speed_govt",
         "fiber_node_distance",
         "microwave_node_distance",
         "nearest_LTE_distance",
@@ -157,6 +161,7 @@ def transform_school_master_types(
 
     columns_convert_to_int = [
         "school_establishment_year",
+        "school_density",
         "num_computers",
         "num_computers_desired",
         "num_teachers",
