@@ -1,8 +1,9 @@
 import requests
+from loguru import logger
 from src.settings import settings
 
 
-def list_ipynb_from_github_repo(owner, repo, path):
+def list_ipynb_from_github_repo(owner: str, repo: str, path: str):
     token = settings.GITHUB_ACCESS_TOKEN
 
     api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
@@ -13,10 +14,10 @@ def list_ipynb_from_github_repo(owner, repo, path):
 
     response = requests.get(api_url, headers=headers)
 
-    ipynb_file_list = list()
+    ipynb_file_list = []
 
     # Check if the request was successful
-    if response.status_code == 200:
+    if response.ok:
         # Parse the JSON response
         content_list = response.json()
 
@@ -31,11 +32,11 @@ def list_ipynb_from_github_repo(owner, repo, path):
                 )
         return ipynb_file_list
     else:
-        print(f"Failed to retrieve contents: {response.status_code}")
+        logger.error(f"Failed to retrieve contents: {response.status_code}")
 
 
 if __name__ == "__main__":
     owner = "unicef"
     repo = "coverage_workflow"
     path = "Notebooks/"
-    print(list_ipynb_from_github_repo(owner, repo, path))
+    logger.info(list_ipynb_from_github_repo(owner, repo, path))
