@@ -12,7 +12,7 @@ x-dagster-common-config: &dagster-common-config
   restart: unless-stopped
   environment:
     DAGSTER_HOME: /app
-    SHORT_SHA: ${SHORT_SHA}
+    COMMIT_SHA: ${COMMIT_SHA}
 
 x-spark-common-config: &spark-common-config
   <<: *common-config
