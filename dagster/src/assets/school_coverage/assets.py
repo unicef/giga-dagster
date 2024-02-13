@@ -122,7 +122,11 @@ def coverage_staging(
     if DeltaTable.isDeltaTable(spark, silver_table_path):
         # Clone silver table to staging folder
         filepath = context.run_tags["dagster/run_key"]
-        table_name = filepath.split("/")[-1].split(".")[0] if "gold" not in context.step_key else filepath.split("/").split("_")[0],
+        table_name = (
+            filepath.split("/")[-1].split(".")[0]
+            if "gold" not in context.step_key
+            else filepath.split("/").split("_")[0],
+        )
 
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
             silver_table_path, table_name, spark.spark_session

@@ -31,6 +31,7 @@ class Constants(BaseSettings):
             "coverage_data_quality_results": f"logs-gx/school-{dataset_type}-data",
             "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
+            "geolocation_staging": f"staging/approved/school-{dataset_type}-data",
             "coverage_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "coverage_dq_failed_rows": "archive/gx-tests-failed/school-{dataset_type}-data",
             "manual_review_passed_rows": (
