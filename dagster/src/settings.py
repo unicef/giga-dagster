@@ -43,7 +43,6 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
-    SHORT_SHA: str = ""
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
     GITHUB_ACCESS_TOKEN: str = ""

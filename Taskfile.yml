@@ -7,7 +7,7 @@ dotenv:
   - ./hive/.env
 
 env:
-  SHORT_SHA:
+  COMMIT_SHA:
     sh: git rev-parse --short HEAD
 
 vars:
@@ -98,16 +98,16 @@ tasks:
   build:
     desc: Build Docker image
     cmds:
-      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f dagster/prod.Dockerfile dagster
-      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
-      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}} -f spark/prod.Dockerfile .
+      - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f dagster/prod.Dockerfile dagster
+      - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
+      - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f spark/prod.Dockerfile .
 
   push:
     desc: Push Docker image to container registry
     cmds:
-      - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
-      - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
-      - docker push {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.SHORT_SHA}}
+      - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
+      - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
+      - docker push {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
 
   helm-up:
     desc: Install/upgrade Helm charts
@@ -129,9 +129,9 @@ tasks:
         --namespace giga-dagster
         --values dagster/values.yaml
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
-        --set-string dagster-user-deployments.deployments[0].image.tag={{.SHORT_SHA}}
+        --set-string dagster-user-deployments.deployments[0].image.tag={{.COMMIT_SHA}}
         --set pipelineRun.image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
-        --set pipelineRun.image.tag={{.SHORT_SHA}}
+        --set pipelineRun.image.tag={{.COMMIT_SHA}}
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
 
@@ -143,7 +143,7 @@ tasks:
         helm upgrade --install dagster-authproxy ./oauth2-proxy
         --namespace giga-dagster
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
-        --set-string image.tag={{.SHORT_SHA}}
+        --set-string image.tag={{.COMMIT_SHA}}
         --set service.type=LoadBalancer
         --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
         --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
@@ -159,7 +159,7 @@ tasks:
         --values spark/values.yaml
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
         --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
-        --set-string image.tag={{.SHORT_SHA}}
+        --set-string image.tag={{.COMMIT_SHA}}
         --set service.type=LoadBalancer
 
   helm-down:

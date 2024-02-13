@@ -44,7 +44,6 @@ jobs:
                     DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                     DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
-                    SHORT_SHA: "$(Build.SourceVersion)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
                     SENTRY_DSN: "$(sentryDsn)"

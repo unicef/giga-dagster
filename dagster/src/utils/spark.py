@@ -60,7 +60,9 @@ if settings.IN_PRODUCTION:
         }
     )
 
-spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
+spark_app_name = (
+    f"giga-dagster{f'@{settings.COMMIT_SHA}' if settings.COMMIT_SHA else ''}"
+)
 
 pyspark = PySparkResource(
     spark_config={
