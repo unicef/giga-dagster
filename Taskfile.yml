@@ -30,7 +30,6 @@ tasks:
       - task: setup-pre-commit
       - task: setup-helm-repos
       - task: setup-dagster
-      - task: setup-authproxy
 
   setup-pre-commit:
     desc: Run first-time setup tasks for pre-commit
@@ -44,13 +43,6 @@ tasks:
     cmds:
       - poetry env use 3.11
       - poetry install --with dev,dagster,pipelines,spark,notebook
-
-  setup-authproxy:
-    desc: Run first-time setup tasks for authproxy
-    dir: authproxy
-    cmds:
-      - poetry env use 3.11
-      - poetry install --with dev
 
   setup-helm-repos:
     desc: Register all Helm chart repositories
@@ -101,6 +93,7 @@ tasks:
       - docker build --tag {{.DAGSTER_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f dagster/prod.Dockerfile dagster
       - docker build --tag {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f oauth2-proxy/prod.Dockerfile oauth2-proxy
       - docker build --tag {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f spark/prod.Dockerfile .
+      - docker build --tag {{.HMS_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}} -f hive/prod.Dockerfile hive
 
   push:
     desc: Push Docker image to container registry
@@ -108,17 +101,31 @@ tasks:
       - docker push {{.DAGSTER_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
       - docker push {{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
       - docker push {{.SPARK_IMAGE_REGISTRY}}/{{.SPARK_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
+      - docker push {{.HMS_IMAGE_REPOSITORY}}:{{.COMMIT_SHA}}
 
   helm-up:
-    desc: Install/upgrade Helm charts
+    desc: Install/upgrade Helm charts to a K8s cluster running on localhost
     dir: infra
     cmds:
       - kubectl apply -f k8s/namespace.yaml
       - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
-      - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
-      - task: helm-up-dagster
+      - kubectl apply -f k8s/configmap.local.yaml --namespace giga-dagster
+      - task: helm-up-hms
       - task: helm-up-spark
+      - task: helm-up-dagster
       - task: helm-up-authproxy
+
+  helm-upi:
+    desc: Install/upgrade Helm charts to a K8s cluster with configured HTTPS ingress
+    dir: infra
+    cmds:
+      - kubectl apply -f k8s/namespace.yaml
+      - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
+      - kubectl apply -f k8s/configmap.local.yaml --namespace giga-dagster
+      - task: helm-up-hms
+      - task: helm-up-spark-ing
+      - task: helm-up-dagster
+      - task: helm-up-authproxy-ing
 
   helm-up-dagster:
     desc: Install/upgrade Dagster Helm chart
@@ -149,6 +156,22 @@ tasks:
         --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
         --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
 
+  helm-up-authproxy-ing:
+    desc: Install/upgrade authproxy Helm chart
+    dir: infra/helm
+    cmds:
+      - >
+        helm upgrade --install dagster-authproxy ./oauth2-proxy
+        --namespace giga-dagster
+        --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
+        --set-string image.tag={{.COMMIT_SHA}}
+        --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
+        --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
+        --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
+        --set ingress.enabled=true
+        --set ingress.annotations='{}'
+        --set ingress.hosts[0]={{.DAGSTER_INGRESS_HOST}}
+
   helm-up-spark:
     desc: Install/upgrade Spark Helm chart
     dir: infra/helm
@@ -162,12 +185,38 @@ tasks:
         --set-string image.tag={{.COMMIT_SHA}}
         --set service.type=LoadBalancer
 
+  helm-up-spark-ing:
+    desc: Install/upgrade Spark Helm chart
+    dir: infra/helm
+    cmds:
+      - >
+        helm upgrade --install spark bitnami/spark
+        --namespace giga-dagster
+        --values spark/values.yaml
+        --set image.registry={{.SPARK_IMAGE_REGISTRY}}
+        --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
+        --set-string image.tag={{.COMMIT_SHA}}
+        --set ingress.enabled=true
+        --set ingress.hostname={{.SPARK_INGRESS_HOST}}
+
+  helm-up-hms:
+    desc: Install/upgrade Hive Metastore Helm chart
+    dir: infra/helm
+    cmds:
+      - helm dependency update ./hive-metastore
+      - >
+        helm upgrade --install hive-metastore ./hive-metastore
+        --namespace giga-dagster
+        --set image.repository={{.HMS_IMAGE_REPOSITORY}}
+        --set-string image.tag={{.COMMIT_SHA}}
+
   helm-down:
     desc: Uninstall Helm charts
     cmds:
       - helm uninstall dagster-authproxy --namespace giga-dagster
-      - helm uninstall spark --namespace giga-dagster
       - helm uninstall dagster --namespace giga-dagster
+      - helm uninstall spark --namespace giga-dagster
+      - helm uninstall hive-metastore --namespace giga-dagster
 
   helm-clean:
     desc: Clean K8s resources

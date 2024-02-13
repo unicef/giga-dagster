@@ -14,8 +14,7 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
 
 COPY ./hms-entrypoint.sh /opt/hive/bin/hms-entrypoint.sh
 COPY ./metastore-site.template.xml /opt/hive/tpl/metastore-site.template.xml
-
-USER 1000
+COPY ./hive-site.template.xml /opt/hive/tpl/hive-site.template.xml
 
 WORKDIR /opt/hive
 
