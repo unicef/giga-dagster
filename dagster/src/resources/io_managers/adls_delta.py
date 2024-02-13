@@ -3,6 +3,7 @@ from pyspark import sql
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
+from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
 adls_client = ADLSFileClient()
@@ -15,7 +16,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context.log.info(">>DELTA LOADOUTPUT RAN")
 
         filepath = self._get_filepath(context)
-        table_path = self._get_table_path(context, filepath)
+        # table_path = self._get_table_path(context, filepath)
+        table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/erinstable"
+        context.log.info(f"adlsdelta out table_path: {table_path}")
 
         if context.step_key == "data_quality_results":
             adls_client.upload_json(filepath, output)
@@ -47,7 +50,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context.log.info(">>DELTA LOADINPUT RAN")
 
         filepath = self._get_filepath(context.upstream_output)
-        table_path = self._get_table_path(context.upstream_output, filepath)
+        # table_path = self._get_table_path(context.upstream_output, filepath)
+
+        table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/erinstable"
+        context.log.info(f"adlsdelta out table_path: {table_path}")
 
         file = adls_client.download_delta_table_as_spark_dataframe(
             table_path, self.pyspark.spark_session

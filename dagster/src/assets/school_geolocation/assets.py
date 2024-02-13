@@ -59,6 +59,8 @@ def geolocation_dq_passed_rows(
     geolocation_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_passed = geolocation_data_quality_results
+    df_passed.toPandas().loc[3, 'school_id_giga'] = 'ABCDEFGHIJKLM'
+    context.log.info(f"df_passed: {df_passed}")
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
