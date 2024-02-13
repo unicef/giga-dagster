@@ -33,6 +33,7 @@ tasks:
 
   setup-pre-commit:
     desc: Run first-time setup tasks for pre-commit
+    internal: true
     cmds:
       - pip install -U pre-commit
       - pre-commit install --install-hooks -t pre-commit -t commit-msg
@@ -40,12 +41,14 @@ tasks:
   setup-dagster:
     desc: Run first-time setup tasks for Dagster
     dir: dagster
+    internal: true
     cmds:
       - poetry env use 3.11
       - poetry install --with dev,dagster,pipelines,spark,notebook
 
   setup-helm-repos:
     desc: Register all Helm chart repositories
+    internal: true
     cmds:
       - helm repo add bitnami https://charts.bitnami.com/bitnami
       - helm repo add dagster https://dagster-io.github.io/helm
@@ -130,9 +133,11 @@ tasks:
   helm-up-dagster:
     desc: Install/upgrade Dagster Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - >
         helm upgrade --install dagster dagster/dagster
+        --version 1.5.0
         --namespace giga-dagster
         --values dagster/values.yaml
         --set dagster-user-deployments.deployments[0].image.repository={{.DAGSTER_IMAGE_REPOSITORY}}
@@ -145,6 +150,7 @@ tasks:
   helm-up-authproxy:
     desc: Install/upgrade authproxy Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - >
         helm upgrade --install dagster-authproxy ./oauth2-proxy
@@ -159,6 +165,7 @@ tasks:
   helm-up-authproxy-ing:
     desc: Install/upgrade authproxy Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - >
         helm upgrade --install dagster-authproxy ./oauth2-proxy
@@ -169,15 +176,17 @@ tasks:
         --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
         --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
         --set ingress.enabled=true
-        --set ingress.annotations='{}'
+        --set ingress.annotations=null
         --set ingress.hosts[0]={{.DAGSTER_INGRESS_HOST}}
 
   helm-up-spark:
     desc: Install/upgrade Spark Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - >
         helm upgrade --install spark bitnami/spark
+        --version 8.1.6
         --namespace giga-dagster
         --values spark/values.yaml
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
@@ -188,9 +197,11 @@ tasks:
   helm-up-spark-ing:
     desc: Install/upgrade Spark Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - >
         helm upgrade --install spark bitnami/spark
+        --version 8.1.6
         --namespace giga-dagster
         --values spark/values.yaml
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
@@ -202,6 +213,7 @@ tasks:
   helm-up-hms:
     desc: Install/upgrade Hive Metastore Helm chart
     dir: infra/helm
+    internal: true
     cmds:
       - helm dependency update ./hive-metastore
       - >

@@ -116,6 +116,8 @@ postgresql:
       userPasswordKey: HMS_POSTGRESQL_PASSWORD
   architecture: standalone
   primary:
+    readinessProbe:
+      enabled: false
     persistence:
       enabled: true
   volumePermissions:

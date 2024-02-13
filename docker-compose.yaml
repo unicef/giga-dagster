@@ -115,7 +115,6 @@ services:
       DB_DRIVER: postgres
       SERVICE_NAME: metastore
       METASTORE_HOME: /opt/hive
-    #      HIVE_CUSTOM_CONF_DIR: /hive_conf
     volumes:
       - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
       - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
