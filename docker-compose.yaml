@@ -112,11 +112,14 @@ services:
     image: unicef/giga-dataops-platform/hive-metastore
     env_file: ./hive/.env
     environment:
-      METASTORE_HOME: /opt/hive-metastore
+      DB_DRIVER: postgres
+      SERVICE_NAME: metastore
+      METASTORE_HOME: /opt/hive
+    #      HIVE_CUSTOM_CONF_DIR: /hive_conf
     volumes:
-      - ./hive/hive-site.template.xml:/opt/hive-metastore/tpl/hive-site.template.xml
-      - ./hive/metastore-site.template.xml:/opt/hive-metastore/tpl/metastore-site.template.xml
-      - ./hive/hms-entrypoint.sh:/opt/hive-metastore/bin/hms-entrypoint.sh
+      - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
+      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
+      - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
     ports:
       - "9083:9083"
     depends_on:
