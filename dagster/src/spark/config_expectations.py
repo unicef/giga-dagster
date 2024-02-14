@@ -3,7 +3,7 @@ import datetime
 SIMILARITY_RATIO_CUTOFF = 0.7
 
 # Single column checks
-CONFIG_UNIQUE_COLUMNS = ["school_id", "school_id_giga"]
+CONFIG_UNIQUE_COLUMNS = ["school_id_gov", "school_id_giga"]
 CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
     "school_name",
     "longitude",
@@ -14,7 +14,7 @@ CONFIG_NONEMPTY_COLUMNS_WARNING = [
     "mobile_internet_generation",
     "internet_availability",
     "internet_type",
-    "internet_speed_mbps",
+    "download_speed_govt",
 ]
 
 CONFIG_NOT_SIMILAR_COLUMN = ["school_name"]
@@ -22,9 +22,12 @@ CONFIG_FIVE_DECIMAL_PLACES = ["latitude", "longitude"]
 
 # Multi-column checks
 CONFIG_UNIQUE_SET_COLUMNS = [
-    ["school_id", "school_name", "education_level", "location_id"],
+    ["school_id_gov", "school_name", "education_level", "location_id"],
     ["school_name", "education_level", "location_id"],
     ["education_level", "location_id"],
+    # everything except school code
+    # school name educ lat 110 lon 110
+    # similar school name educ lat 110 lon 110
 ]
 
 CONFIG_COLUMN_SUM = [
@@ -36,30 +39,31 @@ date_today = datetime.date.today()
 current_year = date_today.year
 
 CONFIG_VALUES_RANGE_PRIO = {
-    "internet_speed_mbps": {"min": 1, "max": 200},
+    "download_speed_govt": {"min": 1, "max": 200},
     "school_density": {"min": 0, "max": 5},
 }
 
 # For GOVERNMENT SCHOOL COLUMNS
 CONFIG_VALUES_RANGE = {
     # Mandatory
-    "internet_speed_mbps": {"min": 1, "max": 200},
-    "student_count": {"min": 20, "max": 2500},
+    "download_speed_govt": {"min": 1, "max": 200},
+    "download_speed_contracted": {"min": 1, "max": 500},
+    "num_students": {"min": 20, "max": 2500},
     "latitude": {"min": -90, "max": 90},
     "longitude": {"min": -180, "max": 180},
     "school_establishment_year": {"min": 1000, "max": current_year},
     # # Calculated
     "school_density": {"min": 0, "max": 5},
     # Optional
-    "connectivity_speed_static": {"min": 0, "max": 200},
-    "connectivity_speed_contracted": {"min": 0, "max": 500},
-    "connectivity_latency_static": {"min": 0, "max": 200},
+    "download_speed_govt": {"min": 0, "max": 200},
+    "download_speed_govt_contracted": {"min": 0, "max": 500},
+    # "connectivity_latency_static": {"min": 0, "max": 200},
     "num_computers": {"min": 0, "max": 500},
     "num_computers_desired": {"min": 0, "max": 1000},
     "num_teachers": {"min": 0, "max": 200},
     "num_adm_personnel": {"min": 0, "max": 200},
     "num_students": {"min": 0, "max": 10000},
-    "num_classrooms": {"min": 0, "max": 200},
+    "num_classroom": {"min": 0, "max": 200},
     "num_latrines": {"min": 0, "max": 200},
     "school_data_collection_year": {"min": 1000, "max": current_year},
 }
@@ -69,7 +73,7 @@ CONFIG_VALUES_OPTIONS = {
     "electricity_availability": ["yes", "no"],
     "water_availability": ["yes", "no"],
     "cellular_network_availability": ["yes", "no"],
-    "connectivity_availability": ["yes", "no"],
+    "connectivity_govt": ["yes", "no"],
     "school_is_open": ["yes", "no"],
     "school_daily_check_app": ["yes", "no"],
     "2G_coverage": ["true", "false"],
@@ -80,6 +84,15 @@ CONFIG_VALUES_OPTIONS = {
         "primary education",
         "secondary education",
         "post secondary education",
+    ],
+    "education_level": [
+        "Pre-Primary",
+        "Primary",
+        "Secondary",
+        "Post-Secondary",
+        "Pre-Primary and Primary",
+        "Primary and Secondary",
+        "Pre-Primary, Primary and Secondary",
     ],
     "connectivity_type": [
         "fiber",
@@ -100,28 +113,33 @@ CONFIG_VALUES_OPTIONS = {
         "other",
     ],
     "school_data_collection_modality": ["online", "in-person", "phone", "other"],
-    "cellular_network_type": ["2g", "3g", "4g", "5g"],
+    
+}
+
+CONFIG_VALUES_OPTIONS_COVERAGE = {
+    "cellular_coverage_availability": ["yes", "no", None],
+    "cellular_coverage_type": ["2g", "3g", "4g", "5g"],
 }
 
 # For COVERAGE ITU dataset. To separate COVERAGE ITU expectations into different file.
 CONFIG_VALUES_RANGE_COVERAGE_ITU = {
     "fiber_node_distance": {"min": 0, "max": None},
     "microwave_node_distance": {"min": 0, "max": None},
-    "nearest_school_distance": {"min": 0, "max": None},
     "schools_within_1km": {"min": 0, "max": 20},
     "schools_within_2km": {"min": 0, "max": 40},
     "schools_within_3km": {"min": 0, "max": 60},
     "schools_within_10km": {"min": 0, "max": 100},
+    "nearest_school_distance": {"min": 0, "max": None},
 }
 
-CONFIG_VALUES_TYPE = [{"column": "school_id", "type": "int64"}]
+CONFIG_VALUES_TYPE = [{"column": "school_id_gov", "type": "int64"}]
 
 # Column Pairs
 CONFIG_PAIR_AVAILABILITY = [
     {"availability_column": "internet_availability", "value_column": "internet_type"},
     {
         "availability_column": "internet_availability",
-        "value_column": "internet_speed_mbps",
+        "value_column": "download_speed_govt",
     },
 ]
 

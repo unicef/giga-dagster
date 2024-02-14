@@ -62,6 +62,7 @@ from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
 # unique set columns (CONFIG_UNIQUE_SET_COLUMNS)
 #   "df.filter(F.expr(NOT (count(1) OVER (PARTITION BY struct(school_id, school_name, education_level, latitude, longitude)
 
+# positive = 0, negative =1?
 # Duplicate Checks (dq_duplicate_ config? :hmm:)
 def duplicate_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
@@ -77,42 +78,60 @@ def duplicate_checks(df, CONFIG_COLUMN_LIST):
 
 def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
-        column_name = f"dq_isnull_{column}"
-        df = df.withColumn(
-            column_name,
-            f.when(
-                f.col(f"{column}").isNull(),
-                1,
-            ).otherwise(0),
-        )
+        if column in df.columns:
+            column_name = f"dq_isnull_{column}"
+            df = df.withColumn(
+                column_name,
+                f.when(
+                    f.col(f"{column}").isNull(),
+                    1,
+                ).otherwise(0),
+            )
+        else:
+            df = df.withColumn(f"dq_isnull_{column}", f.lit(1))
     return df
 
 def range_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
-        df = df.withColumn(
-            f"dq_isvalid_{column}",
-            f.when(
-                f.col(f"{column}").between(
-                    CONFIG_COLUMN_LIST[column]["min"],
-                    CONFIG_COLUMN_LIST[column]["max"],
-                ),
-                1,
-            ).otherwise(0),
-        )
+        if column in df.columns:
+            df = df.withColumn(
+                f"dq_isinvalid_{column}",
+                f.when(
+                    f.col(f"{column}").between(
+                        CONFIG_COLUMN_LIST[column]["min"],
+                        CONFIG_COLUMN_LIST[column]["max"],
+                    ),
+                    0,
+                ).otherwise(1),
+            )
+        else:
+            df = df.withColumn(f"dq_isinvalid_{column}", f.lit(1))
     return df
 
 def domain_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
-        # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
-        df = df.withColumn(
-            f"dq_isvalid_{column}",
-            f.when(
-                f.col(f"{column}").isin(
-                    CONFIG_COLUMN_LIST[column],
-                ),
-                1,
-            ).otherwise(0),
-        )
+        if column in df.columns:
+            if None in CONFIG_COLUMN_LIST[column]:
+                df = df.withColumn(
+                    f"dq_isinvalid_{column}",
+                    f.when(
+                        (f.col(f"{column}").isNull()) |
+                        (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
+                        0,
+                    ).otherwise(1),
+                )
+            else:
+                df = df.withColumn(
+                    f"dq_isinvalid_{column}",
+                    f.when(
+                        f.col(f"{column}").isin(
+                            CONFIG_COLUMN_LIST[column],
+                        ),
+                        0,
+                    ).otherwise(1),
+                )
+        else:
+            df = df.withColumn(f"dq_isinvalid_{column}", f.lit(1))
     return df
 
 # custom checks
@@ -165,7 +184,7 @@ def get_point(longitude, latitude):
     return point
 
 
-def is_within_country(df, country_code_iso3):
+def is_not_within_country(df, country_code_iso3):
 
     # boundary constants
     geometry = get_country_geometry(country_code_iso3)
@@ -212,7 +231,7 @@ def is_within_country(df, country_code_iso3):
         return None
 
 
-    def is_within_country_check(latitude, longitude, country_code_iso3=country_code_iso3):
+    def is_not_within_country_check(latitude, longitude, country_code_iso3=country_code_iso3):
         if latitude is None or longitude is None or country_code_iso3 is None:
             return False
 
@@ -220,20 +239,16 @@ def is_within_country(df, country_code_iso3):
         is_valid_geopy = is_within_country_geopy(latitude, longitude)
         is_valid_boundary = is_within_boundary_distance(latitude, longitude)
 
-        # Note: Check if valid lat/long values
-        
         validity = is_valid_gadm | is_valid_geopy | is_valid_boundary
 
-        
-
-        return int(validity)
+        return int(not validity)
   
-    is_within_country_check_udf = f.udf(is_within_country_check)
+    is_not_within_country_check_udf = f.udf(is_not_within_country_check)
 
 
     df = df.withColumn(
-        "dq_is_within_country",
-        is_within_country_check_udf(
+        "dq_is_not_within_country",
+        is_not_within_country_check_udf(
             f.col("latitude"), f.col("longitude")
         ))
     
@@ -281,24 +296,48 @@ def precision_check(df, CONFIG_COLUMN_LIST):
 
     return df
 
+# Duplicate Sets checks
+
+def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
+    df = df.withColumn(
+        "location_id",
+        f.concat_ws(
+            "_", f.col("longitude").cast("string"), f.col("latitude").cast("string")
+        ),
+    )
+
+    for column_set in CONFIG_COLUMN_LIST:
+        set_name = "_".join(column_set)
+        df = df.withColumn(
+            f"dq_duplicate_{set_name}",
+            f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
+                0
+            ),
+        )
+
+    return df
+
 
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
     # 
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
     df = df.sort("school_name").limit(10)
-    df = duplicate_checks(df, ["school_id"])
-    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-    df = range_checks(df, {"latitude": {"min": -85, "max": 90}})
-    df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
-    df = is_within_country(df, "BLZ")
-    df = has_similar_name(df)
-    df = precision_check(df, CONFIG_PRECISION)
+    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
+    # df = is_not_within_country(df, "BRA")
+    # df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
+    # df = range_checks(df, CONFIG_VALUES_RANGE)
+    df = domain_checks(df, {"school_location_ingestion_timestamp": ["yes", "no", None]})
     df.show()
-    print(CONFIG_PRECISION["latitude"]["min"])
+
+    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS)
+    # df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
+    # df = has_similar_name(df)
+    # df = precision_check(df, CONFIG_PRECISION)
 
     # ## agg
     # dq_columns = [col for col in df.columns if col.startswith("dq_")]
