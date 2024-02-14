@@ -8,7 +8,7 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_raw_io_manager")
@@ -24,7 +24,7 @@ def geolocation_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_bronze_io_manager")  # this is wrong
+@asset(io_manager_key="adls_spark_dataframe_io_manager")  # this is wrong
 def geolocation_bronze(
     context: OpExecutionContext, geolocation_raw: sql.DataFrame
 ) -> sql.DataFrame:
@@ -35,21 +35,42 @@ def geolocation_bronze(
     yield Output(geolocation_raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(
-    io_manager_key="adls_bronze_io_manager",
+@multi_asset(
+    outs={
+        "geolocation_dq_results": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+        "geolocation_dq_summary_statistics": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+        "geolocation_dq_checks": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+    }
 )
 def geolocation_data_quality_results(
     context,
     geolocation_bronze: sql.DataFrame,
 ):
-    # IN: spark dataframe, OUT: csv or delta table?
     # Output is a spark dataframe (bronze + extra columns with dq results)
     # Output is a spark dataframe(?) with summary statistics (for Ger)
     # Output is a JSON with a list of checks (no results - Ger asked for)
-    # Use multiassets
     yield Output(
         geolocation_bronze,
         metadata={"filepath": get_output_filepath(context)},
+        output_name="geolocation_dq_results",
+    )
+
+    yield Output(
+        geolocation_bronze,
+        metadata={"filepath": get_output_filepath(context)},
+        output_name="geolocation_dq_summary_statistics",
+    )
+
+    yield Output(
+        geolocation_bronze.to_json(),
+        metadata={"filepath": get_output_filepath(context)},
+        output_name="geolocation_dq_checks",
     )
 
 

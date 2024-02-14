@@ -8,7 +8,7 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_raw_io_manager")
@@ -24,8 +24,18 @@ def coverage_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(
-    io_manager_key="adls_bronze_io_manager",
+@multi_asset(
+    outs={
+        "coverage_dq_results": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+        "coverage_dq_summary_statistics": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+        "coverage_dq_checks": AssetOut(
+            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+        ),
+    }
 )
 def coverage_data_quality_results(
     context,
@@ -34,8 +44,23 @@ def coverage_data_quality_results(
     # Output is a spark dataframe (bronze + extra columns with dq results)
     # Output is a spark dataframe(?) with summary statistics (for Ger)
     # Output is a JSON with a list of checks (no results - Ger asked for)
-    # Use multiassets
-    yield Output(coverage_raw, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        coverage_raw,
+        metadata={"filepath": get_output_filepath(context)},
+        output_name="coverage_dq_results",
+    )
+
+    yield Output(
+        coverage_raw,
+        metadata={"filepath": get_output_filepath(context)},
+        output_name="coverage_dq_summary_statistics",
+    )
+
+    yield Output(
+        coverage_raw.to_json(),
+        metadata={"filepath": get_output_filepath(context)},
+        output_name="coverage_dq_checks",
+    )
 
 
 @asset(io_manager_key="adls_delta_io_manager")
@@ -64,7 +89,7 @@ def coverage_dq_failed_rows(
 # 1. What if multiple raw files
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_bronze(
-    context: OpExecutionContext, coverage_dq_passed_rows: pd.DataFrame
+    context: OpExecutionContext, coverage_dq_passed_rows: sql.DataFrame
 ) -> sql.DataFrame:
     # fb data - add missing columns in ITU dataset
     # special transform ni renz - use existing silver table - fb transform & ITU transform
