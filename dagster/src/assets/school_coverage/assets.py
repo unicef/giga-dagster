@@ -6,8 +6,8 @@ from delta.tables import DeltaTable
 from pyspark import sql
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -20,7 +20,7 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    # emit_metadata_to_datahub(context, df=df)
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -53,7 +53,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = coverage_data_quality_results
-    # emit_metadata_to_datahub(context, df_failed)
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -69,7 +69,7 @@ def coverage_bronze(
     # fb data - add missing columns in ITU dataset
     # special transform ni renz - use existing silver table - fb transform & ITU transform
     # output is fb + silver or ITU + silver
-    # # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
+    # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
     yield Output(
         coverage_dq_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
@@ -170,5 +170,5 @@ def coverage_staging(
             )
             staging = staging.union(existing_file)
 
-    # # emit_metadata_to_datahub(context, staging)
+    # emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})

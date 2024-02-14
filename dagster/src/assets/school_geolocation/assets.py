@@ -6,8 +6,8 @@ from delta.tables import DeltaTable
 from pyspark import sql
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -20,7 +20,7 @@ def geolocation_raw(
         context.run_tags["dagster/run_key"]
     )
     # IN: pandas df, OUT: csv file
-    # emit_metadata_to_datahub(context, df=df)
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -31,7 +31,7 @@ def geolocation_bronze(
     # IN: spark datafame, OUT: csv file
     # Transform columns added here, all column renaming done here
     # Output should be stored as a spark dataframe
-    # emit_metadata_to_datahub(context, df=raw)
+    emit_metadata_to_datahub(context, df=geolocation_raw)
     yield Output(geolocation_raw, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -70,7 +70,7 @@ def geolocation_dq_failed_rows(
     geolocation_data_quality_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = geolocation_data_quality_results
-    # emit_metadata_to_datahub(context, df_failed)
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -160,5 +160,5 @@ def geolocation_staging(
             )
             staging = staging.union(existing_file)
 
-    # # emit_metadata_to_datahub(context, staging)
+    # emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})

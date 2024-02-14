@@ -2,8 +2,9 @@ import numpy as np
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.sentry import capture_op_exceptions
 
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -16,7 +17,7 @@ def manual_review_passed_rows(
     df = adls_file_client.download_csv_as_spark_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -30,7 +31,7 @@ def manual_review_failed_rows(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
     context.log.info(f"data={df}")
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -39,7 +40,7 @@ def silver(
     context: OpExecutionContext,
     manual_review_passed_rows: sql.DataFrame,
 ) -> sql.DataFrame:
-    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
     yield Output(
         manual_review_passed_rows, metadata={"filepath": get_output_filepath(context)}
     )
@@ -47,7 +48,7 @@ def silver(
 
 @asset(io_manager_key="adls_delta_io_manager")
 def gold(context: OpExecutionContext, silver: sql.DataFrame) -> sql.DataFrame:
-    # emit_metadata_to_datahub(context, df=silver)
+    emit_metadata_to_datahub(context, df=silver)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -105,3 +106,9 @@ def reference_csv_to_gold(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
+
+
+@asset
+@capture_op_exceptions
+def might_explode(_context: OpExecutionContext):
+    raise ValueError("oops!")
