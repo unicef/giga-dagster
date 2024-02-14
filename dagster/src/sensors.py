@@ -155,14 +155,17 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_bronze": get_file_config(
                             "coverage_bronze", file_config_params
                         ),
-                        "coverage_data_quality_results": get_file_config(
-                            "coverage_data_quality_results", file_config_params
-                        ),
                         "coverage_dq_passed_rows": get_file_config(
                             "coverage_dq_passed_rows", file_config_params
                         ),
                         "coverage_dq_failed_rows": get_file_config(
                             "coverage_dq_failed_rows", file_config_params
+                        ),
+                        "coverage_data_quality_results": get_file_config(
+                            "coverage_data_quality_results", file_config_params
+                        ),
+                        "coverage_staging": get_file_config(
+                            "coverage_staging", file_config_params
                         ),
                     }
                 ),

@@ -4,6 +4,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 
 # from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
@@ -24,7 +25,7 @@ def coverage_raw(
 
 
 @asset(
-    io_manager_key="adls_delta_io_manager",
+    io_manager_key="adls_bronze_io_manager",
 )
 def coverage_data_quality_results(
     context,
@@ -90,16 +91,15 @@ def coverage_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
-    # one staging dataset for fb/itu both
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    incoming_data_filepath = context.run_tags["dagster/run_key"]
-    country_code = incoming_data_filepath.split("/")[-1].split("_")[0]
-    silver_table_path = get_filepath(incoming_data_filepath, dataset_type, "silver")
+    filepath = context.run_tags["dagster/run_key"]
+    silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
+    country_code = filepath.split("/")[-1].split("_")[0]
 
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
-        f"staging/pending-review/{dataset_type}"
+        f"staging/pending-review/school-{dataset_type}-data"
     ):
         if (
             file_data["is_directory"]
@@ -109,6 +109,9 @@ def coverage_staging(
         else:
             properties = adls_file_client.get_file_metadata(file_data["name"])
             date_modified = properties["metadata"]["Date_Modified"]
+            context.log.info(
+                f"filepath: {file_data['name']}, date_modified: {date_modified}"
+            )
             files_for_review.append(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
@@ -119,24 +122,22 @@ def coverage_staging(
         )
     )
 
-    if DeltaTable.isDeltaTable(spark, silver_table_path):
+    context.log.info(f"files_for_review: {files_for_review}")
+
+    if DeltaTable.isDeltaTable(spark.spark_session, silver_table_path):
         # Clone silver table to staging folder
         filepath = context.run_tags["dagster/run_key"]
-        table_name = (
-            filepath.split("/")[-1].split(".")[0]
-            if "gold" not in context.step_key
-            else filepath.split("/").split("_")[0],
-        )
+        staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
 
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
-            silver_table_path, table_name, spark.spark_session
+            silver_table_path, spark.spark_session
         )
 
-        staging_table_path = get_filepath(
-            incoming_data_filepath, dataset_type, "staging"
-        )
-        adls_file_client.upload_spark_dataframe_as_delta_table_within_dagster(
-            context, silver, staging_table_path, spark.spark_session
+        adls_file_client.upload_spark_dataframe_as_delta_table(
+            silver,
+            staging_table_path,
+            context.op_config["dataset_type"],
+            spark.spark_session,
         )
 
         # Load new table (silver clone in staging) as a deltatable
@@ -169,5 +170,5 @@ def coverage_staging(
             )
             staging = staging.union(existing_file)
 
-    # # # emit_metadata_to_datahub(context, staging)
+    # # emit_metadata_to_datahub(context, staging)
     yield Output(staging, metadata={"filepath": get_output_filepath(context)})
