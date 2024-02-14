@@ -19,6 +19,7 @@ from src.spark.config_expectations import (
     CONFIG_UNIQUE_SET_COLUMNS,
     CONFIG_VALUES_RANGE,
     CONFIG_VALUES_RANGE_PRIO,
+    CONFIG_PRECISION
 )
 
 import decimal
@@ -88,7 +89,6 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
 
 def range_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
-        # Note: To isolate: Only school_density and internet_speed_mbps are prioritized among the other value checks
         df = df.withColumn(
             f"dq_isvalid_{column}",
             f.when(
@@ -126,8 +126,6 @@ azure_blob_container_name = settings_instance.AZURE_BLOB_CONTAINER_NAME
 DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
-
-# DIRECTORY_LOCATION = "great_expectations/uncommitted/notebooks/data/"
 DIRECTORY_LOCATION = "raw/geospatial-data/gadm_files/version4.1/"
 container_name = azure_blob_container_name
 
@@ -167,71 +165,122 @@ def get_point(longitude, latitude):
     return point
 
 
-# Inside based on GADM admin boundaries data
-def is_within_country_gadm(latitude, longitude, country_code_iso3):
+def is_within_country(df, country_code_iso3):
+
+    # boundary constants
     geometry = get_country_geometry(country_code_iso3)
-    point = get_point(longitude, latitude)
 
-    if point is not None and geometry is not None:
-        return point.within(geometry)
-
-    return None
-
-
-# Inside based on geopy
-def is_within_country_geopy(latitude, longitude, country_code_iso3):
+    # geopy constants
     country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
-    geolocator = Nominatim(user_agent="schools_geolocation")
-    coords = f"{latitude},{longitude}"
-    location = geolocator.reverse(coords)
-
-    if location is None:
-        return False
-    else:
-        geopy_country_code_iso2 = location.raw["address"].get("country_code")
-
-        return geopy_country_code_iso2.lower() == country_code_iso2.lower()
 
 
-# Inside based on boundary distance
-def is_within_boundary_distance(latitude, longitude, country_code_iso3):
-    point = get_point(longitude, latitude)
-    geometry = get_country_geometry(country_code_iso3)
+    # Inside based on GADM admin boundaries data
+    def is_within_country_gadm(latitude, longitude):
+        point = get_point(longitude, latitude)
 
-    if point is not None and geometry is not None:
-        p1, p2 = nearest_points(geometry, point)
-        point1 = p1.coords[0]
-        point2 = (longitude, latitude)
-        distance = geodesic(point1, point2).km
-        return distance <= 1.5  # km
+        if point is not None and geometry is not None:
+            return point.within(geometry)
 
-    return None
+        return None
+    
+
+    # Inside based on geopy
+    def is_within_country_geopy(latitude, longitude):
+        geolocator = Nominatim(user_agent="schools_geolocation")
+        coords = f"{latitude},{longitude}"
+        location = geolocator.reverse(coords)
+    
+        if location is None:
+            return False
+        else:
+            geopy_country_code_iso2 = location.raw["address"].get("country_code")
+    
+            return geopy_country_code_iso2.lower() == country_code_iso2.lower()
+        
+
+    # Inside based on boundary distance
+    def is_within_boundary_distance(latitude, longitude):
+        point = get_point(longitude, latitude)
+
+        if point is not None and geometry is not None:
+            p1, p2 = nearest_points(geometry, point)
+            point1 = p1.coords[0]
+            point2 = (longitude, latitude)
+            distance = geodesic(point1, point2).km
+            return distance <= 1.5  # km
+
+        return None
 
 
-is_within_boundary_distance_udf = f.udf(is_within_boundary_distance)
+    def is_within_country_check(latitude, longitude, country_code_iso3=country_code_iso3):
+        if latitude is None or longitude is None or country_code_iso3 is None:
+            return False
 
-def is_within_country(latitude, longitude, country_code_iso3):
-    if latitude is None or longitude is None or country_code_iso3 is None:
-        return False
+        is_valid_gadm = is_within_country_gadm(latitude, longitude)
+        is_valid_geopy = is_within_country_geopy(latitude, longitude)
+        is_valid_boundary = is_within_boundary_distance(latitude, longitude)
 
-    is_valid_gadm = is_within_country_gadm(latitude, longitude, country_code_iso3)
-    is_valid_geopy = is_within_country_geopy(latitude, longitude, country_code_iso3)
-    is_valid_boundary = is_within_boundary_distance(
-        latitude, longitude, country_code_iso3
+        # Note: Check if valid lat/long values
+        
+        validity = is_valid_gadm | is_valid_geopy | is_valid_boundary
+
+        
+
+        return int(validity)
+  
+    is_within_country_check_udf = f.udf(is_within_country_check)
+
+
+    df = df.withColumn(
+        "dq_is_within_country",
+        is_within_country_check_udf(
+            f.col("latitude"), f.col("longitude")
+        ))
+    
+    return df
+
+
+def has_similar_name(df):
+    
+    name_list = df.rdd.map(lambda x: x.school_name).collect()
+
+    def similarity_test(column, name_list=name_list):
+        for name in name_list:
+            if (
+                1
+                > difflib.SequenceMatcher(None, column, name).ratio()
+                >= SIMILARITY_RATIO_CUTOFF
+            ):      
+                return 1
+        return 0
+    
+    similarity_test_udf = f.udf(similarity_test)
+
+    df = df.withColumn(
+        "dq_has_similar_name",
+        similarity_test_udf(f.col("school_name")),
     )
 
-    # Note: Check if valid lat/long values
-    return is_valid_gadm | is_valid_geopy | is_valid_boundary
-
-is_within_country_udf = f.udf(is_within_country)
-
-def is_within_country(df):
-    df = df.withColumn(
-        "is_within_country",
-        is_within_country_udf(
-            f.col("latitude"), f.col("longitude"), f.col("country_code")
-        ))
     return df
+
+
+# Decimal places tests
+
+def precision_check(df, CONFIG_COLUMN_LIST):
+    for column in CONFIG_COLUMN_LIST:
+        precision = CONFIG_COLUMN_LIST[column]["min"]
+        def get_decimal_places(number, precision=precision):
+            if number is None:
+                return None
+            decimal_places = -decimal.Decimal(str(number)).as_tuple().exponent
+
+            return int(decimal_places >= precision)
+        
+        get_decimal_places_udf = f.udf(get_decimal_places)
+        df = df.withColumn(f"dq_precision_{column}", get_decimal_places_udf(f.col(column)))
+
+    return df
+
 
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
@@ -241,21 +290,56 @@ if __name__ == "__main__":
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
     df = df.sort("school_name").limit(10)
-    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS)
-    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-    # df = range_checks(df, {"latitude": {"min": -85, "max": 90}})
-    # df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
-    df = df.withColumn("country_code", f.lit("BLZ"))
-    df = is_within_country(df)
-    # df = df.limit(10)
+    df = duplicate_checks(df, ["school_id"])
+    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
+    df = range_checks(df, {"latitude": {"min": -85, "max": 90}})
+    df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
+    df = is_within_country(df, "BLZ")
+    df = has_similar_name(df)
+    df = precision_check(df, CONFIG_PRECISION)
     df.show()
-    # json_array = df.toJSON().collect()
+    print(CONFIG_PRECISION["latitude"]["min"])
+
+    # ## agg
+    # dq_columns = [col for col in df.columns if col.startswith("dq_")]
+    # print(dq_columns)
+    # df = df.select(*dq_columns)
+    # df.show()
+    # for column_name in df.columns:
+    #     df = df.withColumn(column_name, f.col(column_name).cast("int"))
+
+    # stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', {col}" for col in dq_columns])
+    # print(stack_expr)
+    
+    # unpivoted_df = df.selectExpr(f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)")
+    # unpivoted_df.show()
+
+    # agg_df = unpivoted_df.groupBy("assertion").agg(
+    #     f.expr("count(CASE WHEN value = 0 THEN value END) as count_failed"),
+    #     f.expr("count(CASE WHEN value = 1 THEN value END) as count_passed"),
+    #     f.expr("count(value) as count_overall"),
+    #     # f.expr("sum(value) as Sum"),
+    #     # f.expr("avg(value) as Average")
+    # )
+
+    # agg_df = agg_df.withColumn("percent_failed", (f.col("count_failed")/f.col("count_overall")) * 100)
+    # agg_df = agg_df.withColumn("percent_passed", (f.col("count_passed")/f.col("count_overall")) * 100)
+    # agg_df.show()
+
+
+    # json_array = agg_df.toJSON().collect()
+    # json_file_path =  "src/spark/test.json"
+
+
     # print("JSON array:",json_array)
     
-    # import json
+    # # import json
 
-    # json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test.json"
-    # # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
+    # # json_file_path =  'C:/Users/RenzTogonon/Downloads/test.json'
+
+    # with open(json_file_path, 'w') as file:
+    #     for json_str in json_array:
+    #         file.write(json_str + ',\n')
 
     # with open(json_file_path, 'r') as file:
     #     data = json.load(file)
