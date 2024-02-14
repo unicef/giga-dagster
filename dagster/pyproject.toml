@@ -41,7 +41,6 @@ shapely = "^2.0.2"
 geopandas = "^0.14.1"
 thefuzz = "^0.20.0"
 country-converter = "^1.1.1"
-dbt-trino = "^1.7.0"
 
 [tool.poetry.group.spark.dependencies]
 pyspark = "3.5.0"
