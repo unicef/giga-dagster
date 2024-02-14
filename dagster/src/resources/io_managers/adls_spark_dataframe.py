@@ -9,7 +9,7 @@ from .base import BaseConfigurableIOManager
 adls_client = ADLSFileClient()
 
 
-class ADLSBronzeIOManager(BaseConfigurableIOManager):
+class ADLSSparkDataframeIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
