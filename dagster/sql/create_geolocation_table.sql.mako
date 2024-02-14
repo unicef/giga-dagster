@@ -1,6 +1,4 @@
 CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
-    school_density INT NOT NULL,
-    hex8 STRING NOT NULL,
     school_id_giga STRING NOT NULL,
     school_id_gov STRING NOT NULL,
     school_name	STRING NOT NULL,

@@ -116,52 +116,24 @@ def transform_columns(
     return df
 
 
-def transform_school_master_types(
+def transform_school_types(
     df: sql.DataFrame, context: OutputContext = None
 ) -> sql.DataFrame:
-    columns_convert_to_string = [
-        "school_id_giga",
-        "school_id_gov",
-        "school_name",
-        "education_level",
-        "connectivity_type_govt",
-        "admin1",
-        "admin2",
-        "school_area_type",
-        "school_funding_type",
-        "computer_lab",
-        "electricity_availability",
-        "electricity_type",
-        "water_availability",
-        "school_data_source",
-        "school_data_collection_modality",
-        "cellular_coverage_availability",
-        "cellular_coverage_type",
-        "connectivity_govt",
-        "connectivity",
-        "connectivity_RT",
-        "connectivity_RT_datasource",
-        "disputed_region",
-        "nearest_NR_id",
-        "connectivity_static",
-    ]
-
     columns_convert_to_double = [
         "latitude",
         "longitude",
-        "download_speed_contracted",
         "download_speed_govt",
+        "download_speed_contracted",
         "fiber_node_distance",
         "microwave_node_distance",
         "nearest_LTE_distance",
         "nearest_UMTS_distance",
         "nearest_GSM_distance",
-        "nearest_NR_distance",
+        "nearest_school_distance",
     ]
-
     columns_convert_to_int = [
         "school_establishment_year",
-        "school_density",
+        "connectivity_govt_collection_year",
         "num_computers",
         "num_computers_desired",
         "num_teachers",
@@ -173,53 +145,52 @@ def transform_school_master_types(
         "schools_within_1km",
         "schools_within_2km",
         "schools_within_3km",
-        "connectivity_govt_collection_year",
+        "schools_within_10km",
     ]
     columns_convert_to_long = [
         "pop_within_1km",
         "pop_within_2km",
         "pop_within_3km",
+        "pop_within_10km",
+    ]
+    columns_convert_to_string = [
+        "school_id_giga",
+        "school_id_gov",
+        "school_name",
+        "education_level",
+        "education_level_govt",
+        "connectivity_govt" "connectivity_type_govt",
+        "admin1",
+        "admin2",
+        "school_area_type",
+        "school_funding_type",
+        "computer_lab",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_modality",
+        "school_id_gov_type",
+        "school_address",
+        "is_school_open",
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "nearest_LTE_id",
+        "nearest_UMTS_id",
+        "nearest_GSM_id",
     ]
     columns_convert_to_timestamp = [
-        "school_location_ingestion_timestamp",
-        "connectivity_RT_ingestion_timestamp",
         "connectivity_govt_ingestion_timestamp",
+        "school_location_ingestion_timestamp",
     ]
 
-    df = transform_columns(df, columns_convert_to_string, types.StringType(), context)
     df = transform_columns(df, columns_convert_to_double, types.DoubleType(), context)
     df = transform_columns(df, columns_convert_to_int, types.IntegerType(), context)
     df = transform_columns(df, columns_convert_to_long, types.LongType(), context)
+    df = transform_columns(df, columns_convert_to_string, types.StringType(), context)
     df = transform_columns(
         df, columns_convert_to_timestamp, types.TimestampType(), context
     )
-
-    df.printSchema()
-    return df
-
-
-def transform_school_reference_types(
-    df: sql.DataFrame, context: OutputContext = None
-) -> sql.DataFrame:
-    log_func = print if context is None else context.log.info
-
-    columns_convert_to_int = [
-        "pop_within_10km",
-        "schools_within_10km",
-    ]
-    columns_convert_to_float = [
-        "download_speed_govt1",
-        "download_speed_govt5",
-        "nearest_school_distance",
-    ]
-
-    for col_name in columns_convert_to_int:
-        df = df.withColumn(col_name, col(col_name).cast(types.IntegerType()))
-        log_func(">> TRANSFORMED INT")
-
-    for col_name in columns_convert_to_float:
-        df = df.withColumn(col_name, col(col_name).cast(types.FloatType()))
-        log_func(">> TRANSFORMED FLOAT")
 
     df.printSchema()
     return df

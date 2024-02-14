@@ -8,8 +8,7 @@ from src.settings import settings
 from src.utils.adls import get_filepath
 from src.utils.spark import (
     transform_qos_bra_types,
-    transform_school_master_types,
-    transform_school_reference_types,
+    transform_school_types,
 )
 
 
@@ -54,9 +53,7 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         dataset_type = context.step_context.op_config["dataset_type"]
         # TODO: Add the correct transform functions for the other datasets/layers
         match dataset_type:
-            case "school-reference":
-                return transform_school_reference_types
             case "qos":
                 return transform_qos_bra_types
             case _:
-                return transform_school_master_types
+                return transform_school_types
