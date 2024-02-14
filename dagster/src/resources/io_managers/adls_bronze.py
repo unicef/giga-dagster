@@ -14,7 +14,6 @@ class ADLSBronzeIOManager(BaseConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
         filepath = self._get_filepath(context)
-        context.log.info(f">>BRONZE LOADOUTPUT RAN, {filepath}")
         if output.isEmpty():
             context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return
@@ -30,7 +29,6 @@ class ADLSBronzeIOManager(BaseConfigurableIOManager):
         file = adls_client.download_csv_as_spark_dataframe(
             filepath, self.pyspark.spark_session
         )
-        context.log.info(">>BRONZE LOADINPUT RAN")
         context.log.info(
             f"Downloaded {filepath.split('/')[-1]} from"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
