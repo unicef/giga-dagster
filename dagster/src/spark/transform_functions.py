@@ -66,14 +66,12 @@ def create_uzbekistan_school_name(df):
     df = df.withColumn(
         "school_name",
         f.expr(
-            "CASE "
-            "WHEN district IS NOT NULL AND region IS NOT NULL THEN "
-                "CONCAT(school_name, ',', district, ',', region) "
-            "WHEN district IS NOT NULL AND city IS NOT NULL THEN "
-                "CONCAT(school_name, ',', city, ',', district) "
-            "WHEN city IS NOT NULL AND region IS NOT NULL THEN "
-                "CONCAT(school_name, ',', city, ',', region) "
-            " ELSE CONCAT(COALESCE(school_name, ''), ',', COALESCE(region, ''), ',', COALESCE(region, '')) END"
+            "CASE WHEN district IS NOT NULL AND region IS NOT NULL THEN"
+            " CONCAT(school_name, ',', district, ',', region) WHEN district IS NOT NULL"
+            " AND city IS NOT NULL THEN CONCAT(school_name, ',', city, ',', district)"
+            " WHEN city IS NOT NULL AND region IS NOT NULL THEN CONCAT(school_name,"
+            " ',', city, ',', region) ELSE CONCAT(COALESCE(school_name, ''), ',',"
+            " COALESCE(region, ''), ',', COALESCE(region, '')) END"
         ),
     )
 
@@ -179,7 +177,7 @@ def create_bronze_layer_columns(df):
     df = bronze_prereq_columns(df)
     
     # ID
-    df = create_giga_school_id(df)
+    df = create_giga_school_id(df) #school_id_giga 
 
     # School Density Computation
     df = df.withColumn("latitude", df["latitude"].cast("float"))
