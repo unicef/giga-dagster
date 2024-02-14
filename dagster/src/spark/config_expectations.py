@@ -125,6 +125,11 @@ CONFIG_PAIR_AVAILABILITY = [
     },
 ]
 
+CONFIG_PRECISION = {
+    "latitude": {"min": 5},
+    "longitude": {"min": 5},
+}
+
 # Coverage Column Configs
 
 # Lower Columns
