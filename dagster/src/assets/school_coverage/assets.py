@@ -27,13 +27,13 @@ def coverage_raw(
 @multi_asset(
     outs={
         "coverage_dq_results": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "coverage_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "coverage_dq_checks": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
     }
 )

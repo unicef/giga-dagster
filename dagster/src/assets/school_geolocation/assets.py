@@ -24,27 +24,29 @@ def geolocation_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_spark_dataframe_io_manager")  # this is wrong
+@asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
 def geolocation_bronze(
     context: OpExecutionContext, geolocation_raw: sql.DataFrame
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     # IN: spark datafame, OUT: csv file
     # Transform columns added here, all column renaming done here
     # Output should be stored as a spark dataframe
     emit_metadata_to_datahub(context, df=geolocation_raw)
-    yield Output(geolocation_raw, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        geolocation_raw.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
 @multi_asset(
     outs={
         "geolocation_dq_results": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "geolocation_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "geolocation_dq_checks": AssetOut(
-            is_required=True, io_manager_key="adls_spark_dataframe_io_manager"
+            is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
     }
 )
