@@ -10,7 +10,7 @@ from .base import BaseConfigurableIOManager
 adls_client = ADLSFileClient()
 
 
-class ADLSPandasDFToCSVIOManager(BaseConfigurableIOManager):
+class ADLSPandasIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
@@ -28,11 +28,11 @@ class ADLSPandasDFToCSVIOManager(BaseConfigurableIOManager):
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         filepath = self._get_filepath(context.upstream_output)
-        file = adls_client.download_csv_as_spark_dataframe(
+        data = adls_client.download_csv_as_spark_dataframe(
             filepath, self.pyspark.spark_session
         )
         context.log.info(
             f"Downloaded {filepath.split('/')[-1]} from"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
         )
-        return file
+        return data

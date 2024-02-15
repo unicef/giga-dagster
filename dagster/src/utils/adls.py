@@ -31,7 +31,7 @@ class ADLSFileClient(ConfigurableResource):
             elif filepath.endswith(".xls") or filepath.endswith(".xlsx"):
                 return pd.read_excel(buffer)
 
-    def download_csv_as_spark_dataframe(  # CAN BE REMOVED ONCE WE FINISH CONVERTING EXISTING FILES TO DELTA TABLE
+    def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
@@ -99,7 +99,7 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json(self, filepath: str, data):
+    def upload_json(self, data, filepath: str):
         file_client = _adls.get_file_client(filepath)
         json_data = json.dumps(data).encode("utf-8")
 
