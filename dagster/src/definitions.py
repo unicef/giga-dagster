@@ -17,6 +17,7 @@ from src.jobs import (
 )
 from src.resources.io_managers import (
     ADLSDeltaIOManager,
+    ADLSJSONIOManager,
     ADLSPandasIOManager,
 )
 from src.sensors import (
@@ -52,8 +53,9 @@ defs = Definitions(
         ),
     ],
     resources={
-        "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
+        "adls_json_io_manager": ADLSJSONIOManager(),
+        "adls_pandas_io_manager": ADLSPandasIOManager(),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
     },
