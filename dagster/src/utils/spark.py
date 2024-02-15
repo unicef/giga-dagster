@@ -34,7 +34,7 @@ spark_common_config = {
     "spark.sql.execution.arrow.pyspark.enabled": "true",
     "spark.sql.warehouse.dir": f"{settings.AZURE_BLOB_CONNECTION_URI}/warehouse",
     "spark.sql.catalogImplementation": "hive",
-    "hive.metastore.uris": "thrift://hive-metastore:9083",
+    "hive.metastore.uris": settings.HIVE_METASTORE_URI,
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
     "spark.executor.cores": "1",

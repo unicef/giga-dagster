@@ -420,7 +420,7 @@ worker:
   daemonMemoryLimit: ""
   ## @param worker.memoryLimit Set the maximum memory the worker is allowed to use
   ##
-  memoryLimit: 1g
+  memoryLimit: 2g
   ## @param worker.coreLimit Se the maximum number of cores that the worker can use
   ##
   coreLimit: 1
