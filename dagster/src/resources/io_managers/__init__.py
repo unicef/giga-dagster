@@ -1,7 +1,7 @@
 from .adls_delta import ADLSDeltaIOManager
-from .adls_pandas_to_csv import ADLSRawIOManager
+from .adls_pandas import ADLSPandasIOManager
 
 __all__ = [
-    "ADLSRawIOManager",
+    "ADLSPandasIOManager",
     "ADLSDeltaIOManager",
 ]

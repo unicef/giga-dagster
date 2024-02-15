@@ -17,7 +17,7 @@ from src.jobs import (
 )
 from src.resources.io_managers import (
     ADLSDeltaIOManager,
-    ADLSPandasDFToCSVIOManager,
+    ADLSPandasIOManager,
 )
 from src.sensors import (
     qos__csv_to_deltatable_sensor,
@@ -52,7 +52,7 @@ defs = Definitions(
         ),
     ],
     resources={
-        "adls_pandas_io_manager": ADLSPandasDFToCSVIOManager(pyspark=pyspark),
+        "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
