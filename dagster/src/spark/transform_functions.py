@@ -193,9 +193,9 @@ def create_bronze_layer_columns(df):
     # Special Cases
     # df = standardize_school_name(df)
 
-    # Temp key for index
-    w = Window().orderBy(f.lit("A"))
-    df = df.withColumn("gx_index", f.row_number().over(w))
+    # # Temp key for index
+    # w = Window().orderBy(f.lit("A"))
+    # df = df.withColumn("gx_index", f.row_number().over(w))
 
     # Timestamp of ingestion
     df = df.withColumn("school_location_ingestion_timestamp", f.current_timestamp())
