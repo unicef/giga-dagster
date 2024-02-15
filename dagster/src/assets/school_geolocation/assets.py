@@ -11,7 +11,7 @@ from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
-@asset(io_manager_key="adls_raw_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -46,7 +46,7 @@ def geolocation_bronze(
             is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "geolocation_dq_checks": AssetOut(
-            is_required=True, io_manager_key="adls_pandas_io_manager"
+            is_required=True, io_manager_key="adls_json_io_manager"
         ),
     }
 )
@@ -58,19 +58,19 @@ def geolocation_data_quality_results(
     # Output is a spark dataframe(?) with summary statistics (for Ger)
     # Output is a JSON with a list of checks (no results - Ger asked for)
     yield Output(
-        geolocation_bronze,
+        geolocation_bronze.toPandas(),
         metadata={"filepath": get_output_filepath(context)},
         output_name="geolocation_dq_results",
     )
 
     yield Output(
-        geolocation_bronze,
+        geolocation_bronze.toPandas(),
         metadata={"filepath": get_output_filepath(context)},
         output_name="geolocation_dq_summary_statistics",
     )
 
     yield Output(
-        geolocation_bronze.to_json(),
+        geolocation_bronze,
         metadata={"filepath": get_output_filepath(context)},
         output_name="geolocation_dq_checks",
     )
