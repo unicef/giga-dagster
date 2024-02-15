@@ -119,6 +119,7 @@ def coverage_staging(
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
+    staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[0]
 
     # {filepath: str, date_modified: str}
@@ -151,9 +152,6 @@ def coverage_staging(
 
     if DeltaTable.isDeltaTable(spark.spark_session, silver_table_path):
         # Clone silver table to staging folder
-        filepath = context.run_tags["dagster/run_key"]
-        staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
-
         silver = adls_file_client.download_delta_table_as_spark_dataframe(
             silver_table_path, spark.spark_session
         )
