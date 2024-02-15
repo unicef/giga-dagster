@@ -1,9 +1,7 @@
 from .adls_delta import ADLSDeltaIOManager
-from .adls_raw import ADLSRawIOManager
-from .adls_spark_dataframe import ADLSSparkDataframeIOManager
+from .adls_pandas_to_csv import ADLSRawIOManager
 
 __all__ = [
     "ADLSRawIOManager",
-    "ADLSSparkDataframeIOManager",
     "ADLSDeltaIOManager",
 ]

@@ -1,3 +1,4 @@
+import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 
@@ -9,16 +10,17 @@ from .base import BaseConfigurableIOManager
 adls_client = ADLSFileClient()
 
 
-class ADLSSparkDataframeIOManager(BaseConfigurableIOManager):
+class ADLSPandasDFToCSVIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: pd.DataFrame):
         filepath = self._get_filepath(context)
-        if output.isEmpty():
+        if output.empty:
             context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return
 
-        adls_client.upload_pandas_dataframe_as_file(output.toPandas(), filepath)
+        adls_client.upload_pandas_dataframe_as_file(output, filepath)
+
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
