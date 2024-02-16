@@ -82,8 +82,8 @@ def fb_transforms(fb):
         "cellular_coverage_availability",
         f.expr(
             "CASE " 
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         )
     )
@@ -132,8 +132,8 @@ def fb_coverage_merge(fb, cov):
         "cellular_coverage_availability",
         f.expr(
             "CASE " 
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         )
     )
@@ -183,8 +183,8 @@ def itu_transforms(itu):
         "cellular_coverage_availability",
         f.expr(
             "CASE " 
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         )
     )
@@ -233,8 +233,8 @@ def itu_coverage_merge(itu, cov):
         "cellular_coverage_availability",
         f.expr(
             "CASE " 
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         )
     )
