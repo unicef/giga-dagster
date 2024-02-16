@@ -78,7 +78,7 @@ class NotebookIngestionAction:
         # current date and time format: day/month/year 24-hour clock
         now = f'{datetime.now().strftime("%d/%b/%Y %H:%M:%S")} UTC+0'
         dataset_properties = DatasetPropertiesClass(
-            customProperties=self.notebook_metadata | now
+            customProperties=self.notebook_metadata | {"last_ingestion_time": now}
         )
         dataset_properties_mcp = MetadataChangeProposalWrapper(
             entityUrn=self.dataset_urn,
