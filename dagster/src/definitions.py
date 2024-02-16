@@ -4,7 +4,7 @@ from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
     datahub__ingest_azure_ad_users_groups_job,
-    datahub__ingest_coverage_notebooks_job,
+    datahub__ingest_coverage_notebooks_from_github_job,
     datahub__update_policies_job,
     qos__convert_csv_to_deltatable_job,
     school_master__automated_data_checks_job,
@@ -61,7 +61,7 @@ defs = Definitions(
         datahub__create_domains_job,
         datahub__create_tags_job,
         datahub__update_policies_job,
-        datahub__ingest_coverage_notebooks_job,
+        datahub__ingest_coverage_notebooks_from_github_job,
     ],
     sensors=[
         school_master__raw_file_uploads_sensor,
