@@ -41,7 +41,7 @@ def datahub_policies(context: OpExecutionContext):
 
 
 @asset
-def coverage_workflow_notebooks(context: OpExecutionContext):
+def github_coverage_workflow_notebooks(context: OpExecutionContext):
     context.log.info("INGESTING COVERAGE WORKFLOW NOTEBOOKS TO DATAHUB")
 
     owner = "unicef"
