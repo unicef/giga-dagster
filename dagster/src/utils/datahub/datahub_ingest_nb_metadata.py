@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from functools import wraps
 
 import datahub.emitter.mce_builder as builder
@@ -74,8 +75,10 @@ class NotebookIngestionAction:
 
     @_log_progress("dataset properties")
     def upsert_dataset_properties(self):
+        # current date and time format: day/month/year 24-hour clock
+        now = f'{datetime.now().strftime("%d/%b/%Y %H:%M:%S")} UTC+0'
         dataset_properties = DatasetPropertiesClass(
-            customProperties=self.notebook_metadata
+            customProperties=self.notebook_metadata | now
         )
         dataset_properties_mcp = MetadataChangeProposalWrapper(
             entityUrn=self.dataset_urn,
