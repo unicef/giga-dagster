@@ -11,8 +11,8 @@ from datahub.metadata.schema_classes import (
     PlatformTypeClass,
 )
 from loguru import logger
-from scripts.github_api_calls import list_ipynb_from_github_repo
 from src.settings import settings
+from src.utils.github_api_calls import list_ipynb_from_github_repo
 
 
 class NotebookIngestionAction:
