@@ -4,6 +4,7 @@ from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
+from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 
@@ -40,7 +41,7 @@ def datahub_policies(context: OpExecutionContext):
 
 
 @asset
-def github_coverage_workflow_notebooks(context: OpExecutionContext):
+def coverage_workflow_notebooks(context: OpExecutionContext):
     context.log.info("INGESTING COVERAGE WORKFLOW NOTEBOOKS TO DATAHUB")
 
     owner = "unicef"
