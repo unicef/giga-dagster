@@ -3,7 +3,9 @@ from src.utils.datahub.datahub_create_tags import create_tags
 from src.utils.datahub.datahub_ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
+from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
 from src.utils.datahub.datahub_update_policies import update_policies
+from src.utils.github_api_calls import list_ipynb_from_github_repo
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -34,4 +36,21 @@ def azure_ad_users_groups(context: OpExecutionContext):
 def datahub_policies(context: OpExecutionContext):
     context.log.info("UPDATING POLICIES IN DATAHUB")
     update_policies()
+    yield Output(None)
+
+
+@asset
+def coverage_workflow_notebooks(context: OpExecutionContext):
+    context.log.info("INGESTING COVERAGE WORKFLOW NOTEBOOKS TO DATAHUB")
+
+    owner = "unicef"
+    repo = "coverage_workflow"
+    path = "Notebooks/"
+    notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path)
+
+    for notebook_metadata in notebook_metadata_list:
+        run_notebook_ingestion = NotebookIngestionAction(
+            notebook_metadata=notebook_metadata
+        )
+        run_notebook_ingestion()
     yield Output(None)
