@@ -13,13 +13,20 @@ from src.spark.check_functions import (
     is_within_country_udf,
 )
 from src.spark.config_expectations import (
-    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
-    CONFIG_NONEMPTY_COLUMNS_WARNING,
-    CONFIG_UNIQUE_COLUMNS,
+    CONFIG_NONEMPTY_COLUMNS_MASTER,
+    CONFIG_UNIQUE_COLUMNS_MASTER,
+    CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
+    CONFIG_UNIQUE_COLUMNS_COVERAGE,
     CONFIG_UNIQUE_SET_COLUMNS,
-    CONFIG_VALUES_RANGE,
+    CONFIG_VALUES_DOMAIN_MASTER,
     CONFIG_VALUES_RANGE_PRIO,
-    CONFIG_PRECISION
+    CONFIG_PRECISION,
+    CONFIG_VALUES_RANGE_COVERAGE,
+    CONFIG_VALUES_RANGE_MASTER,
+    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
+    CONFIG_UNIQUE_COLUMNS_CRITICAL,
+    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
+    CONFIG_VALUES_RANGE_CRITICAL
 )
 
 import decimal
@@ -46,26 +53,10 @@ from azure.storage.blob import BlobServiceClient
 from src.settings import Settings  # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
 from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
 
-# check unique columns (DUPLICATES) (CONFIG_UNIQUE_COLUMNS)
-#   "df.filter(F.expr(NOT (count(1) OVER (PARTITION BY giga_id_school unspecifiedframe$()) <= 1)))"
-# critical non null columns (CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-#   "df.filter(F.expr(NOT (school_name IS NOT NULL)))"
-# range checks  CONFIG_VALUES_RANGE
-#   "df.filter(F.expr((longitude IS NOT NULL) AND (NOT ((longitude >= -180) AND (longitude <= 180)))))"
-# domain checks CONFIG_VALUES_OPTIONS
-
-## CUSTOM EXPECTATIONS ##
-# Geospatial (is_within_country)
-# not SIMILAR (school name)
-# check for five decimal places
-# type?? probably not
-# unique set columns (CONFIG_UNIQUE_SET_COLUMNS)
-#   "df.filter(F.expr(NOT (count(1) OVER (PARTITION BY struct(school_id, school_name, education_level, latitude, longitude)
-
 # positive = 0, negative =1?
-# Duplicate Checks (dq_duplicate_ config? :hmm:)
 def duplicate_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
+
         column_name = f"dq_duplicate_{column}"
         df = df.withColumn(
             column_name,
@@ -78,6 +69,7 @@ def duplicate_checks(df, CONFIG_COLUMN_LIST):
 
 def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
+
         if column in df.columns:
             column_name = f"dq_isnull_{column}"
             df = df.withColumn(
@@ -93,6 +85,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
 
 def range_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
+
         if column in df.columns:
             df = df.withColumn(
                 f"dq_isinvalid_{column}",
@@ -110,6 +103,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
 
 def domain_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
+
         if column in df.columns:
             if None in CONFIG_COLUMN_LIST[column]:
                 df = df.withColumn(
@@ -261,6 +255,7 @@ def has_similar_name(df):
 
     def similarity_test(column, name_list=name_list):
         for name in name_list:
+
             if (
                 1
                 > difflib.SequenceMatcher(None, column, name).ratio()
@@ -284,12 +279,13 @@ def has_similar_name(df):
 def precision_check(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
         precision = CONFIG_COLUMN_LIST[column]["min"]
+
         def get_decimal_places(number, precision=precision):
             if number is None:
                 return None
             decimal_places = -decimal.Decimal(str(number)).as_tuple().exponent
 
-            return int(decimal_places >= precision)
+            return int(decimal_places < precision)
         
         get_decimal_places_udf = f.udf(get_decimal_places)
         df = df.withColumn(f"dq_precision_{column}", get_decimal_places_udf(f.col(column)))
@@ -305,8 +301,8 @@ def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
             "_", f.col("longitude").cast("string"), f.col("latitude").cast("string")
         ),
     )
-
     for column_set in CONFIG_COLUMN_LIST:
+
         set_name = "_".join(column_set)
         df = df.withColumn(
             f"dq_duplicate_{set_name}",
@@ -314,6 +310,137 @@ def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
                 0
             ),
         )
+    df = df.drop("location_id")
+    
+    return df
+
+def duplicate_all_except_checks(df, CONFIG_COLUMN_LIST):
+    for column_set in CONFIG_COLUMN_LIST:
+
+        df = df.withColumn(
+            f"dq_duplicate_all_except_school_code",
+            f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
+                0
+            ),
+        )
+
+    return df
+
+
+def point_110(column):
+    if column is None:
+        return None
+    point = int(1000 * float(column)) / 1000
+    return point
+
+
+point_110_udf = f.udf(point_110)
+
+
+def duplicate_name_level_110_check(df):
+    df_columns = df.columns
+
+    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
+    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
+    window_spec1 = Window.partitionBy(
+        "school_name", "education_level", "lat_110", "long_110"
+    )
+    df = df.withColumn(
+        "dq_duplicate_name_level_within_110m_radius",
+        f.when(f.count("*").over(window_spec1) > 1, 1).otherwise(0),
+    )
+
+    added_columns = ["lat_110", "long_110"]
+    for col in added_columns: # if the check existed in the column before applying this check, dont drop
+        
+        if col in df_columns:
+            pass
+        else: 
+            df = df.drop(col)
+
+    return df
+
+
+def similar_name_level_within_110_check(df):
+    df_columns = df.columns
+    
+    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
+    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
+    window_spec2 = Window.partitionBy("education_level", "lat_110", "long_110")
+
+    df = df.withColumn(
+        "duplicate_similar_name_same_level_within_110m_radius",
+        f.when(f.count("*").over(window_spec2) > 1, 1).otherwise(0),
+    )
+    df = has_similar_name(df)
+    df = df.withColumn(
+        "duplicate_similar_name_same_level_within_110m_radius",
+        f.expr(
+            "CASE "
+            "   WHEN dq_has_similar_name = true "
+            "       AND duplicate_similar_name_same_level_within_110m_radius = 1 "
+            "       THEN 1 "
+            "ELSE 0 END"
+        ),
+    )
+
+    added_columns = ["lat_110", "long_110", "dq_has_similar_name"]
+    for col in added_columns: # if the check existed in the column before applying this check, dont drop
+        
+        if col in df_columns:
+            pass
+        else: 
+            df = df.drop(col)
+
+    return df
+
+def critical_error_checks(df, country_code_iso3):
+    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_CRITICAL)
+    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
+    df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
+    df = is_not_within_country(df, country_code_iso3)
+    df = df.withColumn(
+        "has_critical_error",
+        f.expr(
+            "CASE "
+            "WHEN dq_duplicate_school_id_govt "
+            "   + dq_duplicate_school_id_giga "
+            "   + dq_isnull_school_name "
+            "   + dq_isnull_latitude "
+            "   + dq_isnull_longitude "
+            "   + dq_isinvalid_latitude "
+            "   + dq_isinvalid_longitude "
+            "   + dq_is_not_within_country > 0"
+            "   THEN 1 "
+            "ELSE 0 END"
+        ),
+    )
+
+    return df
+
+
+def h3_geo_to_h3(latitude, longitude):
+    if latitude is None or longitude is None:
+        return "0"
+    else:
+        return h3.geo_to_h3(latitude, longitude, resolution=8)
+
+
+h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
+
+def school_density_check(df):
+    df = df.withColumn("latitude", df["latitude"].cast("float"))
+    df = df.withColumn("longitude", df["longitude"].cast("float"))
+    df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
+    df = df.withColumn(
+        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+    )
+    df = df.withColumn(
+        "dq_is_school_density_greater_than_5",
+            f.when(f.col("school_density") > 5, 1).otherwise(0),
+        )
+    df = df.drop("hex8")
+    df = df.drop("school_density")
 
     return df
 
@@ -327,19 +454,27 @@ if __name__ == "__main__":
     spark = get_spark_session()
     df = spark.read.csv(file_url, header=True)
     df = df.sort("school_name").limit(10)
-    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-    # df = is_not_within_country(df, "BRA")
+    df = df.withColumnRenamed("school_id_gov", "school_id_govt")
+    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_MASTER)
+    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_MASTER)
+    # df = domain_checks(df, CONFIG_VALUES_DOMAIN_MASTER)
+    # df = range_checks(df, CONFIG_VALUES_RANGE_MASTER)
     # df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
-    # df = range_checks(df, CONFIG_VALUES_RANGE)
-    df = domain_checks(df, {"school_location_ingestion_timestamp": ["yes", "no", None]})
-    df.show()
+    # df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER)
+    # df = duplicate_name_level_110_check(df)
+    # df = similar_name_level_within_110_check(df)
+    # df = critical_error_checks(df, "BLZ")
+    # df = precision_check(df, CONFIG_PRECISION)
+    # df = is_not_within_country(df, "BLZ")
+    df = school_density_check(df)
 
-    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS)
+    df.show()
+    # df.write.csv("src/spark/test.csv", header=True)
+
     # df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
     # df = has_similar_name(df)
-    # df = precision_check(df, CONFIG_PRECISION)
 
-    # ## agg
+    # ## agg stuff########
     # dq_columns = [col for col in df.columns if col.startswith("dq_")]
     # print(dq_columns)
     # df = df.select(*dq_columns)
@@ -372,14 +507,16 @@ if __name__ == "__main__":
 
     # print("JSON array:",json_array)
     
-    # # import json
+    # import json
 
-    # # json_file_path =  'C:/Users/RenzTogonon/Downloads/test.json'
 
     # with open(json_file_path, 'w') as file:
     #     for json_str in json_array:
     #         file.write(json_str + ',\n')
+    # #########################
+            
 
+    # json_file_path =  'C:/Users/RenzTogonon/Downloads/test.json'
     # with open(json_file_path, 'r') as file:
     #     data = json.load(file)
 
