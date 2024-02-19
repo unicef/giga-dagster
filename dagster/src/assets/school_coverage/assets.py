@@ -115,13 +115,14 @@ def coverage_staging(
     coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-) -> sql.DataFrame:
+):
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[0]
 
+    # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
@@ -150,18 +151,22 @@ def coverage_staging(
 
     context.log.info(f"files_for_review: {files_for_review}")
 
+    # If silver table exists and no staging table exists, clone it to staging
+    # If silver table exists and staging table exists, merge files for review to existing staging table
+    # If silver table does not exist, merge files for review into one spark dataframe
     if DeltaTable.isDeltaTable(spark.spark_session, silver_table_path):
-        # Clone silver table to staging folder
-        silver = adls_file_client.download_delta_table_as_spark_dataframe(
-            silver_table_path, spark.spark_session
-        )
+        if not DeltaTable.isDeltaTable(spark.spark_session, staging_table_path):
+            # Clone silver table to staging folder
+            silver = adls_file_client.download_delta_table_as_spark_dataframe(
+                silver_table_path, spark.spark_session
+            )
 
-        adls_file_client.upload_spark_dataframe_as_delta_table(
-            silver,
-            staging_table_path,
-            context.op_config["dataset_type"],
-            spark.spark_session,
-        )
+            adls_file_client.upload_spark_dataframe_as_delta_table(
+                silver,
+                staging_table_path,
+                context.op_config["dataset_type"],
+                spark.spark_session,
+            )
 
         # Load new table (silver clone in staging) as a deltatable
         staging = adls_file_client.download_delta_table_as_delta_table(
@@ -174,15 +179,19 @@ def coverage_staging(
                 file_info["filepath"], spark.spark_session
             )
 
-            staging.alias("source").merge(
-                existing_file.alias("target"),
-                "source.school_id_giga = target.school_id_giga",
-            ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
+            staging = (
+                staging.alias("source")
+                .merge(
+                    existing_file.alias("target"),
+                    "source.school_id_giga = target.school_id_giga",
+                )
+                .whenMatchedUpdateAll()
+                .whenNotMatchedInsertAll()
+            )
 
             context.log.info(f"Staging: table {staging}")
-        staging = (
-            staging.toDF()
-        )  # not sure if this is needed, seems like merge is in place
+
+        staging.execute()
 
     else:
         staging = coverage_bronze
@@ -193,5 +202,11 @@ def coverage_staging(
             )
             staging = staging.union(existing_file)
 
+        adls_file_client.upload_spark_dataframe_as_delta_table(
+            staging,
+            staging_table_path,
+            context.op_config["dataset_type"],
+            spark.spark_session,
+        )
+
     # emit_metadata_to_datahub(context, staging)
-    yield Output(staging, metadata={"filepath": get_output_filepath(context)})
