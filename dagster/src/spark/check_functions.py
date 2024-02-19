@@ -239,11 +239,10 @@ are_pair_points_beyond_minimum_distance_udf = f.udf(
 
 #     return is_unique
 
-
 def has_similar_name(column, name_list):
     for name in name_list:
         if (
-            1
+            1 # excludes exact match which are technically duplicates, not similar.
             > difflib.SequenceMatcher(None, column, name).ratio()
             >= SIMILARITY_RATIO_CUTOFF
         ):

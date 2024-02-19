@@ -410,3 +410,45 @@ CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER =[
 # valid lat lon = decimal check and range check
 # added country grouping in checking for duplicates because appended all countries in one dataset
 # added educational level "Primary, Secondary and Post-Secondary"
+# updated connectivity types vs given configs
+# checks for numeric types
+# checks for alphabets
+
+
+# added transforms for standardization of educ types (unmapped = "Other")
+    # edul_fix={ np.nan : 'Other',
+    #             'Other' : 'Other',    
+    #             'Pre-Primary And Primary And Secondary': 'Pre-Primary, Primary and Secondary',
+    #             'Primary, Secondary And Post-Secondary':'Primary, Secondary and Post-Secondary',
+    #             'Pre-Primary, Primary, And Secondary':'Pre-Primary, Primary and Secondary',
+    #             'Basic':'Primary',
+    #             'Basic And Secondary':'Primary and Secondary',
+    #             "Pre-Primary":"Pre-Primary",
+    #             "Primary":"Primary",
+    #             "Secondary":"Secondary",
+    #             "Post-Secondary":"Post-Secondary",
+    #             "Pre-Primary And Primary":"Pre-Primary and Primary",
+    #             "Primary And Secondary":"Primary and Secondary",
+    #             "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary" 
+    #           }
+# added transforms to normalize typos in type_connectivity (connectivity_type_govt)
+    # paterns={
+    # 'Fibre': ['fiber*', 'fibre*', 'fibra*', 'ftt*', 'fttx*', 'ftth*', 'fttp*', 'gpon*', 'epon*', 'fo*', 'Фибер*', 'optic*']
+    # ,'Copper':	['adsl*' , 'dsl*', 'copper*', 'hdsl*', 'vdsl*']
+    # ,'Coaxial': 	['coax*', 'coaxial*' ]
+    # ,'Cellular':	['cell*', 'cellular*', 'celular*', '2g*', '3g*', '4g*', '5g*', 'lte*', 'gsm*', 'umts*', 'cdma*', 'mobile*', 'mobie*']
+    # ,'P2P': 	['p2p*', 'radio*', 'microwave*', 'ptmp*' ,'micro.wave*']
+    # ,'Satellite':	['satellite*', 'satelite*', 'vsat*' , 'geo*', 'leo*']
+    # ,'Other':	['TVWS*', 'other*', 'ethernet*']
+    # ,'Unknown': 	['unknown*', 'null*', 'nan*', 'n/a*']
+    # }
+# transforms for school region normalizing
+    # urban_school_region = ['Urban', 'Urbaine', 'Urbano', 'urban']
+    # rural_school_region = ['Rural', 'Rurale', 'Urbaine', 'rural']
+# transforms for school type
+    # public_labels = ['Estadual','Municipal','Federal', 'Government', 'Public', 'Pubic', 'public']
+    # private_labels = ['Private', 'Private ']
+
+
+
+   
