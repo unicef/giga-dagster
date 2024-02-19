@@ -1,3 +1,5 @@
+from pyspark import sql
+
 from dagster import Definitions, load_assets_from_package_module
 from src.assets import common, datahub_assets, qos, school_coverage, school_geolocation
 from src.jobs import (
@@ -6,6 +8,7 @@ from src.jobs import (
     datahub__ingest_azure_ad_users_groups_job,
     datahub__update_policies_job,
     qos__convert_csv_to_deltatable_job,
+    qos__school_list_job,
     school_master__convert_gold_csv_to_deltatable_job,
     school_master_coverage__automated_data_checks_job,
     school_master_coverage__failed_manual_checks_job,
@@ -20,6 +23,7 @@ from src.resources.io_managers import (
     ADLSJSONIOManager,
     ADLSPandasIOManager,
 )
+from src.schedules import generate_qos__school_list_schedule
 from src.sensors import (
     qos__csv_to_deltatable_sensor,
     school_master__gold_csv_to_deltatable_sensor,
@@ -37,6 +41,14 @@ from src.utils.spark import pyspark
 
 setup_sentry()
 
+school_list_apis = sql.execute(
+    "SELECT * FROM school_list_apis"
+).tolist()  # something like this
+
+schedules = []
+for api in school_list_apis:
+    schedules.append(generate_qos__school_list_schedule(api["api_name"], api["config"]))
+
 
 defs = Definitions(
     assets=[
@@ -52,14 +64,13 @@ defs = Definitions(
             package_module=datahub_assets, group_name="datahub"
         ),
     ],
-    resources={
-        "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
-        "adls_json_io_manager": ADLSJSONIOManager(),
-        "adls_pandas_io_manager": ADLSPandasIOManager(),
-        "adls_file_client": ADLSFileClient(),
-        "spark": pyspark,
-    },
     jobs=[
+        datahub__create_domains_job,
+        datahub__create_tags_job,
+        datahub__ingest_azure_ad_users_groups_job,
+        datahub__update_policies_job,
+        qos__convert_csv_to_deltatable_job,
+        qos__school_list_job,
         school_master_coverage__automated_data_checks_job,
         school_master_coverage__failed_manual_checks_job,
         school_master_coverage__successful_manual_checks_job,
@@ -68,21 +79,24 @@ defs = Definitions(
         school_master_geolocation__successful_manual_checks_job,
         school_master__convert_gold_csv_to_deltatable_job,
         school_reference__convert_gold_csv_to_deltatable_job,
-        qos__convert_csv_to_deltatable_job,
-        datahub__ingest_azure_ad_users_groups_job,
-        datahub__create_domains_job,
-        datahub__create_tags_job,
-        datahub__update_policies_job,
     ],
+    resources={
+        "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
+        "adls_json_io_manager": ADLSJSONIOManager(),
+        "adls_pandas_io_manager": ADLSPandasIOManager(),
+        "adls_file_client": ADLSFileClient(),
+        "spark": pyspark,
+    },
+    schedules=schedules,
     sensors=[
         qos__csv_to_deltatable_sensor,
-        school_master__gold_csv_to_deltatable_sensor,
-        school_reference__gold_csv_to_deltatable_sensor,
-        school_master_geolocation__raw_file_uploads_sensor,
+        school_master_coverage__failed_manual_checks_sensor,
         school_master_coverage__raw_file_uploads_sensor,
-        school_master_geolocation__successful_manual_checks_sensor,
         school_master_coverage__successful_manual_checks_sensor,
         school_master_geolocation__failed_manual_checks_sensor,
-        school_master_coverage__failed_manual_checks_sensor,
+        school_master_geolocation__raw_file_uploads_sensor,
+        school_master_geolocation__successful_manual_checks_sensor,
+        school_master__gold_csv_to_deltatable_sensor,
+        school_reference__gold_csv_to_deltatable_sensor,
     ],
 )

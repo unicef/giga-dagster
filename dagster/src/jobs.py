@@ -1,5 +1,19 @@
 from dagster import define_asset_job
 
+qos__school_list_job = define_asset_job(
+    name="qos__ingest_school_list_job",
+    selection=[
+        "list_raw",
+        "list_bronze",
+        "list_dq_results",
+        "list_dq_summary_statistics",
+        "list_dq_checks",
+        "list_dq_passed_rows",
+        "list_dq_failed_rows",
+        "list_staging",
+    ],
+)
+
 school_master_geolocation__automated_data_checks_job = define_asset_job(
     name="school_master_geolocation__automated_data_checks_job",
     selection=[
