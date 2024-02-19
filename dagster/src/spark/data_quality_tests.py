@@ -57,7 +57,7 @@ from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
 def duplicate_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
-        column_name = f"dq_duplicate_{column}"
+        column_name = f"dq_duplicate-{column}"
         df = df.withColumn(
             column_name,
             f.when(
@@ -71,7 +71,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
         if column in df.columns:
-            column_name = f"dq_isnull_{column}"
+            column_name = f"dq_isnull-{column}"
             df = df.withColumn(
                 column_name,
                 f.when(
@@ -80,7 +80,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(0),
             )
         else:
-            df = df.withColumn(f"dq_isnull_{column}", f.lit(1))
+            df = df.withColumn(f"dq_isnull-{column}", f.lit(1))
     return df
 
 def range_checks(df, CONFIG_COLUMN_LIST):
@@ -88,7 +88,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
 
         if column in df.columns:
             df = df.withColumn(
-                f"dq_isinvalid_{column}",
+                f"dq_isinvalidrange-{column}",
                 f.when(
                     f.col(f"{column}").between(
                         CONFIG_COLUMN_LIST[column]["min"],
@@ -98,7 +98,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(1),
             )
         else:
-            df = df.withColumn(f"dq_isinvalid_{column}", f.lit(1))
+            df = df.withColumn(f"dq_isinvalidrange-{column}", f.lit(1))
     return df
 
 def domain_checks(df, CONFIG_COLUMN_LIST):
@@ -107,7 +107,7 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
         if column in df.columns:
             if None in CONFIG_COLUMN_LIST[column]:
                 df = df.withColumn(
-                    f"dq_isinvalid_{column}",
+                    f"dq_isinvaliddomain-{column}",
                     f.when(
                         (f.col(f"{column}").isNull()) |
                         (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
@@ -116,7 +116,7 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
                 )
             else:
                 df = df.withColumn(
-                    f"dq_isinvalid_{column}",
+                    f"dq_isinvaliddomain-{column}",
                     f.when(
                         f.col(f"{column}").isin(
                             CONFIG_COLUMN_LIST[column],
@@ -125,7 +125,7 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
                     ).otherwise(1),
                 )
         else:
-            df = df.withColumn(f"dq_isinvalid_{column}", f.lit(1))
+            df = df.withColumn(f"dq_isinvaliddomain-{column}", f.lit(1))
     return df
 
 # custom checks
@@ -288,7 +288,7 @@ def precision_check(df, CONFIG_COLUMN_LIST):
             return int(decimal_places < precision)
         
         get_decimal_places_udf = f.udf(get_decimal_places)
-        df = df.withColumn(f"dq_precision_{column}", get_decimal_places_udf(f.col(column)))
+        df = df.withColumn(f"dq_precision-{column}", get_decimal_places_udf(f.col(column)))
 
     return df
 
@@ -305,7 +305,7 @@ def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
 
         set_name = "_".join(column_set)
         df = df.withColumn(
-            f"dq_duplicate_{set_name}",
+            f"dq_duplicateset-{set_name}",
             f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
                 0
             ),
@@ -369,22 +369,23 @@ def similar_name_level_within_110_check(df):
     window_spec2 = Window.partitionBy("education_level", "lat_110", "long_110")
 
     df = df.withColumn(
-        "duplicate_similar_name_same_level_within_110m_radius",
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(f.count("*").over(window_spec2) > 1, 1).otherwise(0),
     )
     df = has_similar_name(df)
     df = df.withColumn(
-        "duplicate_similar_name_same_level_within_110m_radius",
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.expr(
             "CASE "
             "   WHEN dq_has_similar_name = true "
-            "       AND duplicate_similar_name_same_level_within_110m_radius = 1 "
+            "       AND dq_duplicate_similar_name_same_level_within_110m_radius = 1 "
             "       THEN 1 "
             "ELSE 0 END"
         ),
     )
 
     added_columns = ["lat_110", "long_110", "dq_has_similar_name"]
+
     for col in added_columns: # if the check existed in the column before applying this check, dont drop
         
         if col in df_columns:
@@ -400,17 +401,17 @@ def critical_error_checks(df, country_code_iso3):
     df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
     df = is_not_within_country(df, country_code_iso3)
     df = df.withColumn(
-        "has_critical_error",
+        "dq_has_critical_error",
         f.expr(
             "CASE "
-            "WHEN dq_duplicate_school_id_govt "
-            "   + dq_duplicate_school_id_giga "
-            "   + dq_isnull_school_name "
-            "   + dq_isnull_latitude "
-            "   + dq_isnull_longitude "
-            "   + dq_isinvalid_latitude "
-            "   + dq_isinvalid_longitude "
-            "   + dq_is_not_within_country > 0"
+            "WHEN `dq_duplicate-school_id_govt` "
+            "   + `dq_duplicate-school_id_giga` "
+            "   + `dq_isnull-school_name` "
+            "   + `dq_isnull-latitude` "
+            "   + `dq_isnull-longitude` "
+            "   + `dq_isinvalidrange-latitude` "
+            "   + `dq_isinvalidrange-longitude` "
+            "   + `dq_is_not_within_country` > 0"
             "   THEN 1 "
             "ELSE 0 END"
         ),
@@ -455,18 +456,19 @@ if __name__ == "__main__":
     df = spark.read.csv(file_url, header=True)
     df = df.sort("school_name").limit(10)
     df = df.withColumnRenamed("school_id_gov", "school_id_govt")
-    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_MASTER)
-    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_MASTER)
-    # df = domain_checks(df, CONFIG_VALUES_DOMAIN_MASTER)
-    # df = range_checks(df, CONFIG_VALUES_RANGE_MASTER)
-    # df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
-    # df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER)
-    # df = duplicate_name_level_110_check(df)
-    # df = similar_name_level_within_110_check(df)
-    # df = critical_error_checks(df, "BLZ")
-    # df = precision_check(df, CONFIG_PRECISION)
-    # df = is_not_within_country(df, "BLZ")
+    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_MASTER)
+    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_MASTER)
+    df = domain_checks(df, CONFIG_VALUES_DOMAIN_MASTER)
+    df = range_checks(df, CONFIG_VALUES_RANGE_MASTER)
+    df = precision_check(df, CONFIG_PRECISION)
+    df = is_not_within_country(df, "BLZ")
+    df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
+    df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER)
+    df = duplicate_name_level_110_check(df)
+    df = similar_name_level_within_110_check(df)
+    df = critical_error_checks(df, "BLZ")
     df = school_density_check(df)
+
 
     df.show()
     # df.write.csv("src/spark/test.csv", header=True)
@@ -482,7 +484,7 @@ if __name__ == "__main__":
     # for column_name in df.columns:
     #     df = df.withColumn(column_name, f.col(column_name).cast("int"))
 
-    # stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', {col}" for col in dq_columns])
+    # stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
     # print(stack_expr)
     
     # unpivoted_df = df.selectExpr(f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)")
