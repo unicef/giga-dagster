@@ -66,18 +66,18 @@ def coverage_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
-    coverage_data_quality_results: sql.DataFrame,
+    coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = coverage_data_quality_results
+    df_passed = coverage_dq_results
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
-    coverage_data_quality_results: sql.DataFrame,
+    coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = coverage_data_quality_results
+    df_failed = coverage_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 

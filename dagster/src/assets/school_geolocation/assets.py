@@ -79,9 +79,9 @@ def geolocation_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = geolocation_data_quality_results
+    df_passed = geolocation_dq_results
     df_passed.toPandas().loc[3, "school_id_giga"] = "ABCDEFGHIJKLM"
     context.log.info(f"df_passed: {df_passed}")
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
@@ -90,9 +90,9 @@ def geolocation_dq_passed_rows(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = geolocation_data_quality_results
+    df_failed = geolocation_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
