@@ -3,7 +3,7 @@ import uuid
 import h3
 import json
 from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, StringType, StructField, StructType
+from pyspark.sql.types import ArrayType, StringType, StructField, StructType, IntegerType
 from pyspark.sql.window import Window
 
 from src.settings import settings
@@ -26,7 +26,10 @@ from src.spark.config_expectations import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
     CONFIG_UNIQUE_COLUMNS_CRITICAL,
     CONFIG_NONEMPTY_COLUMNS_CRITICAL,
-    CONFIG_VALUES_RANGE_CRITICAL
+    CONFIG_VALUES_RANGE_CRITICAL,
+    CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS,
+    CONFIG_VALUES_DOMAIN_ALL,
+    CONFIG_VALUES_RANGE_ALL,
 )
 
 import decimal
@@ -53,7 +56,9 @@ from azure.storage.blob import BlobServiceClient
 from src.settings import Settings  # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
 from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
 
-# positive = 0, negative =1?
+
+
+# STANDARD CHECKS
 def duplicate_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
@@ -66,6 +71,7 @@ def duplicate_checks(df, CONFIG_COLUMN_LIST):
             ).otherwise(0),
         )
     return df
+
 
 def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
@@ -82,6 +88,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
         else:
             df = df.withColumn(f"dq_isnull-{column}", f.lit(1))
     return df
+
 
 def range_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
@@ -100,6 +107,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
         else:
             df = df.withColumn(f"dq_isinvalidrange-{column}", f.lit(1))
     return df
+
 
 def domain_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
@@ -128,9 +136,9 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
             df = df.withColumn(f"dq_isinvaliddomain-{column}", f.lit(1))
     return df
 
-# custom checks
 
-## geospatial
+# CUSTOM CHECKS
+# Within Country Check
 
 settings_instance = Settings()
 azure_sas_token = settings_instance.AZURE_SAS_TOKEN
@@ -326,6 +334,7 @@ def duplicate_all_except_checks(df, CONFIG_COLUMN_LIST):
 
     return df
 
+# Geospatial Checks
 
 def point_110(column):
     if column is None:
@@ -395,6 +404,36 @@ def similar_name_level_within_110_check(df):
 
     return df
 
+
+def h3_geo_to_h3(latitude, longitude):
+    if latitude is None or longitude is None:
+        return "0"
+    else:
+        return h3.geo_to_h3(latitude, longitude, resolution=8)
+
+
+h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
+
+
+def school_density_check(df):
+    df = df.withColumn("latitude", df["latitude"].cast("float"))
+    df = df.withColumn("longitude", df["longitude"].cast("float"))
+    df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
+    df = df.withColumn(
+        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+    )
+    df = df.withColumn(
+        "dq_is_school_density_greater_than_5",
+            f.when(f.col("school_density") > 5, 1).otherwise(0),
+        )
+    df = df.drop("hex8")
+    df = df.drop("school_density")
+
+    return df
+
+
+# Critical Error Check
+
 def critical_error_checks(df, country_code_iso3):
     df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_CRITICAL)
     df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
@@ -420,30 +459,103 @@ def critical_error_checks(df, country_code_iso3):
     return df
 
 
-def h3_geo_to_h3(latitude, longitude):
-    if latitude is None or longitude is None:
-        return "0"
-    else:
-        return h3.geo_to_h3(latitude, longitude, resolution=8)
 
 
-h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
+# Outputs
 
-def school_density_check(df):
-    df = df.withColumn("latitude", df["latitude"].cast("float"))
-    df = df.withColumn("longitude", df["longitude"].cast("float"))
-    df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
-    df = df.withColumn(
-        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS):
+    dq_columns = [col for col in df.columns if col.startswith("dq_")]
+    
+    df = df.select(*dq_columns)
+
+    for column_name in df.columns:
+        df = df.withColumn(column_name, f.col(column_name).cast("int"))
+
+    # unpivot row level checks
+    stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
+    unpivoted_df = df.selectExpr(f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)")
+    # unpivoted_df.show()
+
+    agg_df = unpivoted_df.groupBy("assertion").agg(
+        f.expr("count(CASE WHEN value = 1 THEN value END) as count_failed"),
+        f.expr("count(CASE WHEN value = 0 THEN value END) as count_passed"),
+        f.expr("count(value) as count_overall"),
     )
-    df = df.withColumn(
-        "dq_is_school_density_greater_than_5",
-            f.when(f.col("school_density") > 5, 1).otherwise(0),
-        )
-    df = df.drop("hex8")
-    df = df.drop("school_density")
 
-    return df
+    agg_df = agg_df.withColumn("percent_failed", (f.col("count_failed")/f.col("count_overall")) * 100)
+    agg_df = agg_df.withColumn("percent_passed", (f.col("count_passed")/f.col("count_overall")) * 100)
+
+    ## processing for human readable report
+    agg_df = agg_df.withColumn("column", (f.split(f.col("assertion"), "-").getItem(1)))
+    agg_df = agg_df.withColumn("assertion", (f.split(f.col("assertion"), "-").getItem(0)))
+    # agg_df.show()
+
+    # descriptions
+    configs_df = spark.createDataFrame(CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS)
+    # configs_df.show(truncate=False)
+
+    
+    # range
+    r_rows = [(key, value["min"], value.get("max")) for key, value in CONFIG_VALUES_RANGE_ALL.items()]
+    range_schema = StructType([
+        StructField("column", StringType(), True),
+        StructField("min", IntegerType(), True),
+        StructField("max", IntegerType(), True)  
+    ])  
+    range_df = spark.createDataFrame(r_rows, schema=range_schema)
+    # range_df.show(truncate=False)
+
+    # domain
+    d_rows = [(key, value) for key, value in CONFIG_VALUES_DOMAIN_ALL.items()]
+    domain_schema = StructType([
+        StructField("column", StringType(), True),
+        StructField("set", ArrayType(StringType(), True), True)
+    ]) 
+    domain_df = spark.createDataFrame(d_rows, schema=domain_schema)
+    # domain_df.show(truncate=False)
+
+    # report construction
+    report = agg_df.join(configs_df, "assertion", "left")
+    report = report.join(range_df, "column", "left")
+    report = report.join(domain_df, "column", "left")
+    report = report.withColumn("description", 
+                               f.when(f.col("column").isNull(), f.col("description"))
+                               .otherwise(f.regexp_replace("description", "\\{\\}", f.col("column"))))
+    report = report.withColumn("description", 
+                               f.when(f.col("min").isNull(), f.col("description"))
+                               .otherwise(f.regexp_replace("description", "\\{min\\}", f.col("min"))))
+    report = report.withColumn("description", 
+                               f.when(f.col("max").isNull(), f.col("description"))
+                               .otherwise(f.regexp_replace("description", "\\{max\\}", f.col("max"))))
+    report = report.withColumn("description", 
+                               f.when(f.col("set").isNull(), f.col("description"))
+                               .otherwise(f.regexp_replace("description", "\\{set\\}", f.array_join(f.col("set"), ", "))))
+    report = report.select(
+        "assertion",
+        "column",
+        "description",
+        "count_failed",
+        "count_passed",
+        "count_overall",
+        "percent_failed",
+        "percent_passed",
+    )
+
+    return report
+
+def aggregate_report_json(df):
+    json_array = df.toJSON().collect()
+    json_file_path =  "src/spark/test.json"
+    
+    import json
+
+
+    print("JSON array:",json_array)
+    with open(json_file_path, 'w') as file:
+        for json_str in json_array:
+            file.write(json_str + ',\n')
+    return json_array
+    
 
 
 if __name__ == "__main__":
@@ -466,56 +578,25 @@ if __name__ == "__main__":
     df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER)
     df = duplicate_name_level_110_check(df)
     df = similar_name_level_within_110_check(df)
-    df = critical_error_checks(df, "BLZ")
+    # df = critical_error_checks(df, "BLZ")
     df = school_density_check(df)
 
 
     df.show()
+    df = aggregate_report_sparkdf(df)
+    df.show()
+
+    # print(CONFIG_VALUES_DOMAIN_ALL)
+    # print(CONFIG_VALUES_RANGE_ALL)
+
+    
+    
+
     # df.write.csv("src/spark/test.csv", header=True)
 
     # df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
     # df = has_similar_name(df)
 
-    # ## agg stuff########
-    # dq_columns = [col for col in df.columns if col.startswith("dq_")]
-    # print(dq_columns)
-    # df = df.select(*dq_columns)
-    # df.show()
-    # for column_name in df.columns:
-    #     df = df.withColumn(column_name, f.col(column_name).cast("int"))
-
-    # stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
-    # print(stack_expr)
-    
-    # unpivoted_df = df.selectExpr(f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)")
-    # unpivoted_df.show()
-
-    # agg_df = unpivoted_df.groupBy("assertion").agg(
-    #     f.expr("count(CASE WHEN value = 0 THEN value END) as count_failed"),
-    #     f.expr("count(CASE WHEN value = 1 THEN value END) as count_passed"),
-    #     f.expr("count(value) as count_overall"),
-    #     # f.expr("sum(value) as Sum"),
-    #     # f.expr("avg(value) as Average")
-    # )
-
-    # agg_df = agg_df.withColumn("percent_failed", (f.col("count_failed")/f.col("count_overall")) * 100)
-    # agg_df = agg_df.withColumn("percent_passed", (f.col("count_passed")/f.col("count_overall")) * 100)
-    # agg_df.show()
-
-
-    # json_array = agg_df.toJSON().collect()
-    # json_file_path =  "src/spark/test.json"
-
-
-    # print("JSON array:",json_array)
-    
-    # import json
-
-
-    # with open(json_file_path, 'w') as file:
-    #     for json_str in json_array:
-    #         file.write(json_str + ',\n')
-    # #########################
             
 
     # json_file_path =  'C:/Users/RenzTogonon/Downloads/test.json'
