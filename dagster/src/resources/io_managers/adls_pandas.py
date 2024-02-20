@@ -1,4 +1,5 @@
 import pandas as pd
+from dagster_pyspark import PySparkResource
 from pyspark import sql
 
 from dagster import InputContext, OutputContext
@@ -10,6 +11,8 @@ adls_client = ADLSFileClient()
 
 
 class ADLSPandasIOManager(BaseConfigurableIOManager):
+    pyspark: PySparkResource
+
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
         filepath = self._get_filepath(context)
         if output.empty:

@@ -56,7 +56,7 @@ defs = Definitions(
     resources={
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
         "adls_json_io_manager": ADLSJSONIOManager(),
-        "adls_pandas_io_manager": ADLSPandasIOManager(),
+        "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
     },
