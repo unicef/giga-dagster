@@ -88,8 +88,14 @@ def school_master_geolocation__raw_file_uploads_sensor():
                         "geolocation_bronze": get_file_config(
                             "geolocation_bronze", file_config_params
                         ),
-                        "geolocation_data_quality_results": get_file_config(
-                            "geolocation_data_quality_results", file_config_params
+                        "geolocation_dq_results": get_file_config(
+                            "geolocation_dq_results", file_config_params
+                        ),
+                        "geolocation_dq_summary_statistics": get_file_config(
+                            "geolocation_dq_summary_statistics", file_config_params
+                        ),
+                        "geolocation_dq_checks": get_file_config(
+                            "geolocation_dq_checks", file_config_params
                         ),
                         "geolocation_dq_passed_rows": get_file_config(
                             "geolocation_dq_passed_rows", file_config_params
@@ -152,8 +158,14 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_raw": get_file_config(
                             "coverage_raw", file_config_params
                         ),
-                        "coverage_data_quality_results": get_file_config(
-                            "coverage_data_quality_results", file_config_params
+                        "coverage_dq_results": get_file_config(
+                            "coverage_dq_results", file_config_params
+                        ),
+                        "coverage_dq_summary_statistics": get_file_config(
+                            "coverage_dq_summary_statistics", file_config_params
+                        ),
+                        "coverage_dq_checks": get_file_config(
+                            "coverage_dq_checks", file_config_params
                         ),
                         "coverage_dq_passed_rows": get_file_config(
                             "coverage_dq_passed_rows", file_config_params
