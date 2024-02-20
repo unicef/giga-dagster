@@ -3,7 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseSettings
+from pydantic import AnyUrl, BaseSettings
 
 
 class Environment(StrEnum):
@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     AUTH_OIDC_CLIENT_ID: str
     AUTH_OIDC_TENANT_ID: str
     AUTH_OIDC_CLIENT_SECRET: str
+    AZURE_EMAIL_CONNECTION_STRING: str
+    EMAIL_RENDERER_BEARER_TOKEN: str
+    EMAIL_RENDERER_SERVICE_URL: AnyUrl
+    EMAIL_TEST_RECIPIENTS: list[str]
+    AZURE_EMAIL_SENDER: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
