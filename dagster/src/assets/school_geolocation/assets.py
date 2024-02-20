@@ -26,7 +26,8 @@ def geolocation_raw(
 
 @asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
 def geolocation_bronze(
-    context: OpExecutionContext, geolocation_raw: sql.DataFrame
+    context: OpExecutionContext,
+    geolocation_raw: sql.DataFrame,
 ) -> pd.DataFrame:
     # IN: spark datafame, OUT: csv file
     # Transform columns added here, all column renaming done here
