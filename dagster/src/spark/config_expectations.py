@@ -2,6 +2,60 @@ import datetime
 
 SIMILARITY_RATIO_CUTOFF = 0.7
 
+# Data Quality Checks Descriptions
+
+CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
+    {
+        "assertion": "duplicate", 
+        "description": "Checks if column {} has a duplicate"
+    },
+    {
+        "assertion": "isnull", 
+        "description": "Checks if column {} is null"
+    },
+    {
+        "assertion": "isinvaliddomain", 
+        "description": "Checks if column {} is within {set}"
+    },
+    {
+        "assertion": "isinvalidrange", 
+        "description": "Checks if column {} is between {min} and {max}"
+    },
+    {
+        "assertion": "precision", 
+        "description": "Checks if column {} has at least {precision} decimal places"
+    },
+    {
+        "assertion": "is_not_within_country", 
+        "description": "Checks if the coordinates is not within the country"
+    },
+    {
+        "assertion": "duplicateset", 
+        "description": "Checks if there are duplicates across these columns {}"
+    },
+    {
+        "assertion": "duplicate_all_except_school_code", 
+        "description": "Checks if there are duplicates across all columns except School ID"
+    },
+    {
+        "assertion": "duplicate_name_level_within_110m_radius", 
+        "description": "Checks if there are duplicates across name, level, lat_110, long_110"
+    },
+    {
+        "assertion": "duplicate_similar_name_same_level_within_110m_radius", 
+        "description": "Checks if there are duplicates across educational_level, lat_110, long_110 that has similar names as well."
+    },
+    {
+        "assertion": "critical_error_checks", 
+        "description": "Checks if the dataset contains a critical error."
+    },
+    {
+        "assertion": "is_school_density_greater_than_5", 
+        "description": "Checks if the the school density within the area is greater than 5."
+    }
+]
+
+
 # Single Column w/ parameters
 date_today = datetime.date.today()
 current_year = date_today.year
@@ -136,20 +190,7 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
         "phone", 
         "other"
     ],
-
-
-    # "cellular_network_availability": ["yes", "no"],
-    # "2G_coverage": ["true", "false"],
-    # "3G_coverage": ["true", "false"],
-    # "4G_coverage": ["true", "false"],
-    # # "education_level_isced": [
-    #     "childhood education",
-    #     "primary education",
-    #     "secondary education",
-    #     "post secondary education",
-    # ],
-    # "school_type_public": ["public", "not public"],
-    
+   
 }
 
 CONFIG_VALUES_DOMAIN_COVERAGE = {
@@ -157,24 +198,10 @@ CONFIG_VALUES_DOMAIN_COVERAGE = {
     "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
 }
 
+CONFIG_VALUES_DOMAIN_ALL = CONFIG_VALUES_DOMAIN_MASTER | CONFIG_VALUES_DOMAIN_REFERENCE | CONFIG_VALUES_DOMAIN_GEOLOCATION | CONFIG_VALUES_DOMAIN_COVERAGE
 
-# For COVERAGE ITU dataset. To separate COVERAGE ITU expectations into different file.
-CONFIG_VALUES_RANGE_COVERAGE = {
-    "fiber_node_distance": {"min": 0, "max": 10000000},
-    "microwave_node_distance": {"min": 0, "max": 10000000},
-    "schools_within_1km": {"min": 0, "max": 20},
-    "schools_within_2km": {"min": 0, "max": 40},
-    "schools_within_3km": {"min": 0, "max": 60},
-    "nearest_school_distance": {"min": 0, "max": None},
-    "schools_within_10km": {"min": 0, "max": 100},
-}
 
-CONFIG_VALUES_RANGE_REFERENCE = {
-    "nearest_school_distance": {"min": 0, "max": None},
-    "schools_within_10km": {"min": 0, "max": 100},
-    "download_speed_govt": {"min": 1, "max": 200},
-}
-
+# For RANGE Data Quality Checks
 CONFIG_VALUES_RANGE_MASTER = {
     "fiber_node_distance": {"min": 0, "max": 10000000},
     "microwave_node_distance": {"min": 0, "max": 10000000},
@@ -194,7 +221,11 @@ CONFIG_VALUES_RANGE_MASTER = {
     "num_latrines": {"min": 0, "max": 200},
     "school_data_collection_year": {"min": 1000, "max": current_year},
 }
-
+CONFIG_VALUES_RANGE_REFERENCE = {
+    "nearest_school_distance": {"min": 0, "max": None},
+    "schools_within_10km": {"min": 0, "max": 100},
+    "download_speed_govt": {"min": 1, "max": 200},
+}
 CONFIG_VALUES_RANGE_GEOLOCATION = {
     "school_establishment_year": {"min": 1000, "max": current_year},
     "latitude": {"min": -90, "max": 90},
@@ -211,11 +242,22 @@ CONFIG_VALUES_RANGE_GEOLOCATION = {
     "download_speed_govt": {"min": 1, "max": 200},
 }
 
+CONFIG_VALUES_RANGE_COVERAGE = {
+    "fiber_node_distance": {"min": 0, "max": 10000000},
+    "microwave_node_distance": {"min": 0, "max": 10000000},
+    "schools_within_1km": {"min": 0, "max": 20},
+    "schools_within_2km": {"min": 0, "max": 40},
+    "schools_within_3km": {"min": 0, "max": 60},
+    "nearest_school_distance": {"min": 0, "max": 10000000},
+    "schools_within_10km": {"min": 0, "max": 100},
+}
+
 CONFIG_VALUES_RANGE_CRITICAL = {
     "latitude": {"min": -90, "max": 90},
     "longitude": {"min": -180, "max": 180},
 }
 
+CONFIG_VALUES_RANGE_ALL = CONFIG_VALUES_RANGE_MASTER | CONFIG_VALUES_RANGE_REFERENCE | CONFIG_VALUES_RANGE_GEOLOCATION | CONFIG_VALUES_RANGE_COVERAGE
 
 CONFIG_UNIQUE_SET_COLUMNS = [
     ["school_id_govt", "school_name", "education_level", "location_id"],
