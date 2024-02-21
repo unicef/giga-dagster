@@ -2,6 +2,7 @@ import json
 from io import BytesIO
 
 import pandas as pd
+from delta.tables import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
 
@@ -24,7 +25,11 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
-            return pd.read_csv(buffer, encoding="utf-8-sig")
+
+            if filepath.endswith(".csv"):
+                return pd.read_csv(buffer)
+            elif filepath.endswith(".xls") or filepath.endswith(".xlsx"):
+                return pd.read_excel(buffer)
 
     def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession
@@ -49,44 +54,41 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
-    def upload_spark_dataframe_as_csv(self, data: sql.DataFrame, filepath: str):
-        data = data.toPandas()
-        self.upload_pandas_dataframe_as_file(data, filepath)
+    def download_delta_table_as_delta_table(self, table_path: str, spark: SparkSession):
+        return DeltaTable.forPath(spark, f"{table_path}")
 
     def download_delta_table_as_spark_dataframe(
-        self, filepath: str, spark: SparkSession
+        self, table_path: str, spark: SparkSession
     ):
-        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        df = spark.read.format("delta").load(adls_path)
+        df = spark.read.format("delta").load(table_path)
         df.show()
         return df
 
     def upload_spark_dataframe_as_delta_table(
         self,
         data: sql.DataFrame,
-        filepath: str,
-        schema_name: str,
-        table_schema_definition: str,
+        table_path: str,
+        dataset_type: str,
         spark: SparkSession,
     ):
-        *directory_list, filename = filepath.split("/")
-        directory = "/".join(directory_list)
-        country_code = filename.split("_")[0]
-
         create_schema_sql = load_sql_template(
             "create_schema",
-            schema_name=schema_name,
+            schema_name=dataset_type,
         )
+
+        table_name = table_path.split("/")[-1]
+        print(f"tablename: {table_name}, table path: {table_path}")
+
         create_table_sql = load_sql_template(
-            table_schema_definition,
-            schema_name=schema_name,
-            table_name=country_code,
-            location=f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory}/{country_code}",
+            f"create_{dataset_type}_table",
+            schema_name=dataset_type,
+            table_name=table_name,
+            location=table_path,
         )
         spark.sql(create_schema_sql)
         spark.sql(create_table_sql)
         data.write.format("delta").mode("overwrite").saveAsTable(
-            f"{schema_name}.{country_code}"
+            f"{dataset_type}.{table_name}"
         )
 
     def download_json(self, filepath: str):
@@ -97,7 +99,7 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json(self, filepath: str, data):
+    def upload_json(self, data, filepath: str):
         file_client = _adls.get_file_client(filepath)
         json_data = json.dumps(data).encode("utf-8")
 
@@ -123,11 +125,10 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    filename = source_path.split("/")[-1]
     filename = (
-        filename.replace(".csv", ".json")
+        source_path.split("/")[-1].replace(".csv", ".json")
         if step == "data_quality_results"
-        else filename
+        else source_path.split("/")[-1]
     )
 
     destination_folder = constants.step_destination_folder_map(dataset_type)[step]
