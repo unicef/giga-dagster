@@ -93,11 +93,13 @@ def duplicate_checks(df, CONFIG_COLUMN_LIST):
 
 
 def completeness_checks(df, CONFIG_COLUMN_LIST):
-    
+    # list of dq columns for exclusion
+    dq_columns = [col for col in df.columns if col.startswith("dq_")]
+
     # optional columns
     for column in df.columns:
 
-        if column not in CONFIG_COLUMN_LIST:
+        if column not in CONFIG_COLUMN_LIST and column not in dq_columns:
             column_name = f"dq_isnulloptional-{column}"
             df = df.withColumn(
                 column_name,
@@ -612,11 +614,21 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     domain_df = spark.createDataFrame(d_rows, schema=domain_schema)
     # domain_df.show(truncate=False)
 
+    # Precision
+    p_rows = [(key, value["min"]) for key, value in CONFIG_PRECISION.items()]
+    precision_schema = StructType([
+        StructField("column", StringType(), True),
+        StructField("precision", IntegerType(), True),
+    ])  
+    precision_df = spark.createDataFrame(p_rows, schema=precision_schema)
+    # precision_df.show()
+
 
     # Report Construction
     report = agg_df.join(configs_df, "assertion", "left")
     report = report.join(range_df, "column", "left")
     report = report.join(domain_df, "column", "left")
+    report = report.join(precision_df, "column", "left")
     report = report.withColumn("description", 
                                f.when(f.col("column").isNull(), f.col("description"))
                                .otherwise(f.regexp_replace("description", "\\{\\}", f.col("column"))))
@@ -629,6 +641,9 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     report = report.withColumn("description", 
                                f.when(f.col("set").isNull(), f.col("description"))
                                .otherwise(f.regexp_replace("description", "\\{set\\}", f.array_join(f.col("set"), ", "))))
+    report = report.withColumn("description", 
+                               f.when(f.col("precision").isNull(), f.col("description"))
+                               .otherwise(f.regexp_replace("description", "\\{precision\\}", f.col("precision"))))
     report = report.select(
         "type",
         "assertion",
@@ -681,9 +696,9 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
     temp = json.dumps(transformed_data, indent=4)
     print(json.dumps(transformed_data, indent=4))
 
-    # json_file_path =  "src/spark/test.json"
-    # with open(json_file_path, 'w') as file:
-    #     json.dump(transformed_data, file, indent=4)
+    json_file_path =  "src/spark/test.json"
+    with open(json_file_path, 'w') as file:
+        json.dump(transformed_data, file, indent=4)
 
     return temp 
     
@@ -697,7 +712,7 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
     df_bronze = spark.read.csv(file_url, header=True)
-    df_bronze = df_bronze.sort("school_name").limit(10)
+    df_bronze = df_bronze.sort("school_name").limit(100)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
 
     # row_level_checks(df, dataset_type, country_code_iso3)
@@ -709,5 +724,7 @@ if __name__ == "__main__":
 
     _json = aggregate_report_json(df, df_bronze)
     print(_json)
+
+    
 
     
