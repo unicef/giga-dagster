@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
+CREATE OR REPLACE TABLE `${schema_name}`.`${table_name}` (
     school_id_giga STRING NOT NULL,
     pop_within_10km LONG,
     nearest_school_distance DOUBLE,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     download_speed_govt DOUBLE,
     school_id_gov_type STRING NOT NULL,
     school_address STRING,
-    is_school_open STRING,
+    is_school_open STRING
 )
 USING DELTA
 LOCATION '${location}'

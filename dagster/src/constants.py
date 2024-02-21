@@ -1,5 +1,3 @@
-from functools import lru_cache
-
 from pydantic import BaseSettings
 
 
@@ -43,15 +41,10 @@ class Constants(BaseSettings):
             ),
             "silver": f"silver/school-{dataset_type}-data",
             "gold": "gold",
-            "master_csv_to_gold": "gold/delta-tables/school-{dataset_type}",
-            "reference_csv_to_gold": "gold/delta-tables/school-{dataset_type}",
+            "master_csv_to_gold": f"gold/delta-tables/school-{dataset_type}",
+            "reference_csv_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "qos_csv_to_gold": "gold/delta-tables/qos",
         }
 
 
-@lru_cache
-def get_constants():
-    return Constants()
-
-
-constants = get_constants()
+constants = Constants()
