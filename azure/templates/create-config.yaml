@@ -30,7 +30,9 @@ jobs:
                   metadata:
                     name: giga-dagster-secrets
                     labels:
-                      app: giga-dagster
+                      app.kubernetes.io/name: giga-dagster
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
                   stringData:
                     POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                     POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
@@ -61,7 +63,9 @@ jobs:
                   metadata:
                     name: giga-dagster-authproxy-secrets
                     labels:
-                      app: giga-dagster
+                      app.kubernetes.io/name: giga-dagster-oauth2-proxy
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
                   stringData:
                     AZURE_TENANT_ID: "$(azureAdTenantId)"
                     AZURE_CLIENT_ID: "$(azureAdClientId)"
@@ -87,9 +91,36 @@ jobs:
                   metadata:
                     name: giga-dagster-spark-secrets
                     labels:
-                      app: giga-dagster
+                      app.kubernetes.io/name: giga-dagster-spark
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
                   stringData:
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     rpc-authentication-secret: "$(sparkRpcAuthSecret)"
                     SPARK_SSL_NEED_CLIENT_AUTH: "yes"
                     SPARK_PUBLIC_DNS: "$(appDomain)"
+
+            - task: Kubernetes@1
+              displayName: Create Hive Metastore secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-hive-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster-hive-metastore
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                      METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
+                      AZURE_SAS_TOKEN: "$(azureSasTokenEscaped)"
+                      STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
+                      STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
+                      HMS_POSTGRESQL_USERNAME: "$(hmsPostgresqlUsername)"
+                      HMS_POSTGRESQL_PASSWORD: "$(hmsPostgresqlPassword)"
+                      HMS_POSTGRESQL_DATABASE: "metastore_db"
