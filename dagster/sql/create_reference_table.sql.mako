@@ -8,6 +8,8 @@ CREATE OR REPLACE TABLE `${schema_name}`.`${table_name}` (
     nearest_GSM_id STRING,
     education_level_govt STRING NOT NULL,
     download_speed_govt DOUBLE,
+    download_speed_govt1 DOUBLE,
+    download_speed_govt5 DOUBLE,
     school_id_gov_type STRING NOT NULL,
     school_address STRING,
     is_school_open STRING

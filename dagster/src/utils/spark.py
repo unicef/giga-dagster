@@ -127,6 +127,8 @@ def transform_school_types(
         "latitude",
         "longitude",
         "download_speed_govt",
+        "download_speed_govt1",
+        "download_speed_govt5",
         "download_speed_contracted",
         "fiber_node_distance",
         "microwave_node_distance",

@@ -49,10 +49,12 @@ tasks:
   setup-helm-repos:
     desc: Register all Helm chart repositories
     internal: true
+    dir: infra/helm
     cmds:
       - helm repo add bitnami https://charts.bitnami.com/bitnami
       - helm repo add dagster https://dagster-io.github.io/helm
       - helm repo update
+      - helm dependency update ./hive-metastore
 
   logs:
     desc: Attach to Docker logs
@@ -124,7 +126,7 @@ tasks:
     cmds:
       - kubectl apply -f k8s/namespace.yaml
       - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
-      - kubectl apply -f k8s/configmap.local.yaml --namespace giga-dagster
+      - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
       - task: helm-up-hms
       - task: helm-up-spark-ing
       - task: helm-up-dagster
@@ -146,6 +148,8 @@ tasks:
         --set pipelineRun.image.tag={{.COMMIT_SHA}}
         --set postgresql.postgresqlUsername={{.POSTGRESQL_USERNAME}}
         --set postgresql.postgresqlPassword={{.POSTGRESQL_PASSWORD}}
+        --set postgresql.readinessProbe.enabled=false
+        --set postgresql.livenessProbe.enabled=false
 
   helm-up-authproxy:
     desc: Install/upgrade authproxy Helm chart
@@ -215,12 +219,13 @@ tasks:
     dir: infra/helm
     internal: true
     cmds:
-      - helm dependency update ./hive-metastore
       - >
         helm upgrade --install hive-metastore ./hive-metastore
         --namespace giga-dagster
         --set image.repository={{.HMS_IMAGE_REPOSITORY}}
         --set-string image.tag={{.COMMIT_SHA}}
+        --set postgresql.primary.readinessProbe.enabled=false
+        --set postgresql.primary.livenessProbe.enabled=false
 
   helm-down:
     desc: Uninstall Helm charts
@@ -234,6 +239,8 @@ tasks:
     desc: Clean K8s resources
     dir: infra
     cmds:
+      - kubectl delete pvc --all
+      - kubectl delete all --all
       - kubectl delete -f k8s/namespace.yaml
 
   python:
