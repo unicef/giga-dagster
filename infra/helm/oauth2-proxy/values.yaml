@@ -79,7 +79,7 @@ image:
   repository: "quay.io/oauth2-proxy/oauth2-proxy"
   # appVersion is used by default
   tag: ""
-  pullPolicy: "IfNotPresent"
+  pullPolicy: Always
 
   # Optionally specify an array of imagePullSecrets.
   # Secrets must be manually created in the namespace.
@@ -433,8 +433,8 @@ extraObjects: [ ]
   #   kind: SecretProviderClass
   #   metadata:
   #     name: oauth2-proxy-secrets-store
-  #   spec:
-  #     provider: aws
+#   spec:
+#     provider: aws
 #     parameters:
 #       objects: |
 #         - objectName: "oauth2-proxy"
