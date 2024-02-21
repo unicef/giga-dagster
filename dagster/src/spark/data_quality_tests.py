@@ -1,4 +1,4 @@
-import uuid
+from datetime import datetime, timezone 
 
 import h3
 import json
@@ -7,29 +7,48 @@ from pyspark.sql.types import ArrayType, StringType, StructField, StructType, In
 from pyspark.sql.window import Window
 
 from src.settings import settings
-from src.spark.check_functions import (
-    get_decimal_places_udf,
-    has_similar_name_udf,
-    is_within_country_udf,
-)
 from src.spark.config_expectations import (
+    # Data Type Configs
+    CONFIG_DATA_TYPES,
+
+    # Data Quality Checks Descriptions
+    CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS,
+
+    # Completeness Configs
     CONFIG_NONEMPTY_COLUMNS_MASTER,
+    CONFIG_NONEMPTY_COLUMNS_REFERENCE,
+    CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
+    CONFIG_NONEMPTY_COLUMNS_COVERAGE,
+    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
+    CONFIG_NONEMPTY_COLUMNS_ALL,
+
+    # Uniqueness Configs
     CONFIG_UNIQUE_COLUMNS_MASTER,
+    CONFIG_UNIQUE_COLUMNS_REFERENCE,
     CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
     CONFIG_UNIQUE_COLUMNS_COVERAGE,
-    CONFIG_UNIQUE_SET_COLUMNS,
-    CONFIG_VALUES_DOMAIN_MASTER,
-    CONFIG_VALUES_RANGE_PRIO,
-    CONFIG_PRECISION,
-    CONFIG_VALUES_RANGE_COVERAGE,
-    CONFIG_VALUES_RANGE_MASTER,
-    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
     CONFIG_UNIQUE_COLUMNS_CRITICAL,
-    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
-    CONFIG_VALUES_RANGE_CRITICAL,
-    CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS,
+
+    # Domain Configs
+    CONFIG_VALUES_DOMAIN_MASTER,
+    CONFIG_VALUES_DOMAIN_REFERENCE,
+    CONFIG_VALUES_DOMAIN_GEOLOCATION,
+    CONFIG_VALUES_DOMAIN_COVERAGE,
     CONFIG_VALUES_DOMAIN_ALL,
+
+    # Range Configs
+    CONFIG_VALUES_RANGE_MASTER,
+    CONFIG_VALUES_RANGE_REFERENCE,
+    CONFIG_VALUES_RANGE_GEOLOCATION,
+    CONFIG_VALUES_RANGE_COVERAGE,
+    CONFIG_VALUES_RANGE_CRITICAL,
     CONFIG_VALUES_RANGE_ALL,
+
+    # Custom Check Configs
+    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION,
+    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
+    CONFIG_UNIQUE_SET_COLUMNS,
+    CONFIG_PRECISION,
 )
 
 import decimal
@@ -74,10 +93,25 @@ def duplicate_checks(df, CONFIG_COLUMN_LIST):
 
 
 def completeness_checks(df, CONFIG_COLUMN_LIST):
+    
+    # optional columns
+    for column in df.columns:
+
+        if column not in CONFIG_COLUMN_LIST:
+            column_name = f"dq_isnulloptional-{column}"
+            df = df.withColumn(
+                column_name,
+                f.when(
+                    f.col(f"{column}").isNull(),
+                    1,
+                ).otherwise(0),
+            )
+
+    # mandatory columns
     for column in CONFIG_COLUMN_LIST:
 
         if column in df.columns:
-            column_name = f"dq_isnull-{column}"
+            column_name = f"dq_isnullmandatory-{column}"
             df = df.withColumn(
                 column_name,
                 f.when(
@@ -86,7 +120,9 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(0),
             )
         else:
-            df = df.withColumn(f"dq_isnull-{column}", f.lit(1))
+            df = df.withColumn(f"dq_isnullmandatory-{column}", f.lit(1))
+    
+
     return df
 
 
@@ -113,28 +149,40 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
         if column in df.columns:
-            if None in CONFIG_COLUMN_LIST[column]:
-                df = df.withColumn(
-                    f"dq_isinvaliddomain-{column}",
-                    f.when(
-                        (f.col(f"{column}").isNull()) |
-                        (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
-                        0,
-                    ).otherwise(1),
-                )
-            else:
-                df = df.withColumn(
-                    f"dq_isinvaliddomain-{column}",
-                    f.when(
-                        f.col(f"{column}").isin(
-                            CONFIG_COLUMN_LIST[column],
-                        ),
-                        0,
-                    ).otherwise(1),
-                )
+            # if None in CONFIG_COLUMN_LIST[column]:
+            #     df = df.withColumn(
+            #         f"dq_isinvaliddomain-{column}",
+            #         f.when(
+            #             (f.col(f"{column}").isNull()) |
+            #             (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
+            #             0,
+            #         ).otherwise(1),
+            #     )
+            # else:
+            df = df.withColumn(
+                f"dq_isinvaliddomain-{column}",
+                f.when(
+                    f.col(f"{column}").isin(
+                        CONFIG_COLUMN_LIST[column],
+                    ),
+                    0,
+                ).otherwise(1),
+            )
         else:
             df = df.withColumn(f"dq_isinvaliddomain-{column}", f.lit(1))
     return df
+
+def format_validation_checks(df):
+    for column, type in CONFIG_DATA_TYPES:
+        if column in df.columns and type == "STRING":
+            df = df.withColumn(
+                f"dq_isnotalphanumeric-{column}", f.when(f.regexp_extract(f.col(column), ".+", 0) != "", 0).otherwise(1))
+        if column in df.columns and type in ["INT", "DOUBLE", "LONG", "TIMESTAMP"]: #included timestamp based on luke's code
+            df = df.withColumn(
+                f"dq_isnotnumeric-{column}", f.when(f.regexp_extract(f.col(column), "^-?\d+(\.\d+)?$", 0) != "", 0).otherwise(1))
+            # df = df.withColumn("test", f.lit("2021-08-03T20:03:46Z"))
+            # df = df.withColumn("regex", f.regexp_extract(f.col("test"), "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", 0))     
+    return df  
 
 
 # CUSTOM CHECKS
@@ -411,7 +459,6 @@ def h3_geo_to_h3(latitude, longitude):
     else:
         return h3.geo_to_h3(latitude, longitude, resolution=8)
 
-
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
@@ -445,9 +492,9 @@ def critical_error_checks(df, country_code_iso3):
             "CASE "
             "WHEN `dq_duplicate-school_id_govt` "
             "   + `dq_duplicate-school_id_giga` "
-            "   + `dq_isnull-school_name` "
-            "   + `dq_isnull-latitude` "
-            "   + `dq_isnull-longitude` "
+            "   + `dq_isnullmandatory-school_name` "
+            "   + `dq_isnullmandatory-latitude` "
+            "   + `dq_isnullmandatory-longitude` "
             "   + `dq_isinvalidrange-latitude` "
             "   + `dq_isinvalidrange-longitude` "
             "   + `dq_is_not_within_country` > 0"
@@ -462,8 +509,59 @@ def critical_error_checks(df, country_code_iso3):
 
 
 # Outputs
+def row_level_checks(df, dataset_type, country_code_iso3):
+    # dynamic configs
+    CONFIG_UNIQUE_COLUMNS = {
+        'master': CONFIG_UNIQUE_COLUMNS_MASTER,
+        'reference': CONFIG_UNIQUE_COLUMNS_REFERENCE,
+        'geolocation': CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
+        'coverage': CONFIG_UNIQUE_COLUMNS_COVERAGE,
+    }
+    CONFIG_NONEMPTY_COLUMNS = {
+        'master': CONFIG_NONEMPTY_COLUMNS_MASTER,
+        'reference': CONFIG_NONEMPTY_COLUMNS_REFERENCE,
+        'geolocation': CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
+        'coverage': CONFIG_NONEMPTY_COLUMNS_COVERAGE,
+    }
+    CONFIG_VALUES_DOMAIN = {
+        'master': CONFIG_VALUES_DOMAIN_MASTER,
+        'reference': CONFIG_VALUES_DOMAIN_REFERENCE,
+        'geolocation': CONFIG_VALUES_DOMAIN_GEOLOCATION,
+        'coverage': CONFIG_VALUES_DOMAIN_COVERAGE,
+    }
+    CONFIG_VALUES_RANGE = {
+        'master': CONFIG_VALUES_RANGE_MASTER,
+        'reference': CONFIG_VALUES_RANGE_REFERENCE,
+        'geolocation': CONFIG_VALUES_RANGE_GEOLOCATION,
+        'coverage': CONFIG_VALUES_RANGE_COVERAGE,
+    }
+    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID = {
+        'master': CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
+        'geolocation': CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION,
+    }
 
-def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS):
+    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
+    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
+    df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
+    df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
+    df = format_validation_checks(df)
+
+    if dataset_type in ['master', 'geolocation']:
+        df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type])
+        df = precision_check(df, CONFIG_PRECISION)
+        df = is_not_within_country(df, country_code_iso3)
+        df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
+        df = duplicate_name_level_110_check(df)
+        df = similar_name_level_within_110_check(df)
+        df = critical_error_checks(df, country_code_iso3)
+        df = school_density_check(df)
+    else:
+        pass
+
+    return df
+
+
+def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS): # input df == row level checks results
     dq_columns = [col for col in df.columns if col.startswith("dq_")]
     
     df = df.select(*dq_columns)
@@ -471,7 +569,7 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     for column_name in df.columns:
         df = df.withColumn(column_name, f.col(column_name).cast("int"))
 
-    # unpivot row level checks
+    # Unpivot Row Level Checks
     stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
     unpivoted_df = df.selectExpr(f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)")
     # unpivoted_df.show()
@@ -485,7 +583,7 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     agg_df = agg_df.withColumn("percent_failed", (f.col("count_failed")/f.col("count_overall")) * 100)
     agg_df = agg_df.withColumn("percent_passed", (f.col("count_passed")/f.col("count_overall")) * 100)
 
-    ## processing for human readable report
+    ## Processing for Human Readable Report
     agg_df = agg_df.withColumn("column", (f.split(f.col("assertion"), "-").getItem(1)))
     agg_df = agg_df.withColumn("assertion", (f.split(f.col("assertion"), "-").getItem(0)))
     # agg_df.show()
@@ -495,7 +593,7 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     # configs_df.show(truncate=False)
 
     
-    # range
+    # Range
     r_rows = [(key, value["min"], value.get("max")) for key, value in CONFIG_VALUES_RANGE_ALL.items()]
     range_schema = StructType([
         StructField("column", StringType(), True),
@@ -505,7 +603,7 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     range_df = spark.createDataFrame(r_rows, schema=range_schema)
     # range_df.show(truncate=False)
 
-    # domain
+    # Domain
     d_rows = [(key, value) for key, value in CONFIG_VALUES_DOMAIN_ALL.items()]
     domain_schema = StructType([
         StructField("column", StringType(), True),
@@ -514,7 +612,8 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
     domain_df = spark.createDataFrame(d_rows, schema=domain_schema)
     # domain_df.show(truncate=False)
 
-    # report construction
+
+    # Report Construction
     report = agg_df.join(configs_df, "assertion", "left")
     report = report.join(range_df, "column", "left")
     report = report.join(domain_df, "column", "left")
@@ -531,6 +630,7 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
                                f.when(f.col("set").isNull(), f.col("description"))
                                .otherwise(f.regexp_replace("description", "\\{set\\}", f.array_join(f.col("set"), ", "))))
     report = report.select(
+        "type",
         "assertion",
         "column",
         "description",
@@ -543,18 +643,49 @@ def aggregate_report_sparkdf(df, CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS=CONFIG_
 
     return report
 
-def aggregate_report_json(df):
-    json_array = df.toJSON().collect()
-    json_file_path =  "src/spark/test.json"
-    
-    import json
 
+def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
+    # Summary Report
+    rows_count = df_bronze.count()
+    columns_count = len(df_bronze.columns)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
 
-    print("JSON array:",json_array)
-    with open(json_file_path, 'w') as file:
-        for json_str in json_array:
-            file.write(json_str + ',\n')
-    return json_array
+    # Summary Dictionary
+    summary = {
+        "summary": {
+            "rows": rows_count,
+            "columns": columns_count,
+            "timestamp": timestamp
+        }
+    }
+
+    # Initialize an empty dictionary for the transformed data
+    json_array = df_aggregated.toJSON().collect()
+    transformed_data = {}
+    transformed_data["summary"] = summary
+
+    # Iterate through each JSON line
+    for line in json_array:
+        # Parse the JSON line into a dictionary
+        data = json.loads(line)
+
+        # Extract the 'type' value to use as a key
+        key = data.pop("type")
+
+        # Append the rest of the dictionary to the list associated with the 'type' key
+        if key not in transformed_data:
+            transformed_data[key] = [data]
+        else:
+            transformed_data[key].append(data)
+
+    temp = json.dumps(transformed_data, indent=4)
+    print(json.dumps(transformed_data, indent=4))
+
+    # json_file_path =  "src/spark/test.json"
+    # with open(json_file_path, 'w') as file:
+    #     json.dump(transformed_data, file, indent=4)
+
+    return temp 
     
 
 
@@ -565,42 +696,18 @@ if __name__ == "__main__":
     file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     spark = get_spark_session()
-    df = spark.read.csv(file_url, header=True)
-    df = df.sort("school_name").limit(10)
-    df = df.withColumnRenamed("school_id_gov", "school_id_govt")
-    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_MASTER)
-    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_MASTER)
-    df = domain_checks(df, CONFIG_VALUES_DOMAIN_MASTER)
-    df = range_checks(df, CONFIG_VALUES_RANGE_MASTER)
-    df = precision_check(df, CONFIG_PRECISION)
-    df = is_not_within_country(df, "BLZ")
-    df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
-    df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER)
-    df = duplicate_name_level_110_check(df)
-    df = similar_name_level_within_110_check(df)
-    # df = critical_error_checks(df, "BLZ")
-    df = school_density_check(df)
+    df_bronze = spark.read.csv(file_url, header=True)
+    df_bronze = df_bronze.sort("school_name").limit(10)
+    df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
 
-
+    # row_level_checks(df, dataset_type, country_code_iso3)
+    df = row_level_checks(df_bronze, "master", "BLZ") # dataset plugged in should conform to updated schema! rename if necessary
     df.show()
+
     df = aggregate_report_sparkdf(df)
     df.show()
 
-    # print(CONFIG_VALUES_DOMAIN_ALL)
-    # print(CONFIG_VALUES_RANGE_ALL)
+    _json = aggregate_report_json(df, df_bronze)
+    print(_json)
 
     
-    
-
-    # df.write.csv("src/spark/test.csv", header=True)
-
-    # df = domain_checks(df, {"computer_availability": ["yes", "no"], "electricity_availability": ["yes", "no"]})
-    # df = has_similar_name(df)
-
-            
-
-    # json_file_path =  'C:/Users/RenzTogonon/Downloads/test.json'
-    # with open(json_file_path, 'r') as file:
-    #     data = json.load(file)
-
-    # dq_passed_rows(df, data).show()
