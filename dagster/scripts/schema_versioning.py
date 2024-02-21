@@ -28,11 +28,11 @@ V1_SCHEMA_FIELDS = [
 ]
 V1_SCHEMA = StructType(V1_SCHEMA_FIELDS)
 
-V2_SCHEMA_FIELDS = [
+V3_SCHEMA_FIELDS = [
     *V1_SCHEMA_FIELDS,
     StructField("connectivity_RT", FloatType()),
 ]
-V2_SCHEMA = StructType(V2_SCHEMA_FIELDS)
+V3_SCHEMA = StructType(V3_SCHEMA_FIELDS)
 
 TABLE_PROPERTIES = {
     "delta.appendOnly": "false",
@@ -44,7 +44,7 @@ TABLE_PROPERTIES = {
 
 
 def step_v0():
-    """Generate v1 table"""
+    """Generate initial schema"""
 
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA_NAME}").show()
     spark.sql(f"DROP TABLE IF EXISTS {FULL_TABLE_NAME}").show()
@@ -56,7 +56,7 @@ def step_v0():
     for key, value in TABLE_PROPERTIES.items():
         dt.property(key, value)
 
-    dt.location(TABLE_LOCATION).execute()
+    dt.execute()
 
 
 def step_v1():
@@ -68,15 +68,56 @@ def step_v1():
 
 
 def step_v2():
-    """Append 5 new rows + add 1 new column"""
+    """Append 5 new rows"""
 
     pdf = pd.read_csv(
         settings.BASE_DIR / "scripts" / "fake_v2.csv", encoding="utf-8-sig"
     )
-    sdf = spark.createDataFrame(pdf, schema=V2_SCHEMA)
+    sdf = spark.createDataFrame(pdf, schema=V1_SCHEMA)
+
+    sdf.write.format("delta").mode("append").saveAsTable(FULL_TABLE_NAME)
+
+
+def step_v3():
+    """Append 5 new rows + add 1 new column"""
+
+    pdf = pd.read_csv(
+        settings.BASE_DIR / "scripts" / "fake_v3.csv", encoding="utf-8-sig"
+    )
+    sdf = spark.createDataFrame(pdf, schema=V3_SCHEMA)
 
     sdf.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(
         FULL_TABLE_NAME
+    )
+
+
+def step_v4():
+    """Edit 5 rows"""
+    pdf = pd.read_csv(
+        settings.BASE_DIR / "scripts" / "fake_v4.csv", encoding="utf-8-sig"
+    )
+    sdf = spark.createDataFrame(pdf, schema=V3_SCHEMA)
+
+    (
+        DeltaTable.forName(spark, FULL_TABLE_NAME)
+        .alias("master")
+        .merge(sdf.alias("updates"), "master.school_id_giga = updates.school_id_giga")
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+
+
+def step_v5():
+    """Rename a column"""
+    (
+        spark.read.format("delta")
+        .table(FULL_TABLE_NAME)
+        .withColumnRenamed("connectivity_RT", "latency")
+        .write.format("delta")
+        .mode("overwrite")
+        .option("overwriteSchema", "true")
+        .saveAsTable(FULL_TABLE_NAME)
     )
 
 
@@ -84,3 +125,6 @@ if __name__ == "__main__":
     step_v0()
     step_v1()
     step_v2()
+    step_v3()
+    step_v4()
+    step_v5()
