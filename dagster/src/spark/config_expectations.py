@@ -2,59 +2,153 @@ import datetime
 
 SIMILARITY_RATIO_CUTOFF = 0.7
 
+
 # Data Quality Checks Descriptions
 
 CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
     {
         "assertion": "duplicate", 
-        "description": "Checks if column {} has a duplicate"
+        "description": "Checks if column {} has a duplicate",
+        "type": "duplicate_rows_checks"
     },
     {
-        "assertion": "isnull", 
-        "description": "Checks if column {} is null"
+        "assertion": "isnullmandatory", 
+        "description": "Checks if non-nullable column {} is null",
+        "type": "completeness_checks"
+    },
+    {
+        "assertion": "isnulloptional", 
+        "description": "Checks if nullable column {} is null",
+        "type": "completeness_checks"
     },
     {
         "assertion": "isinvaliddomain", 
-        "description": "Checks if column {} is within {set}"
+        "description": "Checks if column {} is within {set}",
+        "type": "domain_checks"
     },
     {
         "assertion": "isinvalidrange", 
-        "description": "Checks if column {} is between {min} and {max}"
+        "description": "Checks if column {} is between {min} and {max}",
+        "type": "range_checks"
     },
     {
         "assertion": "precision", 
-        "description": "Checks if column {} has at least {precision} decimal places"
+        "description": "Checks if column {} has at least {precision} decimal places",
+        "type": "geospatial_checks"
     },
     {
         "assertion": "is_not_within_country", 
-        "description": "Checks if the coordinates is not within the country"
+        "description": "Checks if the coordinates is not within the country",
+        "type": "geospatial_checks"
     },
     {
         "assertion": "duplicateset", 
-        "description": "Checks if there are duplicates across these columns {}"
+        "description": "Checks if there are duplicates across these columns {}",
+        "type": "duplicate_rows_checks"
     },
     {
         "assertion": "duplicate_all_except_school_code", 
-        "description": "Checks if there are duplicates across all columns except School ID"
+        "description": "Checks if there are duplicates across all columns except School ID",
+        "type": "duplicate_rows_checks"
     },
     {
         "assertion": "duplicate_name_level_within_110m_radius", 
-        "description": "Checks if there are duplicates across name, level, lat_110, long_110"
+        "description": "Checks if there are duplicates across name, level, lat_110, long_110",
+        "type": "duplicate_rows_checks"
     },
     {
         "assertion": "duplicate_similar_name_same_level_within_110m_radius", 
-        "description": "Checks if there are duplicates across educational_level, lat_110, long_110 that has similar names as well."
+        "description": "Checks if there are duplicates across educational_level, lat_110, long_110 that has similar names as well.",
+        "type": "duplicate_rows_checks"
     },
     {
-        "assertion": "critical_error_checks", 
-        "description": "Checks if the dataset contains a critical error."
+        "assertion": "has_critical_error", 
+        "description": "Checks if the dataset contains a critical error.",
+        "type": "critical_error_check"
     },
     {
         "assertion": "is_school_density_greater_than_5", 
-        "description": "Checks if the the school density within the area is greater than 5."
-    }
+        "description": "Checks if the the school density within the area is greater than 5.",
+        "type": "geospatial_checks"
+    },
+    {
+        "assertion": "isnotnumeric", 
+        "description": "Checks if column {} is numeric.",
+        "type": "format_validation_checks"
+    },
+    {
+        "assertion": "isnotalphanumeric", 
+        "description": "Checks if column {} is alphanumeric.",
+        "type": "format_validation_checks"
+    },
 ]
 
+# Data Types
+CONFIG_DATA_TYPES = {
+    ("cellular_coverage_availability", "STRING"),
+    ("cellular_coverage_type", "STRING"),
+    ("fiber_node_distance", "DOUBLE"),
+    ("microwave_node_distance", "DOUBLE"),
+    ("schools_within_1km", "INT"),
+    ("schools_within_2km", "INT"),
+    ("schools_within_3km", "INT"),
+    ("nearest_LTE_distance", "DOUBLE"),
+    ("nearest_UMTS_distance", "DOUBLE"),
+    ("nearest_GSM_distance", "DOUBLE"),
+    ("pop_within_1km", "LONG"),
+    ("pop_within_2km", "LONG"),
+    ("pop_within_3km", "LONG"),
+    ("connectivity_govt_collection_year", "INT"),
+    ("connectivity_govt", "STRING"),
+    ("school_id_giga", "STRING"),
+    ("school_id_govt", "STRING"),
+    ("school_name", "STRING"),
+    ("school_establishment_year", "INT"),
+    ("latitude", "DOUBLE"),
+    ("longitude", "DOUBLE"),
+    ("education_level", "STRING"),
+    ("download_speed_contracted", "DOUBLE"),
+    ("connectivity_type_govt", "STRING"),
+    ("admin1", "STRING"),
+    ("admin1_id_giga", "STRING"),
+    ("admin2", "STRING"),
+    ("admin2_id_giga", "STRING"),
+    ("school_area_type", "STRING"),
+    ("school_funding_type", "STRING"),
+    ("num_computers", "INT"),
+    ("num_computers_desired", "INT"),
+    ("num_teachers", "INT"),
+    ("num_adm_personnel", "INT"),
+    ("num_students", "INT"),
+    ("num_classroom", "INT"),
+    ("num_latrines", "INT"),
+    ("computer_lab", "STRING"),
+    ("electricity_availability", "STRING"),
+    ("electricity_type", "STRING"),
+    ("water_availability", "STRING"),
+    ("school_data_source", "STRING"),
+    ("school_data_collection_year", "INT"),
+    ("school_data_collection_modality", "STRING"),
+    ("connectivity_govt_ingestion_timestamp", "TIMESTAMP"),
+    ("school_location_ingestion_timestamp", "TIMESTAMP"),
+    ("disputed_region", "STRING"),
+    ("connectivity", "STRING"),
+    ("connectivity_RT", "STRING"),
+    ("connectivity_RT_datasource", "STRING"),
+    ("connectivity_RT_ingestion_timestamp", "TIMESTAMP"),
+    ("school_id_giga", "STRING"),
+    ("pop_within_10km", "LONG"),
+    ("nearest_school_distance", "DOUBLE"),
+    ("schools_within_10km", "INT"),
+    ("nearest_LTE_id", "STRING"),
+    ("nearest_UMTS_id", "STRING"),
+    ("nearest_GSM_id", "STRING"),
+    ("education_level_govt", "STRING"),
+    ("download_speed_govt", "DOUBLE"),
+    ("school_id_govt_type", "STRING"),
+    ("school_address", "STRING"),
+    ("is_school_open", "STRING"),
+}
 
 # Single Column w/ parameters
 date_today = datetime.date.today()
@@ -107,9 +201,11 @@ CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
     "latitude",
 ]
 
+CONFIG_NONEMPTY_COLUMNS_ALL = CONFIG_NONEMPTY_COLUMNS_MASTER + CONFIG_NONEMPTY_COLUMNS_REFERENCE + CONFIG_NONEMPTY_COLUMNS_GEOLOCATION + CONFIG_NONEMPTY_COLUMNS_COVERAGE + CONFIG_NONEMPTY_COLUMNS_CRITICAL
+
 
 CONFIG_VALUES_DOMAIN_MASTER = {
-    "cellular_coverage_availability": ["yes", "no", None],
+    "cellular_coverage_availability": ["yes", "no"],
     "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
     "connectivity_govt": ["yes", "no"],
     "education_level": [
@@ -194,7 +290,7 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
 }
 
 CONFIG_VALUES_DOMAIN_COVERAGE = {
-    "cellular_coverage_availability": ["yes", "no", None],
+    "cellular_coverage_availability": ["yes", "no"],
     "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
 }
 
@@ -222,7 +318,7 @@ CONFIG_VALUES_RANGE_MASTER = {
     "school_data_collection_year": {"min": 1000, "max": current_year},
 }
 CONFIG_VALUES_RANGE_REFERENCE = {
-    "nearest_school_distance": {"min": 0, "max": None},
+    "nearest_school_distance": {"min": 0, "max": 10000000},
     "schools_within_10km": {"min": 0, "max": 100},
     "download_speed_govt": {"min": 1, "max": 200},
 }
