@@ -112,3 +112,10 @@ datahub__update_policies_job = define_asset_job(
         "datahub_policies",
     ],
 )
+
+datahub__ingest_coverage_notebooks_from_github_job = define_asset_job(
+    name="datahub__ingest_coverage_notebooks_from_github_job",
+    selection=[
+        "github_coverage_workflow_notebooks",
+    ],
+)

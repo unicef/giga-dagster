@@ -1,5 +1,6 @@
 import requests
 from loguru import logger
+
 from src.settings import settings
 
 
@@ -28,6 +29,7 @@ def list_ipynb_from_github_repo(owner: str, repo: str, path: str):
                     {
                         "filename": f"notebooks.{repo}.{content['name'].split('.')[0]}",
                         "url": content["html_url"],
+                        "file_size": f"{round(content['size']/1024,1)} KiB",
                     }
                 )
         return ipynb_file_list
