@@ -696,9 +696,9 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
     temp = json.dumps(transformed_data, indent=4)
     print(json.dumps(transformed_data, indent=4))
 
-    json_file_path =  "src/spark/test.json"
-    with open(json_file_path, 'w') as file:
-        json.dump(transformed_data, file, indent=4)
+    # json_file_path =  "src/spark/test.json"
+    # with open(json_file_path, 'w') as file:
+    #     json.dump(transformed_data, file, indent=4)
 
     return temp 
     
