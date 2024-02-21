@@ -68,11 +68,11 @@ def create_uzbekistan_school_name(df):
         f.expr(
             "CASE "
             "WHEN district IS NOT NULL AND region IS NOT NULL THEN "
-                "CONCAT(school_name, ',', district, ',', region) "
+            "CONCAT(school_name, ',', district, ',', region) "
             "WHEN district IS NOT NULL AND city IS NOT NULL THEN "
-                "CONCAT(school_name, ',', city, ',', district) "
+            "CONCAT(school_name, ',', city, ',', district) "
             "WHEN city IS NOT NULL AND region IS NOT NULL THEN "
-                "CONCAT(school_name, ',', city, ',', region) "
+            "CONCAT(school_name, ',', city, ',', region) "
             " ELSE CONCAT(COALESCE(school_name, ''), ',', COALESCE(region, ''), ',', COALESCE(region, '')) END"
         ),
     )
@@ -292,7 +292,7 @@ def has_critical_error(df):
             "   OR is_valid_location_values = false "
             "   OR is_within_country != true "
             "   THEN true "
-            "ELSE false END"
+            "ELSE false END"  # schoolname, lat, long, educ level
         ),
     )
 

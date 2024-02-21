@@ -1,4 +1,3 @@
-from dagster_pyspark import PySparkResource
 from pyspark import sql
 
 from dagster import InputContext, OutputContext
@@ -9,30 +8,26 @@ from .base import BaseConfigurableIOManager
 adls_client = ADLSFileClient()
 
 
-class ADLSBronzeIOManager(BaseConfigurableIOManager):
-    pyspark: PySparkResource
-
+class ADLSJSONIOManager(BaseConfigurableIOManager):
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
         filepath = self._get_filepath(context)
-        context.log.info(f">>BRONZE LOADOUTPUT RAN, {filepath}")
         if output.isEmpty():
             context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return
 
-        adls_client.upload_spark_dataframe_as_csv(output, filepath)
+        adls_client.upload_json(output.toPandas().to_json(), filepath)
+
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
         )
 
-    def load_input(self, context: InputContext) -> sql.DataFrame:
+    def load_input(self, context: InputContext) -> list:
         filepath = self._get_filepath(context.upstream_output)
-        file = adls_client.download_csv_as_spark_dataframe(
-            filepath, self.pyspark.spark_session
-        )
-        context.log.info(">>BRONZE LOADINPUT RAN")
+        data = adls_client.download_json(filepath)
+
         context.log.info(
             f"Downloaded {filepath.split('/')[-1]} from"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
         )
-        return file
+        return data

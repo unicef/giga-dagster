@@ -1,57 +1,11 @@
 import numpy as np
-import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from src.utils.adls import ADLSFileClient, get_output_filepath
-from src.utils.datahub.datahub_emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
-
-
-@asset
-@capture_op_exceptions
-def might_explode(_context: OpExecutionContext):
-    raise ValueError("oops!")
-
-
-@asset(io_manager_key="adls_raw_io_manager")
-def raw(
-    context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
-) -> pd.DataFrame:
-    df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"]
-    )
-
-    emit_metadata_to_datahub(context, df=df)
-    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
-
-
-@asset(io_manager_key="adls_bronze_io_manager")
-def bronze(context: OpExecutionContext, raw: pd.DataFrame) -> sql.DataFrame:
-    emit_metadata_to_datahub(context, df=raw)
-    yield Output(raw, metadata={"filepath": get_output_filepath(context)})
-
-
-@asset(io_manager_key="adls_delta_io_manager")
-def dq_passed_rows(
-    context: OpExecutionContext,
-    bronze: sql.DataFrame,
-) -> sql.DataFrame:
-    df_passed = bronze
-    yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
-
-
-@asset(io_manager_key="adls_delta_io_manager")
-def dq_failed_rows(
-    context: OpExecutionContext,
-    bronze: sql.DataFrame,
-) -> sql.DataFrame:
-
-    df_failed = bronze
-    emit_metadata_to_datahub(context, df_failed)
-    yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
@@ -152,3 +106,9 @@ def reference_csv_to_gold(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
+
+
+@asset
+@capture_op_exceptions
+def might_explode(_context: OpExecutionContext):
+    raise ValueError("oops!")

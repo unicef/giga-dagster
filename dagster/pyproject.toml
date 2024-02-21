@@ -10,6 +10,7 @@ python = ">=3.11,<3.13"
 scipy = ">=1.10.0"
 cryptography = ">=41.0.4"
 sentry-sdk = "^1.35.0"
+openpyxl = "^3.1.2"
 loguru = "^0.7.2"
 
 [tool.poetry.group.dagster.dependencies]
