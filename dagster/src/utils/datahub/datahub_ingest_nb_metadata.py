@@ -76,7 +76,7 @@ class NotebookIngestionAction:
     @_log_progress("dataset properties")
     def upsert_dataset_properties(self):
         # current date and time format: day/month/year 24-hour clock
-        now = f'{datetime.now().strftime("%d/%b/%Y %H:%M:%S")} UTC+0'
+        now = datetime.now().isoformat()
         dataset_properties = DatasetPropertiesClass(
             customProperties=self.notebook_metadata | {"last_ingestion_time": now}
         )
