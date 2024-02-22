@@ -6,6 +6,7 @@ from delta.tables import DeltaTable
 from pyspark import sql
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.send_email_dq_report import send_email_dq_report
 
 # from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -61,6 +62,15 @@ def coverage_data_quality_results(
         metadata={"filepath": get_output_filepath(context)},
         output_name="coverage_dq_checks",
     )
+
+
+@asset
+def email_dq_report(
+    context,
+    coverage_dq_results: sql.DataFrame,
+):
+    context.log.info("SENDING DQ REPORT VIA EMAIL")
+    send_email_dq_report(dq_report=coverage_dq_results)
 
 
 @asset(io_manager_key="adls_delta_io_manager")
