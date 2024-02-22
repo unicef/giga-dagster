@@ -1,4 +1,14 @@
+from datetime import datetime
+
+from models.mappings import FullTypeMappings, TypeMappings
 from pydantic import BaseSettings
+from pyspark.sql.types import DoubleType, LongType, StringType, TimestampType
+
+from datahub.metadata.schema_classes import (
+    DateTypeClass,
+    NumberTypeClass,
+    StringTypeClass,
+)
 
 
 class Constants(BaseSettings):
@@ -8,7 +18,7 @@ class Constants(BaseSettings):
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
 
-    step_origin_map = {
+    step_origin_map: dict[str, str] = {
         "geolocation_raw": "",
         "geolocation_bronze": "geolocation_raw",
         "geolocation_data_quality_results": "geolocation_bronze",
@@ -71,6 +81,15 @@ class Constants(BaseSettings):
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "qos_csv_to_gold": "gold/delta-tables/qos",
         }
+
+    TYPE_MAPPINGS: FullTypeMappings = FullTypeMappings(
+        string=TypeMappings(native=str, pyspark=StringType, datahub=StringTypeClass),
+        integer=TypeMappings(native=int, pyspark=LongType, datahub=NumberTypeClass),
+        float=TypeMappings(native=float, pyspark=DoubleType, datahub=NumberTypeClass),
+        timestamp=TypeMappings(
+            native=datetime, pyspark=TimestampType, datahub=DateTypeClass
+        ),
+    )
 
 
 constants = Constants()
