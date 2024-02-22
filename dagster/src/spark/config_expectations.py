@@ -399,6 +399,45 @@ CONFIG_PRECISION = {
     "longitude": {"min": 5},
 }
 
+# Geolocation Column Configs
+CONFIG_COLUMN_RENAME_GEOLOCATION = {
+    # raw, delta_col
+    ("school_id", "school_id_govt"),
+    ("school_name", "school_name"),
+    ("school_id_gov_type", "school_id_gov_type"),
+    ("school_establishment_year", "school_establishment_year"),
+    ("latitude", "latitude"),
+    ("longitude", "longitude"),
+    ("education_level", "education_level"),
+    ("education_level_govt", "education_level_govt"),
+    ("internet_availability", "connectivity_govt"),
+    ("connectivity_govt_ingestion_timestamp", "connectivity_govt_ingestion_timestamp"),
+    ("internet_speed_mbps", "download_speed_govt"),
+    ("download_speed_contracted", "download_speed_contracted"),
+    ("internet_type", "connectivity_type_govt"),
+    ("admin1", "admin1"),
+    ("admin2", "admin2"),
+    ("school_region", "school_area_type"),
+    ("school_funding_type", "school_funding_type"),
+    ("computer_count", "num_computers"),
+    ("desired_computer_count", "num_computers_desired"),
+    ("teacher_count", "num_teachers"),
+    ("adm_personnel_count", "num_adm_personnel"),
+    ("student_count", "num_students"),
+    ("classroom_count", "num_classroom"),
+    ("num_latrines", "num_latrines"),
+    ("computer_lab", "computer_lab"),
+    ("electricity", "electricity_availability"),
+    ("electricity_type", "electricity_type"),
+    ("water", "water_availability"),
+    ("address", "school_address"),
+    ("school_data_source", "school_data_source"),
+    ("school_data_collection_year", "school_data_collection_year"),
+    ("school_data_collection_modality", "school_data_collection_modality"),
+    ("is_open", "is_school_open"),
+}
+
+
 # Coverage Column Configs
 
 # Lower Columns
