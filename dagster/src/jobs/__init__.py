@@ -1,5 +1,9 @@
 from dagster import define_asset_job
 
+from .generate_test_cdf import (
+    school_master__generate_test_cdf as school_master__generate_test_cdf,
+)
+
 school_master_geolocation__automated_data_checks_job = define_asset_job(
     name="school_master_geolocation__automated_data_checks_job",
     selection=[

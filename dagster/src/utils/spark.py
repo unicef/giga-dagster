@@ -159,7 +159,8 @@ def transform_school_types(
         "school_name",
         "education_level",
         "education_level_govt",
-        "connectivity_govt" "connectivity_type_govt",
+        "connectivity_govt",
+        "connectivity_type_govt",
         "admin1",
         "admin2",
         "school_area_type",
@@ -181,6 +182,7 @@ def transform_school_types(
     ]
     columns_convert_to_timestamp = [
         "connectivity_govt_ingestion_timestamp",
+        "connectivity_RT_ingestion_timestamp",
         "school_location_ingestion_timestamp",
     ]
 
