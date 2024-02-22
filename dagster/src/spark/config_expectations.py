@@ -92,6 +92,7 @@ CONFIG_DATA_TYPES = {
     ("schools_within_1km", "INT"),
     ("schools_within_2km", "INT"),
     ("schools_within_3km", "INT"),
+    ("nearest_NR_distance", "DOUBLE"),
     ("nearest_LTE_distance", "DOUBLE"),
     ("nearest_UMTS_distance", "DOUBLE"),
     ("nearest_GSM_distance", "DOUBLE"),
@@ -120,7 +121,7 @@ CONFIG_DATA_TYPES = {
     ("num_teachers", "INT"),
     ("num_adm_personnel", "INT"),
     ("num_students", "INT"),
-    ("num_classroom", "INT"),
+    ("num_classrooms", "INT"),
     ("num_latrines", "INT"),
     ("computer_lab", "STRING"),
     ("electricity_availability", "STRING"),
@@ -140,6 +141,7 @@ CONFIG_DATA_TYPES = {
     ("pop_within_10km", "LONG"),
     ("nearest_school_distance", "DOUBLE"),
     ("schools_within_10km", "INT"),
+    ("nearest_NR_id", "STRING"),
     ("nearest_LTE_id", "STRING"),
     ("nearest_UMTS_id", "STRING"),
     ("nearest_GSM_id", "STRING"),
@@ -172,6 +174,8 @@ CONFIG_NONEMPTY_COLUMNS_MASTER = [
     "longitude",
     "latitude",
     "education_level",
+    "admin1",
+    "admin2",
 ]
 
 CONFIG_NONEMPTY_COLUMNS_REFERENCE = [
@@ -188,7 +192,9 @@ CONFIG_NONEMPTY_COLUMNS_GEOLOCATION = [
     "latitude",
     "education_level",
     "education_level_govt",
-    "school_id_govt_type"
+    "school_id_govt_type",
+    "admin1",
+    "admin2",
 ]
 
 CONFIG_NONEMPTY_COLUMNS_COVERAGE = [
@@ -219,14 +225,17 @@ CONFIG_VALUES_DOMAIN_MASTER = {
         "Primary, Secondary and Post-Secondary",
     ],
     "connectivity_type_govt": [
-        "fiber",
-        "xdsl",
-        "wired",
-        "cellular",
-        "p2mp wireless",
-        "p2p wireless",
-        "satellite",
-        "other",
+        "fiber"
+        "xdsl"
+        "wired"
+        "cellular"
+        "p2mp wireless"
+        "p2p wireless"
+        "satellite"
+        "other"
+        "copper"
+        "coaxial"
+        "unknown"
     ],
     "school_area_type": ["urban", "rural"],
     "computer_lab": ["yes", "no"],
@@ -259,16 +268,20 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
         "Pre-Primary and Primary",
         "Primary and Secondary",
         "Pre-Primary, Primary and Secondary",
+        "Primary, Secondary and Post-Secondary",
     ],
     "connectivity_type_govt": [
-        "fiber",
-        "xdsl",
-        "wired",
-        "cellular",
-        "p2mp wireless",
-        "p2p wireless",
-        "satellite",
-        "other",
+        "fiber"
+        "xdsl"
+        "wired"
+        "cellular"
+        "p2mp wireless"
+        "p2p wireless"
+        "satellite"
+        "other"
+        "copper"
+        "coaxial"
+        "unknown"
     ],
     "school_area_type": ["urban", "rural"],
     "computer_lab": ["yes", "no"],
@@ -313,7 +326,7 @@ CONFIG_VALUES_RANGE_MASTER = {
     "num_teachers": {"min": 0, "max": 200},
     "num_adm_personnel": {"min": 0, "max": 200},
     "num_students": {"min": 0, "max": 10000},
-    "num_classroom": {"min": 0, "max": 200},
+    "num_classrooms": {"min": 0, "max": 200},
     "num_latrines": {"min": 0, "max": 200},
     "school_data_collection_year": {"min": 1000, "max": current_year},
 }
@@ -332,7 +345,7 @@ CONFIG_VALUES_RANGE_GEOLOCATION = {
     "num_teachers": {"min": 0, "max": 200},
     "num_adm_personnel": {"min": 0, "max": 200},
     "num_students": {"min": 0, "max": 10000},
-    "num_classroom": {"min": 0, "max": 200},
+    "num_classrooms": {"min": 0, "max": 200},
     "num_latrines": {"min": 0, "max": 200},
     "school_data_collection_year": {"min": 1000, "max": current_year},
     "download_speed_govt": {"min": 1, "max": 200},
@@ -399,6 +412,85 @@ CONFIG_PRECISION = {
     "longitude": {"min": 5},
 }
 
+# Geolocation Column Configs
+CONFIG_COLUMN_RENAME_GEOLOCATION = {
+    # raw, delta_col
+    ("school_id", "school_id_govt"),
+    ("school_name", "school_name"),
+    ("school_id_gov_type", "school_id_govt_type"),
+    ("school_establishment_year", "school_establishment_year"),
+    ("latitude", "latitude"),
+    ("longitude", "longitude"),
+    ("education_level", "education_level"),
+    ("education_level_govt", "education_level_govt"),
+    ("internet_availability", "connectivity_govt"),
+    ("connectivity_govt_ingestion_timestamp", "connectivity_govt_ingestion_timestamp"),
+    ("connectivity_govt_collection_year", "connectivity_govt_collection_year"),
+    ("internet_speed_mbps", "download_speed_govt"),
+    ("download_speed_contracted", "download_speed_contracted"),
+    ("internet_type", "connectivity_type_govt"),
+    ("admin1", "admin1"),
+    ("admin2", "admin2"),
+    ("school_region", "school_area_type"),
+    ("school_funding_type", "school_funding_type"),
+    ("computer_count", "num_computers"),
+    ("desired_computer_count", "num_computers_desired"),
+    ("teacher_count", "num_teachers"),
+    ("adm_personnel_count", "num_adm_personnel"),
+    ("student_count", "num_students"),
+    ("classroom_count", "num_classrooms"),
+    ("num_latrines", "num_latrines"),
+    ("computer_lab", "computer_lab"),
+    ("electricity", "electricity_availability"),
+    ("electricity_type", "electricity_type"),
+    ("water", "water_availability"),
+    ("school_data_source", "school_data_source"),
+    ("school_data_collection_year", "school_data_collection_year"),
+    ("school_data_collection_modality", "school_data_collection_modality"),
+    ("address", "school_address"),
+    ("is_open", "is_school_open"),
+    ("school_location_ingestion_timestamp", "school_location_ingestion_timestamp"),
+}
+
+CONFIG_GEOLOCATION_COLUMNS = [
+    "school_id_govt",
+    "school_name",
+    "school_id_govt_type",
+    "school_establishment_year",
+    "latitude",
+    "longitude",
+    "education_level",
+    "education_level_govt",
+    "connectivity_govt",
+    "connectivity_govt_ingestion_timestamp",
+    "connectivity_govt_collection_year",
+    "download_speed_govt",
+    "download_speed_contracted",
+    "connectivity_type_govt",
+    "admin1",
+    "admin2",
+    "school_area_type",
+    "school_funding_type",
+    "num_computers",
+    "num_computers_desired",
+    "num_teachers",
+    "num_adm_personnel",
+    "num_students",
+    "num_classrooms",
+    "num_latrines",
+    "computer_lab",
+    "electricity_availability",
+    "electricity_type",
+    "water_availability",
+    "school_data_source",
+    "school_data_collection_year",
+    "school_data_collection_modality",
+    "school_address",
+    "is_school_open",
+    "school_location_ingestion_timestamp",
+]
+
+
 # Coverage Column Configs
 
 # Lower Columns
@@ -423,6 +515,8 @@ CONFIG_ITU_COLUMNS = [
     "schools_within_2km",
     "schools_within_3km",
     "schools_within_10km",
+    "nearest_NR_id",
+    "nearest_NR_distance",
     "nearest_LTE_id",
     "nearest_LTE_distance",
     "nearest_UMTS_id",
@@ -445,6 +539,8 @@ CONFIG_COV_COLUMNS = [
     "schools_within_2km",
     "schools_within_3km",
     "schools_within_10km",
+    "nearest_NR_id",
+    "nearest_NR_distance",
     "nearest_LTE_id",
     "nearest_LTE_distance",
     "nearest_UMTS_id",
@@ -468,6 +564,8 @@ CONFIG_COV_COLUMN_RENAME = {
     ("schools_within_2km", "schools_within_2km"),
     ("schools_within_3km", "schools_within_3km"),
     ("schools_within_10km", "schools_within_10km"),
+    ("nearest_NR_id", "nearest_NR_id"),
+    ("nearest_NR_distance", "nearest_NR_distance"),
     ("nearest_LTE_id", "nearest_LTE_id"),
     ("nearest_LTE_distance", "nearest_LTE_distance"),
     ("nearest_UMTS_id", "nearest_UMTS_id"),
@@ -507,7 +605,7 @@ CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION =[
     "num_teachers",
     "num_adm_personnel",
     "num_students",
-    "num_classroom",
+    "num_classrooms",
     "num_latrines",
     "computer_lab",
     "electricity_availability",
@@ -532,6 +630,7 @@ CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER =[
     "schools_within_1km",
     "schools_within_2km",
     "schools_within_3km",
+    "nearest_NR_distance",
     "nearest_LTE_distance",
     "nearest_UMTS_distance",
     "nearest_GSM_distance",
@@ -560,7 +659,7 @@ CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER =[
     "num_teachers",
     "num_adm_personnel",
     "num_students",
-    "num_classroom",
+    "num_classrooms",
     "num_latrines",
     "computer_lab",
     "electricity_availability",
