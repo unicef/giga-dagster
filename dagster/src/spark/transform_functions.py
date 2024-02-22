@@ -180,13 +180,13 @@ def create_bronze_layer_columns(df):
     # School Density Computation
     df = df.withColumn("latitude", df["latitude"].cast("float"))
     df = df.withColumn("longitude", df["longitude"].cast("float"))
-    df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
-    df = df.withColumn(
-        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
-    )
+    # df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
+    # df = df.withColumn(
+    #     "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+    # )
 
     # Clean up columns
-    df = standardize_internet_speed(df)
+    # df = standardize_internet_speed(df)
 
     # Special Cases
     # df = standardize_school_name(df)
@@ -196,7 +196,7 @@ def create_bronze_layer_columns(df):
     # df = df.withColumn("gx_index", f.row_number().over(w))
 
     # Timestamp of ingestion
-    df = df.withColumn("school_location_ingestion_timestamp", f.current_timestamp())
+    df = df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
 
     # df = df.withColumn("country_code", f.lit("BLZ"))
     # df = df.withColumn(
@@ -422,118 +422,6 @@ point_110_udf = f.udf(point_110)
 #     )
 
 #     return df
-
-
-def critical_error_indices_json_parse(data):
-    key_id = list(data["run_results"].keys())[0]
-    nest_results = data["run_results"][key_id]["validation_result"]["results"]
-    index = list(range(len(nest_results)))
-
-    ## critical error tags ##
-    for i in index:
-        expectation_config = nest_results[i]["expectation_config"]
-        result = nest_results[i]["result"]
-
-        # duplicate school_id "expect_column_values_to_be_unique"
-        if (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_be_unique"
-            and expectation_config["kwargs"]["column"] == "school_id_gov"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_dup_school_id_set = set(index_list)
-
-        # duplicate school_id_giga "expect_column_values_to_be_unique"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_be_unique"
-            and expectation_config["kwargs"]["column"] == "school_id_giga"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_dup_gid_set = set(index_list)
-
-        # empty school_name "expect_column_values_to_not_be_null"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_not_be_null"
-            and expectation_config["kwargs"]["column"] == "school_name"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_null_school_name_set = set(index_list)
-
-        # empty latitude "expect_column_values_to_not_be_null"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_not_be_null"
-            and expectation_config["kwargs"]["column"] == "latitude"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_null_lat_set = set(index_list)
-
-        # empty longitude "expect_column_values_to_not_be_null"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_not_be_null"
-            and expectation_config["kwargs"]["column"] == "longitude"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_null_long_set = set(index_list)
-
-        # empty education_level "expect_column_values_to_not_be_null"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_not_be_null"
-            and expectation_config["kwargs"]["column"] == "education_level"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_null_educ_level_set = set(index_list)
-
-        # valid location values latitude "expect_column_values_to_be_between"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_be_between"
-            and expectation_config["kwargs"]["column"] == "latitude"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_invalid_lat_set = set(index_list)
-
-        # valid location values longitude "expect_column_values_to_be_between"
-        elif (
-            expectation_config["expectation_type"]
-            == "expect_column_values_to_be_between"
-            and expectation_config["kwargs"]["column"] == "longitude"
-        ):
-            data = result["unexpected_index_list"]
-            index_list = [entry["gx_index"] for entry in data]
-            index_invalid_long_set = set(index_list)
-
-    # # within country is_within_country "add_"expect_column_values_to_be_in_set"
-    #     elif expectation_config["expectation_type"] == "expect_column_values_to_be_unique" and expectation_config["kwargs"]["column"] == "giga_id_school":
-    #         print(i)
-    #         data = result["unexpected_index_list"]
-    #         schema = StructType([StructField("gx_index", StringType(), True)])
-    #         df_unique_giga_id_school = spark.createDataFrame(data, schema=schema)
-
-    critical_error_indices_string = list(
-        index_dup_school_id_set
-        | index_dup_gid_set
-        | index_null_school_name_set
-        | index_null_lat_set
-        | index_null_long_set
-        | index_null_educ_level_set
-        | index_invalid_lat_set
-        | index_invalid_long_set
-    )
-    critical_error_indices = [int(x) for x in critical_error_indices_string]
-
-    return critical_error_indices
 
 
 def dq_passed_rows(bronze_df, json_results):
