@@ -452,6 +452,44 @@ CONFIG_COLUMN_RENAME_GEOLOCATION = {
     ("school_location_ingestion_timestamp", "school_location_ingestion_timestamp"),
 }
 
+CONFIG_GEOLOCATION_COLUMNS = [
+    "school_id_govt",
+    "school_name",
+    "school_id_govt_type",
+    "school_establishment_year",
+    "latitude",
+    "longitude",
+    "education_level",
+    "education_level_govt",
+    "connectivity_govt",
+    "connectivity_govt_ingestion_timestamp",
+    "connectivity_govt_collection_year",
+    "download_speed_govt",
+    "download_speed_contracted",
+    "connectivity_type_govt",
+    "admin1",
+    "admin2",
+    "school_area_type",
+    "school_funding_type",
+    "num_computers",
+    "num_computers_desired",
+    "num_teachers",
+    "num_adm_personnel",
+    "num_students",
+    "num_classrooms",
+    "num_latrines",
+    "computer_lab",
+    "electricity_availability",
+    "electricity_type",
+    "water_availability",
+    "school_data_source",
+    "school_data_collection_year",
+    "school_data_collection_modality",
+    "school_address",
+    "is_school_open",
+    "school_location_ingestion_timestamp",
+]
+
 
 # Coverage Column Configs
 
