@@ -1,16 +1,17 @@
 import requests
 from loguru import logger
+from pyspark import sql
 from requests import HTTPError, JSONDecodeError
 
 from azure.communication.email import EmailClient
 from src.settings import settings
 
 
-def send_email_dq_report():
+def send_email_dq_report(dq_report: sql.DataFrame):
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
 
     res = requests.post(
-        f"http://{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report",
+        "http://email-api:3020/email/dq-report",
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
@@ -43,7 +44,3 @@ def send_email_dq_report():
     poller = client.begin_send(message)
     result = poller.result()
     logger.info(result)
-
-
-if __name__ == "__main__":
-    send_email_dq_report()
