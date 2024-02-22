@@ -8,11 +8,11 @@ T = TypeVar("T")
 def _find_definition_in_module(
     module: ModuleType, definition: T | tuple[T]
 ) -> Generator[T, None, None]:
-    for attr in dir(module):
-        value = getattr(module, attr)
-        if isinstance(value, definition):
-            yield value
-        elif isinstance(value, list) and all(
-            isinstance(el, definition) for el in value
+    for leaf in dir(module):
+        submodule = getattr(module, leaf)
+        if isinstance(submodule, definition):
+            yield submodule
+        elif isinstance(submodule, list) and all(
+            isinstance(sub, definition) for sub in submodule
         ):
-            yield from value
+            yield from submodule
