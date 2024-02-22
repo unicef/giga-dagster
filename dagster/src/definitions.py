@@ -1,4 +1,5 @@
 from dagster import Definitions, load_assets_from_package_module
+from src import jobs, sensors
 from src.assets import (
     adhoc,
     common,
@@ -8,22 +9,6 @@ from src.assets import (
     school_coverage,
     school_geolocation,
 )
-from src.jobs import (
-    datahub__create_domains_job,
-    datahub__create_tags_job,
-    datahub__ingest_azure_ad_users_groups_job,
-    datahub__ingest_coverage_notebooks_from_github_job,
-    datahub__update_policies_job,
-    qos__convert_csv_to_deltatable_job,
-    school_master__convert_gold_csv_to_deltatable_job,
-    school_master_coverage__automated_data_checks_job,
-    school_master_coverage__failed_manual_checks_job,
-    school_master_coverage__successful_manual_checks_job,
-    school_master_geolocation__automated_data_checks_job,
-    school_master_geolocation__failed_manual_checks_job,
-    school_master_geolocation__successful_manual_checks_job,
-    school_reference__convert_gold_csv_to_deltatable_job,
-)
 from src.resources.io_managers import (
     ADLSDeltaIOManager,
     ADLSDeltaV2IOManager,
@@ -32,18 +17,11 @@ from src.resources.io_managers import (
     ADLSPassthroughIOManager,
 )
 from src.resources.io_managers.adls_csv import AdlsCsvIOManager
-from src.sensors.sensors import (
-    qos__csv_to_deltatable_sensor,
-    school_master__gold_csv_to_deltatable_sensor,
-    school_master_coverage__failed_manual_checks_sensor,
-    school_master_coverage__raw_file_uploads_sensor,
-    school_master_coverage__successful_manual_checks_sensor,
-    school_master_geolocation__failed_manual_checks_sensor,
-    school_master_geolocation__raw_file_uploads_sensor,
-    school_master_geolocation__successful_manual_checks_sensor,
-    school_reference__gold_csv_to_deltatable_sensor,
-)
 from src.utils.adls import ADLSFileClient
+from src.utils.load_module import (
+    load_jobs_from_package_module,
+    load_sensors_from_package_module,
+)
 from src.utils.sentry import setup_sentry
 from src.utils.spark import pyspark
 
@@ -79,31 +57,6 @@ defs = Definitions(
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
     },
-    jobs=[
-        school_master_coverage__automated_data_checks_job,
-        school_master_coverage__failed_manual_checks_job,
-        school_master_coverage__successful_manual_checks_job,
-        school_master_geolocation__automated_data_checks_job,
-        school_master_geolocation__failed_manual_checks_job,
-        school_master_geolocation__successful_manual_checks_job,
-        school_master__convert_gold_csv_to_deltatable_job,
-        school_reference__convert_gold_csv_to_deltatable_job,
-        qos__convert_csv_to_deltatable_job,
-        datahub__ingest_azure_ad_users_groups_job,
-        datahub__create_domains_job,
-        datahub__create_tags_job,
-        datahub__update_policies_job,
-        datahub__ingest_coverage_notebooks_from_github_job,
-    ],
-    sensors=[
-        qos__csv_to_deltatable_sensor,
-        school_master__gold_csv_to_deltatable_sensor,
-        school_reference__gold_csv_to_deltatable_sensor,
-        school_master_geolocation__raw_file_uploads_sensor,
-        school_master_coverage__raw_file_uploads_sensor,
-        school_master_geolocation__successful_manual_checks_sensor,
-        school_master_coverage__successful_manual_checks_sensor,
-        school_master_geolocation__failed_manual_checks_sensor,
-        school_master_coverage__failed_manual_checks_sensor,
-    ],
+    jobs=[*load_jobs_from_package_module(jobs)],
+    sensors=[*load_sensors_from_package_module(sensors)],
 )
