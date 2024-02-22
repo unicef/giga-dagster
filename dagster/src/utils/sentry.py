@@ -11,9 +11,11 @@ from sentry_sdk.integrations.stdlib import StdlibIntegration
 from dagster import OpExecutionContext, get_dagster_logger
 from src.settings import settings
 
+SENTRY_ENABLED = not (settings.IN_PRODUCTION and settings.SENTRY_DSN)
+
 
 def setup_sentry():
-    if not settings.SENTRY_DSN:
+    if not SENTRY_ENABLED:
         return
 
     ignore_logger("dagster")
@@ -58,6 +60,9 @@ def log_op_context(context: OpExecutionContext):
 def capture_op_exceptions(func: callable):
     @functools.wraps(func)
     def wrapped_fn(*args, **kwargs):
+        if not SENTRY_ENABLED:
+            return func(*args, **kwargs)
+
         logger = get_dagster_logger("sentry")
 
         try:
