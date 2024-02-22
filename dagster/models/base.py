@@ -4,7 +4,7 @@ from pyspark.sql.types import StructField, StructType
 
 
 class BaseModel:
-    __schema_name__: str = "schema"
+    __schema_name__: str = "schemas"
 
     @property
     @abstractmethod

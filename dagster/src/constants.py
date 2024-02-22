@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from models.mappings import FullTypeMappings, TypeMappings
+from models import FullTypeMappings, TypeMappings
 from pydantic import BaseSettings
 from pyspark.sql.types import DoubleType, LongType, StringType, TimestampType
 
@@ -13,6 +13,7 @@ from datahub.metadata.schema_classes import (
 
 class Constants(BaseSettings):
     raw_folder = "adls-testing-raw"
+    raw_schema_folder = "raw_schema"
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
@@ -31,6 +32,18 @@ class Constants(BaseSettings):
         "coverage_dq_failed_rows": "coverage_data_quality_results",
         "coverage_bronze": "coverage_dq_passed_rows",
         "coverage_staging": "coverage_bronze",
+    }
+
+    step_origin_folder_map: dict[str, str] = {
+        "bronze": "raw",
+        "data_quality_results": "bronze",
+        "dq_split_rows": "bronze",
+        "dq_passed_rows": "bronze",
+        "dq_failed_rows": "bronze",
+        "manual_review_passed_rows": "bronze",
+        "manual_review_failed_rows": "bronze",
+        "silver": "manual_review_passed",
+        "gold": "silver",
     }
 
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:

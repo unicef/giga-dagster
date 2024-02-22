@@ -3,7 +3,7 @@ from pyspark.sql.types import BooleanType, StringType, StructField, StructType
 from .base import BaseModel
 
 
-class Schema(BaseModel):
+class SchemaModel(BaseModel):
     __table_name__ = "metaschema"
 
     @property
@@ -18,3 +18,6 @@ class Schema(BaseModel):
     @property
     def schema(self) -> StructType:
         return StructType(self.fields)
+
+
+Schema = SchemaModel()
