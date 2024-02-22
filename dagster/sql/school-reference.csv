@@ -1,0 +1,15 @@
+name,data_type,is_nullable,description
+school_id_giga,string,false,
+pop_within_10km,integer,true,
+nearest_school_distance,float,true,
+schools_within_10km,integer,true,
+nearest_LTE_id,string,true,
+nearest_UMTS_id,string,true,
+nearest_GSM_id,string,true,
+education_level_govt,string,false,
+download_speed_govt,float,true
+download_speed_govt1,float,true
+download_speed_govt5,float,true
+school_id_gov_type,string,false,
+school_address,string,true,
+is_school_open,string,true,

@@ -3,6 +3,7 @@ from src.assets import (
     adhoc,
     common,
     datahub_assets,
+    migrations,
     qos,
     school_coverage,
     school_geolocation,
@@ -61,6 +62,9 @@ defs = Definitions(
         *load_assets_from_package_module(package_module=qos, group_name="qos_data"),
         *load_assets_from_package_module(
             package_module=datahub_assets, group_name="datahub"
+        ),
+        *load_assets_from_package_module(
+            package_module=migrations, group_name="migrations"
         ),
         *load_assets_from_package_module(package_module=adhoc, group_name="adhoc"),
     ],
