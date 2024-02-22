@@ -11,6 +11,7 @@ data:
   SPARK_UI_URL: "http://spark-master-svc:8080"
   SPARK_MASTER_HOST: "spark-master-svc"
   HMS_DATABASE_URL: "jdbc:postgresql://hive-metastore-postgresql:5432/metastore_db"
+  HIVE_METASTORE_URI: "thrift://hive-metastore:9083"
   oauth2_proxy.cfg: |
     http_address = ":3001"
     upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
