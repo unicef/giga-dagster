@@ -49,7 +49,7 @@ CREATE OR REPLACE TABLE `${schema_name}`.`${table_name}` (
     connectivity STRING,
     connectivity_RT STRING,
     connectivity_RT_datasource STRING,
-    connectivity_RT_ingestion_timestamp TIMESTAMP,
+    connectivity_RT_ingestion_timestamp TIMESTAMP
 )
 USING DELTA
 LOCATION '${location}'

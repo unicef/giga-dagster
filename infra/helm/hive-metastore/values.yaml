@@ -1,4 +1,4 @@
-# Default values for authproxy.
+# Default values for hive-metastore.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -17,6 +17,8 @@ fullnameOverride: ""
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
   # Annotations to add to the service account
   annotations: { }
   # The name of the service account to use.
@@ -24,6 +26,7 @@ serviceAccount:
   name: ""
 
 podAnnotations: { }
+podLabels: { }
 
 podSecurityContext: { }
 # fsGroup: 2000
@@ -38,20 +41,19 @@ securityContext: { }
 
 service:
   type: ClusterIP
-  port: 8088
+  port: 9083
 
 ingress:
   enabled: false
   className: ""
-  annotations:
-    kubernetes.io/ingress.class: azure/application-gateway
-    appgw.ingress.kubernetes.io/appgw-ssl-certificate: "kv-cert-unitst"
-    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+  annotations: { }
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: ""
+    - host: chart-example.local
       paths:
         - path: /
-          pathType: Exact
+          pathType: ImplementationSpecific
   tls: [ ]
   #  - secretName: chart-example-tls
   #    hosts:
@@ -76,6 +78,19 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+# Additional volumes on the output Deployment definition.
+volumes: [ ]
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: [ ]
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
 nodeSelector: { }
 
 tolerations: [ ]
@@ -86,4 +101,22 @@ envConfigMaps:
   - name: giga-dagster-configmap
 
 envSecrets:
-  - name: giga-dagster-authproxy-secrets
+  - name: giga-dagster-hive-secrets
+
+postgresql:
+  image:
+    tag: 9.6.24-debian-10-r70
+  auth:
+    username: giga-hms
+    database: metastore_db
+    existingSecret: giga-dagster-hive-secrets
+    secretKeys:
+      adminPasswordKey: HMS_POSTGRESQL_PASSWORD
+      replicationPasswordKey: HMS_POSTGRESQL_PASSWORD
+      userPasswordKey: HMS_POSTGRESQL_PASSWORD
+  architecture: standalone
+  primary:
+    persistence:
+      enabled: true
+  volumePermissions:
+    enabled: true

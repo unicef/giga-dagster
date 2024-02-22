@@ -17,6 +17,9 @@ metadata:
     - helm
     - dagster
     - azure
+    - apache-spark
+    - apache-hive-metastore
+    - oauth2-proxy
 spec:
   type: client
   lifecycle: development

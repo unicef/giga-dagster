@@ -79,7 +79,7 @@ image:
   repository: "quay.io/oauth2-proxy/oauth2-proxy"
   # appVersion is used by default
   tag: ""
-  pullPolicy: "IfNotPresent"
+  pullPolicy: Always
 
   # Optionally specify an array of imagePullSecrets.
   # Secrets must be manually created in the namespace.
@@ -153,10 +153,9 @@ ingress:
   # className: nginx
   path: /
   # Only used if API capabilities (networking.k8s.io/v1) allow it
-  pathType: Exact
+  pathType: Prefix
   # Used to create an Ingress record.
-  # hosts:
-  # - chart-example.local
+  hosts: [ ]
   # Extra paths to prepend to every host configuration. This is useful when working with annotation based services.
   # Warning! The configuration is dependant on your current k8s API version capabilities (networking.k8s.io/v1)
   # extraPaths:
@@ -434,10 +433,10 @@ extraObjects: [ ]
   #   kind: SecretProviderClass
   #   metadata:
   #     name: oauth2-proxy-secrets-store
-  #   spec:
-  #     provider: aws
-  #     parameters:
-  #       objects: |
+#   spec:
+#     provider: aws
+#     parameters:
+#       objects: |
 #         - objectName: "oauth2-proxy"
 #           objectType: "secretsmanager"
 #           jmesPath:

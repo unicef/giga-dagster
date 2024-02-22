@@ -1,0 +1,6 @@
+dependencies:
+- name: postgresql
+  repository: https://charts.bitnami.com/bitnami
+  version: 14.0.5
+digest: sha256:e487161f88e535bae3cd10beacad33cd11a68e13eeacd9e336015d3ab0b74043
+generated: "2024-02-14T00:14:19.518755235+08:00"
