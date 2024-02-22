@@ -174,6 +174,8 @@ CONFIG_NONEMPTY_COLUMNS_MASTER = [
     "longitude",
     "latitude",
     "education_level",
+    "admin1",
+    "admin2",
 ]
 
 CONFIG_NONEMPTY_COLUMNS_REFERENCE = [
@@ -190,7 +192,9 @@ CONFIG_NONEMPTY_COLUMNS_GEOLOCATION = [
     "latitude",
     "education_level",
     "education_level_govt",
-    "school_id_govt_type"
+    "school_id_govt_type",
+    "admin1",
+    "admin2",
 ]
 
 CONFIG_NONEMPTY_COLUMNS_COVERAGE = [
