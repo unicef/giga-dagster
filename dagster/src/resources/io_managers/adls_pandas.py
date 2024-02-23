@@ -4,6 +4,7 @@ from pyspark import sql
 
 from dagster import InputContext, OutputContext
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from .base import BaseConfigurableIOManager
 
@@ -24,6 +25,18 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
+        )
+
+        context.log.info("EMITTING METADATA TO DATAHUB")
+        input_filepath = context.step_context.op_config["filepath"]
+        context.log.info(f"Input Filepath: {input_filepath}")
+        context.log.info(f"Output Filepath: {filepath}")
+        emit_metadata_to_datahub(
+            context, output_filepath=filepath, input_filepath=input_filepath, df=output
+        )
+
+        context.log.info(
+            f"Metadata of {filepath.split('/')[-1]} has been successfully emitted to Datahub."
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:

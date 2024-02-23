@@ -18,9 +18,9 @@ from datahub.metadata.schema_classes import (
     StringTypeClass,
 )
 from src.settings import settings
-from src.utils.adls import get_input_filepath, get_output_filepath
 
-from dagster import OpExecutionContext, version
+# from src.utils.adls import get_input_filepath
+from dagster import OutputContext, version
 
 
 def identify_country_name(country_code):
@@ -33,9 +33,10 @@ def identify_country_name(country_code):
     return country_name
 
 
-def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
+def create_dataset_urn(
+    output_filepath: str, input_filepath: str, upstream: bool
+) -> str:
     if upstream:
-        input_filepath = get_input_filepath(context)
         upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
@@ -44,28 +45,31 @@ def create_dataset_urn(context: OpExecutionContext, upstream: bool) -> str:
             platform="adls", name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
-        output_filepath = get_output_filepath(context)
         dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
         dataset_urn_name = dataset_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
-        return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
+        return builder.make_dataset_urn(
+            platform="adls", name=dataset_urn_name, env=settings.ADLS_ENVIRONMENT
+        )
 
 
-def define_dataset_properties(context: OpExecutionContext):
+def define_dataset_properties(context: OutputContext, output_filepath, input_filepath):
     step = context.asset_key.to_user_string()
-    output_filepath = get_output_filepath(context)
 
-    domain = context.get_step_execution_context().op_config["dataset_type"]
-    file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
-    metadata = context.get_step_execution_context().op_config["metadata"]
+    domain = context.step_context.op_config["dataset_type"]
+    file_size_bytes = context.step_context.op_config["file_size_bytes"]
+    metadata = context.step_context.op_config["metadata"]
 
     data_format = output_filepath.split(".")[-1]
-    country_code = output_filepath.split("/")[2].split("_")[0]
+    country_code = input_filepath.split("/")[-1].split("_")[0]
+
+    context.log.info(country_code)
+
     country_name = identify_country_name(country_code=country_code)
     source = output_filepath.split("_")[2]
     date_modified = output_filepath.split(".")[0].split("_")[-1]
-    asset_type = "Raw Data" if step == "raw" else "Table"
+    asset_type = "Raw Data" if "raw" in step else "Table"
     file_size_MB = file_size_bytes / 1000000  # bytes to MB
 
     # current date and time format: day/month/year 24-hour clock
@@ -136,8 +140,8 @@ def define_schema_properties(df: pd.DataFrame):
     return schema_properties
 
 
-def set_domain(context: OpExecutionContext):
-    domain = context.get_step_execution_context().op_config["dataset_type"]
+def set_domain(context: OutputContext):
+    domain = context.step_context.op_config["dataset_type"]
 
     if "school" in domain:
         domain_urn = make_domain_urn("School")
@@ -149,7 +153,7 @@ def set_domain(context: OpExecutionContext):
         domain_urn = make_domain_urn("Infrastructure")
     else:
         context.log.info("UNKNOWN DOMAIN")
-        domain_urn = make_domain_urn("UNKOWN DOMAIN")
+        domain_urn = make_domain_urn("UNKNOWN DOMAIN")
 
     return domain_urn
 
@@ -167,15 +171,19 @@ def set_tag_mutation_query(country_name, dataset_urn):
     return query
 
 
-def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
+def emit_metadata_to_datahub(
+    context: OutputContext, output_filepath: str, input_filepath: str, df: pd.DataFrame
+):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
-    dataset_urn = create_dataset_urn(context, upstream=False)
+    dataset_urn = create_dataset_urn(output_filepath, input_filepath, upstream=False)
 
-    dataset_properties = define_dataset_properties(context)
+    dataset_properties = define_dataset_properties(
+        context, output_filepath, input_filepath
+    )
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
         aspect=dataset_properties,
@@ -201,18 +209,20 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     )
 
     domain_urn = set_domain(context)
-    domain_query = f"""
-    mutation setDomain {{
-        setDomain(domainUrn: "{domain_urn}", entityUrn: "{dataset_urn}")
-    }}
-    """
+    if "UNKNOWN" not in domain_urn:
+        domain_query = f"""
+        mutation setDomain {{
+            setDomain(domainUrn: "{domain_urn}", entityUrn: "{dataset_urn}")
+        }}
+        """
 
-    context.log.info(domain_query)
-    context.log.info("EMITTING DOMAIN METADATA")
-    datahub_graph_client.execute_graphql(query=domain_query)
+        context.log.info(domain_query)
+        context.log.info("EMITTING DOMAIN METADATA")
+        datahub_graph_client.execute_graphql(query=domain_query)
 
-    output_filepath = get_output_filepath(context)
-    country_code = output_filepath.split("/")[2].split("_")[0]
+    country_code = input_filepath.split("/")[-1].split("_")[0]
+    context.log.info(f"Country code: {country_code}")
+
     country_name = identify_country_name(country_code=country_code)
     tag_query = set_tag_mutation_query(
         country_name=country_name, dataset_urn=dataset_urn
@@ -223,8 +233,10 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     datahub_graph_client.execute_graphql(query=tag_query)
 
     step = context.asset_key.to_user_string()
-    if step != "raw":
-        upstream_dataset_urn = create_dataset_urn(context, upstream=True)
+    if "raw" not in step:
+        upstream_dataset_urn = create_dataset_urn(
+            output_filepath, input_filepath, upstream=True
+        )
         lineage_mce = builder.make_lineage_mce(
             [upstream_dataset_urn],  # Upstream URNs
             dataset_urn,  # Downstream URN

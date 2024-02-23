@@ -7,7 +7,7 @@ from pyspark import sql
 from pyspark.sql import SparkSession
 
 from azure.storage.filedatalake import DataLakeServiceClient
-from dagster import ConfigurableResource, OpExecutionContext
+from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
 from src.utils.sql import load_sql_template
@@ -151,9 +151,9 @@ def get_output_filepath(context: OpExecutionContext):
     return destination_filepath
 
 
-def get_input_filepath(context: OpExecutionContext) -> str:
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    source_path = context.get_step_execution_context().op_config["filepath"]
+def get_input_filepath(context: OutputContext) -> str:
+    dataset_type = context.step_context.op_config["dataset_type"]
+    source_path = context.step_context.op_config["filepath"]
     filename = source_path.split("/")[-1]
     step = context.asset_key.to_user_string()
 
