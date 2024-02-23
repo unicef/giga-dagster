@@ -225,17 +225,17 @@ CONFIG_VALUES_DOMAIN_MASTER = {
         "Primary, Secondary and Post-Secondary",
     ],
     "connectivity_type_govt": [
-        "fiber"
-        "xdsl"
-        "wired"
-        "cellular"
-        "p2mp wireless"
-        "p2p wireless"
-        "satellite"
-        "other"
-        "copper"
-        "coaxial"
-        "unknown"
+        "fiber",
+        "xdsl",
+        "wired",
+        "cellular",
+        "p2mp ,wireless"
+        "p2p ,wireless"
+        "satellite",
+        "other",
+        "copper",
+        "coaxial",
+        "unknown",
     ],
     "school_area_type": ["urban", "rural"],
     "computer_lab": ["yes", "no"],
@@ -271,17 +271,17 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
         "Primary, Secondary and Post-Secondary",
     ],
     "connectivity_type_govt": [
-        "fiber"
-        "xdsl"
-        "wired"
-        "cellular"
-        "p2mp wireless"
-        "p2p wireless"
-        "satellite"
-        "other"
-        "copper"
-        "coaxial"
-        "unknown"
+        "fiber",
+        "xdsl",
+        "wired",
+        "cellular",
+        "p2mp ,wireless"
+        "p2p ,wireless"
+        "satellite",
+        "other",
+        "copper",
+        "coaxial",
+        "unknown",
     ],
     "school_area_type": ["urban", "rural"],
     "computer_lab": ["yes", "no"],
