@@ -693,14 +693,14 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
         else:
             transformed_data[key].append(data)
 
-    temp = json.dumps(transformed_data, indent=4)
-    print(json.dumps(transformed_data, indent=4))
+    json_dict = json.dumps(transformed_data, indent=4)
+    # print(json.dumps(transformed_data, indent=4))
 
     # json_file_path =  "src/spark/test.json"
     # with open(json_file_path, 'w') as file:
     #     json.dump(transformed_data, file, indent=4)
 
-    return temp 
+    return json_dict 
     
 
 
@@ -714,6 +714,7 @@ if __name__ == "__main__":
     df_bronze = spark.read.csv(file_url, header=True)
     df_bronze = df_bronze.sort("school_name").limit(100)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
+    df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
 
     # row_level_checks(df, dataset_type, country_code_iso3)
     df = row_level_checks(df_bronze, "master", "BLZ") # dataset plugged in should conform to updated schema! rename if necessary
