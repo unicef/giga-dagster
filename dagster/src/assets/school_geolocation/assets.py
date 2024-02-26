@@ -4,6 +4,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.sensors import FileConfig
 from src.settings import settings
 from src.utils.adls import (
     ADLSFileClient,
@@ -57,6 +58,7 @@ def geolocation_bronze(
 )
 def geolocation_data_quality_results(
     context,
+    config: FileConfig,
     geolocation_bronze: sql.DataFrame,
 ):
     # Output is a spark dataframe (bronze + extra columns with dq results)
@@ -64,19 +66,23 @@ def geolocation_data_quality_results(
     # Output is a JSON with a list of checks (no results - Ger asked for)
     yield Output(
         geolocation_bronze.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={"filepath": get_output_filepath(context, "geolocation_dq_results")},
         output_name="geolocation_dq_results",
     )
 
     yield Output(
         geolocation_bronze.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={
+            "filepath": get_output_filepath(
+                context, "geolocation_dq_summary_statistics"
+            )
+        },
         output_name="geolocation_dq_summary_statistics",
     )
 
     yield Output(
         geolocation_bronze,
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={"filepath": get_output_filepath(context, "geolocation_dq_checks")},
         output_name="geolocation_dq_checks",
     )
 
@@ -84,9 +90,9 @@ def geolocation_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = geolocation_bronze
+    df_passed = geolocation_dq_results
     context.log.info(f"df_passed: {df_passed}")
     # emit_metadata_to_datahub(context, df_passed)
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
@@ -95,9 +101,9 @@ def geolocation_dq_passed_rows(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = geolocation_bronze
+    df_failed = geolocation_dq_results
     # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
@@ -179,6 +185,10 @@ def geolocation_staging(
                 )
                 .whenMatchedUpdateAll()
                 .whenNotMatchedInsertAll()
+            )
+
+            adls_file_client.rename_file(
+                file_info["filepath"], f"{file_info['filepath']}/merged-files"
             )
 
             context.log.info(f"Staging: table {staging}")

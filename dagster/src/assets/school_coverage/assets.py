@@ -4,6 +4,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.sensors import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 
@@ -39,6 +40,7 @@ def coverage_raw(
 )
 def coverage_data_quality_results(
     context,
+    config: FileConfig,
     coverage_raw: sql.DataFrame,
 ):
     # Output is a spark dataframe (bronze + extra columns with dq results)
@@ -46,19 +48,21 @@ def coverage_data_quality_results(
     # Output is a JSON with a list of checks (no results - Ger asked for)
     yield Output(
         coverage_raw.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={"filepath": get_output_filepath(context, "coverage_dq_results")},
         output_name="coverage_dq_results",
     )
 
     yield Output(
         coverage_raw.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={
+            "filepath": get_output_filepath(context, "coverage_dq_summary_statistics")
+        },
         output_name="coverage_dq_summary_statistics",
     )
 
     yield Output(
         coverage_raw,
-        metadata={"filepath": get_output_filepath(context)},
+        metadata={"filepath": get_output_filepath(context, "coverage_dq_checks")},
         output_name="coverage_dq_checks",
     )
 
@@ -66,18 +70,18 @@ def coverage_data_quality_results(
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
-    coverage_raw: sql.DataFrame,
+    coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = coverage_raw
+    df_passed = coverage_dq_results
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
-    coverage_raw: sql.DataFrame,
+    coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = coverage_raw
+    df_failed = coverage_dq_results
     # emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
@@ -189,6 +193,9 @@ def coverage_staging(
                 .whenNotMatchedInsertAll()
             )
 
+            adls_file_client.rename_file(
+                file_info["filepath"], f"{file_info['filepath']}/merged-files"
+            )
             context.log.info(f"Staging: table {staging}")
 
         staging.execute()
