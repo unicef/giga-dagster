@@ -7,6 +7,7 @@ from pyspark.sql.types import ArrayType, StringType, StructField, StructType, In
 from pyspark.sql.window import Window
 
 from src.settings import settings
+from src.utils.spark import get_spark_session
 from src.spark.config_expectations import (
     # Data Type Configs
     CONFIG_DATA_TYPES,
@@ -19,6 +20,8 @@ from src.spark.config_expectations import (
     CONFIG_NONEMPTY_COLUMNS_REFERENCE,
     CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
     CONFIG_NONEMPTY_COLUMNS_COVERAGE,
+    CONFIG_NONEMPTY_COLUMNS_COVERAGE_FB,
+    CONFIG_NONEMPTY_COLUMNS_COVERAGE_ITU,
     CONFIG_NONEMPTY_COLUMNS_CRITICAL,
     CONFIG_NONEMPTY_COLUMNS_ALL,
 
@@ -28,6 +31,8 @@ from src.spark.config_expectations import (
     CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
     CONFIG_UNIQUE_COLUMNS_COVERAGE,
     CONFIG_UNIQUE_COLUMNS_CRITICAL,
+    CONFIG_UNIQUE_COLUMNS_COVERAGE_FB,
+    CONFIG_UNIQUE_COLUMNS_COVERAGE_ITU,
 
     # Domain Configs
     CONFIG_VALUES_DOMAIN_MASTER,
@@ -41,6 +46,7 @@ from src.spark.config_expectations import (
     CONFIG_VALUES_RANGE_REFERENCE,
     CONFIG_VALUES_RANGE_GEOLOCATION,
     CONFIG_VALUES_RANGE_COVERAGE,
+    CONFIG_VALUES_RANGE_COVERAGE_ITU,
     CONFIG_VALUES_RANGE_CRITICAL,
     CONFIG_VALUES_RANGE_ALL,
 
@@ -54,6 +60,8 @@ from src.spark.config_expectations import (
 import decimal
 import difflib
 import io
+
+spark = get_spark_session()
 
 # Geospatial
 import country_converter as coco
@@ -259,11 +267,11 @@ def is_not_within_country(df, country_code_iso3):
     def is_within_country_geopy(latitude, longitude):
         geolocator = Nominatim(user_agent="schools_geolocation")
         coords = f"{latitude},{longitude}"
-        location = geolocator.reverse(coords)
     
-        if location is None:
+        if latitude is None or longitude is None:
             return False
         else:
+            location = geolocator.reverse(coords, timeout=10)
             geopy_country_code_iso2 = location.raw["address"].get("country_code")
     
             return geopy_country_code_iso2.lower() == country_code_iso2.lower()
@@ -507,7 +515,12 @@ def critical_error_checks(df, country_code_iso3):
 
     return df
 
+# Coverage FB Sum is 100
 
+def fb_percent_sum_to_100_check(df):
+    df = df.withColumn("dq_is_sum_of_percent_not_equal_100",
+                       f.when(f.col("percent_2G") + f.col("percent_3G") + f.col("percent_4G") != 100, 1).otherwise(0))
+    return df
 
 
 # Outputs
@@ -518,12 +531,16 @@ def row_level_checks(df, dataset_type, country_code_iso3):
         'reference': CONFIG_UNIQUE_COLUMNS_REFERENCE,
         'geolocation': CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
         'coverage': CONFIG_UNIQUE_COLUMNS_COVERAGE,
+        'coverage_fb': CONFIG_UNIQUE_COLUMNS_COVERAGE_FB,
+        'coverage_itu': CONFIG_UNIQUE_COLUMNS_COVERAGE_ITU,
     }
     CONFIG_NONEMPTY_COLUMNS = {
         'master': CONFIG_NONEMPTY_COLUMNS_MASTER,
         'reference': CONFIG_NONEMPTY_COLUMNS_REFERENCE,
         'geolocation': CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
         'coverage': CONFIG_NONEMPTY_COLUMNS_COVERAGE,
+        'coverage_fb': CONFIG_NONEMPTY_COLUMNS_COVERAGE_FB,
+        'coverage_itu': CONFIG_NONEMPTY_COLUMNS_COVERAGE_ITU,
     }
     CONFIG_VALUES_DOMAIN = {
         'master': CONFIG_VALUES_DOMAIN_MASTER,
@@ -536,19 +553,22 @@ def row_level_checks(df, dataset_type, country_code_iso3):
         'reference': CONFIG_VALUES_RANGE_REFERENCE,
         'geolocation': CONFIG_VALUES_RANGE_GEOLOCATION,
         'coverage': CONFIG_VALUES_RANGE_COVERAGE,
+        'coverage_itu': CONFIG_VALUES_RANGE_COVERAGE_ITU,
     }
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID = {
         'master': CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
         'geolocation': CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION,
     }
 
-    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
-    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
-    df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
-    df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
-    df = format_validation_checks(df)
-
     if dataset_type in ['master', 'geolocation']:
+        # standard checks
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
+        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
+        df = format_validation_checks(df)
+
+        # custom checks
         df = duplicate_all_except_checks(df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type])
         df = precision_check(df, CONFIG_PRECISION)
         df = is_not_within_country(df, country_code_iso3)
@@ -557,6 +577,28 @@ def row_level_checks(df, dataset_type, country_code_iso3):
         df = similar_name_level_within_110_check(df)
         df = critical_error_checks(df, country_code_iso3)
         df = school_density_check(df)
+
+    elif dataset_type in ['coverage', 'reference']:
+        # standard checks
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
+        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
+        df = format_validation_checks(df)
+
+    elif dataset_type == 'coverage_fb':
+        # standard checks
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
+        df = fb_percent_sum_to_100_check(df)
+        df = format_validation_checks(df)
+
+    elif dataset_type == 'coverage_itu':
+        # standard checks
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
+        df = format_validation_checks(df)
     else:
         pass
 
@@ -705,19 +747,16 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
 
 
 if __name__ == "__main__":
-    from src.utils.spark import get_spark_session
     # 
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GHA_school_geolocation_coverage_master.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    spark = get_spark_session()
     df_bronze = spark.read.csv(file_url, header=True)
-    df_bronze = df_bronze.sort("school_name").limit(100)
+    df_bronze = df_bronze.sort("school_name") #.limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-
     # row_level_checks(df, dataset_type, country_code_iso3)
-    df = row_level_checks(df_bronze, "master", "BLZ") # dataset plugged in should conform to updated schema! rename if necessary
+    df = row_level_checks(df_bronze, "master", "GHA") # dataset plugged in should conform to updated schema! rename if necessary
     df.show()
 
     df = aggregate_report_sparkdf(df)

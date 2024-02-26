@@ -81,6 +81,11 @@ CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
         "description": "Checks if column {} is alphanumeric.",
         "type": "format_validation_checks"
     },
+    {
+        "assertion": "is_sum_of_percent_not_equal_100", 
+        "description": "Checks if sum of percent_2G, percent_3G, percent_4G is equal to 100",
+        "type": "custom_coverage_check"
+    },
 ]
 
 # Data Types
@@ -165,6 +170,14 @@ CONFIG_UNIQUE_COLUMNS_GEOLOCATION = ["school_id_govt", "school_id_giga"]
 
 CONFIG_UNIQUE_COLUMNS_COVERAGE = ["school_id_giga"]
 
+CONFIG_UNIQUE_COLUMNS_COVERAGE_FB = [
+    "school_id_giga",
+]
+
+CONFIG_UNIQUE_COLUMNS_COVERAGE_ITU = [
+    "school_id_giga",
+]
+
 CONFIG_UNIQUE_COLUMNS_CRITICAL = ["school_id_govt", "school_id_giga"]
 
 CONFIG_NONEMPTY_COLUMNS_MASTER = [
@@ -199,6 +212,22 @@ CONFIG_NONEMPTY_COLUMNS_GEOLOCATION = [
 
 CONFIG_NONEMPTY_COLUMNS_COVERAGE = [
     "school_id_giga",
+    "cellular_coverage_availability",
+    "cellular_coverage_type",
+]
+
+CONFIG_NONEMPTY_COLUMNS_COVERAGE_FB = [
+    "school_id_giga",
+    "percent_2G",
+    "percent_3G",
+    "percent_4G",
+]
+
+CONFIG_NONEMPTY_COLUMNS_COVERAGE_ITU = [
+    "school_id_giga",
+    "2G",
+    "3G",
+    "4G",
 ]
 
 CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
@@ -352,6 +381,16 @@ CONFIG_VALUES_RANGE_GEOLOCATION = {
 }
 
 CONFIG_VALUES_RANGE_COVERAGE = {
+    "fiber_node_distance": {"min": 0, "max": 10000000},
+    "microwave_node_distance": {"min": 0, "max": 10000000},
+    "schools_within_1km": {"min": 0, "max": 20},
+    "schools_within_2km": {"min": 0, "max": 40},
+    "schools_within_3km": {"min": 0, "max": 60},
+    "nearest_school_distance": {"min": 0, "max": 10000000},
+    "schools_within_10km": {"min": 0, "max": 100},
+}
+
+CONFIG_VALUES_RANGE_COVERAGE_ITU = {
     "fiber_node_distance": {"min": 0, "max": 10000000},
     "microwave_node_distance": {"min": 0, "max": 10000000},
     "schools_within_1km": {"min": 0, "max": 20},
