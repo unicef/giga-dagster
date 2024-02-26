@@ -3,23 +3,28 @@ from pydantic import BaseSettings
 
 class Constants(BaseSettings):
     raw_folder = "adls-testing-raw"
+    dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_folder = "updated_master_schema"
 
-    step_origin_folder_map: dict[str, str] = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
+    def step_origin_map(self) -> dict[str, str]:
+        return {
+            "geolocation_raw": "",
+            "geolocation_bronze": "geolocation_raw",
+            "geolocation_data_quality_results": "geolocation_bronze",
+            "geolocation_dq_passed_rows": "geolocation_data_quality_results",
+            "geolocation_dq_failed_rows": "geolocation_data_quality_results",
+            "geolocation_staging": "geolocation_dq_passed_rows",
+            "coverage_raw": "",
+            "coverage_data_quality_results": "coverage_raw",
+            "coverage_dq_passed_rows": "coverage_data_quality_results",
+            "coverage_dq_failed_rows": "coverage_data_quality_results",
+            "coverage_bronze": "coverage_dq_passed_rows",
+            "coverage_staging": "coverage_bronze",
+        }
 
-    def step_destination_folder_map(self, dataset_type: str) -> dict[str, str]:
+    def step_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
             "geolocation_raw": f"{self.raw_folder}/school-{dataset_type}-data",
             "geolocation_bronze": f"bronze/school-{dataset_type}-data",

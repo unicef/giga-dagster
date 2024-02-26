@@ -5,7 +5,11 @@ from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
 from src.settings import settings
-from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.adls import (
+    ADLSFileClient,
+    get_filepath,
+    get_output_filepath,
+)
 
 # from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -83,8 +87,8 @@ def geolocation_dq_passed_rows(
     geolocation_bronze: sql.DataFrame,
 ) -> sql.DataFrame:
     df_passed = geolocation_bronze
-    df_passed.toPandas().loc[3, "school_id_giga"] = "ABCDEFGHIJKLM"
     context.log.info(f"df_passed: {df_passed}")
+    # emit_metadata_to_datahub(context, df_passed)
     yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -101,7 +105,7 @@ def geolocation_dq_failed_rows(
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_staging(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ):
@@ -110,7 +114,6 @@ def geolocation_staging(
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[0]
-
     # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
@@ -183,7 +186,7 @@ def geolocation_staging(
         staging.execute()
 
     else:
-        staging = geolocation_bronze
+        staging = geolocation_dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(

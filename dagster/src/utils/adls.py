@@ -125,13 +125,25 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    filename = (
-        source_path.split("/")[-1].replace(".csv", ".json")
-        if step == "data_quality_results"
-        else source_path.split("/")[-1]
-    )
+    if step in ["geolocation_data_quality_results", "coverage_data_quality_results"]:
+        filename = source_path.split("/")[-1].replace(".csv", ".json")
+    elif step in [
+        "geolocation_dq_passed_rows",
+        "geolocation_dq_failed_rows",
+        "geolocation_staging",
+        "coverage_dq_passed_rows",
+        "coverage_dq_failed_rows",
+        "coverage_staging",
+        "manual_review_passed_rows",
+        "manual_review_failed_rows",
+        "silver",
+        "gold",
+    ]:
+        filename = source_path.split("/")[-1].split("_")[0]
+    else:
+        filename = source_path.split("/")[-1]
 
-    destination_folder = constants.step_destination_folder_map(dataset_type)[step]
+    destination_folder = constants.step_folder_map(dataset_type)[step]
 
     if not destination_folder:
         raise ValueError(f"Unknown filepath: {source_path}")
@@ -154,10 +166,9 @@ def get_output_filepath(context: OpExecutionContext):
 def get_input_filepath(context: OpExecutionContext) -> str:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
-    filename = source_path.split("/")[-1]
     step = context.asset_key.to_user_string()
+    origin_step = constants.step_origin_map()[step]
 
-    upstream_step = constants.step_origin_folder_map[step]
-    upstream_path = f"{upstream_step}/{dataset_type}/{filename}"
+    source_filepath = get_filepath(source_path, dataset_type, origin_step)
 
-    return upstream_path
+    return source_filepath
