@@ -15,10 +15,14 @@ from src.utils.spark import (
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
     def _get_filepath(context: OutputContext):
+        if context.step_key == "data_quality_results":
+            step = context.name
+        else:
+            step = context.step_key
+
         filepath = context.step_context.op_config["filepath"]
 
         parent_folder = context.step_context.op_config["dataset_type"]
-        step = context.step_key
 
         destination_filepath = get_filepath(filepath, parent_folder, step)
 

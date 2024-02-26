@@ -125,7 +125,7 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    if step in ["geolocation_data_quality_results", "coverage_data_quality_results"]:
+    if "dq_checks" in step:
         filename = source_path.split("/")[-1].replace(".csv", ".json")
     elif step in [
         "geolocation_dq_passed_rows",
@@ -153,10 +153,14 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
     return destination_filepath
 
 
-def get_output_filepath(context: OpExecutionContext):
+def get_output_filepath(context: OpExecutionContext, output_name: str = None):
+    if output_name:
+        step = output_name
+    else:
+        step = context.asset_key.to_user_string()
+
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
-    step = context.asset_key.to_user_string()
 
     destination_filepath = get_filepath(source_path, dataset_type, step)
 
