@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "authproxy.fullname" . }}
+  name: {{ include "hive-metastore.fullname" . }}
   labels:
-    {{- include "authproxy.labels" . | nindent 4 }}
+    {{- include "hive-metastore.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "authproxy.fullname" . }}
+    name: {{ include "hive-metastore.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

@@ -12,7 +12,7 @@ x-dagster-common-config: &dagster-common-config
   restart: unless-stopped
   environment:
     DAGSTER_HOME: /app
-    SHORT_SHA: ${SHORT_SHA}
+    COMMIT_SHA: ${COMMIT_SHA}
 
 x-spark-common-config: &spark-common-config
   <<: *common-config
@@ -40,6 +40,7 @@ x-spark-worker-common-env: &spark-worker-common-env
 
 volumes:
   dagster-storage:
+  hms-db-storage:
 
 networks:
   giga-dataops:
@@ -48,7 +49,7 @@ networks:
 services:
   dagster-storage:
     <<: *common-config
-    image: bitnami/postgresql:14
+    image: bitnami/postgresql:14.10.0-debian-11-r31
     env_file: ./dagster/.env
     volumes:
       - dagster-storage:/bitnami/postgresql
@@ -104,6 +105,41 @@ services:
       SPARK_WORKER_WEBUI_PORT: 8073
     ports:
       - "8073:8073"
+
+  hive-metastore:
+    <<: *common-config
+    build: ./hive
+    image: unicef/giga-dataops-platform/hive-metastore
+    env_file: ./hive/.env
+    environment:
+      DB_DRIVER: postgres
+      SERVICE_NAME: metastore
+      METASTORE_HOME: /opt/hive
+    volumes:
+      - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
+      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
+      - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
+    ports:
+      - "9083:9083"
+    depends_on:
+      hms-database:
+        condition: service_healthy
+
+  hms-database:
+    <<: *common-config
+    image: bitnami/postgresql:9.6.24-debian-10-r70
+    env_file: ./hive/.env
+    environment:
+      POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
+      POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
+      POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
+    volumes:
+      - hms-db-storage:/bitnami/postgresql
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "metastore" ]
+      timeout: 3s
+      start_period: 5s
+      retries: 5
 
 #  authproxy:
 #    <<: *common-config

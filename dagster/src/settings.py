@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     AUTH_OIDC_CLIENT_ID: str
     AUTH_OIDC_TENANT_ID: str
     AUTH_OIDC_CLIENT_SECRET: str
+    HIVE_METASTORE_URI: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
@@ -43,7 +44,6 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
-    SHORT_SHA: str = ""
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
     GITHUB_ACCESS_TOKEN: str = ""

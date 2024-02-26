@@ -32,8 +32,9 @@ spark_common_config = {
         "org.apache.spark.sql.delta.catalog.DeltaCatalog"
     ),
     "spark.sql.execution.arrow.pyspark.enabled": "true",
-    "spark.sql.warehouse.dir": "/opt/spark/warehouse",
+    "spark.sql.warehouse.dir": f"{settings.AZURE_BLOB_CONNECTION_URI}/warehouse",
     "spark.sql.catalogImplementation": "hive",
+    "hive.metastore.uris": settings.HIVE_METASTORE_URI,
     "spark.driver.cores": "1",
     "spark.driver.memory": "1g",
     "spark.executor.cores": "1",
@@ -44,6 +45,7 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.enableChangeDataFeed": "true",
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
+    "spark.databricks.delta.catalog.update.enabled": "true",
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
@@ -59,7 +61,9 @@ if settings.IN_PRODUCTION:
         }
     )
 
-spark_app_name = f"giga-dagster{f'@{settings.SHORT_SHA}' if settings.SHORT_SHA else ''}"
+spark_app_name = (
+    f"giga-dagster{f'@{settings.COMMIT_SHA}' if settings.COMMIT_SHA else ''}"
+)
 
 pyspark = PySparkResource(
     spark_config={
@@ -123,6 +127,8 @@ def transform_school_types(
         "latitude",
         "longitude",
         "download_speed_govt",
+        "download_speed_govt1",
+        "download_speed_govt5",
         "download_speed_contracted",
         "fiber_node_distance",
         "microwave_node_distance",

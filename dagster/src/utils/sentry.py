@@ -24,7 +24,7 @@ def setup_sentry():
         dsn=settings.SENTRY_DSN,
         traces_sample_rate=1.0,
         environment=settings.DEPLOY_ENV.value,
-        release=settings.COMMIT_SHA or settings.SHORT_SHA,
+        release=settings.COMMIT_SHA,
         default_integrations=False,
         integrations=[
             AtexitIntegration(),
