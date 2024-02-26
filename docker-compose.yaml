@@ -106,40 +106,40 @@ services:
     ports:
       - "8073:8073"
 
-  hive-metastore:
-    <<: *common-config
-    build: ./hive
-    image: unicef/giga-dataops-platform/hive-metastore
-    env_file: ./hive/.env
-    environment:
-      DB_DRIVER: postgres
-      SERVICE_NAME: metastore
-      METASTORE_HOME: /opt/hive
-    volumes:
-      - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
-      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
-      - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
-    ports:
-      - "9083:9083"
-    depends_on:
-      hms-database:
-        condition: service_healthy
+  # hive-metastore:
+  #   <<: *common-config
+  #   build: ./hive
+  #   image: unicef/giga-dataops-platform/hive-metastore
+  #   env_file: ./hive/.env
+  #   environment:
+  #     DB_DRIVER: postgres
+  #     SERVICE_NAME: metastore
+  #     METASTORE_HOME: /opt/hive
+  #   volumes:
+  #     - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
+  #     - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
+  #     - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
+  #   ports:
+  #     - "9083:9083"
+  #   depends_on:
+  #     hms-database:
+  #       condition: service_healthy
 
-  hms-database:
-    <<: *common-config
-    image: bitnami/postgresql:9.6.24-debian-10-r70
-    env_file: ./hive/.env
-    environment:
-      POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
-      POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
-      POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
-    volumes:
-      - hms-db-storage:/bitnami/postgresql
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "metastore" ]
-      timeout: 3s
-      start_period: 5s
-      retries: 5
+  # hms-database:
+  #   <<: *common-config
+  #   image: bitnami/postgresql:9.6.24-debian-10-r70
+  #   env_file: ./hive/.env
+  #   environment:
+  #     POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
+  #     POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
+  #     POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
+  #   volumes:
+  #     - hms-db-storage:/bitnami/postgresql
+  #   healthcheck:
+  #     test: [ "CMD", "pg_isready", "-U", "metastore" ]
+  #     timeout: 3s
+  #     start_period: 5s
+  #     retries: 5
 
 #  authproxy:
 #    <<: *common-config

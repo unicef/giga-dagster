@@ -14,7 +14,7 @@ from src.utils.spark import (
 
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
-    def _get_filepath(context: InputContext | OutputContext):
+    def _get_filepath(context: OutputContext):
         filepath = context.step_context.op_config["filepath"]
 
         parent_folder = context.step_context.op_config["dataset_type"]
