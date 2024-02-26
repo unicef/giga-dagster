@@ -159,16 +159,6 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
         if column in df.columns:
-            # if None in CONFIG_COLUMN_LIST[column]:
-            #     df = df.withColumn(
-            #         f"dq_is_invalid_domain-{column}",
-            #         f.when(
-            #             (f.col(f"{column}").isNull()) |
-            #             (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
-            #             0,
-            #         ).otherwise(1),
-            #     )
-            # else:
             df = df.withColumn(
                 f"dq_is_invalid_domain-{column}",
                 f.when(
@@ -189,9 +179,7 @@ def format_validation_checks(df):
                 f"dq_is_not_alphanumeric-{column}", f.when(f.regexp_extract(f.col(column), ".+", 0) != "", 0).otherwise(1))
         if column in df.columns and type in ["INT", "DOUBLE", "LONG", "TIMESTAMP"]: #included timestamp based on luke's code
             df = df.withColumn(
-                f"dq_is_not_numeric-{column}", f.when(f.regexp_extract(f.col(column), "^-?\d+(\.\d+)?$", 0) != "", 0).otherwise(1))
-            # df = df.withColumn("test", f.lit("2021-08-03T20:03:46Z"))
-            # df = df.withColumn("regex", f.regexp_extract(f.col("test"), "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", 0))     
+                f"dq_is_not_numeric-{column}", f.when(f.regexp_extract(f.col(column), "^-?\d+(\.\d+)?$", 0) != "", 0).otherwise(1))   
     return df  
 
 
@@ -736,11 +724,6 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
             transformed_data[key].append(data)
 
     json_dict = json.dumps(transformed_data, indent=4)
-    # print(json.dumps(transformed_data, indent=4))
-
-    # json_file_path =  "src/spark/test.json"
-    # with open(json_file_path, 'w') as file:
-    #     json.dump(transformed_data, file, indent=4)
 
     return json_dict 
     
