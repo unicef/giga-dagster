@@ -12,22 +12,22 @@ CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
         "type": "duplicate_rows_checks"
     },
     {
-        "assertion": "isnullmandatory", 
+        "assertion": "is_null_mandatory", 
         "description": "Checks if non-nullable column {} is null",
         "type": "completeness_checks"
     },
     {
-        "assertion": "isnulloptional", 
+        "assertion": "is_null_optional", 
         "description": "Checks if nullable column {} is null",
         "type": "completeness_checks"
     },
     {
-        "assertion": "isinvaliddomain", 
+        "assertion": "is_invalid_domain", 
         "description": "Checks if column {} is within {set}",
         "type": "domain_checks"
     },
     {
-        "assertion": "isinvalidrange", 
+        "assertion": "is_invalid_range", 
         "description": "Checks if column {} is between {min} and {max}",
         "type": "range_checks"
     },
@@ -42,7 +42,7 @@ CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
         "type": "geospatial_checks"
     },
     {
-        "assertion": "duplicateset", 
+        "assertion": "duplicate_set", 
         "description": "Checks if there are duplicates across these columns {}",
         "type": "duplicate_rows_checks"
     },
@@ -72,19 +72,19 @@ CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
         "type": "geospatial_checks"
     },
     {
-        "assertion": "isnotnumeric", 
+        "assertion": "is_not_numeric", 
         "description": "Checks if column {} is numeric.",
         "type": "format_validation_checks"
     },
     {
-        "assertion": "isnotalphanumeric", 
+        "assertion": "is_not_alphanumeric", 
         "description": "Checks if column {} is alphanumeric.",
         "type": "format_validation_checks"
     },
     {
         "assertion": "is_sum_of_percent_not_equal_100", 
         "description": "Checks if sum of percent_2G, percent_3G, percent_4G is equal to 100",
-        "type": "custom_coverage_check"
+        "type": "custom_coverage_fb_check"
     },
 ]
 

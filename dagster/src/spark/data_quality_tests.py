@@ -108,7 +108,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in df.columns:
 
         if column not in CONFIG_COLUMN_LIST and column not in dq_columns:
-            column_name = f"dq_isnulloptional-{column}"
+            column_name = f"dq_is_null_optional-{column}"
             df = df.withColumn(
                 column_name,
                 f.when(
@@ -121,7 +121,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
     for column in CONFIG_COLUMN_LIST:
 
         if column in df.columns:
-            column_name = f"dq_isnullmandatory-{column}"
+            column_name = f"dq_is_null_mandatory-{column}"
             df = df.withColumn(
                 column_name,
                 f.when(
@@ -130,7 +130,7 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(0),
             )
         else:
-            df = df.withColumn(f"dq_isnullmandatory-{column}", f.lit(1))
+            df = df.withColumn(f"dq_is_null_mandatory-{column}", f.lit(1))
     
 
     return df
@@ -141,7 +141,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
 
         if column in df.columns:
             df = df.withColumn(
-                f"dq_isinvalidrange-{column}",
+                f"dq_is_invalid_range-{column}",
                 f.when(
                     f.col(f"{column}").between(
                         CONFIG_COLUMN_LIST[column]["min"],
@@ -151,7 +151,7 @@ def range_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(1),
             )
         else:
-            df = df.withColumn(f"dq_isinvalidrange-{column}", f.lit(1))
+            df = df.withColumn(f"dq_is_invalid_range-{column}", f.lit(1))
     return df
 
 
@@ -161,7 +161,7 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
         if column in df.columns:
             # if None in CONFIG_COLUMN_LIST[column]:
             #     df = df.withColumn(
-            #         f"dq_isinvaliddomain-{column}",
+            #         f"dq_is_invalid_domain-{column}",
             #         f.when(
             #             (f.col(f"{column}").isNull()) |
             #             (f.col(f"{column}").isin(CONFIG_COLUMN_LIST[column])),
@@ -170,7 +170,7 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
             #     )
             # else:
             df = df.withColumn(
-                f"dq_isinvaliddomain-{column}",
+                f"dq_is_invalid_domain-{column}",
                 f.when(
                     f.col(f"{column}").isin(
                         CONFIG_COLUMN_LIST[column],
@@ -179,17 +179,17 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
                 ).otherwise(1),
             )
         else:
-            df = df.withColumn(f"dq_isinvaliddomain-{column}", f.lit(1))
+            df = df.withColumn(f"dq_is_invalid_domain-{column}", f.lit(1))
     return df
 
 def format_validation_checks(df):
     for column, type in CONFIG_DATA_TYPES:
         if column in df.columns and type == "STRING":
             df = df.withColumn(
-                f"dq_isnotalphanumeric-{column}", f.when(f.regexp_extract(f.col(column), ".+", 0) != "", 0).otherwise(1))
+                f"dq_is_not_alphanumeric-{column}", f.when(f.regexp_extract(f.col(column), ".+", 0) != "", 0).otherwise(1))
         if column in df.columns and type in ["INT", "DOUBLE", "LONG", "TIMESTAMP"]: #included timestamp based on luke's code
             df = df.withColumn(
-                f"dq_isnotnumeric-{column}", f.when(f.regexp_extract(f.col(column), "^-?\d+(\.\d+)?$", 0) != "", 0).otherwise(1))
+                f"dq_is_not_numeric-{column}", f.when(f.regexp_extract(f.col(column), "^-?\d+(\.\d+)?$", 0) != "", 0).otherwise(1))
             # df = df.withColumn("test", f.lit("2021-08-03T20:03:46Z"))
             # df = df.withColumn("regex", f.regexp_extract(f.col("test"), "^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", 0))     
     return df  
@@ -371,7 +371,7 @@ def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
 
         set_name = "_".join(column_set)
         df = df.withColumn(
-            f"dq_duplicateset-{set_name}",
+            f"dq_duplicate_set-{set_name}",
             f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
                 0
             ),
@@ -502,11 +502,11 @@ def critical_error_checks(df, country_code_iso3):
             "CASE "
             "WHEN `dq_duplicate-school_id_govt` "
             "   + `dq_duplicate-school_id_giga` "
-            "   + `dq_isnullmandatory-school_name` "
-            "   + `dq_isnullmandatory-latitude` "
-            "   + `dq_isnullmandatory-longitude` "
-            "   + `dq_isinvalidrange-latitude` "
-            "   + `dq_isinvalidrange-longitude` "
+            "   + `dq_is_null_mandatory-school_name` "
+            "   + `dq_is_null_mandatory-latitude` "
+            "   + `dq_is_null_mandatory-longitude` "
+            "   + `dq_is_invalid_range-latitude` "
+            "   + `dq_is_invalid_range-longitude` "
             "   + `dq_is_not_within_country` > 0"
             "   THEN 1 "
             "ELSE 0 END"
@@ -752,7 +752,7 @@ if __name__ == "__main__":
     file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GHA_school_geolocation_coverage_master.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     df_bronze = spark.read.csv(file_url, header=True)
-    df_bronze = df_bronze.sort("school_name") #.limit(10)
+    df_bronze = df_bronze.sort("school_name").limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     # row_level_checks(df, dataset_type, country_code_iso3)
