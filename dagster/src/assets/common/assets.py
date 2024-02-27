@@ -185,7 +185,7 @@ def gold(
             "source.school_id_giga = target.school_id_giga",
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
-    if DeltaTable.isDeltaTable(spark.spark_session, gold_master_table_path):
+    if DeltaTable.isDeltaTable(spark.spark_session, gold_reference_table_path):
         reference = adls_file_client.download_delta_table_as_delta_table(
             gold_reference_table_path, spark.spark_session
         )
