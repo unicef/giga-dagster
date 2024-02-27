@@ -728,6 +728,28 @@ def aggregate_report_json(df_aggregated, df_bronze): # input: df_aggregated = ag
     return json_dict 
     
 
+def dq_passed_rows(df, dataset_type):
+    columns = [col for col in df.columns if not col.startswith("dq_")]
+
+    if dataset_type in ['master', 'geolocation']:
+        df = df.filter(df.dq_has_critical_error == 0)
+        df = df.select(*columns)
+    else:
+        df = df.filter((df['dq_duplicate-school_id_giga'] == 0) & (df['dq_is_null_mandatory-school_id_giga'] == 0))
+        df = df.select(*columns)
+    return df
+
+
+def dq_failed_rows(df, dataset_type):
+    columns = [col for col in df.columns if not col.startswith("dq_")]
+
+    if dataset_type in ['master', 'geolocation']:
+        df = df.filter(df.dq_has_critical_error == 1)
+        df = df.select(*columns)
+    else:
+        df = df.filter((df['dq_duplicate-school_id_giga'] == 1) | (df['dq_is_null_mandatory-school_id_giga'] == 1))
+        df = df.select(*columns)
+    return df
 
 if __name__ == "__main__":
     # 
@@ -741,13 +763,13 @@ if __name__ == "__main__":
     # row_level_checks(df, dataset_type, country_code_iso3)
     df = row_level_checks(df_bronze, "master", "GHA") # dataset plugged in should conform to updated schema! rename if necessary
     df.show()
+    df = df.withColumn("dq_has_critical_error", f.lit(1))
 
-    df = aggregate_report_sparkdf(df)
+    df = dq_passed_rows(df, "coverage")
+    # df = aggregate_report_sparkdf(df)
     df.show()
 
-    _json = aggregate_report_json(df, df_bronze)
-    print(_json)
-
-    
+    # _json = aggregate_report_json(df, df_bronze)
+    # print(_json)
 
     

@@ -59,9 +59,9 @@ def fb_transforms(fb):
         "cellular_coverage_type",
         f.expr(
             "CASE "
-            "WHEN 4g_coverage IS TRUE THEN '4G' "
-            "WHEN 3g_coverage IS TRUE THEN '3G' "
-            "WHEN 2g_coverage IS TRUE THEN '2G' "
+            "WHEN 4G_coverage IS TRUE THEN '4G' "
+            "WHEN 3G_coverage IS TRUE THEN '3G' "
+            "WHEN 2G_coverage IS TRUE THEN '2G' "
             "ELSE 'no coverage' "
             "END"
         ),
@@ -81,22 +81,23 @@ def fb_transforms(fb):
         if col not in fb.columns:
             fb = fb.withColumn(col, f.lit(None))
 
-    # add suffixes
-    for col in fb.columns:
-        if col != "school_id_giga":  # add suffix except join key
-            fb = fb.withColumnRenamed(col, col + "_fb")
+    # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
+    fb = fb.drop("2G_coverage")
+    fb = fb.drop("3G_coverage")
+    fb = fb.drop("4G_coverage")
 
     return fb
 
 
 def fb_coverage_merge(fb, cov):
+    # add suffixes
+    for col in fb.columns:
+        if col != "school_id_giga":  # add suffix except join key
+            fb = fb.withColumnRenamed(col, col + "_fb")
+    
     # outer join
     cov_stg = cov.join(fb, on="school_id_giga", how="outer")
 
-    # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    cov_stg = cov_stg.drop("2G_coverage_fb")
-    cov_stg = cov_stg.drop("3G_coverage_fb")
-    cov_stg = cov_stg.drop("4G_coverage_fb")
 
     # coalesce with updated values
     for col in cov.columns:
@@ -165,9 +166,9 @@ def itu_transforms(itu):
         "cellular_coverage_type",
         f.expr(
             "CASE "
-            "WHEN 4g_coverage IS TRUE THEN '4G' "
-            "WHEN 3g_coverage IS TRUE THEN '3G' "
-            "WHEN 2g_coverage IS TRUE THEN '2G' "
+            "WHEN 4G_coverage IS TRUE THEN '4G' "
+            "WHEN 3G_coverage IS TRUE THEN '3G' "
+            "WHEN 2G_coverage IS TRUE THEN '2G' "
             "ELSE 'no coverage' "
             "END"
         ),
@@ -187,22 +188,23 @@ def itu_transforms(itu):
         if col not in itu.columns:
             itu = itu.withColumn(col, f.lit(None))
 
-    # add suffixes
-    for col in itu.columns:
-        if col != "school_id_giga":  # add suffix except join key
-            itu = itu.withColumnRenamed(col, col + "_itu")
+    # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
+    itu = itu.drop("2G_coverage")
+    itu = itu.drop("3G_coverage")
+    itu = itu.drop("4G_coverage")
 
     return itu
 
 
 def itu_coverage_merge(itu, cov):
+    # add suffixes
+    for col in itu.columns:
+        if col != "school_id_giga":  # add suffix except join key
+            itu = itu.withColumnRenamed(col, col + "_itu")
+
     # outer join
     cov_stg = cov.join(itu, on="school_id_giga", how="outer")
 
-    # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    cov_stg = cov_stg.drop("2G_coverage_itu")
-    cov_stg = cov_stg.drop("3G_coverage_itu")
-    cov_stg = cov_stg.drop("4G_coverage_itu")
 
     # coalesce with updated values
     for col in cov.columns:
@@ -265,33 +267,37 @@ if __name__ == "__main__":
 
 
     ## filter to one entry for testing
-    # fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    # cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
 
 
     ## DAGSTER WORKFLOW ##
 
-    # ## TRANSFORM STEP
-    # # FB
-    # fb = fb_transforms(fb)
-    # df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
-    # print("Merged FB and (Silver) Coverage Dataset")
-    # df1.show()
+    ## TRANSFORM STEP
+    # FB
+    fb = fb_transforms(fb)
+    fb = fb.withColumn('cellular_coverage_type', f.lit('3G'))
+    fb.show()
+    df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
+    print("Merged FB and (Silver) Coverage Dataset")
+    df1.show()
 
-    # # ITU
-    # itu = itu_transforms(itu)
-    # df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
-    # print("Merged ITU and (Silver) Coverage Dataset")
-    # df2.show()
+    # ITU
+    itu = itu_transforms(itu)
+    itu.show()
+    cov.show()
+    df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
+    print("Merged ITU and (Silver) Coverage Dataset")
+    df2.show()
 
-    from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
+    # from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
 
-    df = row_level_checks(itu, "coverage_itu", "UZB") # dataset plugged in should conform to updated schema! rename if necessary
-    df.show()
+    # df = row_level_checks(itu, "coverage_itu", "UZB") # dataset plugged in should conform to updated schema! rename if necessary
+    # df.show()
 
-    df = aggregate_report_sparkdf(df)
-    df.show()
+    # df = aggregate_report_sparkdf(df)
+    # df.show()
 
-    _json = aggregate_report_json(df, fb)
-    print(_json)
+    # _json = aggregate_report_json(df, fb)
+    # print(_json)
