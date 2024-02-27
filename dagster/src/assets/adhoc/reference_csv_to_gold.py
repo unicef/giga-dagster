@@ -1,15 +1,15 @@
 from io import BytesIO
 
-import numpy as np
 import pandas as pd
-import src.schemas
 from dagster_pyspark import PySparkResource
-from icecream import ic
 from pyspark import sql
 from pyspark.sql import SparkSession
-from src.schemas import BaseSchema
+from pyspark.sql.functions import lit
+from pyspark.sql.types import NullType
 from src.sensors.config import FileConfig
+from src.utils.adhoc.rename_columns import REFERENCE_COLUMNS_TO_ADD
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -27,18 +27,20 @@ def adhoc__load_reference_csv(
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: FileConfig,
+    spark: PySparkResource,
     adhoc__load_reference_csv: bytes,
 ) -> sql.DataFrame:
-    schema_name = ic(config.metastore_schema)
-    schema_class: BaseSchema = getattr(src.schemas, schema_name)
-    spark_schema = ic(schema_class.schema)
     s: SparkSession = spark.spark_session
 
     buffer = BytesIO(adhoc__load_reference_csv)
     buffer.seek(0)
     df = pd.read_csv(buffer)
-    df = df.fillna(np.nan).replace([np.nan], [None])
-    gold = s.createDataFrame(df, schema=spark_schema)
+    sdf = s.createDataFrame(df)
+    columns_to_add = {
+        column: lit(None).cast(NullType()) for column in REFERENCE_COLUMNS_TO_ADD
+    }
+    sdf = sdf.withColumns(columns_to_add)
+
+    gold = transform_types(sdf, config.metastore_schema, context)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})

@@ -22,9 +22,9 @@ class SchoolReferenceSchema(Schema):
             StructField("nearest_LTE_id", StringType(), True),
             StructField("nearest_UMTS_id", StringType(), True),
             StructField("nearest_GSM_id", StringType(), True),
-            StructField("education_level_govt", StringType(), False),
+            StructField("education_level_govt", StringType(), True),
             StructField("download_speed_govt", DoubleType(), True),
-            StructField("school_id_govt_type", StringType(), False),
+            StructField("school_id_govt_type", StringType(), True),
             StructField("school_address", StringType(), True),
             StructField("is_school_open", StringType(), True),
         ]

@@ -88,11 +88,13 @@ def adhoc__master_data_quality_checks(
     buffer.seek(0)
     df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
     sdf = s.createDataFrame(df)
-    for col in sdf.columns:
-        if col in COLUMN_RENAME_MAPPING.keys():
-            new_col = COLUMN_RENAME_MAPPING[col]
-            sdf = sdf.withColumnRenamed(col, new_col)
-            context.log.info(f'Renamed column "{col}" to "{new_col}"')
+    columns_to_rename = {
+        col: COLUMN_RENAME_MAPPING[col]
+        for col in sdf.columns
+        if col in COLUMN_RENAME_MAPPING.keys()
+    }
+    sdf = sdf.withColumnsRenamed(columns_to_rename)
+    context.log.info(f"Renamed columns {json.dumps(columns_to_rename, indent=2)}")
 
     # dq_checked = row_level_checks(sdf, "master", country_iso3, context)
     yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
