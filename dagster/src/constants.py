@@ -51,7 +51,8 @@ class Constants(BaseSettings):
                 f"{constants.archive_manual_review_rejected_folder}"
             ),
             "silver": f"silver/school-{dataset_type}-data",
-            "gold": "gold",
+            "gold_master": "gold/school-master",
+            "gold_reference": "gold/school-reference",
             "master_csv_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "reference_csv_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "qos_csv_to_gold": "gold/delta-tables/qos",

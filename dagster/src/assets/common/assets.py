@@ -96,91 +96,104 @@ def gold(
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     gold_table_name = filepath.split("/").split("_")[1]
-    gold_table_path = (
-        f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold').split('/')[:-1]}/{gold_table_name}",
+    gold_master_table_path = (
+        f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_master').split('/')[:-1]}/{gold_table_name}",
+    )
+    gold_reference_table_path = (
+        f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_reference').split('/')[:-1]}/{gold_table_name}",
     )
 
-    if DeltaTable.isDeltaTable(spark.spark_session, gold_table_path):
-        gold = adls_file_client.download_delta_table_as_delta_table(
-            gold_table_path, spark.spark_session
+    master_columns = [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "microwave_node_distance",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "nearest_NR_distance",
+        "nearest_LTE_distance",
+        "nearest_UMTS_distance",
+        "nearest_GSM_distance",
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "connectivity_govt_collection_year",
+        "connectivity_govt",
+        "school_id_giga",
+        "school_id_govt",
+        "school_name",
+        "school_establishment_year",
+        "latitude",
+        "longitude",
+        "education_level",
+        "download_speed_contracted",
+        "connectivity_type_govt",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+        "school_area_type",
+        "school_funding_type",
+        "num_computers",
+        "num_computers_desired",
+        "num_teachers",
+        "num_adm_personnel",
+        "num_students",
+        "num_classrooms",
+        "num_latrines",
+        "computer_lab",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_year",
+        "school_data_collection_modality",
+        "connectivity_govt_ingestion_timestamp",
+        "school_location_ingestion_timestamp",
+        "disputed_region",
+        "connectivity",
+        "connectivity_RT",
+        "connectivity_RT_datasource",
+        "connectivity_RT_ingestion_timestamp",
+    ]
+
+    reference_columns = [
+        "School_id_giga",
+        "pop_within_10km"
+        "nearest_school_distance"
+        "schools_within_10km"
+        "nearest_NR_id",
+        "nearest_LTE_id",
+        "nearest_UMTS_id",
+        "nearest_GSM_id",
+        "education_level_govt",
+        "download_speed_govt" "school_id_govt_type",
+        "school_address",
+        "is_school_open",
+    ]
+
+    silver_master = silver.select(master_columns)
+    silver_reference = silver.select(reference_columns)
+
+    if DeltaTable.isDeltaTable(spark.spark_session, gold_master_table_path):
+        master = adls_file_client.download_delta_table_as_delta_table(
+            gold_master_table_path, spark.spark_session
         )
 
-        gold.alias("source").merge(
-            silver.alias("target"),
+        master.alias("source").merge(
+            silver_master.alias("target"),
             "source.school_id_giga = target.school_id_giga",
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
-        master_columns = [
-            "cellular_coverage_availability",
-            "cellular_coverage_type",
-            "microwave_node_distance",
-            "schools_within_1km",
-            "schools_within_2km",
-            "schools_within_3km",
-            "nearest_NR_distance",
-            "nearest_LTE_distance",
-            "nearest_UMTS_distance",
-            "nearest_GSM_distance",
-            "pop_within_1km",
-            "pop_within_2km",
-            "pop_within_3km",
-            "connectivity_govt_collection_year",
-            "connectivity_govt",
-            "school_id_giga",
-            "school_id_govt",
-            "school_name",
-            "school_establishment_year",
-            "latitude",
-            "longitude",
-            "education_level",
-            "download_speed_contracted",
-            "connectivity_type_govt",
-            "admin1",
-            "admin1_id_giga",
-            "admin2",
-            "admin2_id_giga",
-            "school_area_type",
-            "school_funding_type",
-            "num_computers",
-            "num_computers_desired",
-            "num_teachers",
-            "num_adm_personnel",
-            "num_students",
-            "num_classrooms",
-            "num_latrines",
-            "computer_lab",
-            "electricity_availability",
-            "electricity_type",
-            "water_availability",
-            "school_data_source",
-            "school_data_collection_year",
-            "school_data_collection_modality",
-            "connectivity_govt_ingestion_timestamp",
-            "school_location_ingestion_timestamp",
-            "disputed_region",
-            "connectivity",
-            "connectivity_RT",
-            "connectivity_RT_datasource",
-            "connectivity_RT_ingestion_timestamp",
-        ]
+    if DeltaTable.isDeltaTable(spark.spark_session, gold_master_table_path):
+        reference = adls_file_client.download_delta_table_as_delta_table(
+            gold_reference_table_path, spark.spark_session
+        )
 
-        reference_columns = [
-            "School_id_giga",
-            "pop_within_10km"
-            "nearest_school_distance"
-            "schools_within_10km"
-            "nearest_NR_id",
-            "nearest_LTE_id",
-            "nearest_UMTS_id",
-            "nearest_GSM_id",
-            "education_level_govt",
-            "download_speed_govt" "school_id_govt_type",
-            "school_address",
-            "is_school_open",
-        ]
-
-        master = gold.toDF().select(master_columns)
-        reference = gold.toDF().select(reference_columns)
+        reference.alias("source").merge(
+            silver_reference.alias("target"),
+            "source.school_id_giga = target.school_id_giga",
+        ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
     # emit_metadata_to_datahub(context, df=silver)
     yield Output(
