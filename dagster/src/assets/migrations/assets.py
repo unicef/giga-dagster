@@ -41,14 +41,13 @@ def migrate_schema(
     is_delta_table = DeltaTable.isDeltaTable(s, full_remote_path)
     context.log.info(is_delta_table)
 
-    if not is_delta_table:
-        columns = Schema.fields
-        (
-            DeltaTable.create(s)
-            .tableName(f"{schema_name}.{table_name}")
-            .addColumns(columns)
-            .execute()
-        )
+    columns = Schema.fields
+    (
+        DeltaTable.createIfNotExists(s)
+        .tableName(f"{schema_name}.{table_name}")
+        .addColumns(columns)
+        .execute()
+    )
 
     (
         DeltaTable.forName(s, f"{schema_name}.{table_name}")
