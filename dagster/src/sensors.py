@@ -88,18 +88,18 @@ def school_master_geolocation__raw_file_uploads_sensor():
                         "geolocation_bronze": get_file_config(
                             "geolocation_bronze", file_config_params
                         ),
-                        # "geolocation_data_quality_results": get_file_config(
-                        #     "geolocation_data_quality_results", file_config_params
-                        # ),
+                        "geolocation_data_quality_results": get_file_config(
+                            "geolocation_data_quality_results", file_config_params
+                        ),
                         "geolocation_dq_passed_rows": get_file_config(
                             "geolocation_dq_passed_rows", file_config_params
                         ),
                         "geolocation_dq_failed_rows": get_file_config(
                             "geolocation_dq_failed_rows", file_config_params
                         ),
-                        "geolocation_staging": get_file_config(
-                            "geolocation_staging", file_config_params
-                        ),
+                        # "geolocation_staging": get_file_config(
+                        #     "geolocation_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -152,9 +152,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_raw": get_file_config(
                             "coverage_raw", file_config_params
                         ),
-                        # "coverage_data_quality_results": get_file_config(
-                        #     "coverage_data_quality_results", file_config_params
-                        # ),
+                        "coverage_data_quality_results": get_file_config(
+                            "coverage_data_quality_results", file_config_params
+                        ),
                         "coverage_dq_passed_rows": get_file_config(
                             "coverage_dq_passed_rows", file_config_params
                         ),
@@ -164,9 +164,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_bronze": get_file_config(
                             "coverage_bronze", file_config_params
                         ),
-                        "coverage_staging": get_file_config(
-                            "coverage_staging", file_config_params
-                        ),
+                        # "coverage_staging": get_file_config(
+                        #     "coverage_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -179,7 +179,7 @@ def school_master_coverage__raw_file_uploads_sensor():
 def school_master_geolocation__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-geolocation-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -231,7 +231,7 @@ def school_master_geolocation__successful_manual_checks_sensor():
 def school_master_coverage__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-coverage-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:

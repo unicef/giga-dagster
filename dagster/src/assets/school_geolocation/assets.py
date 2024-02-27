@@ -4,8 +4,19 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.sensors import FileConfig
 from src.settings import settings
-from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.spark.data_quality_tests import (
+    aggregate_report_json,
+    aggregate_report_sparkdf,
+    row_level_checks,
+)
+from src.spark.transform_functions import create_bronze_layer_columns
+from src.utils.adls import (
+    ADLSFileClient,
+    get_filepath,
+    get_output_filepath,
+)
 
 # from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -19,7 +30,6 @@ def geolocation_raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    # IN: pandas df, OUT: csv file
     # emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
@@ -29,13 +39,9 @@ def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: sql.DataFrame,
 ) -> pd.DataFrame:
-    # IN: spark datafame, OUT: csv file
-    # Transform columns added here, all column renaming done here
-    # Output should be stored as a spark dataframe
+    df = create_bronze_layer_columns(geolocation_raw)
     # emit_metadata_to_datahub(context, df=geolocation_raw)
-    yield Output(
-        geolocation_raw.toPandas(), metadata={"filepath": get_output_filepath(context)}
-    )
+    yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @multi_asset(
@@ -44,64 +50,67 @@ def geolocation_bronze(
             is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
         "geolocation_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_pandas_io_manager"
-        ),
-        "geolocation_dq_checks": AssetOut(
             is_required=True, io_manager_key="adls_json_io_manager"
         ),
     }
 )
 def geolocation_data_quality_results(
     context,
+    config: FileConfig,
     geolocation_bronze: sql.DataFrame,
+    spark: PySparkResource,
 ):
-    # Output is a spark dataframe (bronze + extra columns with dq results)
-    # Output is a spark dataframe(?) with summary statistics (for Ger)
-    # Output is a JSON with a list of checks (no results - Ger asked for)
+    country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
+    dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
+    dq_summary_statistics = aggregate_report_json(
+        aggregate_report_sparkdf(spark.spark_session, dq_results), geolocation_bronze
+    )
+
     yield Output(
-        geolocation_bronze.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        dq_results.toPandas(),
+        metadata={"filepath": get_output_filepath(context, "geolocation_dq_results")},
         output_name="geolocation_dq_results",
     )
 
     yield Output(
-        geolocation_bronze.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        dq_summary_statistics,
+        metadata={
+            "filepath": get_output_filepath(
+                context, "geolocation_dq_summary_statistics"
+            )
+        },
         output_name="geolocation_dq_summary_statistics",
     )
 
+
+@asset(io_manager_key="adls_pandas_io_manager")
+def geolocation_dq_passed_rows(
+    context: OpExecutionContext,
+    geolocation_dq_results: sql.DataFrame,
+) -> sql.DataFrame:
+    df_passed = geolocation_dq_results
+    # emit_metadata_to_datahub(context, df_passed)
     yield Output(
-        geolocation_bronze,
-        metadata={"filepath": get_output_filepath(context)},
-        output_name="geolocation_dq_checks",
+        df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
 
 
-@asset(io_manager_key="adls_delta_io_manager")
-def geolocation_dq_passed_rows(
-    context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
-) -> sql.DataFrame:
-    df_passed = geolocation_bronze
-    df_passed.toPandas().loc[3, "school_id_giga"] = "ABCDEFGHIJKLM"
-    context.log.info(f"df_passed: {df_passed}")
-    yield Output(df_passed, metadata={"filepath": get_output_filepath(context)})
-
-
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = geolocation_bronze
+    df_failed = geolocation_dq_results
     # emit_metadata_to_datahub(context, df_failed)
-    yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
 @asset(io_manager_key="adls_delta_io_manager")
 def geolocation_staging(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
+    geolocation_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ):
@@ -109,8 +118,7 @@ def geolocation_staging(
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
-    country_code = filepath.split("/")[-1].split("_")[0]
-
+    country_code = filepath.split("/")[-1].split("_")[1]
     # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
@@ -178,12 +186,16 @@ def geolocation_staging(
                 .whenNotMatchedInsertAll()
             )
 
+            adls_file_client.rename_file(
+                file_info["filepath"], f"{file_info['filepath']}/merged-files"
+            )
+
             context.log.info(f"Staging: table {staging}")
 
         staging.execute()
 
     else:
-        staging = geolocation_bronze
+        staging = geolocation_dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
