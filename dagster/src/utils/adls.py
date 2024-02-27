@@ -173,7 +173,7 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
     step = context.asset_key.to_user_string()
-    origin_step = constants.step_origin_map()[step]
+    origin_step = constants.step_origin_map[step]
 
     source_filepath = get_filepath(source_path, dataset_type, origin_step)
 

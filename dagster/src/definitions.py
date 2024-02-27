@@ -1,5 +1,12 @@
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import common, datahub_assets, qos, school_coverage, school_geolocation
+from src.assets import (
+    adhoc,
+    common,
+    datahub_assets,
+    qos,
+    school_coverage,
+    school_geolocation,
+)
 from src.jobs import (
     datahub__create_domains_job,
     datahub__create_tags_job,
@@ -52,6 +59,7 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=datahub_assets, group_name="datahub"
         ),
+        *load_assets_from_package_module(package_module=adhoc, group_name="adhoc"),
     ],
     resources={
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),

@@ -32,7 +32,7 @@ spark_common_config = {
         "org.apache.spark.sql.delta.catalog.DeltaCatalog"
     ),
     "spark.sql.execution.arrow.pyspark.enabled": "true",
-    "spark.sql.warehouse.dir": settings.WAREHOUSE_DIR,
+    "spark.sql.warehouse.dir": settings.SPARK_WAREHOUSE_DIR,
     "spark.sql.catalogImplementation": "hive",
     "hive.metastore.uris": settings.HIVE_METASTORE_URI,
     "spark.driver.cores": "1",
