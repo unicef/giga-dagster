@@ -69,9 +69,9 @@ def fb_transforms(fb):
     fb = fb.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "CASE " 
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         ),
     )
@@ -122,9 +122,9 @@ def fb_coverage_merge(fb, cov):
     cov_stg = cov_stg.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "CASE " 
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         ),
     )
@@ -175,9 +175,9 @@ def itu_transforms(itu):
     itu = itu.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "CASE " 
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         ),
     )
@@ -228,9 +228,9 @@ def itu_coverage_merge(itu, cov):
     cov_stg = cov_stg.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'NO' "
-            "ELSE 'YES' "
+            "CASE " 
+            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
+            "ELSE 'yes' "
             "END"
         ),
     )
@@ -255,25 +255,43 @@ if __name__ == "__main__":
     ## CONFORM TEST FILES TO PROPER SCHEMA
     fb = rename_raw_columns(fb)
     itu = rename_raw_columns(itu)
+    itu = itu.withColumn("nearest_NR_id", f.lit(None))
+    itu = itu.withColumn("nearest_NR_distance", f.lit(None))
     cov = rename_raw_columns(cov)
+    cov = cov.withColumn("nearest_NR_id", f.lit(None))
+    cov = cov.withColumn("nearest_NR_distance", f.lit(None))
     cov = cov.select(*CONFIG_COV_COLUMNS)
 
+
+
     ## filter to one entry for testing
-    fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    # fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    # cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+
 
     ## DAGSTER WORKFLOW ##
 
-    ## TRANSFORM STEP
-    # FB
-    fb = fb_transforms(fb)
-    df = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
-    print("Merged FB and (Silver) Coverage Dataset")
+    # ## TRANSFORM STEP
+    # # FB
+    # fb = fb_transforms(fb)
+    # df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
+    # print("Merged FB and (Silver) Coverage Dataset")
+    # df1.show()
+
+    # # ITU
+    # itu = itu_transforms(itu)
+    # df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
+    # print("Merged ITU and (Silver) Coverage Dataset")
+    # df2.show()
+
+    from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
+
+    df = row_level_checks(itu, "coverage_itu", "UZB") # dataset plugged in should conform to updated schema! rename if necessary
     df.show()
 
-    # ITU
-    itu = itu_transforms(itu)
-    df = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
-    print("Merged ITU and (Silver) Coverage Dataset")
+    df = aggregate_report_sparkdf(df)
     df.show()
+
+    _json = aggregate_report_json(df, fb)
+    print(_json)
