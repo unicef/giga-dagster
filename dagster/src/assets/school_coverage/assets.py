@@ -4,7 +4,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors import FileConfig
+from src.sensors.config import FileConfig
 from src.settings import settings
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,

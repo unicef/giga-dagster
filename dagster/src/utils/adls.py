@@ -5,7 +5,9 @@ import pandas as pd
 from delta.tables import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 
+import azure.core.exceptions
 from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
@@ -20,6 +22,24 @@ _adls = _client.get_file_system_client(file_system=settings.AZURE_BLOB_CONTAINER
 
 
 class ADLSFileClient(ConfigurableResource):
+    @staticmethod
+    def download_raw(filepath: str) -> bytes:
+        file_client = _adls.get_file_client(filepath)
+        with BytesIO() as buffer:
+            file_client.download_file().readinto(buffer)
+            buffer.seek(0)
+            return buffer.read()
+
+    @staticmethod
+    def upload_raw(data: bytes, filepath: str):
+        file_client = _adls.get_file_client(filepath)
+        with BytesIO(data) as buffer:
+            buffer.seek(0)
+            try:
+                file_client.upload_data(buffer.read())
+            except azure.core.exceptions.ResourceModifiedError:
+                pass
+
     def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
         file_client = _adls.get_file_client(filepath)
         with BytesIO() as buffer:
@@ -32,10 +52,19 @@ class ADLSFileClient(ConfigurableResource):
                 return pd.read_excel(buffer)
 
     def download_csv_as_spark_dataframe(
-        self, filepath: str, spark: SparkSession
+        self, filepath: str, spark: SparkSession, schema: StructType = None
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+        reader_params = {
+            "path": adls_path,
+            "header": True,
+            "escape": '"',
+            "multiLine": True,
+        }
+        if schema is None:
+            return spark.read.csv(**reader_params)
+
+        return spark.read.csv(**reader_params, schema=schema)
 
     def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:

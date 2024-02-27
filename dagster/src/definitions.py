@@ -25,10 +25,12 @@ from src.jobs import (
 )
 from src.resources.io_managers import (
     ADLSDeltaIOManager,
+    ADLSDeltaV2IOManager,
     ADLSJSONIOManager,
     ADLSPandasIOManager,
+    ADLSPassthroughIOManager,
 )
-from src.sensors import (
+from src.sensors.sensors import (
     qos__csv_to_deltatable_sensor,
     school_master__gold_csv_to_deltatable_sensor,
     school_master_coverage__failed_manual_checks_sensor,
@@ -63,8 +65,10 @@ defs = Definitions(
     ],
     resources={
         "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
+        "adls_delta_v2_io_manager": ADLSDeltaV2IOManager(pyspark=pyspark),
         "adls_json_io_manager": ADLSJSONIOManager(),
         "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
+        "adls_passthrough_io_manager": ADLSPassthroughIOManager(),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
     },

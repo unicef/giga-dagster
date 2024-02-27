@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors import FileConfig
+from src.sensors.config import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.sentry import capture_op_exceptions
