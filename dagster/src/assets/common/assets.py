@@ -158,7 +158,7 @@ def gold(
     ]
 
     reference_columns = [
-        "School_id_giga",
+        "school_id_giga",
         "pop_within_10km"
         "nearest_school_distance"
         "schools_within_10km"

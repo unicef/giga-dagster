@@ -106,69 +106,69 @@ services:
     ports:
       - "8073:8073"
 
-  # hive-metastore:
-  #   <<: *common-config
-  #   build: ./hive
-  #   image: unicef/giga-dataops-platform/hive-metastore
-  #   env_file: ./hive/.env
-  #   environment:
-  #     DB_DRIVER: postgres
-  #     SERVICE_NAME: metastore
-  #     METASTORE_HOME: /opt/hive
-  #   volumes:
-  #     - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
-  #     - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
-  #     - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
-  #   ports:
-  #     - "9083:9083"
-  #   depends_on:
-  #     hms-database:
-  #       condition: service_healthy
+  hive-metastore:
+    <<: *common-config
+    build: ./hive
+    image: unicef/giga-dataops-platform/hive-metastore
+    env_file: ./hive/.env
+    environment:
+      DB_DRIVER: postgres
+      SERVICE_NAME: metastore
+      METASTORE_HOME: /opt/hive
+    volumes:
+      - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
+      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
+      - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
+    ports:
+      - "9083:9083"
+    depends_on:
+      hms-database:
+        condition: service_healthy
 
-  # hms-database:
-  #   <<: *common-config
-  #   image: bitnami/postgresql:9.6.24-debian-10-r70
-  #   env_file: ./hive/.env
-  #   environment:
-  #     POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
-  #     POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
-  #     POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
-  #   volumes:
-  #     - hms-db-storage:/bitnami/postgresql
-  #   healthcheck:
-  #     test: [ "CMD", "pg_isready", "-U", "metastore" ]
-  #     timeout: 3s
-  #     start_period: 5s
-  #     retries: 5
+  hms-database:
+    <<: *common-config
+    image: bitnami/postgresql:9.6.24-debian-10-r70
+    env_file: ./hive/.env
+    environment:
+      POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
+      POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
+      POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
+    volumes:
+      - hms-db-storage:/bitnami/postgresql
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "metastore" ]
+      timeout: 3s
+      start_period: 5s
+      retries: 5
 
-#  authproxy:
-#    <<: *common-config
-#    image: quay.io/oauth2-proxy/oauth2-proxy:v7.5.1
-#    env_file: ./oauth2-proxy/.env
-#    environment:
-#      OAUTH2_PROXY_PROVIDER: azure
-#      OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION: true
-#      OAUTH2_PROXY_SCOPE: "openid profile email"
-#      OAUTH2_PROXY_AZURE_TENANT: ${AZURE_TENANT_ID}
-#      OAUTH2_PROXY_OIDC_EMAIL_CLAIM: preferred_username
-#      OAUTH2_PROXY_OIDC_ISSUER_URL: https://login.microsoftonline.com/common/v2.0
-#      OAUTH2_PROXY_CLIENT_ID: ${AZURE_CLIENT_ID}
-#      OAUTH2_PROXY_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
-#      OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
-#      OAUTH2_PROXY_PROXY_PREFIX: /auth
-#      OAUTH2_PROXY_REDIRECT_URL: http://localhost:3001/auth/callback
-#      OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:3001
-#      OAUTH2_PROXY_UPSTREAMS: "http://dagster-webserver:3002,http://spark-master:8070/spark"
-#      OAUTH2_PROXY_EMAIL_DOMAINS: "thinkingmachin.es,unicef.org"
-#      OAUTH2_PROXY_API_ROUTES: "^/graphql,^/favicon.ico"
-#      OAUTH2_PROXY_PROXY_WEBSOCKETS: true
-#      OAUTH2_PROXY_COOKIE_NAME: _oauth2_proxy
-#      OAUTH2_PROXY_COOKIE_EXPIRE: 168h
-#      OAUTH2_PROXY_COOKIE_SECURE: false
-#      OAUTH2_PROXY_COOKIE_HTTPONLY: false
-#      OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: /app/static/dagster.svg
-#      OAUTH2_PROXY_SHOW_DEBUG_ON_ERROR: true
-#    volumes:
-#      - ./oauth2-proxy/dagster.svg:/app/static/dagster.svg
-#    ports:
-#      - "3001:3001"
+  authproxy:
+   <<: *common-config
+   image: quay.io/oauth2-proxy/oauth2-proxy:v7.5.1
+   env_file: ./oauth2-proxy/.env
+   environment:
+     OAUTH2_PROXY_PROVIDER: azure
+     OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION: true
+     OAUTH2_PROXY_SCOPE: "openid profile email"
+     OAUTH2_PROXY_AZURE_TENANT: ${AZURE_TENANT_ID}
+     OAUTH2_PROXY_OIDC_EMAIL_CLAIM: preferred_username
+     OAUTH2_PROXY_OIDC_ISSUER_URL: https://login.microsoftonline.com/common/v2.0
+     OAUTH2_PROXY_CLIENT_ID: ${AZURE_CLIENT_ID}
+     OAUTH2_PROXY_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+     OAUTH2_PROXY_CODE_CHALLENGE_METHOD: S256
+     OAUTH2_PROXY_PROXY_PREFIX: /auth
+     OAUTH2_PROXY_REDIRECT_URL: http://localhost:3001/auth/callback
+     OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:3001
+     OAUTH2_PROXY_UPSTREAMS: "http://dagster-webserver:3002,http://spark-master:8070/spark"
+     OAUTH2_PROXY_EMAIL_DOMAINS: "thinkingmachin.es,unicef.org"
+     OAUTH2_PROXY_API_ROUTES: "^/graphql,^/favicon.ico"
+     OAUTH2_PROXY_PROXY_WEBSOCKETS: true
+     OAUTH2_PROXY_COOKIE_NAME: _oauth2_proxy
+     OAUTH2_PROXY_COOKIE_EXPIRE: 168h
+     OAUTH2_PROXY_COOKIE_SECURE: false
+     OAUTH2_PROXY_COOKIE_HTTPONLY: false
+     OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO: /app/static/dagster.svg
+     OAUTH2_PROXY_SHOW_DEBUG_ON_ERROR: true
+   volumes:
+     - ./oauth2-proxy/dagster.svg:/app/static/dagster.svg
+   ports:
+     - "3001:3001"
