@@ -423,7 +423,7 @@ worker:
   memoryLimit: 2g
   ## @param worker.coreLimit Se the maximum number of cores that the worker can use
   ##
-  coreLimit: 1
+  coreLimit: 2
   ## @param worker.dir Set a custom working directory for the application
   ##
   dir: ""
@@ -451,7 +451,7 @@ worker:
   extraEnvVarsSecret: ""
   ## @param worker.replicaCount Number of spark workers (will be the minimum number when autoscaling is enabled)
   ##
-  replicaCount: 3
+  replicaCount: 4
   ## Kubernetes Pods Security Context
   ## https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
   ## @param worker.podSecurityContext.enabled Enable security context
