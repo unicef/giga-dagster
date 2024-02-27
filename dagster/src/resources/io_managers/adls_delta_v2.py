@@ -1,7 +1,7 @@
-import os.path
-
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
+from icecream import ic
+from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
 
@@ -21,13 +21,13 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     @staticmethod
     def _get_table_path(
         context: InputContext | OutputContext, filepath: str
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str, str, AnyUrl]:
         table_name = filepath.split("/")[-1].split("_")[0].replace("-", "_")
-        table_root_path = os.path.splitext(filepath)[0]
+        table_root_path = "/".join(filepath.split("/")[:-1])
         return (
-            table_name,
-            table_root_path,
-            f"{settings.AZURE_BLOB_CONNECTION_URI}/{table_root_path}/{table_name}",
+            ic(table_name),
+            ic(table_root_path),
+            ic(f"{settings.AZURE_BLOB_CONNECTION_URI}/{table_root_path}/{table_name}"),
         )
 
     @staticmethod
@@ -46,6 +46,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         )
 
         schema_name = self._get_schema(context)
+        full_table_name = f"{schema_name}.{table_name}"
 
         # TODO: Pull the correct Delta Table schema from ADLS
         schema: BaseSchema = getattr(src.schemas, schema_name)
@@ -54,16 +55,15 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`").show()
         (
-            DeltaTable.createIfNotExists(spark)
-            .tableName(table_name)
+            DeltaTable.createOrReplace(spark)
+            .tableName(full_table_name)
             .addColumns(columns)
             .property("delta.enableChangeDataFeed", "true")
-            .location(table_path)
             .execute()
         )
-        dt = DeltaTable.forName(spark, table_name)
         (
-            dt.alias("master")
+            DeltaTable.forName(spark, full_table_name)
+            .alias("master")
             .merge(
                 output.alias("updates"),
                 "master.school_id_giga = updates.school_id_giga",

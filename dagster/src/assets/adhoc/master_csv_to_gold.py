@@ -5,12 +5,13 @@ import numpy as np
 import pandas as pd
 import src.schemas
 from dagster_pyspark import PySparkResource
-from icecream import ic
 from pyspark import sql
 from pyspark.sql import SparkSession
 from src.schemas import BaseSchema
 from src.sensors.config import FileConfig
+from src.utils.adhoc.rename_columns import COLUMN_RENAME_MAPPING
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -74,11 +75,27 @@ def adhoc__load_master_csv(
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
+    spark: PySparkResource,
+    # config: FileConfig,
 ) -> pd.DataFrame:
+    s: SparkSession = spark.spark_session
+    # filepath = config.filepath
+    # filename = filepath.split("/")[-1]
+    # file_stem = os.path.splitext(filename)[0]
+    # country_iso3 = file_stem.split("_")[0]
+
     buffer = BytesIO(adhoc__load_master_csv)
     buffer.seek(0)
-    dq_checked = pd.read_csv(buffer)
-    yield Output(dq_checked, metadata={"filepath": get_output_filepath(context)})
+    df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+    sdf = s.createDataFrame(df)
+    for col in sdf.columns:
+        if col in COLUMN_RENAME_MAPPING.keys():
+            new_col = COLUMN_RENAME_MAPPING[col]
+            sdf = sdf.withColumnRenamed(col, new_col)
+            context.log.info(f'Renamed column "{col}" to "{new_col}"')
+
+    # dq_checked = row_level_checks(sdf, "master", country_iso3, context)
+    yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -102,19 +119,10 @@ def adhoc__master_dq_checks_failed(
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
 ) -> sql.DataFrame:
-    schema_name = ic(config.metastore_schema)
-    schema_class: BaseSchema = getattr(src.schemas, schema_name)
-    spark_schema = ic(schema_class.schema)
-    s: SparkSession = spark.spark_session
-
-    df = (
-        adhoc__master_dq_checks_passed.toPandas()
-        .fillna(np.nan)
-        .replace([np.nan], [None])
+    gold = transform_types(
+        adhoc__master_dq_checks_passed, config.metastore_schema, context
     )
-    gold = s.createDataFrame(df, schema=spark_schema)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})
