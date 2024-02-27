@@ -58,11 +58,12 @@ def geolocation_data_quality_results(
     context,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
+    spark: PySparkResource,
 ):
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
     dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_sparkdf(dq_results), geolocation_bronze
+        aggregate_report_sparkdf(spark.spark_session, dq_results), geolocation_bronze
     )
 
     yield Output(

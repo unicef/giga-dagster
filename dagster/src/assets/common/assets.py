@@ -2,8 +2,8 @@ import numpy as np
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src import settings
 from src.sensors import FileConfig
+from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.sentry import capture_op_exceptions
 
@@ -40,7 +40,7 @@ def manual_review_failed_rows(
     # table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'manual_review_failed_rows').split('/')[:-1]}/{table_name}",
 
     df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"], spark.spark_session
+        context.run_tags["dagster/run_key"]
     )
     # emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -55,7 +55,7 @@ def silver(
 ) -> sql.DataFrame:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    silver_table_name = filepath.split("/").split("_")[1]
+    silver_table_name = filepath.split("/")[-1].split("_")[1]
     silver_table_path = (
         f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('/')[:-1]}/{silver_table_name}",
     )
@@ -95,13 +95,9 @@ def gold(
 ) -> sql.DataFrame:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    gold_table_name = filepath.split("/").split("_")[1]
-    gold_master_table_path = (
-        f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_master').split('/')[:-1]}/{gold_table_name}",
-    )
-    gold_reference_table_path = (
-        f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_reference').split('/')[:-1]}/{gold_table_name}",
-    )
+    gold_table_name = filepath.split("/")[-1].split("_")[1]
+    gold_master_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_master').split('/')[:-1]}/{gold_table_name}"
+    gold_reference_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'gold_reference').split('/')[:-1]}/{gold_table_name}"
 
     master_columns = [
         "cellular_coverage_availability",

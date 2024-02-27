@@ -50,6 +50,7 @@ def coverage_data_quality_results(
     context,
     config: FileConfig,
     coverage_raw: sql.DataFrame,
+    spark: PySparkResource,
 ):
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     country_code = filepath.split("_")[1]
@@ -57,7 +58,7 @@ def coverage_data_quality_results(
 
     dq_results = row_level_checks(coverage_raw, f"coverage_{source}", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_sparkdf(dq_results), coverage_raw
+        aggregate_report_sparkdf(spark.spark_session, dq_results), coverage_raw
     )
 
     yield Output(

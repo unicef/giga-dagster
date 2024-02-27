@@ -19,7 +19,7 @@ school_master_coverage__automated_data_checks_job = define_asset_job(
         "coverage_raw",
         "coverage_dq_results",
         "coverage_dq_summary_statistics",
-        "coverage_dq_checks",
+        # "coverage_dq_checks",
         "coverage_dq_passed_rows",
         "coverage_dq_failed_rows",
         "coverage_bronze",
@@ -33,7 +33,8 @@ school_master_geolocation__successful_manual_checks_job = define_asset_job(
     selection=[
         "manual_review_passed_rows",
         "silver",
-        "gold",
+        "master",
+        "reference",
     ],
 )
 
