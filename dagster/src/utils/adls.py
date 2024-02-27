@@ -54,12 +54,14 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.getvalue(), overwrite=True)
 
-    def download_delta_table_as_delta_table(self, table_path: str, spark: SparkSession):
+    def download_delta_table_as_delta_table(
+        self, table_path: str, spark: SparkSession
+    ) -> DeltaTable:
         return DeltaTable.forPath(spark, f"{table_path}")
 
     def download_delta_table_as_spark_dataframe(
         self, table_path: str, spark: SparkSession
-    ):
+    ) -> sql.DataFrame:
         df = spark.read.format("delta").load(table_path)
         df.show()
         return df
@@ -125,21 +127,21 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    if "dq_checks" in step:
+    if "dq_summary" in step:
         filename = source_path.split("/")[-1].replace(".csv", ".json")
     elif step in [
-        "geolocation_dq_passed_rows",
-        "geolocation_dq_failed_rows",
+        # "geolocation_dq_passed_rows",
+        # "geolocation_dq_failed_rows",
         "geolocation_staging",
-        "coverage_dq_passed_rows",
-        "coverage_dq_failed_rows",
+        # "coverage_dq_passed_rows",
+        # "coverage_dq_failed_rows",
         "coverage_staging",
-        "manual_review_passed_rows",
-        "manual_review_failed_rows",
+        # "manual_review_passed_rows",
+        # "manual_review_failed_rows",
         "silver",
         "gold",
     ]:
-        filename = source_path.split("/")[-1].split("_")[0]
+        filename = source_path.split("/")[-1].split("_")[1]
     else:
         filename = source_path.split("/")[-1]
 

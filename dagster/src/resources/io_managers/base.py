@@ -15,7 +15,7 @@ from src.utils.spark import (
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
     def _get_filepath(context: OutputContext):
-        if context.step_key == "data_quality_results":
+        if context.step_key in ["data_quality_results", "gold"]:
             step = context.name
         else:
             step = context.step_key
@@ -45,7 +45,7 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         ):
             table_name = filepath.split("/")[-1].split(".")[0]
         else:
-            table_name = filepath.split("/").split("_")[0]
+            table_name = filepath.split("/").split("_")[1]
 
         return f"{settings.AZURE_BLOB_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/{table_name}"
 
