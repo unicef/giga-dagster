@@ -1,18 +1,16 @@
 import decimal
-import difflib
 import io
 import json
 from datetime import UTC, datetime
+from difflib import SequenceMatcher
 
 # Geospatial
 import country_converter as coco
 import geopandas as gpd
-import h3
-
-# Name Similarity
-from azure.storage.blob import BlobServiceClient
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+from h3 import geo_to_h3
+from pyspark import sql
 
 # Spark functions
 from pyspark.sql import (
@@ -21,6 +19,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import (
     ArrayType,
+    FloatType,
     IntegerType,
     StringType,
     StructField,
@@ -29,6 +28,10 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 from shapely.geometry import Point
 from shapely.ops import nearest_points
+
+# Name Similarity
+from azure.storage.blob import BlobServiceClient
+from dagster import OpExecutionContext
 
 # Auth
 from src.settings import (
@@ -76,23 +79,37 @@ from src.spark.config_expectations import (
     CONFIG_VALUES_RANGE_REFERENCE,
     SIMILARITY_RATIO_CUTOFF,
 )
+from src.utils.logger import (
+    ContextLoggerWithLoguruFallback,
+    get_context_with_fallback_logger,
+)
 
 
 # STANDARD CHECKS
-def duplicate_checks(df, CONFIG_COLUMN_LIST):
+def duplicate_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running duplicate checks...")
+
     for column in CONFIG_COLUMN_LIST:
         column_name = f"dq_duplicate-{column}"
         df = df.withColumn(
             column_name,
             f.when(
-                f.count(f"{column}").over(Window.partitionBy(f"{column}")) > 1,
+                f.count(f"{column}").over(Window.partitionBy(column)) > 1,
                 1,
             ).otherwise(0),
         )
     return df
 
 
-def completeness_checks(df, CONFIG_COLUMN_LIST):
+def completeness_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running completeness checks...")
+
     # list of dq columns for exclusion
     dq_columns = [col for col in df.columns if col.startswith("dq_")]
 
@@ -125,7 +142,12 @@ def completeness_checks(df, CONFIG_COLUMN_LIST):
     return df
 
 
-def range_checks(df, CONFIG_COLUMN_LIST):
+def range_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running range checks...")
+
     for column in CONFIG_COLUMN_LIST:
         if column in df.columns:
             df = df.withColumn(
@@ -143,7 +165,12 @@ def range_checks(df, CONFIG_COLUMN_LIST):
     return df
 
 
-def domain_checks(df, CONFIG_COLUMN_LIST):
+def domain_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running domain checks...")
+
     for column in CONFIG_COLUMN_LIST:
         if column in df.columns:
             df = df.withColumn(
@@ -160,7 +187,10 @@ def domain_checks(df, CONFIG_COLUMN_LIST):
     return df
 
 
-def format_validation_checks(df):
+def format_validation_checks(df, context: OpExecutionContext = None):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running format validation checks...")
+
     for column, type in CONFIG_DATA_TYPES:
         if column in df.columns and type == "STRING":
             df = df.withColumn(
@@ -232,7 +262,12 @@ def get_point(longitude, latitude):
     return point
 
 
-def is_not_within_country(df, country_code_iso3):
+def is_not_within_country(
+    df: sql.DataFrame, country_code_iso3, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Checking if not within country...")
+
     # boundary constants
     geometry = get_country_geometry(country_code_iso3)
 
@@ -298,23 +333,24 @@ def is_not_within_country(df, country_code_iso3):
     return df
 
 
-def has_similar_name(df):
-    name_list = df.rdd.map(lambda x: x.school_name).collect()
-    with_similar_name = []
-
-    for index in range(len(name_list)):
-        check_iterable = name_list.copy()
-        # print(check_iterable)
-        string_value = check_iterable.pop(index)
-        if string_value in with_similar_name:
-            continue
-
-        for name in check_iterable:
-            if (difflib.SequenceMatcher(None, string_value, name).ratio() > SIMILARITY_RATIO_CUTOFF):
-                with_similar_name.append(string_value)
-                with_similar_name.append(name)
-                break
+def has_similar_name(df: sql.DataFrame, context: OpExecutionContext = None):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running has similar name checks...")
     
+    name_list = df.rdd.map(lambda x: x.school_name).collect()
+
+    def similarity_test(column, name_list=name_list):
+        for name in name_list:
+            if (
+                1
+                > difflib.SequenceMatcher(None, column, name).ratio()
+                >= SIMILARITY_RATIO_CUTOFF
+            ):
+                return 1
+        return 0
+
+    similarity_test_udf = f.udf(similarity_test)
+
     df = df.withColumn(
         "dq_has_similar_name",
             f.when(f.col("school_name").isin(with_similar_name), 1).otherwise(0)
@@ -326,7 +362,12 @@ def has_similar_name(df):
 # Decimal places tests
 
 
-def precision_check(df, CONFIG_COLUMN_LIST):
+def precision_check(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running precision checks...")
+
     for column in CONFIG_COLUMN_LIST:
         precision = CONFIG_COLUMN_LIST[column]["min"]
 
@@ -348,7 +389,12 @@ def precision_check(df, CONFIG_COLUMN_LIST):
 # Duplicate Sets checks
 
 
-def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
+def duplicate_set_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running duplicate set checks...")
+
     df = df.withColumn(
         "location_id",
         f.concat_ws(
@@ -368,7 +414,12 @@ def duplicate_set_checks(df, CONFIG_COLUMN_LIST):
     return df
 
 
-def duplicate_all_except_checks(df, CONFIG_COLUMN_LIST):
+def duplicate_all_except_checks(
+    df: sql.DataFrame, CONFIG_COLUMN_LIST, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running duplicate all except checks...")
+
     for column_set in CONFIG_COLUMN_LIST:
         df = df.withColumn(
             "dq_duplicate_all_except_school_code",
@@ -393,7 +444,12 @@ def point_110(column):
 point_110_udf = f.udf(point_110)
 
 
-def duplicate_name_level_110_check(df):
+def duplicate_name_level_110_check(
+    df: sql.DataFrame, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running duplicate level within 110m checks...")
+
     df_columns = df.columns
 
     df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
@@ -418,7 +474,13 @@ def duplicate_name_level_110_check(df):
     return df
 
 
-def similar_name_level_within_110_check(df):
+def similar_name_level_within_110_check(
+    df: sql.DataFrame, context: OpExecutionContext = None
+):
+    __test_name__ = "similar name level within 110m"
+    logger = get_context_with_fallback_logger(context)
+    logger.info(f"Running {__test_name__} checks...")
+
     df_columns = df.columns
 
     df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
@@ -429,16 +491,15 @@ def similar_name_level_within_110_check(df):
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(f.count("*").over(window_spec2) > 1, 1).otherwise(0),
     )
-    df = has_similar_name(df)
+
+    df = has_similar_name(df, context)
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
-        f.expr(
-            "CASE "
-            "   WHEN dq_has_similar_name = true "
-            "       AND dq_duplicate_similar_name_same_level_within_110m_radius = 1 "
-            "       THEN 1 "
-            "ELSE 0 END"
-        ),
+        f.when(
+            (f.col("dq_has_similar_name") == True)  # noqa: E712
+            & (f.col("dq_duplicate_similar_name_same_level_within_110m_radius") == 1),
+            1,
+        ).otherwise(0),
     )
 
     added_columns = ["lat_110", "long_110", "dq_has_similar_name"]
@@ -458,25 +519,49 @@ def h3_geo_to_h3(latitude, longitude):
     if latitude is None or longitude is None:
         return "0"
     else:
-        return h3.geo_to_h3(latitude, longitude, resolution=8)
+        return geo_to_h3(latitude, longitude, resolution=8)
 
 
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
-def school_density_check(df):
-    df = df.withColumn("latitude", df["latitude"].cast("float"))
-    df = df.withColumn("longitude", df["longitude"].cast("float"))
-    df = df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")))
-    df = df.withColumn(
-        "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
+    __test_name__ = "school density"
+    logger = ContextLoggerWithLoguruFallback(context, __test_name__)
+    logger.log.info(f"Running {__test_name__} checks...")
+
+    df = logger.passthrough(
+        df.withColumn("latitude", f.col("latitude").cast(FloatType())),
+        'Cast "latitude" to float',
     )
-    df = df.withColumn(
-        "dq_is_school_density_greater_than_5",
-        f.when(f.col("school_density") > 5, 1).otherwise(0),
+    df = logger.passthrough(
+        df.withColumn("longitude", f.col("longitude").cast(FloatType())),
+        'Cast "longitude" to float',
     )
-    df = df.drop("hex8")
-    df = df.drop("school_density")
+    df = logger.passthrough(
+        df.withColumn("hex8", h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude"))),
+        "geo to h3",
+    )
+    df = logger.passthrough(
+        df.withColumn(
+            "school_density", f.count("school_id_giga").over(Window.partitionBy("hex8"))
+        ),
+        'Added column "school_density"',
+    )
+    df = logger.passthrough(
+        df.withColumn(
+            "dq_is_school_density_greater_than_5",
+            f.when(f.col("school_density") > 5, 1).otherwise(0),
+        ),
+        'Checked "school_density" > 5',
+    )
+
+    df = logger.passthrough(df.drop("hex8"), 'Dropped "hex8"')
+
+    df = logger.passthrough(
+        df.drop("school_density"),
+        'Dropped "school_density"',
+    )
 
     return df
 
@@ -484,26 +569,30 @@ def school_density_check(df):
 # Critical Error Check
 
 
-def critical_error_checks(df, country_code_iso3):
+def critical_error_checks(
+    df: sql.DataFrame, country_code_iso3, context: OpExecutionContext = None
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running critical error checks...")
+
     df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_CRITICAL)
     df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
     df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
     df = is_not_within_country(df, country_code_iso3)
     df = df.withColumn(
         "dq_has_critical_error",
-        f.expr(
-            "CASE "
-            "WHEN `dq_duplicate-school_id_govt` "
-            "   + `dq_duplicate-school_id_giga` "
-            "   + `dq_is_null_mandatory-school_name` "
-            "   + `dq_is_null_mandatory-latitude` "
-            "   + `dq_is_null_mandatory-longitude` "
-            "   + `dq_is_invalid_range-latitude` "
-            "   + `dq_is_invalid_range-longitude` "
-            "   + `dq_is_not_within_country` > 0"
-            "   THEN 1 "
-            "ELSE 0 END"
-        ),
+        f.when(
+            f.col("dq_duplicate-school_id_govt")
+            + f.col("dq_duplicate-school_id_giga")
+            + f.col("dq_is_null_mandatory-school_name")
+            + f.col("dq_is_null_mandatory-latitude")
+            + f.col("dq_is_null_mandatory-longitude")
+            + f.col("dq_is_invalid_range-latitude")
+            + f.col("dq_is_invalid_range-longitude")
+            + f.col("dq_is_not_within_country")
+            > 0,
+            1,
+        ).otherwise(0),
     )
 
     return df
@@ -512,7 +601,10 @@ def critical_error_checks(df, country_code_iso3):
 # Coverage FB Sum is 100
 
 
-def fb_percent_sum_to_100_check(df):
+def fb_percent_sum_to_100_check(df: sql.DataFrame, context: OpExecutionContext = None):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running sum of percent not equal 100 checks...")
+
     df = df.withColumn(
         "dq_is_sum_of_percent_not_equal_100",
         f.when(
@@ -523,7 +615,12 @@ def fb_percent_sum_to_100_check(df):
 
 
 # Outputs
-def row_level_checks(df, dataset_type, country_code_iso3):
+def row_level_checks(
+    df: sql.DataFrame,
+    dataset_type: str,
+    country_code_iso3: str,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
     # dynamic configs
     CONFIG_UNIQUE_COLUMNS = {
         "master": CONFIG_UNIQUE_COLUMNS_MASTER,
@@ -559,50 +656,54 @@ def row_level_checks(df, dataset_type, country_code_iso3):
         "geolocation": CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION,
     }
 
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Starting row level checks...")
+
     if dataset_type in ["master", "geolocation"]:
         # standard checks
-        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
-        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
-        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
-        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
-        df = format_validation_checks(df)
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
+        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type], context)
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type], context)
+        df = format_validation_checks(df, context)
 
         # custom checks
         df = duplicate_all_except_checks(
-            df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type]
+            df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
-        df = precision_check(df, CONFIG_PRECISION)
-        df = is_not_within_country(df, country_code_iso3)
-        df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS)
-        df = duplicate_name_level_110_check(df)
-        df = similar_name_level_within_110_check(df)
-        df = critical_error_checks(df, country_code_iso3)
-        df = school_density_check(df)
+        df = precision_check(df, CONFIG_PRECISION, context)
+        df = is_not_within_country(df, country_code_iso3, context)
+        df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
+        df = duplicate_name_level_110_check(df, context)
+        df = similar_name_level_within_110_check(df, context)
+        df = critical_error_checks(df, country_code_iso3, context)
+        df = school_density_check(df, context)
 
     elif dataset_type in ["coverage", "reference"]:
         # standard checks
-        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
-        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
-        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type])
-        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
-        df = format_validation_checks(df)
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
+        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type], context)
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type], context)
+        df = format_validation_checks(df, context)
 
     elif dataset_type == "coverage_fb":
         # standard checks
-        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
-        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
-        df = fb_percent_sum_to_100_check(df)
-        df = format_validation_checks(df)
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
+        df = fb_percent_sum_to_100_check(df, context)
+        df = format_validation_checks(df, context)
 
     elif dataset_type == "coverage_itu":
         # standard checks
-        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type])
-        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type])
-        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type])
-        df = format_validation_checks(df)
+        df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
+        df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
+        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type], context)
+        df = format_validation_checks(df, context)
     else:
         pass
 
+    logger.info("Row level checks completed")
     return df
 
 

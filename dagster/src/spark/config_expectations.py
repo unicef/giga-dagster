@@ -2,89 +2,91 @@ import datetime
 
 SIMILARITY_RATIO_CUTOFF = 0.7
 
+SIMILARITY_CUTOFF = 70
+
 
 # Data Quality Checks Descriptions
 
 CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS = [
     {
-        "assertion": "duplicate", 
+        "assertion": "duplicate",
         "description": "Checks if column {} has a duplicate",
-        "type": "duplicate_rows_checks"
+        "type": "duplicate_rows_checks",
     },
     {
-        "assertion": "is_null_mandatory", 
+        "assertion": "is_null_mandatory",
         "description": "Checks if non-nullable column {} is null",
-        "type": "completeness_checks"
+        "type": "completeness_checks",
     },
     {
-        "assertion": "is_null_optional", 
+        "assertion": "is_null_optional",
         "description": "Checks if nullable column {} is null",
-        "type": "completeness_checks"
+        "type": "completeness_checks",
     },
     {
-        "assertion": "is_invalid_domain", 
+        "assertion": "is_invalid_domain",
         "description": "Checks if column {} is within {set}",
-        "type": "domain_checks"
+        "type": "domain_checks",
     },
     {
-        "assertion": "is_invalid_range", 
+        "assertion": "is_invalid_range",
         "description": "Checks if column {} is between {min} and {max}",
-        "type": "range_checks"
+        "type": "range_checks",
     },
     {
-        "assertion": "precision", 
+        "assertion": "precision",
         "description": "Checks if column {} has at least {precision} decimal places",
-        "type": "geospatial_checks"
+        "type": "geospatial_checks",
     },
     {
-        "assertion": "is_not_within_country", 
+        "assertion": "is_not_within_country",
         "description": "Checks if the coordinates is not within the country",
-        "type": "geospatial_checks"
+        "type": "geospatial_checks",
     },
     {
-        "assertion": "duplicate_set", 
+        "assertion": "duplicate_set",
         "description": "Checks if there are duplicates across these columns {}",
-        "type": "duplicate_rows_checks"
+        "type": "duplicate_rows_checks",
     },
     {
-        "assertion": "duplicate_all_except_school_code", 
+        "assertion": "duplicate_all_except_school_code",
         "description": "Checks if there are duplicates across all columns except School ID",
-        "type": "duplicate_rows_checks"
+        "type": "duplicate_rows_checks",
     },
     {
-        "assertion": "duplicate_name_level_within_110m_radius", 
+        "assertion": "duplicate_name_level_within_110m_radius",
         "description": "Checks if there are duplicates across name, level, lat_110, long_110",
-        "type": "duplicate_rows_checks"
+        "type": "duplicate_rows_checks",
     },
     {
-        "assertion": "duplicate_similar_name_same_level_within_110m_radius", 
+        "assertion": "duplicate_similar_name_same_level_within_110m_radius",
         "description": "Checks if there are duplicates across educational_level, lat_110, long_110 that has similar names as well.",
-        "type": "duplicate_rows_checks"
+        "type": "duplicate_rows_checks",
     },
     {
-        "assertion": "has_critical_error", 
+        "assertion": "has_critical_error",
         "description": "Checks if the dataset contains a critical error.",
-        "type": "critical_error_check"
+        "type": "critical_error_check",
     },
     {
-        "assertion": "is_school_density_greater_than_5", 
+        "assertion": "is_school_density_greater_than_5",
         "description": "Checks if the the school density within the area is greater than 5.",
-        "type": "geospatial_checks"
+        "type": "geospatial_checks",
     },
     {
-        "assertion": "is_not_numeric", 
+        "assertion": "is_not_numeric",
         "description": "Checks if column {} is numeric.",
-        "type": "format_validation_checks"
+        "type": "format_validation_checks",
     },
     {
-        "assertion": "is_not_alphanumeric", 
+        "assertion": "is_not_alphanumeric",
         "description": "Checks if column {} is alphanumeric.",
-        "type": "format_validation_checks"
+        "type": "format_validation_checks",
     },
     {
-        "assertion": "is_sum_of_percent_not_equal_100", 
+        "assertion": "is_sum_of_percent_not_equal_100",
         "description": "Checks if sum of percent_2G, percent_3G, percent_4G is equal to 100",
-        "type": "custom_coverage_fb_check"
+        "type": "custom_coverage_fb_check",
     },
 ]
 
@@ -236,7 +238,13 @@ CONFIG_NONEMPTY_COLUMNS_CRITICAL = [
     "latitude",
 ]
 
-CONFIG_NONEMPTY_COLUMNS_ALL = CONFIG_NONEMPTY_COLUMNS_MASTER + CONFIG_NONEMPTY_COLUMNS_REFERENCE + CONFIG_NONEMPTY_COLUMNS_GEOLOCATION + CONFIG_NONEMPTY_COLUMNS_COVERAGE + CONFIG_NONEMPTY_COLUMNS_CRITICAL
+CONFIG_NONEMPTY_COLUMNS_ALL = (
+    CONFIG_NONEMPTY_COLUMNS_MASTER
+    + CONFIG_NONEMPTY_COLUMNS_REFERENCE
+    + CONFIG_NONEMPTY_COLUMNS_GEOLOCATION
+    + CONFIG_NONEMPTY_COLUMNS_COVERAGE
+    + CONFIG_NONEMPTY_COLUMNS_CRITICAL
+)
 
 
 CONFIG_VALUES_DOMAIN_MASTER = {
@@ -258,9 +266,7 @@ CONFIG_VALUES_DOMAIN_MASTER = {
         "xdsl",
         "wired",
         "cellular",
-        "p2mp ,wireless"
-        "p2p ,wireless"
-        "satellite",
+        "p2mp ,wireless" "p2p ,wireless" "satellite",
         "other",
         "copper",
         "coaxial",
@@ -276,12 +282,7 @@ CONFIG_VALUES_DOMAIN_MASTER = {
         "other",
     ],
     "water_availability": ["yes", "no"],
-    "school_data_collection_modality": [
-        "online", 
-        "in-person", 
-        "phone", 
-        "other"
-    ],
+    "school_data_collection_modality": ["online", "in-person", "phone", "other"],
 }
 
 CONFIG_VALUES_DOMAIN_REFERENCE = {
@@ -304,9 +305,7 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
         "xdsl",
         "wired",
         "cellular",
-        "p2mp ,wireless"
-        "p2p ,wireless"
-        "satellite",
+        "p2mp ,wireless" "p2p ,wireless" "satellite",
         "other",
         "copper",
         "coaxial",
@@ -322,13 +321,7 @@ CONFIG_VALUES_DOMAIN_GEOLOCATION = {
         "other",
     ],
     "water_availability": ["yes", "no"],
-    "school_data_collection_modality": [
-        "online", 
-        "in-person", 
-        "phone", 
-        "other"
-    ],
-   
+    "school_data_collection_modality": ["online", "in-person", "phone", "other"],
 }
 
 CONFIG_VALUES_DOMAIN_COVERAGE = {
@@ -336,7 +329,12 @@ CONFIG_VALUES_DOMAIN_COVERAGE = {
     "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
 }
 
-CONFIG_VALUES_DOMAIN_ALL = CONFIG_VALUES_DOMAIN_MASTER | CONFIG_VALUES_DOMAIN_REFERENCE | CONFIG_VALUES_DOMAIN_GEOLOCATION | CONFIG_VALUES_DOMAIN_COVERAGE
+CONFIG_VALUES_DOMAIN_ALL = (
+    CONFIG_VALUES_DOMAIN_MASTER
+    | CONFIG_VALUES_DOMAIN_REFERENCE
+    | CONFIG_VALUES_DOMAIN_GEOLOCATION
+    | CONFIG_VALUES_DOMAIN_COVERAGE
+)
 
 
 # For RANGE Data Quality Checks
@@ -405,7 +403,12 @@ CONFIG_VALUES_RANGE_CRITICAL = {
     "longitude": {"min": -180, "max": 180},
 }
 
-CONFIG_VALUES_RANGE_ALL = CONFIG_VALUES_RANGE_MASTER | CONFIG_VALUES_RANGE_REFERENCE | CONFIG_VALUES_RANGE_GEOLOCATION | CONFIG_VALUES_RANGE_COVERAGE
+CONFIG_VALUES_RANGE_ALL = (
+    CONFIG_VALUES_RANGE_MASTER
+    | CONFIG_VALUES_RANGE_REFERENCE
+    | CONFIG_VALUES_RANGE_GEOLOCATION
+    | CONFIG_VALUES_RANGE_COVERAGE
+)
 
 CONFIG_UNIQUE_SET_COLUMNS = [
     ["school_id_govt", "school_name", "education_level", "location_id"],
@@ -431,8 +434,6 @@ CONFIG_VALUES_RANGE_PRIO = {
 }
 
 # For GOVERNMENT SCHOOL COLUMNS
-
-
 
 
 CONFIG_VALUES_TYPE = [{"column": "school_id_govt", "type": "int64"}]
@@ -617,108 +618,111 @@ CONFIG_COV_COLUMN_RENAME = {
     ("pop_within_10km", "pop_within_10km"),
 }
 
-CONFIG_COV_COLUMN_MERGE_LOGIC = ["cellular_coverage_availability", "cellular_coverage_type"]
-
-CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION =[
-    [
-    # "school_id_giga",
-    # "school_id_govt",
-    "school_name",
-    "school_establishment_year",
-    "latitude",
-    "longitude",
-    "education_level",
-    "education_level_govt",
-    "connectivity_govt",
-    "connectivity_govt_ingestion_timestamp",
-    "connectivity_govt_collection_year",
-    "download_speed_govt",
-    "download_speed_contracted",
-    "connectivity_type_govt",
-    "admin1",
-    "admin2",
-    "school_area_type",
-    "school_funding_type",
-    "num_computers",
-    "num_computers_desired",
-    "num_teachers",
-    "num_adm_personnel",
-    "num_students",
-    "num_classrooms",
-    "num_latrines",
-    "computer_lab",
-    "electricity_availability",
-    "electricity_type",
-    "water_availability",
-    "school_data_source",
-    "school_data_collection_year",
-    "school_data_collection_modality",
-    "school_id_govt_type",
-    "school_address",
-    "is_school_open",
-    "school_location_ingestion_timestamp",  
-    ]
-]
-
-CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER =[
-    [
+CONFIG_COV_COLUMN_MERGE_LOGIC = [
     "cellular_coverage_availability",
     "cellular_coverage_type",
-    "fiber_node_distance",
-    "microwave_node_distance",
-    "schools_within_1km",
-    "schools_within_2km",
-    "schools_within_3km",
-    "nearest_NR_distance",
-    "nearest_LTE_distance",
-    "nearest_UMTS_distance",
-    "nearest_GSM_distance",
-    "pop_within_1km",
-    "pop_within_2km",
-    "pop_within_3km",
-    "connectivity_govt_collection_year",
-    "connectivity_govt",
-    # "school_id_giga",
-    # "school_id_govt",
-    "school_name",
-    "school_establishment_year",
-    "latitude",
-    "longitude",
-    "education_level",
-    "download_speed_contracted",
-    "connectivity_type_govt",
-    "admin1",
-    # "admin1_id_giga",
-    "admin2",
-    # "admin2_id_giga",
-    "school_area_type",
-    "school_funding_type",
-    "num_computers",
-    "num_computers_desired",
-    "num_teachers",
-    "num_adm_personnel",
-    "num_students",
-    "num_classrooms",
-    "num_latrines",
-    "computer_lab",
-    "electricity_availability",
-    "electricity_type",
-    "water_availability",
-    "school_data_source",
-    "school_data_collection_year",
-    "school_data_collection_modality",
-    "connectivity_govt_ingestion_timestamp",
-    "school_location_ingestion_timestamp",
-    "disputed_region",
-    "connectivity",
-    "connectivity_RT",
-    "connectivity_RT_datasource",
-    "connectivity_RT_ingestion_timestamp", 
+]
+
+CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION = [
+    [
+        # "school_id_giga",
+        # "school_id_govt",
+        "school_name",
+        "school_establishment_year",
+        "latitude",
+        "longitude",
+        "education_level",
+        "education_level_govt",
+        "connectivity_govt",
+        "connectivity_govt_ingestion_timestamp",
+        "connectivity_govt_collection_year",
+        "download_speed_govt",
+        "download_speed_contracted",
+        "connectivity_type_govt",
+        "admin1",
+        "admin2",
+        "school_area_type",
+        "school_funding_type",
+        "num_computers",
+        "num_computers_desired",
+        "num_teachers",
+        "num_adm_personnel",
+        "num_students",
+        "num_classrooms",
+        "num_latrines",
+        "computer_lab",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_year",
+        "school_data_collection_modality",
+        "school_id_govt_type",
+        "school_address",
+        "is_school_open",
+        "school_location_ingestion_timestamp",
+    ]
+]
+
+CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER = [
+    [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "fiber_node_distance",
+        "microwave_node_distance",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "nearest_NR_distance",
+        "nearest_LTE_distance",
+        "nearest_UMTS_distance",
+        "nearest_GSM_distance",
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "connectivity_govt_collection_year",
+        "connectivity_govt",
+        # "school_id_giga",
+        # "school_id_govt",
+        "school_name",
+        "school_establishment_year",
+        "latitude",
+        "longitude",
+        "education_level",
+        "download_speed_contracted",
+        "connectivity_type_govt",
+        "admin1",
+        # "admin1_id_giga",
+        "admin2",
+        # "admin2_id_giga",
+        "school_area_type",
+        "school_funding_type",
+        "num_computers",
+        "num_computers_desired",
+        "num_teachers",
+        "num_adm_personnel",
+        "num_students",
+        "num_classrooms",
+        "num_latrines",
+        "computer_lab",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_year",
+        "school_data_collection_modality",
+        "connectivity_govt_ingestion_timestamp",
+        "school_location_ingestion_timestamp",
+        "disputed_region",
+        "connectivity",
+        "connectivity_RT",
+        "connectivity_RT_datasource",
+        "connectivity_RT_ingestion_timestamp",
     ]
 ]
 
 
-#notes 
+# notes
 # admin 1 admin 2 connectivity_RT nonnullable
 # admin 1 admin 2 connectivity_RT required
 # valid lat lon = decimal check and range check
@@ -730,39 +734,35 @@ CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER =[
 
 
 # added transforms for standardization of educ types (unmapped = "Other")
-    # edul_fix={ np.nan : 'Other',
-    #             'Other' : 'Other',    
-    #             'Pre-Primary And Primary And Secondary': 'Pre-Primary, Primary and Secondary',
-    #             'Primary, Secondary And Post-Secondary':'Primary, Secondary and Post-Secondary',
-    #             'Pre-Primary, Primary, And Secondary':'Pre-Primary, Primary and Secondary',
-    #             'Basic':'Primary',
-    #             'Basic And Secondary':'Primary and Secondary',
-    #             "Pre-Primary":"Pre-Primary",
-    #             "Primary":"Primary",
-    #             "Secondary":"Secondary",
-    #             "Post-Secondary":"Post-Secondary",
-    #             "Pre-Primary And Primary":"Pre-Primary and Primary",
-    #             "Primary And Secondary":"Primary and Secondary",
-    #             "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary" 
-    #           }
+# edul_fix={ np.nan : 'Other',
+#             'Other' : 'Other',
+#             'Pre-Primary And Primary And Secondary': 'Pre-Primary, Primary and Secondary',
+#             'Primary, Secondary And Post-Secondary':'Primary, Secondary and Post-Secondary',
+#             'Pre-Primary, Primary, And Secondary':'Pre-Primary, Primary and Secondary',
+#             'Basic':'Primary',
+#             'Basic And Secondary':'Primary and Secondary',
+#             "Pre-Primary":"Pre-Primary",
+#             "Primary":"Primary",
+#             "Secondary":"Secondary",
+#             "Post-Secondary":"Post-Secondary",
+#             "Pre-Primary And Primary":"Pre-Primary and Primary",
+#             "Primary And Secondary":"Primary and Secondary",
+#             "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary"
+#           }
 # added transforms to normalize typos in type_connectivity (connectivity_type_govt)
-    # paterns={
-    # 'Fibre': ['fiber*', 'fibre*', 'fibra*', 'ftt*', 'fttx*', 'ftth*', 'fttp*', 'gpon*', 'epon*', 'fo*', 'Фибер*', 'optic*']
-    # ,'Copper':	['adsl*' , 'dsl*', 'copper*', 'hdsl*', 'vdsl*']
-    # ,'Coaxial': 	['coax*', 'coaxial*' ]
-    # ,'Cellular':	['cell*', 'cellular*', 'celular*', '2g*', '3g*', '4g*', '5g*', 'lte*', 'gsm*', 'umts*', 'cdma*', 'mobile*', 'mobie*']
-    # ,'P2P': 	['p2p*', 'radio*', 'microwave*', 'ptmp*' ,'micro.wave*']
-    # ,'Satellite':	['satellite*', 'satelite*', 'vsat*' , 'geo*', 'leo*']
-    # ,'Other':	['TVWS*', 'other*', 'ethernet*']
-    # ,'Unknown': 	['unknown*', 'null*', 'nan*', 'n/a*']
-    # }
+# paterns={
+# 'Fibre': ['fiber*', 'fibre*', 'fibra*', 'ftt*', 'fttx*', 'ftth*', 'fttp*', 'gpon*', 'epon*', 'fo*', 'Фибер*', 'optic*']
+# ,'Copper':	['adsl*' , 'dsl*', 'copper*', 'hdsl*', 'vdsl*']
+# ,'Coaxial': 	['coax*', 'coaxial*' ]
+# ,'Cellular':	['cell*', 'cellular*', 'celular*', '2g*', '3g*', '4g*', '5g*', 'lte*', 'gsm*', 'umts*', 'cdma*', 'mobile*', 'mobie*']
+# ,'P2P': 	['p2p*', 'radio*', 'microwave*', 'ptmp*' ,'micro.wave*']
+# ,'Satellite':	['satellite*', 'satelite*', 'vsat*' , 'geo*', 'leo*']
+# ,'Other':	['TVWS*', 'other*', 'ethernet*']
+# ,'Unknown': 	['unknown*', 'null*', 'nan*', 'n/a*']
+# }
 # transforms for school region normalizing
-    # urban_school_region = ['Urban', 'Urbaine', 'Urbano', 'urban']
-    # rural_school_region = ['Rural', 'Rurale', 'Urbaine', 'rural']
+# urban_school_region = ['Urban', 'Urbaine', 'Urbano', 'urban']
+# rural_school_region = ['Rural', 'Rurale', 'Urbaine', 'rural']
 # transforms for school type
-    # public_labels = ['Estadual','Municipal','Federal', 'Government', 'Public', 'Pubic', 'public']
-    # private_labels = ['Private', 'Private ']
-
-
-
-   
+# public_labels = ['Estadual','Municipal','Federal', 'Government', 'Public', 'Pubic', 'public']
+# private_labels = ['Private', 'Private ']

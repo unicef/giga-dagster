@@ -8,8 +8,11 @@ from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
 from pyspark.sql.functions import col, count, udf
 
-from dagster import OutputContext
+import src.schemas
+from dagster import OpExecutionContext, OutputContext
+from src.schemas import BaseSchema
 from src.settings import settings
+from src.utils.logger import get_context_with_fallback_logger
 
 
 def _get_host_ip():
@@ -32,16 +35,13 @@ spark_common_config = {
         "org.apache.spark.sql.delta.catalog.DeltaCatalog"
     ),
     "spark.sql.execution.arrow.pyspark.enabled": "true",
-    "spark.sql.warehouse.dir": settings.WAREHOUSE_DIR,
+    "spark.sql.warehouse.dir": settings.SPARK_WAREHOUSE_DIR,
     "spark.sql.catalogImplementation": "hive",
     "hive.metastore.uris": settings.HIVE_METASTORE_URI,
-    "spark.driver.cores": "1",
-    "spark.driver.memory": "1g",
-    "spark.executor.cores": "1",
-    "spark.executor.memory": "1g",
-    "spark.executor.instances": "1",
-    "spark.dynamicAllocation.enabled": "false",
-    "spark.default.parallelism": "1",
+    "spark.driver.cores": "2",
+    "spark.driver.memory": "2g",
+    "spark.executor.cores": "2",
+    "spark.executor.memory": "2g",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -52,8 +52,6 @@ spark_common_config = {
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
-    # "spark.python.use.daemon": "true",
-    # "spark.python.daemon.module": "src.utils.sentry",
 }
 
 if settings.IN_PRODUCTION:
@@ -104,7 +102,7 @@ def transform_columns(
     target_type: types.DataType,
     context: OutputContext = None,
 ) -> sql.DataFrame:
-    log_func = print if context is None else context.log.info
+    logger = get_context_with_fallback_logger(context)
 
     for col_name in columns:
         if col_name not in df.columns:
@@ -112,7 +110,7 @@ def transform_columns(
 
         nulls_before = count_nulls_for_column(df, col_name)
         df = df.withColumn(col_name, col(col_name).cast(target_type))
-        log_func(f">> TRANSFORMED {target_type} for column {col_name}")
+        logger.info(f">> TRANSFORMED {target_type} for column {col_name}")
         nulls_after = count_nulls_for_column(df, col_name)
 
         if nulls_before != nulls_after:
@@ -124,7 +122,7 @@ def transform_columns(
 
 
 def transform_school_types(
-    df: sql.DataFrame, context: OutputContext = None
+    df: sql.DataFrame, context: OpExecutionContext | OutputContext = None
 ) -> sql.DataFrame:
     columns_convert_to_double = [
         "latitude",
@@ -200,6 +198,34 @@ def transform_school_types(
     df = transform_columns(
         df, columns_convert_to_timestamp, types.TimestampType(), context
     )
+
+    df.printSchema()
+    return df
+
+
+def transform_types(
+    df: sql.DataFrame,
+    schema_name: str,
+    context: OpExecutionContext | OutputContext = None,
+) -> sql.DataFrame:
+    logger = get_context_with_fallback_logger(context)
+
+    schema: BaseSchema = getattr(src.schemas, schema_name)
+    for column in schema.columns:
+        if column.name not in df.columns:
+            continue
+
+        nulls_before = count_nulls_for_column(df, column.name)
+        df = df.withColumn(column.name, col(column.name).cast(column.dataType))
+        logger.info(
+            f">> TRANSFORMED {column.dataType.typeName()} for column {column.name}"
+        )
+        nulls_after = count_nulls_for_column(df, column.name)
+
+        if nulls_before != nulls_after:
+            raise ValueError(
+                f"Error: NULL count mismatch for column {column.name} after the cast."
+            )
 
     df.printSchema()
     return df

@@ -33,8 +33,8 @@ x-spark-worker-common-env: &spark-worker-common-env
   SPARK_MODE: worker
   SPARK_MASTER_URL: spark://spark-master:7077
   SPARK_WORKER_HOST: 0.0.0.0
-  SPARK_WORKER_CORES: 4
-  SPARK_WORKER_MEMORY: 4G
+  SPARK_WORKER_CORES: 6
+  SPARK_WORKER_MEMORY: 8G
   SPARK_PUBLIC_DNS: localhost
   PYTHONPATH: /opt/bitnami/spark/app
 
