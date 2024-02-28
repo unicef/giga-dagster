@@ -18,7 +18,7 @@ from src.spark.data_quality_tests import (
     dq_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
-from src.utils.adhoc.rename_columns import REFERENCE_COLUMNS_TO_ADD
+from src.utils import adhoc as adhoc_utils
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.spark import transform_types
 
@@ -35,13 +35,13 @@ def adhoc__load_reference_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__reference_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_reference_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> sql.DataFrame:
     s: SparkSession = spark.spark_session
     filepath = config.filepath
     filename = filepath.split("/")[-1]
@@ -57,7 +57,7 @@ def adhoc__reference_data_quality_checks(
     sdf = s.createDataFrame(df)
 
     columns_to_add = {}
-    for column in REFERENCE_COLUMNS_TO_ADD:
+    for column in adhoc_utils.REFERENCE_COLUMNS_TO_ADD:
         columns_to_add[column] = f.lit(None).cast(NullType())
     for column in schema.columns:
         if column.name not in sdf.columns:
@@ -67,35 +67,29 @@ def adhoc__reference_data_quality_checks(
     context.log.info(f"Renamed {len(columns_to_add)} columns")
 
     dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
-    yield Output(
-        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
-    )
+    yield Output(dq_checked, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__reference_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
+) -> sql.DataFrame:
     dq_passed = extract_dq_passed_rows(
         adhoc__reference_data_quality_checks, "reference"
     )
-    yield Output(
-        dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
-    )
+    yield Output(dq_passed, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__reference_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
+) -> sql.DataFrame:
     dq_failed = extract_dq_failed_rows(
         adhoc__reference_data_quality_checks, "reference"
     )
-    yield Output(
-        dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
-    )
+    yield Output(dq_failed, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")

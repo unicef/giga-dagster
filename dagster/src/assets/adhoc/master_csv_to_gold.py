@@ -1,4 +1,5 @@
 import json
+import os
 from io import BytesIO
 
 import numpy as np
@@ -6,11 +7,21 @@ import pandas as pd
 import src.schemas
 from dagster_pyspark import PySparkResource
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
+from pyspark.sql.types import NullType
 from src.schemas import BaseSchema
 from src.sensors.config import FileConfig
-from src.utils.adhoc.rename_columns import COLUMN_RENAME_MAPPING
+from src.spark.data_quality_tests import (
+    dq_failed_rows as extract_dq_failed_rows,
+    dq_passed_rows as extract_dq_passed_rows,
+    row_level_checks,
+)
+from src.utils import adhoc as adhoc_utils
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -71,50 +82,71 @@ def adhoc__load_master_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
     spark: PySparkResource,
-    # config: FileConfig,
-) -> pd.DataFrame:
+    config: FileConfig,
+) -> sql.DataFrame:
+    logger = ContextLoggerWithLoguruFallback(context)
+
     s: SparkSession = spark.spark_session
-    # filepath = config.filepath
-    # filename = filepath.split("/")[-1]
-    # file_stem = os.path.splitext(filename)[0]
-    # country_iso3 = file_stem.split("_")[0]
+    filepath = config.filepath
+    filename = filepath.split("/")[-1]
+    file_stem = os.path.splitext(filename)[0]
+    country_iso3 = file_stem.split("_")[0]
+
+    schema_name = config.metastore_schema
+    schema: BaseSchema = getattr(src.schemas, schema_name)
 
     buffer = BytesIO(adhoc__load_master_csv)
     buffer.seek(0)
     df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
     sdf = s.createDataFrame(df)
+
     columns_to_rename = {
-        col: COLUMN_RENAME_MAPPING[col]
+        col: adhoc_utils.COLUMN_RENAME_MAPPING[col]
         for col in sdf.columns
-        if col in COLUMN_RENAME_MAPPING.keys()
+        if col in adhoc_utils.COLUMN_RENAME_MAPPING.keys()
     }
-    sdf = sdf.withColumnsRenamed(columns_to_rename)
-    context.log.info(f"Renamed columns {json.dumps(columns_to_rename, indent=2)}")
 
-    # dq_checked = row_level_checks(sdf, "master", country_iso3, context)
-    yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
+    columns_to_add = {
+        col.name: f.lit(None).cast(NullType())
+        for col in schema.columns
+        if col.name not in sdf.columns
+    }
+
+    sdf = logger.passthrough(
+        sdf.withColumnsRenamed(columns_to_rename),
+        f"Renamed {len(columns_to_rename)} columns",
+    )
+    sdf = logger.passthrough(
+        sdf.withColumns(columns_to_add), f"Added {len(columns_to_add)} missing columns"
+    )
+
+    dq_checked = logger.passthrough(
+        row_level_checks(sdf, "master", country_iso3, context),
+        "Row level checks completed",
+    )
+    yield Output(dq_checked, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
-    dq_passed = adhoc__master_data_quality_checks.toPandas()
+) -> sql.DataFrame:
+    dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
     yield Output(dq_passed, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key="spark_csv_io_manager")
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
-    dq_failed = adhoc__master_data_quality_checks.toPandas()
+    dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     yield Output(dq_failed, metadata={"filepath": get_output_filepath(context)})
 
 

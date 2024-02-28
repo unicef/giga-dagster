@@ -14,7 +14,7 @@ from src.spark.coverage_transform_functions import (
 )
 from src.spark.data_quality_tests import (
     aggregate_report_json,
-    aggregate_report_sparkdf,
+    aggregate_report_spark_df,
     row_level_checks,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
@@ -58,7 +58,7 @@ def coverage_data_quality_results(
 
     dq_results = row_level_checks(coverage_raw, f"coverage_{source}", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_sparkdf(spark.spark_session, dq_results), coverage_raw
+        aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
 
     yield Output(

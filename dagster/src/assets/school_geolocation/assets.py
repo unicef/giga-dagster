@@ -8,7 +8,7 @@ from src.sensors.config import FileConfig
 from src.settings import settings
 from src.spark.data_quality_tests import (
     aggregate_report_json,
-    aggregate_report_sparkdf,
+    aggregate_report_spark_df,
     row_level_checks,
 )
 from src.spark.transform_functions import create_bronze_layer_columns
@@ -63,7 +63,7 @@ def geolocation_data_quality_results(
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
     dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_sparkdf(spark.spark_session, dq_results), geolocation_bronze
+        aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
     )
 
     yield Output(

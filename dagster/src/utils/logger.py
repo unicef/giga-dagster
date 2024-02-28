@@ -1,13 +1,13 @@
 from typing import TypeVar
 
-from loguru import logger
+import loguru
 
 from dagster import OpExecutionContext
 
 
 def get_context_with_fallback_logger(context: OpExecutionContext = None):
     if context is None:
-        return logger
+        return loguru.logger
     return context.log
 
 
