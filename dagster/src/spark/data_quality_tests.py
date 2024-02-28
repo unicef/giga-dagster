@@ -176,8 +176,8 @@ def domain_checks(
             df = df.withColumn(
                 f"dq_is_invalid_domain-{column}",
                 f.when(
-                    f.col(f"{column}").isin(
-                        CONFIG_COLUMN_LIST[column],
+                    f.lower(f.col(f"{column}")).isin(
+                        [x.lower() for x in CONFIG_COLUMN_LIST[column]],
                     ),
                     0,
                 ).otherwise(1),
@@ -923,16 +923,21 @@ if __name__ == "__main__":
     df_bronze = df_bronze.sort("school_name").limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    df = domain_checks(df_bronze, CONFIG_VALUES_DOMAIN_MASTER)
+    df.show()
+    # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
+   
+    
     # row_level_checks(df, dataset_type, country_code_iso3)
-    df = row_level_checks(
-        df_bronze, "master", "GHA"
-    )  # dataset plugged in should conform to updated schema! rename if necessary
-    df.show()
-    df = df.withColumn("dq_has_critical_error", f.lit(1))
+    # df = row_level_checks(
+    #     df_bronze, "master", "GHA")  
+    # dataset plugged in should conform to updated schema! rename if necessary
+    # df.show()
+    # df = df.withColumn("dq_has_critical_error", f.lit(1))
 
-    df = dq_passed_rows(df, "coverage")
+    # df = dq_passed_rows(df, "coverage")
     # df = aggregate_report_sparkdf(df)
-    df.show()
+    # df.show()
 
     # _json = aggregate_report_json(df, df_bronze)
     # print(_json)
