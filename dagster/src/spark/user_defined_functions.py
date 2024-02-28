@@ -1,13 +1,13 @@
 from decimal import Decimal
 
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
 from h3 import geo_to_h3
 from pyspark.sql.functions import udf
-from shapely.geometry import Point
-from shapely.ops import nearest_points
 
-from src.settings import settings
+from .udf_dependencies import (
+    is_within_boundary_distance,
+    is_within_country_gadm,
+    is_within_country_geopy,
+)
 
 
 def get_decimal_places_udf_factory(precision: int):
@@ -24,7 +24,7 @@ def get_decimal_places_udf_factory(precision: int):
 
 
 @udf
-def point_110(value):
+def point_110_udf(value):
     if value is None:
         point = None
     else:
@@ -34,65 +34,11 @@ def point_110(value):
 
 
 @udf
-def h3_geo_to_h3(latitude: float, longitude: float):
+def h3_geo_to_h3_udf(latitude: float, longitude: float):
     if latitude is None or longitude is None:
         out = "0"
     else:
         out = geo_to_h3(latitude, longitude, resolution=8)
-
-    return out
-
-
-def get_point(longitude: float, latitude: float):
-    try:
-        point = Point(longitude, latitude)
-    except:  # noqa: E722
-        point = None
-
-    return point
-
-
-# Inside based on GADM admin boundaries data
-def is_within_country_gadm(latitude: float, longitude: float, geometry) -> bool:
-    point = get_point(longitude, latitude)
-    if point is not None and geometry is not None:
-        out = point.within(geometry)
-    else:
-        out = False
-    return out
-
-
-# Inside based on geopy
-def is_within_country_geopy(
-    latitude: float, longitude: float, country_code_iso2: str
-) -> bool:
-    geolocator = Nominatim(user_agent=f"GigaSyncDagster/{settings.COMMIT_SHA[:7]}")
-    coords = f"{latitude},{longitude}"
-
-    if latitude is None or longitude is None:
-        out = False
-    else:
-        location = geolocator.reverse(coords, timeout=10)
-        geopy_country_code_iso2 = location.raw.get("address", {}).get(
-            "country_code", ""
-        )
-        out = geopy_country_code_iso2.lower() == country_code_iso2.lower()
-
-    return out
-
-
-# Inside based on boundary distance
-def is_within_boundary_distance(latitude: float, longitude: float, geometry) -> bool:
-    point = get_point(longitude, latitude)
-
-    if point is not None and geometry is not None:
-        p1, p2 = nearest_points(geometry, point)
-        point1 = p1.coords[0]
-        point2 = (longitude, latitude)
-        distance = geodesic(point1, point2).km
-        out = distance <= 1.5  # km
-    else:
-        out = False
 
     return out
 

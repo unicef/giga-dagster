@@ -78,9 +78,9 @@ from src.utils.logger import (
 
 from .user_defined_functions import (
     get_decimal_places_udf_factory,
-    h3_geo_to_h3,
+    h3_geo_to_h3_udf,
     is_not_within_country_check_udf_factory,
-    point_110,
+    point_110_udf,
 )
 
 
@@ -373,8 +373,8 @@ def duplicate_name_level_110_check(
 
     df_columns = df.columns
 
-    df = df.withColumn("lat_110", point_110(f.col("latitude")))
-    df = df.withColumn("long_110", point_110(f.col("longitude")))
+    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
+    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
     window_spec1 = Window.partitionBy(
         "school_name", "education_level", "lat_110", "long_110"
     )
@@ -399,8 +399,8 @@ def similar_name_level_within_110_check(
     df_columns = df.columns
 
     column_actions = {
-        "lat_110": point_110(f.col("latitude")),
-        "long_110": point_110(f.col("longitude")),
+        "lat_110": point_110_udf(f.col("latitude")),
+        "long_110": point_110_udf(f.col("longitude")),
     }
     df = df.withColumns(column_actions)
 
@@ -442,7 +442,7 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
 
     df = df.withColumn(
         "hex8",
-        h3_geo_to_h3(f.col("latitude"), f.col("longitude")),
+        h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")),
     )
 
     df = df.withColumn(
@@ -595,7 +595,7 @@ def row_level_checks(
         # df = is_not_within_country(df, country_code_iso3, context)
         df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
-        df = similar_name_level_within_110_check(df, context)
+        # df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(df, country_code_iso3, context)
         df = school_density_check(df, context)
     elif dataset_type in ["coverage", "reference"]:
