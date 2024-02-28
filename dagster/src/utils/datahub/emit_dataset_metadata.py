@@ -223,7 +223,7 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     datahub_graph_client.execute_graphql(query=tag_query)
 
     step = context.asset_key.to_user_string()
-    if step != "raw":
+    if "raw" not in step:
         upstream_dataset_urn = create_dataset_urn(context, upstream=True)
         lineage_mce = builder.make_lineage_mce(
             [upstream_dataset_urn],  # Upstream URNs

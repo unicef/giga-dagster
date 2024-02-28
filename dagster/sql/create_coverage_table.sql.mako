@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     schools_within_1km INT,
     schools_within_2km INT,
     schools_within_3km INT,
+    schools_within_10km INT,
+    nearest_NR_distance DOUBLE,
     nearest_LTE_distance DOUBLE,
     nearest_UMTS_distance DOUBLE,
     nearest_GSM_distance DOUBLE,
@@ -15,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
     pop_within_3km LONG,
     pop_within_10km LONG,
     nearest_school_distance DOUBLE,
-    schools_within_10km INT,
+    nearest_NR_id STRING,
     nearest_LTE_id STRING,
     nearest_UMTS_id STRING,
     nearest_GSM_id STRING

@@ -5,12 +5,11 @@ school_master_geolocation__automated_data_checks_job = define_asset_job(
     selection=[
         "geolocation_raw",
         "geolocation_bronze",
-        # "geolocation_dq_results",
-        # "geolocation_dq_summary_statistics",
-        # "geolocation_dq_checks",
+        "geolocation_dq_results",
+        "geolocation_dq_summary_statistics",
         "geolocation_dq_passed_rows",
         "geolocation_dq_failed_rows",
-        "geolocation_staging",
+        # "geolocation_staging",
     ],
 )
 
@@ -18,13 +17,13 @@ school_master_coverage__automated_data_checks_job = define_asset_job(
     name="school_master_coverage__automated_data_checks_job",
     selection=[
         "coverage_raw",
-        # "coverage_dq_results",
-        # "coverage_dq_summary_statistics",
+        "coverage_dq_results",
+        "coverage_dq_summary_statistics",
         # "coverage_dq_checks",
         "coverage_dq_passed_rows",
         "coverage_dq_failed_rows",
         "coverage_bronze",
-        "coverage_staging",
+        # "coverage_staging",
     ],
 )
 
@@ -34,7 +33,8 @@ school_master_geolocation__successful_manual_checks_job = define_asset_job(
     selection=[
         "manual_review_passed_rows",
         "silver",
-        "gold",
+        "master",
+        "reference",
     ],
 )
 
@@ -49,11 +49,7 @@ school_master_geolocation__failed_manual_checks_job = define_asset_job(
 
 school_master_coverage__successful_manual_checks_job = define_asset_job(
     name="school_master_coverage__successful_manual_checks_job",
-    selection=[
-        "manual_review_passed_rows",
-        "silver",
-        "gold",
-    ],
+    selection=["manual_review_passed_rows", "silver", "master", "reference"],
 )
 
 
@@ -67,14 +63,19 @@ school_master_coverage__failed_manual_checks_job = define_asset_job(
 school_master__convert_gold_csv_to_deltatable_job = define_asset_job(
     name="school_master__convert_gold_csv_to_deltatable_job",
     selection=[
-        "master_csv_to_gold",
+        "adhoc__load_master_csv",
+        "adhoc__master_data_quality_checks",
+        "adhoc__master_dq_checks_passed",
+        "adhoc__master_dq_checks_failed",
+        "adhoc__publish_master_to_gold",
     ],
 )
 
 school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
     name="school_reference__convert_gold_csv_to_deltatable_job",
     selection=[
-        "reference_csv_to_gold",
+        "adhoc__load_reference_csv",
+        "adhoc__publish_reference_to_gold",
     ],
 )
 

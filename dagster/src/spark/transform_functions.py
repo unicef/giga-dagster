@@ -3,18 +3,11 @@ import uuid
 import h3
 from pyspark.sql import functions as f
 from pyspark.sql.types import ArrayType, StringType
-from pyspark.sql.window import Window
 
 from src.settings import settings
-from src.spark.check_functions import (
-    get_decimal_places_udf,
-    has_similar_name_udf,
-    is_within_country_udf,
-)
 from src.spark.config_expectations import (
-    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
-    CONFIG_UNIQUE_SET_COLUMNS,
     CONFIG_COLUMN_RENAME_GEOLOCATION,
+    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
 )
 
 
@@ -126,7 +119,9 @@ def rename_raw_columns(df):
 
 
 def bronze_prereq_columns(df):
-    bronze_prereq_columns = [delta_col for _, delta_col in CONFIG_COLUMN_RENAME_GEOLOCATION]
+    bronze_prereq_columns = [
+        delta_col for _, delta_col in CONFIG_COLUMN_RENAME_GEOLOCATION
+    ]
     df = df.select(*bronze_prereq_columns)
 
     return df
@@ -138,7 +133,7 @@ def create_bronze_layer_columns(df):
     df = bronze_prereq_columns(df)
 
     # ID
-    df = create_giga_school_id(df) #school_id_giga 
+    df = create_giga_school_id(df)  # school_id_giga
 
     ## Clean up columns -- function shouldnt exist, uploads should be clean
     # df = standardize_internet_speed(df)

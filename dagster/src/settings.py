@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
         return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
 
+    @property
+    def SPARK_WAREHOUSE_DIR(self) -> str:
+        if self.PYTHON_ENV == Environment.LOCAL:
+            return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
+        return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+
 
 @lru_cache
 def get_settings():
