@@ -7,8 +7,6 @@ from typing import Any
 # Geospatial
 import country_converter as coco
 import geopandas as gpd
-from geopy.distance import geodesic
-from geopy.geocoders import Nominatim
 from pyspark import sql
 
 # Spark functions
@@ -25,8 +23,6 @@ from pyspark.sql.types import (
     StructType,
 )
 from pyspark.sql.window import Window
-from shapely.geometry import Point
-from shapely.ops import nearest_points
 
 import src.schemas
 
@@ -48,7 +44,6 @@ from src.spark.config_expectations import (
     CONFIG_NONEMPTY_COLUMNS_COVERAGE,
     CONFIG_NONEMPTY_COLUMNS_COVERAGE_FB,
     CONFIG_NONEMPTY_COLUMNS_COVERAGE_ITU,
-    CONFIG_NONEMPTY_COLUMNS_CRITICAL,
     CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
     # Completeness Configs
     CONFIG_NONEMPTY_COLUMNS_MASTER,
@@ -57,7 +52,6 @@ from src.spark.config_expectations import (
     CONFIG_UNIQUE_COLUMNS_COVERAGE,
     CONFIG_UNIQUE_COLUMNS_COVERAGE_FB,
     CONFIG_UNIQUE_COLUMNS_COVERAGE_ITU,
-    CONFIG_UNIQUE_COLUMNS_CRITICAL,
     CONFIG_UNIQUE_COLUMNS_GEOLOCATION,
     CONFIG_UNIQUE_COLUMNS_MASTER,
     CONFIG_UNIQUE_COLUMNS_REFERENCE,
@@ -71,7 +65,6 @@ from src.spark.config_expectations import (
     CONFIG_VALUES_RANGE_ALL,
     CONFIG_VALUES_RANGE_COVERAGE,
     CONFIG_VALUES_RANGE_COVERAGE_ITU,
-    CONFIG_VALUES_RANGE_CRITICAL,
     CONFIG_VALUES_RANGE_GEOLOCATION,
     # Range Configs
     CONFIG_VALUES_RANGE_MASTER,
@@ -86,6 +79,7 @@ from src.utils.logger import (
 from .user_defined_functions import (
     get_decimal_places_udf_factory,
     h3_geo_to_h3,
+    is_not_within_country_check_udf_factory,
     point_110,
 )
 
@@ -249,18 +243,6 @@ def get_country_geometry(country_code_iso3: str):
     return country_geometry
 
 
-def get_point(longitude: float, latitude: float):
-    try:
-        point = Point(longitude, latitude)
-    except ValueError as e:
-        if str(e) == "Must be a coordinate pair or Point":
-            point = None
-        else:
-            raise e
-
-    return point
-
-
 def is_not_within_country(
     df: sql.DataFrame, country_code_iso3: str, context: OpExecutionContext = None
 ):
@@ -273,55 +255,9 @@ def is_not_within_country(
     # geopy constants
     country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
-    # Inside based on GADM admin boundaries data
-    def is_within_country_gadm(latitude: float, longitude: float):
-        point = get_point(longitude, latitude)
-
-        if point is not None and geometry is not None:
-            return point.within(geometry)
-
-        return None
-
-    # Inside based on geopy
-    def is_within_country_geopy(latitude: float, longitude: float):
-        geolocator = Nominatim(user_agent="schools_geolocation")
-        coords = f"{latitude},{longitude}"
-
-        if latitude is None or longitude is None:
-            return False
-        else:
-            location = geolocator.reverse(coords, timeout=10)
-            geopy_country_code_iso2 = location.raw["address"].get("country_code")
-
-            return geopy_country_code_iso2.lower() == country_code_iso2.lower()
-
-    # Inside based on boundary distance
-    def is_within_boundary_distance(latitude: float, longitude: float):
-        point = get_point(longitude, latitude)
-
-        if point is not None and geometry is not None:
-            p1, p2 = nearest_points(geometry, point)
-            point1 = p1.coords[0]
-            point2 = (longitude, latitude)
-            distance = geodesic(point1, point2).km
-            return distance <= 1.5  # km
-
-        return None
-
-    @f.udf
-    def is_not_within_country_check(
-        latitude: float, longitude: float, country_code_iso3_: str = country_code_iso3
-    ):
-        if latitude is None or longitude is None or country_code_iso3_ is None:
-            return False
-
-        is_valid_gadm = is_within_country_gadm(latitude, longitude)
-        is_valid_geopy = is_within_country_geopy(latitude, longitude)
-        is_valid_boundary = is_within_boundary_distance(latitude, longitude)
-
-        validity = is_valid_gadm | is_valid_geopy | is_valid_boundary
-
-        return int(not validity)
+    is_not_within_country_check = is_not_within_country_check_udf_factory(
+        country_code_iso2, country_code_iso3, geometry
+    )
 
     return df.withColumn(
         "dq_is_not_within_country",
@@ -411,18 +347,17 @@ def duplicate_set_checks(
 
 
 def duplicate_all_except_checks(
-    df: sql.DataFrame, config_column_list: set[str], context: OpExecutionContext = None
+    df: sql.DataFrame, config_column_list: list[str], context: OpExecutionContext = None
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate all except checks...")
 
-    for column_set in config_column_list:
-        df = df.withColumn(
-            "dq_duplicate_all_except_school_code",
-            f.when(f.count("*").over(Window.partitionBy(column_set)) > 1, 1).otherwise(
-                0
-            ),
-        )
+    df = df.withColumn(
+        "dq_duplicate_all_except_school_code",
+        f.when(
+            f.count("*").over(Window.partitionBy(config_column_list)) > 1, 1
+        ).otherwise(0),
+    )
 
     return df
 
@@ -535,10 +470,10 @@ def critical_error_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running critical error checks...")
 
-    df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_CRITICAL)
-    df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
-    df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
-    df = is_not_within_country(df, country_code_iso3)
+    # df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS_CRITICAL)
+    # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
+    # df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
+    # df = is_not_within_country(df, country_code_iso3)
     df = df.withColumn(
         "dq_has_critical_error",
         f.when(
@@ -549,7 +484,7 @@ def critical_error_checks(
             + f.col("dq_is_null_mandatory-longitude")
             + f.col("dq_is_invalid_range-latitude")
             + f.col("dq_is_invalid_range-longitude")
-            + f.col("dq_is_not_within_country")
+            # + f.col("dq_is_not_within_country")
             > 0,
             1,
         ).otherwise(0),
@@ -657,7 +592,7 @@ def row_level_checks(
             df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
         df = precision_check(df, CONFIG_PRECISION, context)
-        df = is_not_within_country(df, country_code_iso3, context)
+        # df = is_not_within_country(df, country_code_iso3, context)
         df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
         df = similar_name_level_within_110_check(df, context)

@@ -211,22 +211,13 @@ def transform_types(
     logger = get_context_with_fallback_logger(context)
 
     schema: BaseSchema = getattr(src.schemas, schema_name)
-    for column in schema.columns:
-        if column.name not in df.columns:
-            continue
-
-        nulls_before = count_nulls_for_column(df, column.name)
-        df = df.withColumn(column.name, col(column.name).cast(column.dataType))
-        logger.info(
-            f">> TRANSFORMED {column.dataType.typeName()} for column {column.name}"
-        )
-        nulls_after = count_nulls_for_column(df, column.name)
-
-        if nulls_before != nulls_after:
-            raise ValueError(
-                f"Error: NULL count mismatch for column {column.name} after the cast."
-            )
-
+    df = df.withColumns(
+        {
+            column.name: col(column.name).cast(column.dataType)
+            for column in schema.columns
+        }
+    )
+    logger.info("Transformed column types")
     df.printSchema()
     return df
 

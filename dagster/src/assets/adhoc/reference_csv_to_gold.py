@@ -35,13 +35,13 @@ def adhoc__load_reference_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__reference_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_reference_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
     filepath = config.filepath
     filename = filepath.split("/")[-1]
@@ -67,29 +67,36 @@ def adhoc__reference_data_quality_checks(
     context.log.info(f"Renamed {len(columns_to_add)} columns")
 
     dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
-    yield Output(dq_checked, metadata={"filepath": get_output_filepath(context)})
+    dq_checked = transform_types(dq_checked, config.metastore_schema, context)
+    yield Output(
+        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__reference_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(
         adhoc__reference_data_quality_checks, "reference"
     )
-    yield Output(dq_passed, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__reference_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     dq_failed = extract_dq_failed_rows(
         adhoc__reference_data_quality_checks, "reference"
     )
-    yield Output(dq_failed, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")

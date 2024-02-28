@@ -82,13 +82,13 @@ def adhoc__load_master_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     logger = ContextLoggerWithLoguruFallback(context)
 
     s: SparkSession = spark.spark_session
@@ -129,25 +129,32 @@ def adhoc__master_data_quality_checks(
         row_level_checks(sdf, "master", country_iso3, context),
         "Row level checks completed",
     )
-    yield Output(dq_checked, metadata={"filepath": get_output_filepath(context)})
+    dq_checked = transform_types(dq_checked, config.metastore_schema, context)
+    yield Output(
+        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
-) -> sql.DataFrame:
+) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
-    yield Output(dq_passed, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
-@asset(io_manager_key="spark_csv_io_manager")
+@asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
+) -> sql.DataFrame:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
-    yield Output(dq_failed, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+    )
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")

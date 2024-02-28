@@ -95,18 +95,19 @@ class ADLSFileClient(ConfigurableResource):
         if not (extension := os.path.splitext(filepath)[1]):
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
+        full_remote_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+
         match extension:
             case ".csv":
                 data.write.csv(
-                    filepath,
+                    full_remote_path,
                     mode="overwrite",
                     quote='"',
                     escapeQuotes=True,
-                    encoding="utf-8-sig",
                     header=True,
                 )
             case ".json":
-                data.write.json(filepath, mode="overwrite")
+                data.write.json(full_remote_path, mode="overwrite")
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
