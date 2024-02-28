@@ -336,25 +336,27 @@ def is_not_within_country(
 def has_similar_name(df: sql.DataFrame, context: OpExecutionContext = None):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running has similar name checks...")
+    
+    name_list = df.rdd.map(lambda x: x.school_name).collect()
+    with_similar_name = []
 
-    name_list = df.select("school_name").collect()
-    name_list = [row.school_name for row in name_list]
+    for index in range(len(name_list)):
+        string_value = name_list.pop(index)
+        if string_value in with_similar_name:
+            name_list.insert(index, string_value)
+            continue
 
-    def similarity_test(column):
         for name in name_list:
-            if (
-                1
-                > SequenceMatcher(None, column, name).ratio()
-                >= SIMILARITY_RATIO_CUTOFF
-            ):
-                return 1
-        return 0
+            if (SequenceMatcher(None, string_value, name).ratio() > SIMILARITY_RATIO_CUTOFF):
+                with_similar_name.append(string_value)
+                with_similar_name.append(name)
+                break
 
-    similarity_test_udf = f.udf(similarity_test)
+        name_list.insert(index, string_value)
 
     df = df.withColumn(
         "dq_has_similar_name",
-        similarity_test_udf(f.col("school_name")),
+            f.when(f.col("school_name").isin(with_similar_name), 1).otherwise(0)
     )
 
     return df
@@ -920,10 +922,11 @@ if __name__ == "__main__":
     file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GHA_school_geolocation_coverage_master.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     df_bronze = spark.read.csv(file_url, header=True)
-    df_bronze = df_bronze.sort("school_name").limit(10)
+    df_bronze = df_bronze.sort("school_name").limit(1000)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-    df = domain_checks(df_bronze, CONFIG_VALUES_DOMAIN_MASTER)
+    # df = domain_checks(df_bronze, CONFIG_VALUES_DOMAIN_MASTER)
+    df = has_similar_name(df_bronze)
     df.show()
     # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
    
@@ -936,7 +939,9 @@ if __name__ == "__main__":
     # df = df.withColumn("dq_has_critical_error", f.lit(1))
 
     # df = dq_passed_rows(df, "coverage")
+    # df = dq_passed_rows(df, "coverage")
     # df = aggregate_report_sparkdf(df)
+    # df.show()
     # df.show()
 
     # _json = aggregate_report_json(df, df_bronze)
