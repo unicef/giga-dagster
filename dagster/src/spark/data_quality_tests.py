@@ -2,6 +2,8 @@ import io
 import json
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
+from functools import reduce
+from operator import add
 from typing import Any
 
 # Geospatial
@@ -465,7 +467,10 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
 
 
 def critical_error_checks(
-    df: sql.DataFrame, country_code_iso3, context: OpExecutionContext = None
+    df: sql.DataFrame,
+    dataset_type: str,
+    config_column_list: list[str],
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running critical error checks...")
@@ -474,18 +479,25 @@ def critical_error_checks(
     # df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS_CRITICAL)
     # df = range_checks(df, CONFIG_VALUES_RANGE_CRITICAL)
     # df = is_not_within_country(df, country_code_iso3)
+
+    critial_column_dq_checks = [
+        f.col(f"dq_is_null_mandatory-{column}") for column in config_column_list
+    ]
+
+    if dataset_type == "master":
+        critial_column_dq_checks = [
+            *critial_column_dq_checks,
+            f.col("dq_duplicate-school_id_govt"),
+            f.col("dq_duplicate-school_id_giga"),
+            f.col("dq_is_invalid_range-latitude"),
+            f.col("dq_is_invalid_range-longitude"),
+            # f.col("dq_is_not_within_country"),
+        ]
+
     df = df.withColumn(
         "dq_has_critical_error",
         f.when(
-            f.col("dq_duplicate-school_id_govt")
-            + f.col("dq_duplicate-school_id_giga")
-            + f.col("dq_is_null_mandatory-school_name")
-            + f.col("dq_is_null_mandatory-latitude")
-            + f.col("dq_is_null_mandatory-longitude")
-            + f.col("dq_is_invalid_range-latitude")
-            + f.col("dq_is_invalid_range-longitude")
-            # + f.col("dq_is_not_within_country")
-            > 0,
+            reduce(add, critial_column_dq_checks) > 0,
             1,
         ).otherwise(0),
     )
@@ -596,7 +608,9 @@ def row_level_checks(
         df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
         # df = similar_name_level_within_110_check(df, context)
-        df = critical_error_checks(df, country_code_iso3, context)
+        df = critical_error_checks(
+            df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
+        )
         df = school_density_check(df, context)
     elif dataset_type in ["coverage", "reference"]:
         df = standard_checks(df, dataset_type, context)
