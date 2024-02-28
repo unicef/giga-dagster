@@ -178,8 +178,6 @@ def domain_checks(
                 f.when(
                     f.lower(f.col(f"{column}")).isin(
                         [x.lower() for x in CONFIG_COLUMN_LIST[column]],
-                    f.lower(f.col(f"{column}")).isin(
-                        [x.lower() for x in CONFIG_COLUMN_LIST[column]],
                     ),
                     0,
                 ).otherwise(1),
@@ -343,17 +341,18 @@ def has_similar_name(df: sql.DataFrame, context: OpExecutionContext = None):
     with_similar_name = []
 
     for index in range(len(name_list)):
-        check_iterable = name_list.copy()
-        # print(check_iterable)
-        string_value = check_iterable.pop(index)
+        string_value = name_list.pop(index)
         if string_value in with_similar_name:
+            name_list.insert(index, string_value)
             continue
 
-        for name in check_iterable:
+        for name in name_list:
             if (SequenceMatcher(None, string_value, name).ratio() > SIMILARITY_RATIO_CUTOFF):
                 with_similar_name.append(string_value)
                 with_similar_name.append(name)
                 break
+
+        name_list.insert(index, string_value)
 
     df = df.withColumn(
         "dq_has_similar_name",
@@ -927,8 +926,8 @@ if __name__ == "__main__":
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     # df = domain_checks(df_bronze, CONFIG_VALUES_DOMAIN_MASTER)
-    df_bronze = has_similar_name(df_bronze)
-    df_bronze.show()
+    df = has_similar_name(df_bronze)
+    df.show()
     # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
    
     
