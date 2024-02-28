@@ -178,6 +178,8 @@ def domain_checks(
                 f.when(
                     f.lower(f.col(f"{column}")).isin(
                         [x.lower() for x in CONFIG_COLUMN_LIST[column]],
+                    f.lower(f.col(f"{column}")).isin(
+                        [x.lower() for x in CONFIG_COLUMN_LIST[column]],
                     ),
                     0,
                 ).otherwise(1),
@@ -938,7 +940,9 @@ if __name__ == "__main__":
     # df = df.withColumn("dq_has_critical_error", f.lit(1))
 
     # df = dq_passed_rows(df, "coverage")
+    # df = dq_passed_rows(df, "coverage")
     # df = aggregate_report_sparkdf(df)
+    # df.show()
     # df.show()
 
     # _json = aggregate_report_json(df, df_bronze)
