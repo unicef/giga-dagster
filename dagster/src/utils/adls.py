@@ -1,8 +1,10 @@
 import json
+import os.path
 from io import BytesIO
 
 import pandas as pd
 from delta.tables import DeltaTable
+from loguru import logger
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
@@ -38,7 +40,11 @@ class ADLSFileClient(ConfigurableResource):
             try:
                 file_client.upload_data(buffer.read())
             except azure.core.exceptions.ResourceModifiedError:
+                logger.warning("ResourceModifiedError: Skipping write")
                 pass
+            except azure.core.exceptions.ResourceNotFoundError as e:
+                logger.error(f"ResourceNotFoundError: {filepath}")
+                raise e
 
     def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
         file_client = _adls.get_file_client(filepath)
@@ -75,13 +81,35 @@ class ADLSFileClient(ConfigurableResource):
             case "csv" | "xls" | "xlsx":
                 bytes_data = data.to_csv(mode="w+", index=False).encode("utf-8-sig")
             case "json":
-                bytes_data = data.to_json().encode()
+                bytes_data = data.to_json(indent=2).encode()
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(buffer.read(), overwrite=True)
+
+    def upload_spark_dataframe_as_file(
+        self, data: sql.DataFrame, filepath: str, spark: SparkSession
+    ):
+        if not (extension := os.path.splitext(filepath)[1]):
+            raise RuntimeError(f"Cannot infer format of file {filepath}")
+
+        full_remote_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+
+        match extension:
+            case ".csv":
+                data.write.csv(
+                    full_remote_path,
+                    mode="overwrite",
+                    quote='"',
+                    escapeQuotes=True,
+                    header=True,
+                )
+            case ".json":
+                data.write.json(full_remote_path, mode="overwrite")
+            case _:
+                raise OSError(f"Unsupported format for file {filepath}")
 
     def download_delta_table_as_delta_table(
         self, table_path: str, spark: SparkSession

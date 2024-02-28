@@ -30,6 +30,7 @@ from src.resources.io_managers import (
     ADLSPandasIOManager,
     ADLSPassthroughIOManager,
 )
+from src.resources.io_managers.adls_csv import AdlsCsvIOManager
 from src.sensors.sensors import (
     qos__csv_to_deltatable_sensor,
     school_master__gold_csv_to_deltatable_sensor,
@@ -69,6 +70,8 @@ defs = Definitions(
         "adls_json_io_manager": ADLSJSONIOManager(),
         "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
         "adls_passthrough_io_manager": ADLSPassthroughIOManager(),
+        "pandas_csv_io_manager": AdlsCsvIOManager(pyspark=pyspark, engine="pandas"),
+        "spark_csv_io_manager": AdlsCsvIOManager(pyspark=pyspark, engine="spark"),
         "adls_file_client": ADLSFileClient(),
         "spark": pyspark,
     },
