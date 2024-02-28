@@ -75,6 +75,9 @@ school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
     name="school_reference__convert_gold_csv_to_deltatable_job",
     selection=[
         "adhoc__load_reference_csv",
+        "adhoc__reference_data_quality_checks",
+        "adhoc__reference_dq_checks_passed",
+        "adhoc__reference_dq_checks_failed",
         "adhoc__publish_reference_to_gold",
     ],
 )

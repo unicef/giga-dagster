@@ -432,6 +432,9 @@ def school_reference__gold_csv_to_deltatable_sensor():
                     "run_config": RunConfig(
                         ops={
                             "adhoc__load_reference_csv": file_config,
+                            "adhoc__reference_data_quality_checks": file_config,
+                            "adhoc__reference_dq_checks_passed": file_config,
+                            "adhoc__reference_dq_checks_failed": file_config,
                             "adhoc__publish_reference_to_gold": file_config,
                         }
                     ),

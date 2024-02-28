@@ -162,7 +162,8 @@ def gold(
         "nearest_UMTS_id",
         "nearest_GSM_id",
         "education_level_govt",
-        "download_speed_govt" "school_id_govt_type",
+        "download_speed_govt",
+        "school_id_govt_type",
         "school_address",
         "is_school_open",
     ]

@@ -15,9 +15,9 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
         filepath = self._get_filepath(context)
-        if output.empty:
-            context.log.warning("Output DataFrame is empty. Skipping write operation.")
-            return
+        # if output.empty:
+        context.log.warning("Output DataFrame is empty.")
+        #     return
 
         adls_client.upload_pandas_dataframe_as_file(output, filepath)
 

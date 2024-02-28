@@ -29,9 +29,12 @@ from pyspark.sql.window import Window
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
+import src.schemas
+
 # Name Similarity
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
+from src.schemas import BaseSchema
 
 # Auth
 from src.settings import (
@@ -120,7 +123,7 @@ def completeness_checks(
             df = df.withColumn(
                 column_name,
                 f.when(
-                    f.col(f"{column}").isNull(),
+                    f.isnull(f.col(column)),
                     1,
                 ).otherwise(0),
             )
@@ -132,7 +135,7 @@ def completeness_checks(
             df = df.withColumn(
                 column_name,
                 f.when(
-                    f.col(f"{column}").isNull(),
+                    f.isnull(f.col(column)),
                     1,
                 ).otherwise(0),
             )
@@ -883,8 +886,13 @@ def aggregate_report_json(
     return json_dict
 
 
-def dq_passed_rows(df, dataset_type):
-    columns = [col for col in df.columns if not col.startswith("dq_")]
+def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
+    if dataset_type in ["master", "reference"]:
+        schema_name = f"school_{dataset_type}"
+        schema: BaseSchema = getattr(src.schemas, schema_name)
+        columns = [col.name for col in schema.columns]
+    else:
+        columns = [col for col in df.columns if not col.startswith("dq_")]
 
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 0)
@@ -893,23 +901,23 @@ def dq_passed_rows(df, dataset_type):
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-school_id_giga"] == 0)
+            & (df["dq_is_null_mandatory-education_level_govt"] == 0)
+            & (df["dq_is_null_mandatory-school_id_govt_type"] == 0)
         )
         df = df.select(*columns)
     return df
 
 
-def dq_failed_rows(df, dataset_type):
-    columns = [col for col in df.columns if not col.startswith("dq_")]
-
+def dq_failed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
-        df = df.select(*columns)
     else:
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 1)
             | (df["dq_is_null_mandatory-school_id_giga"] == 1)
+            | (df["dq_is_null_mandatory-education_level_govt"] == 1)
+            | (df["dq_is_null_mandatory-school_id_govt_type"] == 1)
         )
-        df = df.select(*columns)
     return df
 
 
