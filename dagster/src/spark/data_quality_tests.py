@@ -1,7 +1,6 @@
 import io
 import json
 from datetime import UTC, datetime
-from difflib import SequenceMatcher
 from typing import Any
 
 # Geospatial
@@ -69,7 +68,6 @@ from src.spark.config_expectations import (
     # Range Configs
     CONFIG_VALUES_RANGE_MASTER,
     CONFIG_VALUES_RANGE_REFERENCE,
-    SIMILARITY_RATIO_CUTOFF,
 )
 from src.utils.logger import (
     ContextLoggerWithLoguruFallback,
@@ -79,6 +77,7 @@ from src.utils.logger import (
 from .user_defined_functions import (
     get_decimal_places_udf_factory,
     h3_geo_to_h3_udf,
+    has_similar_name_udf_factory,
     is_not_within_country_check_udf_factory,
     point_110_udf,
 )
@@ -266,33 +265,17 @@ def is_not_within_country(
 
 
 def has_similar_name(df: sql.DataFrame, context: OpExecutionContext = None):
+    __test_name__ = "has similar name"
     logger = get_context_with_fallback_logger(context)
-    logger.info("Running has similar name checks...")
+    logger.info(f"Running {__test_name__} checks...")
 
-    name_list = df.select(f.col("school_name")).collect()
-    name_list = [row["school_name"] for row in name_list]
-    with_similar_name = []
+    name_list = df.select("school_name").rdd.flatMap(lambda x: x).collect()
+    name_list_broadcasted = df.sparkSession.sparkContext.broadcast(name_list)
 
-    for index in range(len(name_list)):
-        string_value = name_list.pop(index)
-        if string_value in with_similar_name:
-            name_list.insert(index, string_value)
-            continue
-
-        for name in name_list:
-            if (
-                SequenceMatcher(None, string_value, name).ratio()
-                > SIMILARITY_RATIO_CUTOFF
-            ):
-                with_similar_name.append(string_value)
-                with_similar_name.append(name)
-                break
-
-        name_list.insert(index, string_value)
-
+    has_similar_name_udf = has_similar_name_udf_factory(name_list_broadcasted)
     return df.withColumn(
         "dq_has_similar_name",
-        f.when(f.col("school_name").isin(with_similar_name), 1).otherwise(0),
+        has_similar_name_udf(f.col("school_name")),
     )
 
 
@@ -595,7 +578,7 @@ def row_level_checks(
         # df = is_not_within_country(df, country_code_iso3, context)
         df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
-        # df = similar_name_level_within_110_check(df, context)
+        df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(df, country_code_iso3, context)
         df = school_density_check(df, context)
     elif dataset_type in ["coverage", "reference"]:

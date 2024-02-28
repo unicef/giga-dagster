@@ -1,8 +1,13 @@
 from decimal import Decimal
+from difflib import SequenceMatcher
 
+import pandas as pd
 from h3 import geo_to_h3
-from pyspark.sql.functions import udf
+from pyspark import Broadcast
+from pyspark.sql.functions import pandas_udf, udf
+from pyspark.sql.types import IntegerType
 
+from .config_expectations import SIMILARITY_RATIO_CUTOFF
 from .udf_dependencies import (
     is_within_boundary_distance,
     is_within_country_gadm,
@@ -65,3 +70,19 @@ def is_not_within_country_check_udf_factory(
         return out
 
     return is_not_within_country_check
+
+
+def has_similar_name_udf_factory(name_list_broadcasted: Broadcast[list]):
+    @pandas_udf(IntegerType())
+    def has_similar_name(school_name: pd.Series) -> pd.Series:
+        result = pd.Series([0] * school_name.size)
+
+        for i, sname in enumerate(school_name):
+            for name in name_list_broadcasted.value:
+                if SequenceMatcher(None, sname, name).ratio() > SIMILARITY_RATIO_CUTOFF:
+                    result.at[i] = 1
+                    break
+
+        return result
+
+    return has_similar_name
