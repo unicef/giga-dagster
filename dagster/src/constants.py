@@ -1,14 +1,13 @@
 from datetime import datetime
 
-from models import FullTypeMappings, TypeMappings
-from pydantic import BaseSettings
-from pyspark.sql.types import DoubleType, LongType, StringType, TimestampType
-
 from datahub.metadata.schema_classes import (
     DateTypeClass,
     NumberTypeClass,
     StringTypeClass,
 )
+from models import FullTypeMappings, TypeMappings
+from pydantic import BaseSettings
+from pyspark.sql.types import DoubleType, LongType, StringType, TimestampType
 
 
 class Constants(BaseSettings):
@@ -92,7 +91,7 @@ class Constants(BaseSettings):
             "adhoc__reference_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
-            "qos_csv_to_gold": "gold/delta-tables/qos",
+            "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
         }
 
     TYPE_MAPPINGS: FullTypeMappings = FullTypeMappings(

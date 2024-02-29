@@ -21,13 +21,20 @@ from .base import FileConfig, get_dataset_type
 def school_master_geolocation__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.raw_folder}/school-geolocation")
+    file_list = adls.list_paths(f"{constants.raw_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:
             continue
         else:
             filepath = file_data["name"]
+            dataset_type = get_dataset_type(filepath)
+            if (
+                dataset_type != "geolocation"
+                or "test_pipeline" not in filepath.split("/")[-1]
+            ):
+                continue
+
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
@@ -41,6 +48,7 @@ def school_master_geolocation__raw_file_uploads_sensor():
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
                 **params,
+                # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=f"{layer}_{params['dataset_type'].replace('-', '_')}",
             )
 
@@ -56,18 +64,18 @@ def school_master_geolocation__raw_file_uploads_sensor():
                         "geolocation_bronze": get_file_config(
                             "geolocation_bronze", file_config_params
                         ),
-                        # "geolocation_data_quality_results": get_file_config(
-                        #     "geolocation_data_quality_results", file_config_params
-                        # ),
+                        "geolocation_data_quality_results": get_file_config(
+                            "geolocation_data_quality_results", file_config_params
+                        ),
                         "geolocation_dq_passed_rows": get_file_config(
                             "geolocation_dq_passed_rows", file_config_params
                         ),
                         "geolocation_dq_failed_rows": get_file_config(
                             "geolocation_dq_failed_rows", file_config_params
                         ),
-                        "geolocation_staging": get_file_config(
-                            "geolocation_staging", file_config_params
-                        ),
+                        # "geolocation_staging": get_file_config(
+                        #     "geolocation_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -80,13 +88,20 @@ def school_master_geolocation__raw_file_uploads_sensor():
 def school_master_coverage__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.raw_folder}/school-coverage")
+    file_list = adls.list_paths(f"{constants.raw_folder}")
 
     for file_data in file_list:
         if file_data["is_directory"]:
             continue
         else:
             filepath = file_data["name"]
+            dataset_type = get_dataset_type(filepath)
+            if (
+                dataset_type != "coverage"
+                or "test_pipeline" not in filepath.split("/")[-1]
+            ):
+                continue
+
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
@@ -100,6 +115,7 @@ def school_master_coverage__raw_file_uploads_sensor():
 
             get_file_config = lambda layer, params: FileConfig(  # noqa: E731
                 **params,
+                # TODO: Add the correct metastore schema and table SQL definition
                 metastore_schema=f"{layer}_{params['dataset_type'].replace('-', '_')}",
             )
 
@@ -112,9 +128,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_raw": get_file_config(
                             "coverage_raw", file_config_params
                         ),
-                        # "coverage_data_quality_results": get_file_config(
-                        #     "coverage_data_quality_results", file_config_params
-                        # ),
+                        "coverage_data_quality_results": get_file_config(
+                            "coverage_data_quality_results", file_config_params
+                        ),
                         "coverage_dq_passed_rows": get_file_config(
                             "coverage_dq_passed_rows", file_config_params
                         ),
@@ -124,9 +140,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_bronze": get_file_config(
                             "coverage_bronze", file_config_params
                         ),
-                        "coverage_staging": get_file_config(
-                            "coverage_staging", file_config_params
-                        ),
+                        # "coverage_staging": get_file_config(
+                        #     "coverage_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -139,7 +155,7 @@ def school_master_coverage__raw_file_uploads_sensor():
 def school_master_geolocation__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-geolocation-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -191,7 +207,7 @@ def school_master_geolocation__successful_manual_checks_sensor():
 def school_master_coverage__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-coverage-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
