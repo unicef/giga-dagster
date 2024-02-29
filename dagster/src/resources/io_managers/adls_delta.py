@@ -40,10 +40,12 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         context.log.info("EMITTING METADATA TO DATAHUB")
         input_filepath = context.step_context.op_config["filepath"]
-        context.log.info(f"Input Filepath: {input_filepath}")
-        context.log.info(f"Output Filepath: {filepath}")
         emit_metadata_to_datahub(
-            context, output_filepath=filepath, input_filepath=input_filepath, df=output
+            context,
+            output_filepath=filepath,
+            input_filepath=input_filepath,
+            df=output,
+            data_format="delta table",
         )
 
         context.log.info(

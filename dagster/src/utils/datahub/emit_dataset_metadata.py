@@ -54,14 +54,15 @@ def create_dataset_urn(
         )
 
 
-def define_dataset_properties(context: OutputContext, output_filepath, input_filepath):
+def define_dataset_properties(
+    context: OutputContext, output_filepath: str, input_filepath: str, data_format: str
+):
     step = context.asset_key.to_user_string()
 
     domain = context.step_context.op_config["dataset_type"]
     file_size_bytes = context.step_context.op_config["file_size_bytes"]
     metadata = context.step_context.op_config["metadata"]
 
-    data_format = output_filepath.split(".")[-1]
     country_code = input_filepath.split("/")[-1].split("_")[0]
 
     context.log.info(country_code)
@@ -172,7 +173,11 @@ def set_tag_mutation_query(country_name, dataset_urn):
 
 
 def emit_metadata_to_datahub(
-    context: OutputContext, output_filepath: str, input_filepath: str, df: pd.DataFrame
+    context: OutputContext,
+    output_filepath: str,
+    input_filepath: str,
+    df: pd.DataFrame,
+    data_format: str,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -182,7 +187,7 @@ def emit_metadata_to_datahub(
     dataset_urn = create_dataset_urn(output_filepath, input_filepath, upstream=False)
 
     dataset_properties = define_dataset_properties(
-        context, output_filepath, input_filepath
+        context, output_filepath, input_filepath, data_format
     )
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
