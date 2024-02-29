@@ -11,13 +11,13 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import NullType
-from src.schemas import BaseSchema
-from src.sensors.config import FileConfig
-from src.spark.data_quality_tests import (
+from src.data_quality_checks.utils import (
     dq_failed_rows as extract_dq_failed_rows,
     dq_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
+from src.schemas import BaseSchema
+from src.sensors.config import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.spark import transform_types
@@ -73,6 +73,7 @@ def adhoc__master_data_quality_checks(
         "Row level checks completed",
     )
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
+    logger.log.info(f"Post-DQ checks stats: {len(df.columns)=}, {df.count()=}")
     yield Output(
         dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -84,6 +85,9 @@ def adhoc__master_dq_checks_passed(
     adhoc__master_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
+    context.log.info(
+        f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}"
+    )
     yield Output(
         dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -95,6 +99,9 @@ def adhoc__master_dq_checks_failed(
     adhoc__master_data_quality_checks: sql.DataFrame,
 ) -> sql.DataFrame:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
+    context.log.info(
+        f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}"
+    )
     yield Output(
         dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )

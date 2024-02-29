@@ -1,4 +1,4 @@
-from .base import Schema as BaseSchema
+from .base import BaseSchema
 from .school_master import school_master
 from .school_reference import school_reference
 
