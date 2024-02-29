@@ -1,13 +1,22 @@
 from datetime import datetime
 
 from datahub.metadata.schema_classes import (
+    BooleanTypeClass,
     DateTypeClass,
     NumberTypeClass,
     StringTypeClass,
 )
-from models import FullTypeMappings, TypeMappings
+from models import TypeMapping, TypeMappings
 from pydantic import BaseSettings
-from pyspark.sql.types import DoubleType, LongType, StringType, TimestampType
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    TimestampType,
+)
 
 
 class Constants(BaseSettings):
@@ -94,12 +103,41 @@ class Constants(BaseSettings):
             "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
         }
 
-    TYPE_MAPPINGS: FullTypeMappings = FullTypeMappings(
-        string=TypeMappings(native=str, pyspark=StringType, datahub=StringTypeClass),
-        integer=TypeMappings(native=int, pyspark=LongType, datahub=NumberTypeClass),
-        float=TypeMappings(native=float, pyspark=DoubleType, datahub=NumberTypeClass),
-        timestamp=TypeMappings(
-            native=datetime, pyspark=TimestampType, datahub=DateTypeClass
+    TYPE_MAPPINGS: TypeMappings = TypeMappings(
+        string=TypeMapping(
+            native=str,
+            pyspark=StringType,
+            datahub=StringTypeClass,
+        ),
+        integer=TypeMapping(
+            native=int,
+            pyspark=IntegerType,
+            datahub=NumberTypeClass,
+        ),
+        long=TypeMapping(
+            native=int,
+            pyspark=LongType,
+            datahub=NumberTypeClass,
+        ),
+        float=TypeMapping(
+            native=float,
+            pyspark=FloatType,
+            datahub=NumberTypeClass,
+        ),
+        double=TypeMapping(
+            native=float,
+            pyspark=DoubleType,
+            datahub=NumberTypeClass,
+        ),
+        timestamp=TypeMapping(
+            native=datetime,
+            pyspark=TimestampType,
+            datahub=DateTypeClass,
+        ),
+        boolean=TypeMapping(
+            native=bool,
+            pyspark=BooleanType,
+            datahub=BooleanTypeClass,
         ),
     )
 

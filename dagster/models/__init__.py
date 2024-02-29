@@ -1,9 +1,9 @@
-from .mappings import VALID_PRIMITIVES, FullTypeMappings, TypeMappings
+from .mappings import VALID_PRIMITIVES, TypeMapping, TypeMappings
 from .schema import Schema as Schema
 
 __all__ = [
     "VALID_PRIMITIVES",
-    "FullTypeMappings",
     "TypeMappings",
+    "TypeMapping",
     "Schema",
 ]

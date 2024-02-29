@@ -1,19 +1,29 @@
-from typing import Literal, TypedDict
-
 from avrogen.dict_wrapper import DictWrapper
+from pydantic import BaseModel
 from pyspark.sql.types import DataType
 
-VALID_PRIMITIVES = Literal["string", "integer", "float", "timestamp"]
+VALID_PRIMITIVES = [
+    "string",
+    "integer",
+    "long",
+    "float",
+    "double",
+    "timestamp",
+    "boolean",
+]
 
 
-class TypeMappings(TypedDict):
+class TypeMapping(BaseModel):
     native: type
     pyspark: type[DataType]
     datahub: type[DictWrapper]
 
 
-class FullTypeMappings(TypedDict):
-    string: TypeMappings
-    integer: TypeMappings
-    float: TypeMappings
-    timestamp: TypeMappings
+class TypeMappings(BaseModel):
+    string: TypeMapping
+    integer: TypeMapping
+    long: TypeMapping
+    float: TypeMapping
+    double: TypeMapping
+    timestamp: TypeMapping
+    boolean: TypeMapping
