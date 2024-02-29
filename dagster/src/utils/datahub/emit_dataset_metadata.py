@@ -234,9 +234,7 @@ def emit_metadata_to_datahub(
 
     step = context.asset_key.to_user_string()
     if "raw" not in step:
-        upstream_dataset_urn = create_dataset_urn(
-            output_filepath, input_filepath, upstream=True
-        )
+        upstream_dataset_urn = create_dataset_urn(context, upstream=True)
         lineage_mce = builder.make_lineage_mce(
             [upstream_dataset_urn],  # Upstream URNs
             dataset_urn,  # Downstream URN

@@ -11,7 +11,7 @@ from sentry_sdk.integrations.stdlib import StdlibIntegration
 from dagster import OpExecutionContext, get_dagster_logger
 from src.settings import settings
 
-SENTRY_ENABLED = not (settings.IN_PRODUCTION and settings.SENTRY_DSN)
+SENTRY_ENABLED = settings.IN_PRODUCTION and settings.SENTRY_DSN
 
 
 def setup_sentry():

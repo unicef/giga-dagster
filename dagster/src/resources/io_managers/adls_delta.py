@@ -13,6 +13,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
+        if context.step_key in ["staging", "silver", "gold"]:
+            return
+
         if output.isEmpty():
             context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return

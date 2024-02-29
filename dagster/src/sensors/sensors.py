@@ -1,4 +1,4 @@
-from dagster import Config, RunConfig, RunRequest, sensor
+from dagster import RunConfig, RunRequest, sensor
 from src.constants import constants
 from src.jobs import (
     qos__convert_csv_to_deltatable_job,
@@ -14,26 +14,20 @@ from src.jobs import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-
-class FileConfig(Config):
-    filepath: str
-    dataset_type: str
-    metadata: dict
-    file_size_bytes: int
-    metastore_schema: str
+from .config import FileConfig
 
 
 def get_dataset_type(filepath: str) -> str | None:
-    if "geolocation" in filepath:
+    if "master" in filepath:
+        return "master"
+    elif "reference" in filepath:
+        return "reference"
+    elif "qos" in filepath:
+        return "qos"
+    elif "geolocation" in filepath:
         return "geolocation"
     elif "coverage" in filepath:
         return "coverage"
-    elif "reference" in filepath:
-        return "reference"
-    elif "master" in filepath:
-        return "master"
-    elif "qos" in filepath:
-        return "qos"
     else:
         return None
 
@@ -88,18 +82,18 @@ def school_master_geolocation__raw_file_uploads_sensor():
                         "geolocation_bronze": get_file_config(
                             "geolocation_bronze", file_config_params
                         ),
-                        # "geolocation_data_quality_results": get_file_config(
-                        #     "geolocation_data_quality_results", file_config_params
-                        # ),
+                        "geolocation_data_quality_results": get_file_config(
+                            "geolocation_data_quality_results", file_config_params
+                        ),
                         "geolocation_dq_passed_rows": get_file_config(
                             "geolocation_dq_passed_rows", file_config_params
                         ),
                         "geolocation_dq_failed_rows": get_file_config(
                             "geolocation_dq_failed_rows", file_config_params
                         ),
-                        "geolocation_staging": get_file_config(
-                            "geolocation_staging", file_config_params
-                        ),
+                        # "geolocation_staging": get_file_config(
+                        #     "geolocation_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -152,9 +146,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_raw": get_file_config(
                             "coverage_raw", file_config_params
                         ),
-                        # "coverage_data_quality_results": get_file_config(
-                        #     "coverage_data_quality_results", file_config_params
-                        # ),
+                        "coverage_data_quality_results": get_file_config(
+                            "coverage_data_quality_results", file_config_params
+                        ),
                         "coverage_dq_passed_rows": get_file_config(
                             "coverage_dq_passed_rows", file_config_params
                         ),
@@ -164,9 +158,9 @@ def school_master_coverage__raw_file_uploads_sensor():
                         "coverage_bronze": get_file_config(
                             "coverage_bronze", file_config_params
                         ),
-                        "coverage_staging": get_file_config(
-                            "coverage_staging", file_config_params
-                        ),
+                        # "coverage_staging": get_file_config(
+                        #     "coverage_staging", file_config_params
+                        # ),
                     }
                 ),
             )
@@ -179,7 +173,7 @@ def school_master_coverage__raw_file_uploads_sensor():
 def school_master_geolocation__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-geolocation-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -231,7 +225,7 @@ def school_master_geolocation__successful_manual_checks_sensor():
 def school_master_coverage__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.staging_approved_folder}")
+    file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-coverage-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
@@ -369,7 +363,7 @@ def school_master_coverage__failed_manual_checks_sensor():
 def school_master__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.gold_folder}/master")
+    file_list = adls.list_paths(f"{constants.gold_source_folder}/master")
     run_requests = []
 
     for file_data in file_list:
@@ -377,29 +371,30 @@ def school_master__gold_csv_to_deltatable_sensor():
             continue
         else:
             filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if dataset_type is None:
-                continue
-
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
             file_config = FileConfig(
                 filepath=filepath,
-                dataset_type=dataset_type,
+                dataset_type="master",
                 metadata=metadata,
                 file_size_bytes=size,
-                metastore_schema=f"gold_master_{dataset_type.replace('-', '_')}",
+                metastore_schema="school_master",
             )
+
             run_requests.append(
-                dict(
-                    run_key=filepath,
-                    run_config=RunConfig(
+                {
+                    "run_key": filepath,
+                    "run_config": RunConfig(
                         ops={
-                            "master_csv_to_gold": file_config,
+                            "adhoc__load_master_csv": file_config,
+                            "adhoc__master_data_quality_checks": file_config,
+                            "adhoc__master_dq_checks_passed": file_config,
+                            "adhoc__master_dq_checks_failed": file_config,
+                            "adhoc__publish_master_to_gold": file_config,
                         }
                     ),
-                )
+                }
             )
 
     for request in run_requests:
@@ -413,7 +408,7 @@ def school_master__gold_csv_to_deltatable_sensor():
 def school_reference__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.gold_folder}/reference")
+    file_list = adls.list_paths(f"{constants.gold_source_folder}/reference")
     run_requests = []
 
     for file_data in file_list:
@@ -421,29 +416,29 @@ def school_reference__gold_csv_to_deltatable_sensor():
             continue
         else:
             filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if dataset_type is None:
-                continue
-
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
             size = properties["size"]
             file_config = FileConfig(
                 filepath=filepath,
-                dataset_type=dataset_type,
+                dataset_type="reference",
                 metadata=metadata,
                 file_size_bytes=size,
-                metastore_schema=f"gold_reference_{dataset_type.replace('-', '_')}",
+                metastore_schema="school_reference",
             )
             run_requests.append(
-                dict(
-                    run_key=filepath,
-                    run_config=RunConfig(
+                {
+                    "run_key": filepath,
+                    "run_config": RunConfig(
                         ops={
-                            "reference_csv_to_gold": file_config,
+                            "adhoc__load_reference_csv": file_config,
+                            "adhoc__reference_data_quality_checks": file_config,
+                            "adhoc__reference_dq_checks_passed": file_config,
+                            "adhoc__reference_dq_checks_failed": file_config,
+                            "adhoc__publish_reference_to_gold": file_config,
                         }
                     ),
-                )
+                }
             )
 
     for request in run_requests:
@@ -457,7 +452,7 @@ def school_reference__gold_csv_to_deltatable_sensor():
 def qos__csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.gold_folder}/qos")
+    file_list = adls.list_paths(f"{constants.gold_source_folder}/qos")
     run_requests = []
 
     for file_data in file_list:

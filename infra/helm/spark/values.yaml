@@ -420,10 +420,10 @@ worker:
   daemonMemoryLimit: ""
   ## @param worker.memoryLimit Set the maximum memory the worker is allowed to use
   ##
-  memoryLimit: 2g
+  memoryLimit: 2731M
   ## @param worker.coreLimit Se the maximum number of cores that the worker can use
   ##
-  coreLimit: 1
+  coreLimit: 2
   ## @param worker.dir Set a custom working directory for the application
   ##
   dir: ""
