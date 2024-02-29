@@ -49,6 +49,11 @@ jobs:
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
                     SENTRY_DSN: "$(sentryDsn)"
+                    AZURE_EMAIL_CONNECTION_STRING: "$(azureEmailConnectionString)"
+                    AZURE_EMAIL_SENDER: "$(azureEmailSender)"
+                    EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
+                    EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
+                    EMAIL_TEST_RECIPIENTS: '$(emailTestRecipients)'
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets
