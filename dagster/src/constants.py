@@ -1,14 +1,33 @@
+from datetime import datetime
+
+from datahub.metadata.schema_classes import (
+    BooleanTypeClass,
+    DateTypeClass,
+    NumberTypeClass,
+    StringTypeClass,
+)
+from models import TypeMapping, TypeMappings
 from pydantic import BaseSettings
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    TimestampType,
+)
 
 
 class Constants(BaseSettings):
     raw_folder = "adls-testing-raw"
+    raw_schema_folder = "raw_schema"
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
 
-    step_origin_map = {
+    step_origin_map: dict[str, str] = {
         "geolocation_raw": "",
         "geolocation_bronze": "geolocation_raw",
         "geolocation_data_quality_results": "geolocation_bronze",
@@ -21,6 +40,18 @@ class Constants(BaseSettings):
         "coverage_dq_failed_rows": "coverage_data_quality_results",
         "coverage_bronze": "coverage_dq_passed_rows",
         "coverage_staging": "coverage_bronze",
+    }
+
+    step_origin_folder_map: dict[str, str] = {
+        "bronze": "raw",
+        "data_quality_results": "bronze",
+        "dq_split_rows": "bronze",
+        "dq_passed_rows": "bronze",
+        "dq_failed_rows": "bronze",
+        "manual_review_passed_rows": "bronze",
+        "manual_review_failed_rows": "bronze",
+        "silver": "manual_review_passed",
+        "gold": "silver",
     }
 
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:
@@ -69,8 +100,46 @@ class Constants(BaseSettings):
             "adhoc__reference_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
-            "qos_csv_to_gold": "gold/delta-tables/qos",
+            "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
         }
+
+    TYPE_MAPPINGS: TypeMappings = TypeMappings(
+        string=TypeMapping(
+            native=str,
+            pyspark=StringType,
+            datahub=StringTypeClass,
+        ),
+        integer=TypeMapping(
+            native=int,
+            pyspark=IntegerType,
+            datahub=NumberTypeClass,
+        ),
+        long=TypeMapping(
+            native=int,
+            pyspark=LongType,
+            datahub=NumberTypeClass,
+        ),
+        float=TypeMapping(
+            native=float,
+            pyspark=FloatType,
+            datahub=NumberTypeClass,
+        ),
+        double=TypeMapping(
+            native=float,
+            pyspark=DoubleType,
+            datahub=NumberTypeClass,
+        ),
+        timestamp=TypeMapping(
+            native=datetime,
+            pyspark=TimestampType,
+            datahub=DateTypeClass,
+        ),
+        boolean=TypeMapping(
+            native=bool,
+            pyspark=BooleanType,
+            datahub=BooleanTypeClass,
+        ),
+    )
 
 
 constants = Constants()
