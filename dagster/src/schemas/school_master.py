@@ -8,10 +8,10 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from .base import Schema
+from .base import BaseSchema
 
 
-class SchoolMasterSchema(Schema):
+class SchoolMasterSchema(BaseSchema):
     @property
     def columns(self):
         return [

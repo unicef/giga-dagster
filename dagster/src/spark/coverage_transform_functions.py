@@ -1,21 +1,14 @@
 from pyspark.sql import functions as f
 
 from src.settings import settings
-from src.spark.config_expectations import (
-    CONFIG_COV_COLUMN_MERGE_LOGIC,
-    CONFIG_COV_COLUMN_RENAME,
-    CONFIG_COV_COLUMNS,
-    CONFIG_FB_COLUMNS,
-    CONFIG_ITU_COLUMNS,
-    CONFIG_ITU_COLUMNS_TO_RENAME,
-)
+from src.spark.config_expectations import config
 
 # General Transform Components
 
 
 def rename_raw_columns(df):
     # Iterate over mapping set and perform actions
-    for raw_col, delta_col in CONFIG_COV_COLUMN_RENAME:
+    for raw_col, delta_col in config.COV_COLUMN_RENAME:
         # Check if the raw column exists in the DataFrame
         if raw_col in df.columns:
             # If it exists in raw, rename it to the delta column
@@ -51,7 +44,7 @@ def fb_percent_to_boolean(df):
 def fb_transforms(fb):
     # fb
     fb = fb_percent_to_boolean(fb)
-    fb = coverage_column_filter(fb, CONFIG_FB_COLUMNS)
+    fb = coverage_column_filter(fb, config.FB_COLUMNS)
     fb = coverage_row_filter(fb)
 
     # coverage availability and type columns
@@ -69,7 +62,7 @@ def fb_transforms(fb):
     fb = fb.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE " 
+            "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
             "END"
@@ -77,7 +70,7 @@ def fb_transforms(fb):
     )
 
     # add cov schema
-    for col in CONFIG_COV_COLUMNS:
+    for col in config.COV_COLUMNS:
         if col not in fb.columns:
             fb = fb.withColumn(col, f.lit(None))
 
@@ -94,15 +87,14 @@ def fb_coverage_merge(fb, cov):
     for col in fb.columns:
         if col != "school_id_giga":  # add suffix except join key
             fb = fb.withColumnRenamed(col, col + "_fb")
-    
+
     # outer join
     cov_stg = cov.join(fb, on="school_id_giga", how="outer")
-
 
     # coalesce with updated values
     for col in cov.columns:
         if (
-            col not in CONFIG_COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
+            col not in config.COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
         ):  # coverage availability and type are merged differently
             cov_stg = cov_stg.withColumn(col, f.coalesce(col + "_fb", col))
             cov_stg = cov_stg.drop(col + "_fb")
@@ -123,7 +115,7 @@ def fb_coverage_merge(fb, cov):
     cov_stg = cov_stg.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE " 
+            "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
             "END"
@@ -149,7 +141,7 @@ def itu_binary_to_boolean(df):
 
 
 def itu_lower_columns(df):
-    for col_name in CONFIG_ITU_COLUMNS_TO_RENAME:
+    for col_name in config.ITU_COLUMNS_TO_RENAME:
         df = df.withColumnRenamed(col_name, col_name.lower())
     return df
 
@@ -158,7 +150,7 @@ def itu_transforms(itu):
     # fb
     itu = itu_binary_to_boolean(itu)
     itu = itu_lower_columns(itu)  ## should i remove given column mapping portal?
-    itu = coverage_column_filter(itu, CONFIG_ITU_COLUMNS)
+    itu = coverage_column_filter(itu, config.ITU_COLUMNS)
     itu = coverage_row_filter(itu)
 
     # coverage availability and type columns
@@ -176,7 +168,7 @@ def itu_transforms(itu):
     itu = itu.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE " 
+            "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
             "END"
@@ -184,7 +176,7 @@ def itu_transforms(itu):
     )
 
     # add cov schema
-    for col in CONFIG_COV_COLUMNS:
+    for col in config.COV_COLUMNS:
         if col not in itu.columns:
             itu = itu.withColumn(col, f.lit(None))
 
@@ -205,11 +197,10 @@ def itu_coverage_merge(itu, cov):
     # outer join
     cov_stg = cov.join(itu, on="school_id_giga", how="outer")
 
-
     # coalesce with updated values
     for col in cov.columns:
         if (
-            col not in CONFIG_COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
+            col not in config.COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
         ):  # coverage availability and type are merged differently
             cov_stg = cov_stg.withColumn(col, f.coalesce(col + "_itu", col))
             cov_stg = cov_stg.drop(col + "_itu")
@@ -230,7 +221,7 @@ def itu_coverage_merge(itu, cov):
     cov_stg = cov_stg.withColumn(
         "cellular_coverage_availability",
         f.expr(
-            "CASE " 
+            "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
             "END"
@@ -262,22 +253,19 @@ if __name__ == "__main__":
     cov = rename_raw_columns(cov)
     cov = cov.withColumn("nearest_NR_id", f.lit(None))
     cov = cov.withColumn("nearest_NR_distance", f.lit(None))
-    cov = cov.select(*CONFIG_COV_COLUMNS)
-
-
+    cov = cov.select(*config.COV_COLUMNS)
 
     ## filter to one entry for testing
     fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
     itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
     cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
 
-
     ## DAGSTER WORKFLOW ##
 
     ## TRANSFORM STEP
     # FB
     fb = fb_transforms(fb)
-    fb = fb.withColumn('cellular_coverage_type', f.lit('3G'))
+    fb = fb.withColumn("cellular_coverage_type", f.lit("3G"))
     fb.show()
     df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
     print("Merged FB and (Silver) Coverage Dataset")

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from pyspark.sql.types import StructField, StructType
 
 
-class Schema(ABC):
+class BaseSchema(ABC):
     @property
     @abstractmethod
     def columns(self) -> list[StructField]:

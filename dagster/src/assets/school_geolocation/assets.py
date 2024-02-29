@@ -4,13 +4,13 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors.config import FileConfig
-from src.settings import settings
-from src.spark.data_quality_tests import (
+from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.sensors.config import FileConfig
+from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import (
     ADLSFileClient,

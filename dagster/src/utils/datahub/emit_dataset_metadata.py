@@ -23,7 +23,7 @@ from src.settings import settings
 from dagster import OutputContext, version
 
 
-def identify_country_name(country_code):
+def identify_country_name(country_code: str) -> str:
     coco = cc.CountryConverter()
     country_name = list(
         coco.data.iloc[coco.data["ISO3"][coco.data["ISO3"].isin([country_code])].index][
@@ -34,9 +34,9 @@ def identify_country_name(country_code):
 
 
 def create_dataset_urn(
-    output_filepath: str, input_filepath: str, upstream: bool
+    output_filepath: str, input_filepath: str, is_upstream: bool
 ) -> str:
-    if upstream:
+    if is_upstream:
         upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
@@ -55,7 +55,7 @@ def create_dataset_urn(
 
 
 def define_dataset_properties(
-    context: OutputContext, output_filepath: str, input_filepath: str, data_format: str
+    context: OutputContext, input_filepath: str, data_format: str
 ):
     step = context.asset_key.to_user_string()
 
@@ -68,41 +68,34 @@ def define_dataset_properties(
     context.log.info(country_code)
 
     country_name = identify_country_name(country_code=country_code)
-    source = output_filepath.split("_")[2]
-    date_modified = output_filepath.split(".")[0].split("_")[-1]
-    asset_type = "Raw Data" if "raw" in step else "Table"
-    file_size_MB = file_size_bytes / 1000000  # bytes to MB
+    file_size_MB = file_size_bytes / (2 ** (10 * 2))  # bytes to MB
+    run_tags = str.join(", ", [f"{k}={v}" for k, v in context.run_tags.items()])
 
-    # current date and time format: day/month/year 24-hour clock
-    now = datetime.now().strftime("%d/%b/%Y %H:%M:%S")
+    run_stats = context.instance.get_run_stats(context.run_id)
+    start_time = datetime.fromtimestamp(run_stats.start_time).isoformat()
 
-    custom_metadata = {
-        "Dagster Asset Key": f"{step}",
-        "Metadata Last Ingested": f"{now}",
-        "Asset Type": f"{asset_type}",
-        "Sensitivity Level": "",
-        "Data Security Classification (UNICEF)": "",
-        "PII Classification": "",
-        "Date Uploaded": "",
-        "Geolocation Data Source": f"{source}",
-        "Data Collection Modality": "",
-        "Data Collection Date": "",
-        "Domain": f"{domain}",
-        "Date_Modified": f"{date_modified}",
-        "Source": f"{source}",
-        "Data Format": f"{data_format}",
+    custom_metadata: dict[str, str] = {
+        "Dagster Asset Key": step,
+        "Dagster Version": version.__version__,
+        "Dagster Run ID": context.run_id,
+        "Dagster Is Re-Execution": str(context.run.is_resume_retry),
+        "Dagster Parent Run ID": str(context.run.parent_run_id),
+        "Dagster Root Run ID": str(context.run.root_run_id),
+        "Dagster Run Tags": run_tags,
+        "Dagster Op Name": context.op_def.name,
+        "Dagster Job Name": context.job_def.name,
+        "Dagster Run Created Timestamp": start_time,
+        "Dagster Sensor Name": context.run_tags.get("dagster/sensor_name"),
+        "Metadata Last Ingested": datetime.now().isoformat(),
+        "Domain": domain,
+        "Data Format": data_format,
         "Data Size": f"{file_size_MB} MB",
-        "Data Owner": "",
-        "Data Schema": "",
-        "Country": f"{country_name}",
-        "School ID Type": "",
-        "Description of file update": "",
-        "Dagster version": version.__version__,
-    } | metadata
+        "Country": country_name,
+    }
 
     dataset_properties = DatasetPropertiesClass(
-        description=f"{step}",
-        customProperties=custom_metadata,
+        description=step,
+        customProperties={**metadata, **custom_metadata},
     )
 
     return dataset_properties
@@ -184,10 +177,14 @@ def emit_metadata_to_datahub(
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
-    dataset_urn = create_dataset_urn(output_filepath, input_filepath, upstream=False)
+    dataset_urn = create_dataset_urn(
+        output_filepath=output_filepath,
+        input_filepath=input_filepath,
+        is_upstream=False,
+    )
 
     dataset_properties = define_dataset_properties(
-        context, output_filepath, input_filepath, data_format
+        context=context, input_filepath=input_filepath, data_format=data_format
     )
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
@@ -239,7 +236,11 @@ def emit_metadata_to_datahub(
 
     step = context.asset_key.to_user_string()
     if "raw" not in step:
-        upstream_dataset_urn = create_dataset_urn(context, upstream=True)
+        upstream_dataset_urn = create_dataset_urn(
+            output_filepath=output_filepath,
+            input_filepath=input_filepath,
+            is_upstream=True,
+        )
         lineage_mce = builder.make_lineage_mce(
             [upstream_dataset_urn],  # Upstream URNs
             dataset_urn,  # Downstream URN

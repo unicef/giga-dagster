@@ -4,6 +4,11 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.data_quality_checks.utils import (
+    aggregate_report_json,
+    aggregate_report_spark_df,
+    row_level_checks,
+)
 from src.sensors.config import FileConfig
 from src.settings import settings
 from src.spark.coverage_transform_functions import (
@@ -11,11 +16,6 @@ from src.spark.coverage_transform_functions import (
     fb_transforms,
     itu_coverage_merge,
     itu_transforms,
-)
-from src.spark.data_quality_tests import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
-    row_level_checks,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 

@@ -7,10 +7,10 @@ from pyspark.sql.types import (
     StructType,
 )
 
-from .base import Schema
+from .base import BaseSchema
 
 
-class SchoolReferenceSchema(Schema):
+class SchoolReferenceSchema(BaseSchema):
     @property
     def columns(self):
         return [
