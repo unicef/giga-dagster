@@ -59,8 +59,8 @@ class Constants(BaseSettings):
             "gold_reference": "gold/school-reference",
             #
             # adhoc
-            "adhoc__load_master_csv": f"gold/pre-check/school-{dataset_type}",
-            "adhoc__load_reference_csv": f"gold/pre-check/school-{dataset_type}",
+            "adhoc__load_master_csv": f"updated_master_schema/{dataset_type}",
+            "adhoc__load_reference_csv": f"updated_master_schema/{dataset_type}",
             "adhoc__master_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__reference_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__master_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
