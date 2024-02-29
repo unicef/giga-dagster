@@ -11,7 +11,7 @@ def send_email_dq_report(json):
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
 
     res = requests.post(
-        "http://localhost:3020/email/dq-report",
+        f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report",
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
