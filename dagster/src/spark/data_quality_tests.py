@@ -13,7 +13,7 @@ if __name__ == "__main__":
     df_bronze = df_bronze.sort("school_name").limit(1000)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-    # df = domain_checks(df_bronze, CONFIG_VALUES_DOMAIN_MASTER)
+    # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
     df_test = has_similar_name(df_bronze)
     df_test.show()
     # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))

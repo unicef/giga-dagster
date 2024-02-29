@@ -76,13 +76,13 @@ def aggregate_report_spark_df(
     # agg_df.show()
 
     # descriptions
-    configs_df = spark.createDataFrame(config.CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS)
+    configs_df = spark.createDataFrame(config.DATA_QUALITY_CHECKS_DESCRIPTIONS)
     # configs_df.show(truncate=False)
 
     # Range
     r_rows = [
         (key, value["min"], value.get("max"))
-        for key, value in config.CONFIG_VALUES_RANGE_ALL.items()
+        for key, value in config.VALUES_RANGE_ALL.items()
     ]
     range_schema = StructType(
         [
@@ -95,7 +95,7 @@ def aggregate_report_spark_df(
     # range_df.show(truncate=False)
 
     # Domain
-    d_rows = list(config.CONFIG_VALUES_DOMAIN_ALL.items())
+    d_rows = list(config.VALUES_DOMAIN_ALL.items())
     domain_schema = StructType(
         [
             StructField("column", StringType(), True),
@@ -106,7 +106,7 @@ def aggregate_report_spark_df(
     # domain_df.show(truncate=False)
 
     # Precision
-    p_rows = [(key, value["min"]) for key, value in config.CONFIG_PRECISION.items()]
+    p_rows = [(key, value["min"]) for key, value in config.PRECISION.items()]
     precision_schema = StructType(
         [
             StructField("column", StringType(), True),
@@ -257,9 +257,9 @@ def row_level_checks(
         df = duplicate_all_except_checks(
             df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
-        df = precision_check(df, config.CONFIG_PRECISION, context)
+        df = precision_check(df, config.PRECISION, context)
         # df = is_not_within_country(df, country_code_iso3, context)
-        df = duplicate_set_checks(df, config.CONFIG_UNIQUE_SET_COLUMNS, context)
+        df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
         # df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(

@@ -99,7 +99,7 @@ h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 def rename_raw_columns(df):
     # Iterate over mapping set and perform actions
-    for raw_col, delta_col in config.CONFIG_COLUMN_RENAME_GEOLOCATION:
+    for raw_col, delta_col in config.COLUMN_RENAME_GEOLOCATION:
         # Check if the raw column exists in the DataFrame
         if raw_col in df.columns:
             # If it exists in raw, rename it to the delta column
@@ -117,7 +117,7 @@ def rename_raw_columns(df):
 
 def bronze_prereq_columns(df):
     bronze_prereq_columns = [
-        delta_col for _, delta_col in config.CONFIG_COLUMN_RENAME_GEOLOCATION
+        delta_col for _, delta_col in config.COLUMN_RENAME_GEOLOCATION
     ]
     df = df.select(*bronze_prereq_columns)
 
@@ -147,9 +147,7 @@ def get_critical_errors_empty_column(*args):
     empty_errors = []
 
     # Only critical null errors
-    for column, value in zip(
-        config.CONFIG_NONEMPTY_COLUMNS_CRITICAL, args, strict=False
-    ):
+    for column, value in zip(config.NONEMPTY_COLUMNS_CRITICAL, args, strict=False):
         if value is None:  # If empty (None in PySpark)
             empty_errors.append(column)
 

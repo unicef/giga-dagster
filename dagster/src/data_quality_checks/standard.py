@@ -118,7 +118,7 @@ def format_validation_checks(df, context: OpExecutionContext = None):
     logger.info("Running format validation checks...")
 
     column_actions = {}
-    for column, dtype in config.CONFIG_DATA_TYPES:
+    for column, dtype in config.DATA_TYPES:
         if column in df.columns and dtype == "STRING":
             column_actions[f"dq_is_not_alphanumeric-{column}"] = f.when(
                 f.regexp_extract(f.col(column), ".+", 0) != "",

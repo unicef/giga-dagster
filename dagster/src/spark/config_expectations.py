@@ -7,7 +7,7 @@ class Config(BaseSettings):
     SIMILARITY_RATIO_CUTOFF: float = 0.7
     SIMILARITY_CUTOFF: int = 70
 
-    CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS: list[dict[str, str]] = [
+    DATA_QUALITY_CHECKS_DESCRIPTIONS: list[dict[str, str]] = [
         {
             "assertion": "duplicate",
             "description": "Checks if column {} has a duplicate",
@@ -90,7 +90,7 @@ class Config(BaseSettings):
         },
     ]
 
-    CONFIG_DATA_TYPES: set[tuple[str, str]] = {
+    DATA_TYPES: set[tuple[str, str]] = {
         ("cellular_coverage_availability", "STRING"),
         ("cellular_coverage_type", "STRING"),
         ("fiber_node_distance", "DOUBLE"),
@@ -161,21 +161,21 @@ class Config(BaseSettings):
     date_today: date = date.today()
     current_year: int = date_today.year
 
-    CONFIG_UNIQUE_COLUMNS_MASTER: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_MASTER: list[str] = ["school_id_govt", "school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_REFERENCE: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_REFERENCE: list[str] = ["school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_GEOLOCATION: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_GEOLOCATION: list[str] = ["school_id_govt", "school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_COVERAGE: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE: list[str] = ["school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
-    CONFIG_UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
 
-    CONFIG_NONEMPTY_COLUMNS_MASTER: list[str] = [
+    NONEMPTY_COLUMNS_MASTER: list[str] = [
         "school_id_giga",
         "school_id_govt",
         "school_name",
@@ -186,13 +186,13 @@ class Config(BaseSettings):
         "admin2",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_REFERENCE: list[str] = [
+    NONEMPTY_COLUMNS_REFERENCE: list[str] = [
         "school_id_giga",
         "education_level_govt",
         "school_id_govt_type",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_GEOLOCATION: list[str] = [
+    NONEMPTY_COLUMNS_GEOLOCATION: list[str] = [
         "school_id_giga",
         "school_id_govt",
         "school_name",
@@ -205,43 +205,43 @@ class Config(BaseSettings):
         "admin2",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_COVERAGE: list[str] = [
+    NONEMPTY_COLUMNS_COVERAGE: list[str] = [
         "school_id_giga",
         "cellular_coverage_availability",
         "cellular_coverage_type",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = [
+    NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = [
         "school_id_giga",
         "percent_2G",
         "percent_3G",
         "percent_4G",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = [
+    NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = [
         "school_id_giga",
         "2G",
         "3G",
         "4G",
     ]
 
-    CONFIG_NONEMPTY_COLUMNS_CRITICAL: list[str] = [
+    NONEMPTY_COLUMNS_CRITICAL: list[str] = [
         "school_name",
         "longitude",
         "latitude",
     ]
 
     @property
-    def CONFIG_NONEMPTY_COLUMNS_ALL(self) -> list[str]:
+    def NONEMPTY_COLUMNS_ALL(self) -> list[str]:
         return [
-            *self.CONFIG_NONEMPTY_COLUMNS_MASTER,
-            *self.CONFIG_NONEMPTY_COLUMNS_REFERENCE,
-            *self.CONFIG_NONEMPTY_COLUMNS_GEOLOCATION,
-            *self.CONFIG_NONEMPTY_COLUMNS_COVERAGE,
-            *self.CONFIG_NONEMPTY_COLUMNS_CRITICAL,
+            *self.NONEMPTY_COLUMNS_MASTER,
+            *self.NONEMPTY_COLUMNS_REFERENCE,
+            *self.NONEMPTY_COLUMNS_GEOLOCATION,
+            *self.NONEMPTY_COLUMNS_COVERAGE,
+            *self.NONEMPTY_COLUMNS_CRITICAL,
         ]
 
-    CONFIG_VALUES_DOMAIN_MASTER: dict[str, list[str]] = {
+    VALUES_DOMAIN_MASTER: dict[str, list[str]] = {
         "cellular_coverage_availability": ["yes", "no"],
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
         "connectivity_govt": ["yes", "no"],
@@ -281,11 +281,11 @@ class Config(BaseSettings):
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
     }
 
-    CONFIG_VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
+    VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
         "is_school_open": ["yes", "no"],
     }
 
-    CONFIG_VALUES_DOMAIN_GEOLOCATION: dict[str, list[str]] = {
+    VALUES_DOMAIN_GEOLOCATION: dict[str, list[str]] = {
         "connectivity_govt": ["yes", "no"],
         "education_level": [
             "Pre-Primary",
@@ -323,22 +323,22 @@ class Config(BaseSettings):
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
     }
 
-    CONFIG_VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {
+    VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {
         "cellular_coverage_availability": ["yes", "no"],
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
     }
 
     @property
-    def CONFIG_VALUES_DOMAIN_ALL(self) -> dict[str, list[str]]:
+    def VALUES_DOMAIN_ALL(self) -> dict[str, list[str]]:
         return {
-            **self.CONFIG_VALUES_DOMAIN_MASTER,
-            **self.CONFIG_VALUES_DOMAIN_REFERENCE,
-            **self.CONFIG_VALUES_DOMAIN_GEOLOCATION,
-            **self.CONFIG_VALUES_DOMAIN_COVERAGE,
+            **self.VALUES_DOMAIN_MASTER,
+            **self.VALUES_DOMAIN_REFERENCE,
+            **self.VALUES_DOMAIN_GEOLOCATION,
+            **self.VALUES_DOMAIN_COVERAGE,
         }
 
     @property
-    def CONFIG_VALUES_RANGE_MASTER(self) -> dict[str, dict[str, int]]:
+    def VALUES_RANGE_MASTER(self) -> dict[str, dict[str, int]]:
         return {
             "fiber_node_distance": {"min": 0, "max": 10000000},
             "microwave_node_distance": {"min": 0, "max": 10000000},
@@ -360,7 +360,7 @@ class Config(BaseSettings):
         }
 
     @property
-    def CONFIG_VALUES_RANGE_REFERENCE(self) -> dict[str, dict[str, int]]:
+    def VALUES_RANGE_REFERENCE(self) -> dict[str, dict[str, int]]:
         return {
             "nearest_school_distance": {"min": 0, "max": 10000000},
             "schools_within_10km": {"min": 0, "max": 100},
@@ -368,7 +368,7 @@ class Config(BaseSettings):
         }
 
     @property
-    def CONFIG_VALUES_RANGE_GEOLOCATION(self) -> dict[str, dict[str, int]]:
+    def VALUES_RANGE_GEOLOCATION(self) -> dict[str, dict[str, int]]:
         return {
             "school_establishment_year": {"min": 1000, "max": self.current_year},
             "latitude": {"min": -90, "max": 90},
@@ -385,7 +385,7 @@ class Config(BaseSettings):
             "download_speed_govt": {"min": 1, "max": 200},
         }
 
-    CONFIG_VALUES_RANGE_COVERAGE: dict[str, dict[str, int]] = {
+    VALUES_RANGE_COVERAGE: dict[str, dict[str, int]] = {
         "fiber_node_distance": {"min": 0, "max": 10000000},
         "microwave_node_distance": {"min": 0, "max": 10000000},
         "schools_within_1km": {"min": 0, "max": 20},
@@ -395,31 +395,25 @@ class Config(BaseSettings):
         "schools_within_10km": {"min": 0, "max": 100},
     }
 
-    CONFIG_VALUES_RANGE_COVERAGE_ITU: dict[str, dict[str, int]] = {
-        "fiber_node_distance": {"min": 0, "max": 10000000},
-        "microwave_node_distance": {"min": 0, "max": 10000000},
-        "schools_within_1km": {"min": 0, "max": 20},
-        "schools_within_2km": {"min": 0, "max": 40},
-        "schools_within_3km": {"min": 0, "max": 60},
-        "nearest_school_distance": {"min": 0, "max": 10000000},
-        "schools_within_10km": {"min": 0, "max": 100},
-    }
+    @property
+    def VALUES_RANGE_COVERAGE_ITU(self) -> dict[str, dict[str, int]]:
+        return self.VALUES_RANGE_COVERAGE
 
-    CONFIG_VALUES_RANGE_CRITICAL: dict[str, dict[str, int]] = {
+    VALUES_RANGE_CRITICAL: dict[str, dict[str, int]] = {
         "latitude": {"min": -90, "max": 90},
         "longitude": {"min": -180, "max": 180},
     }
 
     @property
-    def CONFIG_VALUES_RANGE_ALL(self) -> dict[str, dict[str, int]]:
+    def VALUES_RANGE_ALL(self) -> dict[str, dict[str, int]]:
         return {
-            **self.CONFIG_VALUES_RANGE_MASTER,
-            **self.CONFIG_VALUES_RANGE_REFERENCE,
-            **self.CONFIG_VALUES_RANGE_GEOLOCATION,
-            **self.CONFIG_VALUES_RANGE_COVERAGE,
+            **self.VALUES_RANGE_MASTER,
+            **self.VALUES_RANGE_REFERENCE,
+            **self.VALUES_RANGE_GEOLOCATION,
+            **self.VALUES_RANGE_COVERAGE,
         }
 
-    CONFIG_UNIQUE_SET_COLUMNS: list[list[str]] = [
+    UNIQUE_SET_COLUMNS: list[list[str]] = [
         ["school_id_govt", "school_name", "education_level", "location_id"],
         ["school_name", "education_level", "location_id"],
         ["education_level", "location_id"],
@@ -427,24 +421,22 @@ class Config(BaseSettings):
         # similar school name educ lat 110 lon 110
     ]
 
-    CONFIG_NOT_SIMILAR_COLUMN: list[str] = ["school_name"]
+    NOT_SIMILAR_COLUMN: list[str] = ["school_name"]
 
-    CONFIG_FIVE_DECIMAL_PLACES: list[str] = ["latitude", "longitude"]
+    FIVE_DECIMAL_PLACES: list[str] = ["latitude", "longitude"]
 
-    CONFIG_COLUMN_SUM: list[list[str]] = [
+    COLUMN_SUM: list[list[str]] = [
         ["student_count_girls", "student_count_boys", "student_count_others"]
     ]
 
-    CONFIG_VALUES_RANGE_PRIO: dict[str, dict[str, int]] = {
+    VALUES_RANGE_PRIO: dict[str, dict[str, int]] = {
         "download_speed_govt": {"min": 1, "max": 200},
         # "school_density": {"min": 0, "max": 5},
     }
 
-    CONFIG_VALUES_TYPE: list[dict[str, str]] = [
-        {"column": "school_id_govt", "type": "int64"}
-    ]
+    VALUES_TYPE: list[dict[str, str]] = [{"column": "school_id_govt", "type": "int64"}]
 
-    CONFIG_PAIR_AVAILABILITY: list[dict[str, str]] = [
+    PAIR_AVAILABILITY: list[dict[str, str]] = [
         {
             "availability_column": "internet_availability",
             "value_column": "internet_type",
@@ -455,13 +447,13 @@ class Config(BaseSettings):
         },
     ]
 
-    CONFIG_PRECISION: dict[str, dict[str, int]] = {
+    PRECISION: dict[str, dict[str, int]] = {
         "latitude": {"min": 5},
         "longitude": {"min": 5},
     }
 
     # Geolocation Column Configs
-    CONFIG_COLUMN_RENAME_GEOLOCATION: set[tuple[str, str]] = {
+    COLUMN_RENAME_GEOLOCATION: set[tuple[str, str]] = {
         # raw, delta_col
         ("school_id", "school_id_govt"),
         ("school_name", "school_name"),
@@ -503,7 +495,7 @@ class Config(BaseSettings):
         ("school_location_ingestion_timestamp", "school_location_ingestion_timestamp"),
     }
 
-    CONFIG_GEOLOCATION_COLUMNS: list[str] = [
+    GEOLOCATION_COLUMNS: list[str] = [
         "school_id_govt",
         "school_name",
         "school_id_govt_type",
@@ -544,7 +536,7 @@ class Config(BaseSettings):
     # Coverage Column Configs
 
     # Lower Columns
-    CONFIG_ITU_COLUMNS_TO_RENAME: list[str] = [
+    ITU_COLUMNS_TO_RENAME: list[str] = [
         "Schools_within_1km",
         "Schools_within_2km",
         "Schools_within_3km",
@@ -552,14 +544,14 @@ class Config(BaseSettings):
     ]
 
     # Columns To Keep From Dataset
-    CONFIG_FB_COLUMNS: list[str] = [
+    FB_COLUMNS: list[str] = [
         "school_id_giga",
         "2G_coverage",
         "3G_coverage",
         "4G_coverage",
     ]
 
-    CONFIG_ITU_COLUMNS: list[str] = [
+    ITU_COLUMNS: list[str] = [
         "school_id_giga",
         "2G_coverage",
         "3G_coverage",
@@ -585,7 +577,7 @@ class Config(BaseSettings):
         "pop_within_10km",
     ]
 
-    CONFIG_COV_COLUMNS: list[str] = [
+    COV_COLUMNS: list[str] = [
         "school_id_giga",
         "cellular_coverage_availability",
         "cellular_coverage_type",
@@ -610,7 +602,7 @@ class Config(BaseSettings):
         "pop_within_10km",
     ]
 
-    CONFIG_COV_COLUMN_RENAME: set[tuple[str, str]] = {
+    COV_COLUMN_RENAME: set[tuple[str, str]] = {
         ("giga_id_school", "school_id_giga"),
         ("coverage_availability", "cellular_coverage_availability"),
         ("coverage_type", "cellular_coverage_type"),
@@ -635,12 +627,12 @@ class Config(BaseSettings):
         ("pop_within_10km", "pop_within_10km"),
     }
 
-    CONFIG_COV_COLUMN_MERGE_LOGIC: list[str] = [
+    COV_COLUMN_MERGE_LOGIC: list[str] = [
         "cellular_coverage_availability",
         "cellular_coverage_type",
     ]
 
-    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION: list[str] = [
+    COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION: list[str] = [
         # "school_id_giga",
         # "school_id_govt",
         "school_name",
@@ -679,7 +671,7 @@ class Config(BaseSettings):
         "school_location_ingestion_timestamp",
     ]
 
-    CONFIG_COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
+    COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
         "cellular_coverage_availability",
         "cellular_coverage_type",
         "fiber_node_distance",
