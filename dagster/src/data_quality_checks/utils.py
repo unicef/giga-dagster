@@ -33,13 +33,7 @@ from src.data_quality_checks.geometry import (
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.schemas import BaseSchema
-from src.spark.config_expectations import (
-    CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS,
-    CONFIG_PRECISION,
-    CONFIG_UNIQUE_SET_COLUMNS,
-    CONFIG_VALUES_DOMAIN_ALL,
-    CONFIG_VALUES_RANGE_ALL,
-)
+from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -82,13 +76,13 @@ def aggregate_report_spark_df(
     # agg_df.show()
 
     # descriptions
-    configs_df = spark.createDataFrame(CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS)
+    configs_df = spark.createDataFrame(config.CONFIG_DATA_QUALITY_CHECKS_DESCRIPTIONS)
     # configs_df.show(truncate=False)
 
     # Range
     r_rows = [
         (key, value["min"], value.get("max"))
-        for key, value in CONFIG_VALUES_RANGE_ALL.items()
+        for key, value in config.CONFIG_VALUES_RANGE_ALL.items()
     ]
     range_schema = StructType(
         [
@@ -101,7 +95,7 @@ def aggregate_report_spark_df(
     # range_df.show(truncate=False)
 
     # Domain
-    d_rows = list(CONFIG_VALUES_DOMAIN_ALL.items())
+    d_rows = list(config.CONFIG_VALUES_DOMAIN_ALL.items())
     domain_schema = StructType(
         [
             StructField("column", StringType(), True),
@@ -112,7 +106,7 @@ def aggregate_report_spark_df(
     # domain_df.show(truncate=False)
 
     # Precision
-    p_rows = [(key, value["min"]) for key, value in CONFIG_PRECISION.items()]
+    p_rows = [(key, value["min"]) for key, value in config.CONFIG_PRECISION.items()]
     precision_schema = StructType(
         [
             StructField("column", StringType(), True),
@@ -263,9 +257,9 @@ def row_level_checks(
         df = duplicate_all_except_checks(
             df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
-        df = precision_check(df, CONFIG_PRECISION, context)
+        df = precision_check(df, config.CONFIG_PRECISION, context)
         # df = is_not_within_country(df, country_code_iso3, context)
-        df = duplicate_set_checks(df, CONFIG_UNIQUE_SET_COLUMNS, context)
+        df = duplicate_set_checks(df, config.CONFIG_UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
         # df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(

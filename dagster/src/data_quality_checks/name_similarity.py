@@ -4,7 +4,7 @@ from pyspark import sql
 from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
-from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
+from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -25,7 +25,7 @@ def has_similar_name(df: sql.DataFrame, context: OpExecutionContext = None):
         for name in name_list:
             if (
                 SequenceMatcher(None, string_value, name).ratio()
-                > SIMILARITY_RATIO_CUTOFF
+                > config.SIMILARITY_RATIO_CUTOFF
             ):
                 with_similar_name.append(string_value)
                 with_similar_name.append(name)

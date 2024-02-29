@@ -20,7 +20,7 @@ from azure.storage.blob import BlobServiceClient
 
 # Auth
 from src.settings import Settings  # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
-from src.spark.config_expectations import SIMILARITY_RATIO_CUTOFF
+from src.spark.config_expectations import config
 
 settings_instance = Settings()
 azure_sas_token = settings_instance.AZURE_SAS_TOKEN
@@ -238,12 +238,13 @@ are_pair_points_beyond_minimum_distance_udf = f.udf(
 
 #     return is_unique
 
+
 def has_similar_name(column, name_list):
     for name in name_list:
         if (
-            1 # excludes exact match which are technically duplicates, not similar.
+            1  # excludes exact match which are technically duplicates, not similar.
             > difflib.SequenceMatcher(None, column, name).ratio()
-            >= SIMILARITY_RATIO_CUTOFF
+            >= config.SIMILARITY_RATIO_CUTOFF
         ):
             return True
     return False
@@ -303,7 +304,8 @@ def is_similar_name_level_within_radius(row1, row2):
     longitude2 = row2["longitude"]
 
     return (
-        fuzz.ratio(str(school_name1), str(school_name2)) >= SIMILARITY_RATIO_CUTOFF
+        fuzz.ratio(str(school_name1), str(school_name2))
+        >= config.SIMILARITY_RATIO_CUTOFF
         and education_level1 == education_level2
         and not are_pair_points_beyond_minimum_distance(
             (longitude1, latitude1), (longitude2, latitude2)

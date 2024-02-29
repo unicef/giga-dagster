@@ -22,14 +22,15 @@ def critical_error_checks(
     ]
 
     if dataset_type == "master":
-        critial_column_dq_checks = [
-            *critial_column_dq_checks,
-            f.col("dq_duplicate-school_id_govt"),
-            f.col("dq_duplicate-school_id_giga"),
-            f.col("dq_is_invalid_range-latitude"),
-            f.col("dq_is_invalid_range-longitude"),
-            # f.col("dq_is_not_within_country"),
-        ]
+        critial_column_dq_checks.extend(
+            [
+                f.col("dq_duplicate-school_id_govt"),
+                f.col("dq_duplicate-school_id_giga"),
+                f.col("dq_is_invalid_range-latitude"),
+                f.col("dq_is_invalid_range-longitude"),
+                # f.col("dq_is_not_within_country"),
+            ]
+        )
 
     df = df.withColumn(
         "dq_has_critical_error",

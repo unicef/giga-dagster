@@ -13,7 +13,7 @@ from src.data_quality_checks.config import (
     CONFIG_VALUES_DOMAIN,
     CONFIG_VALUES_RANGE,
 )
-from src.spark.config_expectations import CONFIG_DATA_TYPES
+from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -118,7 +118,7 @@ def format_validation_checks(df, context: OpExecutionContext = None):
     logger.info("Running format validation checks...")
 
     column_actions = {}
-    for column, dtype in CONFIG_DATA_TYPES:
+    for column, dtype in config.CONFIG_DATA_TYPES:
         if column in df.columns and dtype == "STRING":
             column_actions[f"dq_is_not_alphanumeric-{column}"] = f.when(
                 f.regexp_extract(f.col(column), ".+", 0) != "",
