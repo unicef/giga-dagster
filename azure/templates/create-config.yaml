@@ -56,6 +56,22 @@ jobs:
                     EMAIL_TEST_RECIPIENTS: '$(emailTestRecipients)'
 
             - task: Kubernetes@1
+              displayName: Create Datahub external service
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Service
+                  metadata:
+                    name: datahub-gms-external
+                  spec:
+                    type: ExternalName
+                    externalName: "datahub-datahub-gms.io-datahub-$(deployEnv).svc.cluster.local"
+
+            - task: Kubernetes@1
               displayName: Create authproxy secrets
               inputs:
                 namespace: $(kubernetesNamespace)
