@@ -153,11 +153,14 @@ def adhoc__master_dq_checks_summary(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> dict | list[dict]:
     df_summary = aggregate_report_spark_df(
         spark.spark_session, adhoc__master_data_quality_checks
     )
-    yield Output(df_summary, metadata={"filepath": get_output_filepath(context)})
+    yield Output(
+        df_summary.toPandas().to_dict(orient="records"),
+        metadata={"filepath": get_output_filepath(context)},
+    )
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
