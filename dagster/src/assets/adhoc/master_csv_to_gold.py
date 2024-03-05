@@ -15,6 +15,7 @@ from src.data_quality_checks.utils import (
     dq_failed_rows as extract_dq_failed_rows,
     dq_passed_rows as extract_dq_passed_rows,
     row_level_checks,
+    extract_school_id_govt_duplicates,
 )
 from src.schemas import BaseSchema
 from src.sensors.config import FileConfig
@@ -22,7 +23,7 @@ from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.spark import transform_types
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, asset, multi_asset, AssetOut
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
@@ -35,7 +36,17 @@ def adhoc__load_master_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@multi_asset(
+    outs={
+        "adhoc__df_duplicates": AssetOut(
+            is_required=True, io_manager_key="adls_pandas_io_manager"
+        ),
+        "adhoc__master_data_quality_checks_results": AssetOut(
+            is_required=True, io_manager_key="adls_pandas_io_manager"
+        ),
+    }
+)
+# @asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
@@ -68,23 +79,38 @@ def adhoc__master_data_quality_checks(
         sdf.withColumns(columns_to_add), f"Added {len(columns_to_add)} missing columns"
     )
 
+    df_duplicates, df_deduplicated = logger.passthrough(
+        extract_school_id_govt_duplicates(sdf),
+        "Duplicate school_id_govt extraction completed",
+    )
+
     dq_checked = logger.passthrough(
-        row_level_checks(sdf, "master", country_iso3, context),
+        row_level_checks(df_deduplicated, "master", country_iso3, context),
         "Row level checks completed",
     )
+    
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
     logger.log.info(f"Post-DQ checks stats: {len(df.columns)=}, {df.count()=}")
+
     yield Output(
-        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_duplicates.toPandas(), 
+        metadata={"filepath": get_output_filepath(context, "adhoc__df_duplicates")},
+        output_name="adhoc__df_duplicates",
+    )
+
+    yield Output(
+        dq_checked.toPandas(), 
+        metadata={"filepath": get_output_filepath(context, "adhoc__master_data_quality_checks")},
+        output_name="adhoc__master_data_quality_checks_results",
     )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
-    adhoc__master_data_quality_checks: sql.DataFrame,
+    adhoc__master_data_quality_checks_results: sql.DataFrame,
 ) -> pd.DataFrame:
-    dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
+    dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks_results, "master")
     context.log.info(
         f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}"
     )
@@ -96,9 +122,9 @@ def adhoc__master_dq_checks_passed(
 @asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
-    adhoc__master_data_quality_checks: sql.DataFrame,
+    adhoc__master_data_quality_checks_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
+    dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks_results, "master")
     context.log.info(
         f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}"
     )
