@@ -9,6 +9,13 @@ jobs:
             - checkout: self
 
             - task: HelmDeploy@0
+              displayName: Helm uninstall Spark
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: spark
+
+            - task: HelmDeploy@0
               displayName: Add Dagster Helm Repo
               inputs:
                 command: repo
