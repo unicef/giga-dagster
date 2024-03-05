@@ -54,6 +54,10 @@ def adhoc__master_data_transforms(
     buffer = BytesIO(adhoc__load_master_csv)
     buffer.seek(0)
     df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+    for col, dtype in df.dtypes.items():
+        if dtype == "object":
+            df[col] = df[col].astype("string")
+
     sdf = s.createDataFrame(df)
 
     columns_to_add = {
