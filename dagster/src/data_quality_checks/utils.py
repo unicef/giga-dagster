@@ -203,9 +203,7 @@ def aggregate_report_json(
         else:
             transformed_data[key].append(data)
 
-    json_dict = json.dumps(transformed_data, indent=4)
-
-    return json_dict
+    return transformed_data
 
 
 def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
