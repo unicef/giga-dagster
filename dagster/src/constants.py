@@ -101,7 +101,8 @@ class Constants(BaseSettings):
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
-            "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate-school_id_govt"
+            "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
+            "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
         }
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
