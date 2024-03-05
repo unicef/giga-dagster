@@ -95,6 +95,7 @@ class Constants(BaseSettings):
             "adhoc__master_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__reference_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__master_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
+            "adhoc__master_dq_checks_summary": f"gold/dq-results/school-{dataset_type}/summary",
             "adhoc__reference_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
             "adhoc__master_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__reference_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",

@@ -12,10 +12,11 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
+    aggregate_report_spark_df,
     dq_failed_rows as extract_dq_failed_rows,
     dq_passed_rows as extract_dq_passed_rows,
-    row_level_checks,
     extract_school_id_govt_duplicates,
+    row_level_checks,
 )
 from src.schemas import BaseSchema
 from src.sensors.config import FileConfig
@@ -23,7 +24,7 @@ from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.spark import transform_types
 
-from dagster import OpExecutionContext, Output, asset, multi_asset, AssetOut
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
@@ -66,15 +67,10 @@ def adhoc__master_data_transforms(
     )
 
     sdf = logger.passthrough(
-        extract_school_id_govt_duplicates(sdf),
-        "Added row number transforms"
+        extract_school_id_govt_duplicates(sdf), "Added row number transforms"
     )
 
-
-    yield Output(
-        sdf.toPandas(), metadata={"filepath": get_output_filepath(context)}
-    )
-
+    yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -82,12 +78,12 @@ def adhoc__df_duplicates(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
 ) -> pd.DataFrame:
-    df_duplicates = adhoc__master_data_transforms.where(adhoc__master_data_transforms.row_num != 1)
+    df_duplicates = adhoc__master_data_transforms.where(
+        adhoc__master_data_transforms.row_num != 1
+    )
     df_duplicates = df_duplicates.drop("row_num")
 
-    context.log.info(
-        f"Duplicate school_id_govt: {df_duplicates.count()=}"
-    )
+    context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
     yield Output(
         df_duplicates.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -106,7 +102,9 @@ def adhoc__master_data_quality_checks(
     file_stem = os.path.splitext(filename)[0]
     country_iso3 = file_stem.split("_")[0]
 
-    df_deduplicated = adhoc__master_data_transforms.where(adhoc__master_data_transforms.row_num == 1)
+    df_deduplicated = adhoc__master_data_transforms.where(
+        adhoc__master_data_transforms.row_num == 1
+    )
     df_deduplicated = df_deduplicated.drop("row_num")
 
     dq_checked = logger.passthrough(
@@ -114,7 +112,9 @@ def adhoc__master_data_quality_checks(
         "Row level checks completed",
     )
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
-    logger.log.info(f"Post-DQ checks stats: {len(df_deduplicated.columns)=}, {df_deduplicated.count()=}")
+    logger.log.info(
+        f"Post-DQ checks stats: {len(df_deduplicated.columns)=}\n{df_deduplicated.count()=}"
+    )
     yield Output(
         dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -146,6 +146,18 @@ def adhoc__master_dq_checks_failed(
     yield Output(
         dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
+
+
+@asset(io_manager_key="adls_json_io_manager")
+def adhoc__master_dq_checks_summary(
+    context: OpExecutionContext,
+    adhoc__master_data_quality_checks: sql.DataFrame,
+    spark: PySparkResource,
+) -> sql.DataFrame:
+    df_summary = aggregate_report_spark_df(
+        spark.spark_session, adhoc__master_data_quality_checks
+    )
+    yield Output(df_summary, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
