@@ -44,7 +44,7 @@ tasks:
     internal: true
     cmds:
       - poetry env use 3.11
-      - poetry install --with dev,dagster,pipelines,spark,notebook
+      - poetry install --with dev,dagster,pipelines,spark,notebook --no-root
 
   setup-helm-repos:
     desc: Register all Helm chart repositories
