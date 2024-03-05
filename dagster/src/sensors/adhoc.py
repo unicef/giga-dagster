@@ -133,7 +133,10 @@ def qos__csv_to_deltatable_sensor():
                 {
                     "run_key": filepath,
                     "run_config": RunConfig(
-                        ops={"adhoc__publish_qos_to_gold": file_config}
+                        ops={
+                            "adhoc__load_qos_bra_csv": file_config,
+                            "adhoc__publish_qos_bra_to_gold": file_config,
+                        }
                     ),
                 }
             )
