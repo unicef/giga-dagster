@@ -21,19 +21,13 @@ from .base import FileConfig, get_dataset_type
 def school_master_geolocation__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.raw_folder}")
+    file_list = adls.list_paths(f"{constants.raw_folder}/school-geolocation-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
             continue
         else:
             filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if (
-                dataset_type != "geolocation"
-                or "test_pipeline" not in filepath.split("/")[-1]
-            ):
-                continue
 
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]
@@ -88,19 +82,13 @@ def school_master_geolocation__raw_file_uploads_sensor():
 def school_master_coverage__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.raw_folder}")
+    file_list = adls.list_paths(f"{constants.raw_folder}/school-coverage-data")
 
     for file_data in file_list:
         if file_data["is_directory"]:
             continue
         else:
             filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if (
-                dataset_type != "coverage"
-                or "test_pipeline" not in filepath.split("/")[-1]
-            ):
-                continue
 
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties["metadata"]

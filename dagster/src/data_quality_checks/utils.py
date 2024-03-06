@@ -5,6 +5,7 @@ from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
+    window as w, 
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -164,6 +165,7 @@ def aggregate_report_spark_df(
         "percent_failed",
         "percent_passed",
     )
+    report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
 
     return report
 
@@ -203,9 +205,7 @@ def aggregate_report_json(
         else:
             transformed_data[key].append(data)
 
-    json_dict = json.dumps(transformed_data, indent=4)
-
-    return json_dict
+    return transformed_data
 
 
 def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
@@ -275,3 +275,69 @@ def row_level_checks(
         df = standard_checks(df, dataset_type, context, domain=False)
 
     return df
+
+
+def extract_school_id_govt_duplicates(df: sql.DataFrame):
+    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
+
+    df = df.withColumn("row_num", f.row_number().over(window))
+
+    ## outputs
+    # df_duplicates = df.where(df.row_num != 1)
+    # df_duplicates = df_duplicates.drop("row_num")
+
+    # df_deduplicated = df.where(df.row_num == 1)
+    # df_deduplicated = df_deduplicated.drop("row_num")
+
+    return df
+
+if __name__ == "__main__":
+    from src.utils.spark import get_spark_session
+    from src.settings import settings
+
+    spark = get_spark_session()
+    #
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+    df_bronze = spark.read.csv(file_url, header=True)
+    print(df_bronze.count())
+    # df_bronze = df_bronze.sort("school_name").limit(100)
+    df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
+    df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
+    # df_test = has_similar_name(df_bronze)
+
+    df_duplicates, df_deduplicated = extract_school_id_govt_duplicates(df_bronze)
+
+    # df_duplicates.where(df_duplicates.school_id_govt == '11514002').show()
+    # df_deduplicated.where(df_deduplicated.school_id_govt == '11514002').show()
+    df_duplicates.show()
+    df_deduplicated.show()
+
+    
+    # df_bronze.groupBy("school_id_govt").agg(f.count("*").alias("count")).orderBy("count", ascending=False).show()
+    # window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
+    # df_bronze = df_bronze.withColumn("test", f.row_number().over(window))
+    # df_bronze.orderBy("test", ascending=False).show()
+    # df_dups = df_bronze.where(df_bronze.test != 1)
+    # df_dups.orderBy("school_id_govt").show(100000)
+
+
+    # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
+
+    # # row_level_checks(df, dataset_type, country_code_iso3)
+    # df = row_level_checks(
+    #     df_bronze, "master", "GIN")
+    # # dataset plugged in should conform to updated schema! rename if necessary
+    # df.show()
+    # df = df.withColumn("dq_has_critical_error", f.lit(1))
+
+    # # df = dq_passed_rows(df, "coverage")
+    # # df = dq_passed_rows(df, "coverage")
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.orderBy("column").show()
+    # # df.show()
+
+    # _json = aggregate_report_json(df, df_bronze)
+    # print(_json)

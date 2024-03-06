@@ -95,12 +95,15 @@ class Constants(BaseSettings):
             "adhoc__master_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__reference_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__master_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
+            "adhoc__master_dq_checks_summary": f"gold/dq-results/school-{dataset_type}/summary",
             "adhoc__reference_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
             "adhoc__master_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__reference_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
+            "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
+            "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
         }
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(

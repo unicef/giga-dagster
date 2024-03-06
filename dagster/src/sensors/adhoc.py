@@ -43,7 +43,10 @@ def school_master__gold_csv_to_deltatable_sensor():
                     "run_config": RunConfig(
                         ops={
                             "adhoc__load_master_csv": file_config,
+                            "adhoc__master_data_transforms": file_config,
+                            "adhoc__df_duplicates": file_config,
                             "adhoc__master_data_quality_checks": file_config,
+                            "adhoc__master_dq_checks_summary": file_config,
                             "adhoc__master_dq_checks_passed": file_config,
                             "adhoc__master_dq_checks_failed": file_config,
                             "adhoc__publish_master_to_gold": file_config,

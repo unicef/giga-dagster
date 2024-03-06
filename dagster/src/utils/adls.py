@@ -158,13 +158,13 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json(self, data, filepath: str):
+    def upload_json(self, data: dict | list[dict], filepath: str):
         file_client = _adls.get_file_client(filepath)
-        json_data = json.dumps(data).encode("utf-8")
+        json_data = json.dumps(data, indent=2).encode()
 
         with BytesIO(json_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(buffer.read(), overwrite=True)
 
     def list_paths(self, path: str, recursive=True):
         paths = _adls.get_paths(path=path, recursive=recursive)
