@@ -1,3 +1,5 @@
+import os.path
+
 from dagster import RunConfig, RunRequest, sensor
 from src.constants import constants
 from src.jobs.adhoc import (
@@ -118,6 +120,8 @@ def school_qos_bra__gold_csv_to_deltatable_sensor():
             continue
 
         filepath = file_data["name"]
+        if os.path.splitext(filepath)[1] != ".csv":
+            continue
 
         properties = adls.get_file_metadata(filepath=filepath)
         metadata = properties["metadata"]

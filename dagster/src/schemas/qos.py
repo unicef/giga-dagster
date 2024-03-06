@@ -17,7 +17,7 @@ class QosSchema(BaseSchema):
             StructField("timestamp", TimestampType(), False),
             StructField("date", StringType(), False),
             StructField("country_id", StringType(), False),
-            StructField("school_id_gov", StringType(), False),
+            StructField("school_id_govt", StringType(), False),
             StructField("school_id_giga", StringType(), False),
             StructField("speed_download", FloatType(), True),
             StructField("speed_upload", FloatType(), True),

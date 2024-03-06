@@ -5,6 +5,7 @@ from delta import DeltaTable
 from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
+from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
 
 import src.schemas
@@ -79,7 +80,17 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         ):
             query.partitionedBy(*partition_columns)
 
-        query.property("delta.enableChangeDataFeed", "true").execute()
+        query = query.property("delta.enableChangeDataFeed", "true")
+
+        try:
+            query.execute()
+        except AnalysisException as exc:
+            if "DELTA_TABLE_NOT_FOUND" in str(exc):
+                query.location(
+                    f"{settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db/{table_name.lower()}"
+                ).execute()
+            else:
+                raise exc
 
         (
             DeltaTable.forName(spark, full_table_name)
