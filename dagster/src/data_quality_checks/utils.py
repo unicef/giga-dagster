@@ -32,7 +32,7 @@ from src.data_quality_checks.geometry import (
     school_density_check,
 )
 from src.data_quality_checks.precision import precision_check
-from src.data_quality_checks.standard import standard_checks
+from src.data_quality_checks.standard import standard_checks, format_validation_checks
 from src.schemas import BaseSchema
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
@@ -306,7 +306,9 @@ if __name__ == "__main__":
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     df_bronze.show()
-    df = standard_checks(df_bronze, 'master')
+    # df = standard_checks(df_bronze, 'master')
+    df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
+    df = format_validation_checks(df_bronze)
     df.show()
     # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
     # df_test = has_similar_name(df_bronze)
@@ -338,9 +340,9 @@ if __name__ == "__main__":
 
     # # df = dq_passed_rows(df, "coverage")
     # # df = dq_passed_rows(df, "coverage")
-    # df = aggregate_report_spark_df(spark=spark, df=df)
+    df = aggregate_report_spark_df(spark=spark, df=df)
     # df.orderBy("column").show()
-    # # df.show()
+    df.show()
 
-    # _json = aggregate_report_json(df, df_bronze)
-    # print(_json)
+    _json = aggregate_report_json(df, df_bronze)
+    print(_json)
