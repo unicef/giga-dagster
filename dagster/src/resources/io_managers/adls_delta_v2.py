@@ -65,7 +65,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`").show()
         query = (
-            DeltaTable.createOrReplace(spark)
+            DeltaTable.createIfNotExists(spark)
             .tableName(full_table_name)
             .addColumns(columns)
         )
@@ -86,6 +86,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.execute()
         except AnalysisException as exc:
             if "DELTA_TABLE_NOT_FOUND" in str(exc):
+                spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`").show()
                 query.location(
                     f"{settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db/{table_name.lower()}"
                 ).execute()
