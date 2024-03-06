@@ -4,6 +4,7 @@ from pyspark import sql
 from src.sensors.config import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -23,7 +24,7 @@ def manual_review_passed_rows(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -41,7 +42,7 @@ def manual_review_failed_rows(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    # emit_metadata_to_datahub(context, df)
+    emit_metadata_to_datahub(context, df)
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -75,7 +76,7 @@ def silver(
             .execute()
         )
 
-    # emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -191,7 +192,7 @@ def gold(
             "source.school_id_giga = target.school_id_giga",
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
-    # emit_metadata_to_datahub(context, df=silver)
+    emit_metadata_to_datahub(context, df=silver)
     yield Output(
         master,
         metadata={"filepath": get_output_filepath(context, "master")},
