@@ -49,7 +49,7 @@ def adhoc__qos_bra_transforms(
         ),
         "date": f.to_date(f.col("timestamp")),
     }
-    sdf = sdf.withColumns(column_actions)
+    sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
 
     yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
