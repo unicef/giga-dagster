@@ -4,7 +4,6 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     StructField,
-    StructType,
 )
 
 from .base import BaseSchema
@@ -28,10 +27,6 @@ class SchoolReferenceSchema(BaseSchema):
             StructField("school_address", StringType(), True),
             StructField("is_school_open", StringType(), True),
         ]
-
-    @property
-    def schema(self):
-        return StructType(self.columns)
 
 
 school_reference = SchoolReferenceSchema()

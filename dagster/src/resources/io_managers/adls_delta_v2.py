@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
@@ -22,7 +24,11 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     def _get_table_path(
         context: InputContext | OutputContext, filepath: str
     ) -> tuple[str, str, AnyUrl]:
-        table_name = filepath.split("/")[-1].split("_")[0].replace("-", "_")
+        if context.step_context.op_config.get("dataset_type") == "qos":
+            table_name = Path(context.step_context.op_config["filepath"]).parent.name
+        else:
+            table_name = Path(filepath).name.split("_")[0]
+
         table_root_path = "/".join(filepath.split("/")[:-1])
         return (
             ic(table_name),
@@ -47,6 +53,9 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
         schema_name = self._get_schema(context)
         full_table_name = f"{schema_name}.{table_name}"
+        unique_identifier_column = context.step_context.op_config.get(
+            "unique_identifier_column", "school_id_giga"
+        )
 
         # TODO: Pull the correct Delta Table schema from ADLS
         schema: BaseSchema = getattr(src.schemas, schema_name)
@@ -54,19 +63,30 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         spark = self._get_spark_session()
 
         spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`").show()
-        (
+        query = (
             DeltaTable.createOrReplace(spark)
             .tableName(full_table_name)
             .addColumns(columns)
-            .property("delta.enableChangeDataFeed", "true")
-            .execute()
         )
+
+        if (
+            len(
+                partition_columns := context.step_context.op_config.get(
+                    "partition_columns", []
+                )
+            )
+            > 0
+        ):
+            query.partitionedBy(*partition_columns)
+
+        query.property("delta.enableChangeDataFeed", "true").execute()
+
         (
             DeltaTable.forName(spark, full_table_name)
             .alias("master")
             .merge(
                 output.alias("updates"),
-                "master.school_id_giga = updates.school_id_giga",
+                f"master.{unique_identifier_column} = updates.{unique_identifier_column}",
             )
             .whenMatchedUpdateAll()
             .whenNotMatchedInsertAll()

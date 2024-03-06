@@ -10,6 +10,5 @@ class BaseSchema(ABC):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def schema(self) -> StructType:
-        raise NotImplementedError
+        return StructType(self.columns)

@@ -26,9 +26,10 @@ school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
 )
 
 school_qos_bra__convert_csv_to_deltatable_job = define_asset_job(
-    name="qos__convert_csv_to_deltatable_job",
+    name="school_qos_bra__convert_csv_to_deltatable_job",
     selection=[
         "adhoc__load_qos_bra_csv",
+        "adhoc__qos_bra_transforms",
         "adhoc__publish_qos_bra_to_gold",
     ],
 )

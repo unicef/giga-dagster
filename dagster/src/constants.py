@@ -26,6 +26,7 @@ class Constants(BaseSettings):
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
+    qos_source_folder = "gold/qos"
 
     step_origin_map: dict[str, str] = {
         "geolocation_raw": "",
@@ -92,6 +93,7 @@ class Constants(BaseSettings):
             # adhoc
             "adhoc__load_master_csv": f"updated_master_schema/{dataset_type}",
             "adhoc__load_reference_csv": f"updated_master_schema/{dataset_type}",
+            "adhoc__load_qos_bra_csv": "gold/qos/BRA",
             "adhoc__master_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__reference_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__master_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
@@ -101,7 +103,8 @@ class Constants(BaseSettings):
             "adhoc__reference_dq_checks_failed": f"gold/dq-results/school-{dataset_type}/failed",
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
-            "adhoc__publish_qos_to_gold": "gold/delta-tables/qos",
+            "adhoc__publish_qos_bra_to_gold": "gold/delta-tables/qos",
+            "adhoc__qos_bra_transforms": "gold/dq-results/qos/transforms/BRA",
             "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
             "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
         }
