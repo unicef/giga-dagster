@@ -302,18 +302,21 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     df_bronze = spark.read.csv(file_url, header=True)
     print(df_bronze.count())
-    # df_bronze = df_bronze.sort("school_name").limit(100)
+    df_bronze = df_bronze.sort("school_name").limit(100)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    df_bronze.show()
+    df = standard_checks(df_bronze, 'master')
+    df.show()
     # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
     # df_test = has_similar_name(df_bronze)
 
-    df_duplicates, df_deduplicated = extract_school_id_govt_duplicates(df_bronze)
+    # df_duplicates, df_deduplicated = extract_school_id_govt_duplicates(df_bronze)
 
     # df_duplicates.where(df_duplicates.school_id_govt == '11514002').show()
     # df_deduplicated.where(df_deduplicated.school_id_govt == '11514002').show()
-    df_duplicates.show()
-    df_deduplicated.show()
+    # df_duplicates.show()
+    # df_deduplicated.show()
 
     
     # df_bronze.groupBy("school_id_govt").agg(f.count("*").alias("count")).orderBy("count", ascending=False).show()

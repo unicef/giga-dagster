@@ -279,6 +279,7 @@ class Config(BaseSettings):
         ],
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
+        "school_funding_type": ["public", "private", "charitable", "others"],
     }
 
     VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
@@ -321,6 +322,7 @@ class Config(BaseSettings):
         ],
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
+        "school_funding_type": ["public", "private", "charitable", "others"],
     }
 
     VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {
