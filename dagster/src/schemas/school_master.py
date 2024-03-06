@@ -4,7 +4,6 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     StructField,
-    StructType,
     TimestampType,
 )
 
@@ -68,10 +67,6 @@ class SchoolMasterSchema(BaseSchema):
             StructField("connectivity_RT_datasource", StringType(), True),
             StructField("connectivity_RT_ingestion_timestamp", TimestampType(), True),
         ]
-
-    @property
-    def schema(self):
-        return StructType(self.columns)
 
 
 school_master = SchoolMasterSchema()

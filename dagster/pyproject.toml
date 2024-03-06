@@ -61,6 +61,7 @@ notebook = "^7.0.6"
 [tool.poetry.group.dev.dependencies]
 autopep8 = "2.0.2"
 ruff = "^0.1.13"
+ipython = "^8.22.2"
 
 [build-system]
 requires = ["poetry-core"]
