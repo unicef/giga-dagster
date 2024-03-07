@@ -9,7 +9,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
-from src.sensors.config import FileConfig
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import (

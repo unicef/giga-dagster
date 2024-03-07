@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors.config import FileConfig
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub

@@ -19,7 +19,7 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas import BaseSchema
-from src.sensors.config import FileConfig
+from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.spark import transform_types
