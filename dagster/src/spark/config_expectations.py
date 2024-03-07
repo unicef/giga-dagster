@@ -84,6 +84,11 @@ class Config(BaseSettings):
             "type": "format_validation_checks",
         },
         {
+            "assertion": "is_not_36_character_hash",
+            "description": "Checks if school_id_giga is a 36 character hash.",
+            "type": "format_validation_checks",
+        },
+        {
             "assertion": "is_sum_of_percent_not_equal_100",
             "description": "Checks if sum of percent_2G, percent_3G, percent_4G is equal to 100",
             "type": "custom_coverage_fb_check",
@@ -279,6 +284,7 @@ class Config(BaseSettings):
         ],
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
+        "school_funding_type": ["public", "private", "charitable", "others"],
     }
 
     VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
@@ -321,6 +327,7 @@ class Config(BaseSettings):
         ],
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
+        "school_funding_type": ["public", "private", "charitable", "others"],
     }
 
     VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {

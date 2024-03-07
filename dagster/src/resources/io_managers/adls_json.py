@@ -7,7 +7,7 @@ adls_client = ADLSFileClient()
 
 
 class ADLSJSONIOManager(BaseConfigurableIOManager):
-    def handle_output(self, context: OutputContext, output: dict):
+    def handle_output(self, context: OutputContext, output: dict | list[dict]):
         filepath = self._get_filepath(context)
         adls_client.upload_json(output, filepath)
 
