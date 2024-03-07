@@ -18,7 +18,11 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
-from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
+from src.utils.datahub.emit_dataset_metadata import (
+    create_dataset_urn,
+    emit_metadata_to_datahub,
+)
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -60,6 +64,14 @@ def coverage_data_quality_results(
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
+
+    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
+    dataset_urn = create_dataset_urn(context, is_upstream=False)
+    emit_assertions = EmitDatasetAssertionResults(
+        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
+    )
+    emit_assertions()
+    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
 
     yield Output(
         dq_results.toPandas(),
