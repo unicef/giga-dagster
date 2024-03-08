@@ -118,8 +118,10 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.execute()
         except AnalysisException as exc:
             if "DELTA_TABLE_NOT_FOUND" in str(exc):
-                # This error happens when you delete the Delta Table in ADLS
-                # Its corresponding entry in the metastore needs to be dropped
+                # This error gets raised when you delete the Delta Table in ADLS and subsequently try to re-ingest the
+                # same table. Its corresponding entry in the metastore needs to be dropped first.
+                #
+                # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
                 spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`").show()
                 query.location(
                     f"{settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db/{table_name.lower()}"
