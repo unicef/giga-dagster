@@ -13,12 +13,16 @@ class QosSchema(BaseSchema):
     @property
     def columns(self) -> list[StructField]:
         return [
+            # generated fields
             StructField("gigasync_id", StringType(), False),
-            StructField("timestamp", TimestampType(), False),
+            StructField("signature", StringType(), False),
             StructField("date", StringType(), False),
-            StructField("country_id", StringType(), False),
-            StructField("school_id_govt", StringType(), False),
+            #
+            # main fields
+            StructField("timestamp", TimestampType(), False),
             StructField("school_id_giga", StringType(), False),
+            StructField("school_id_govt", StringType(), False),
+            StructField("country_id", StringType(), False),
             StructField("speed_download", FloatType(), True),
             StructField("speed_upload", FloatType(), True),
             StructField("roundtrip_time", FloatType(), True),

@@ -37,7 +37,7 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         return destination_filepath
 
     @staticmethod
-    def _get_schema(context: InputContext | OutputContext):
+    def _get_schema_name(context: InputContext | OutputContext):
         return context.step_context.op_config["dataset_type"]
 
     @staticmethod
