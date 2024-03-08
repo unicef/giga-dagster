@@ -93,6 +93,11 @@ class Config(BaseSettings):
             "description": "Checks if sum of percent_2G, percent_3G, percent_4G is equal to 100",
             "type": "custom_coverage_fb_check",
         },
+        {
+            "assertion": "is_string_less_than_255_characters",
+            "description": "Checks if column {} is less than 255 characters.",
+            "type": "format_validation_checks",
+        },
     ]
 
     DATA_TYPES: set[tuple[str, str]] = {

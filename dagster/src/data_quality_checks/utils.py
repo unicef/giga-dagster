@@ -32,7 +32,7 @@ from src.data_quality_checks.geometry import (
     school_density_check,
 )
 from src.data_quality_checks.precision import precision_check
-from src.data_quality_checks.standard import standard_checks, format_validation_checks
+from src.data_quality_checks.standard import standard_checks
 from src.schemas import BaseSchema
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
@@ -302,41 +302,18 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     df_bronze = spark.read.csv(file_url, header=True)
     print(df_bronze.count())
-    df_bronze = df_bronze.sort("school_name").limit(100)
+    df_bronze = df_bronze.sort("school_name").limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
-    df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
-    df = format_validation_checks(df_bronze)
+    # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
+    # df = format_validation_checks(df_bronze)
+    df_bronze = df_bronze.select(*["school_id_giga", "school_id_govt"])
+    # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
+    df = standard_checks(df_bronze, 'master')
     df.show()
-    # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
-    # df_test = has_similar_name(df_bronze)
-
-    # df_duplicates, df_deduplicated = extract_school_id_govt_duplicates(df_bronze)
-
-    # df_duplicates.where(df_duplicates.school_id_govt == '11514002').show()
-    # df_deduplicated.where(df_deduplicated.school_id_govt == '11514002').show()
-    # df_duplicates.show()
-    # df_deduplicated.show()
-
     
-    # df_bronze.groupBy("school_id_govt").agg(f.count("*").alias("count")).orderBy("count", ascending=False).show()
-    # window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
-    # df_bronze = df_bronze.withColumn("test", f.row_number().over(window))
-    # df_bronze.orderBy("test", ascending=False).show()
-    # df_dups = df_bronze.where(df_bronze.test != 1)
-    # df_dups.orderBy("school_id_govt").show(100000)
-
-
-    # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
-
-    # # row_level_checks(df, dataset_type, country_code_iso3)
-    # df = row_level_checks(
-    #     df_bronze, "master", "GIN")
-    # # dataset plugged in should conform to updated schema! rename if necessary
-    # df.show()
-    # df = df.withColumn("dq_has_critical_error", f.lit(1))
 
     # # df = dq_passed_rows(df, "coverage")
     # # df = dq_passed_rows(df, "coverage")
