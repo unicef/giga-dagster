@@ -153,7 +153,7 @@ def is_string_less_than_255_characters_check(
 
     column_actions = {}
     for column in df.columns:
-        if column != "school_id_giga" and not column.startswith("dq"):
+        if column != "school_name" and not column.startswith("dq"):
             column_actions[f"dq_is_string_less_than_255_characters-{column}"] = f.when(
                 f.length(column) > 255,
                 1,
