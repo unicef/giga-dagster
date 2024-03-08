@@ -294,18 +294,46 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 def column_relation_checks(df: sql.DataFrame, dataset_type: str):
     
     # connectivity = 'Yes' then (connectivity_RT or connectivity_govt or download_speed_contracted) is not NULL
-    df = df.withColumn("dq_column_relation_checks", f.when(
-        (f.lower(f.col("connectivity")) == "yes") & (
-            (f.lower(f.col("connectivity_RT")) == "yes") | 
-            (f.lower(f.col("connectivity_govt")) == "yes") |
-            (f.col("download_speed_contracted").isNotNull())
+        # expected behavior : yes -- yes|no|null/speed = 0
+        # expected behavior : no -- no&no&null = 0
+        # expected behavior : no -- no&yes&null = 1
+    df = df.withColumn("dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted", 
+        f.when(
+            (f.lower(f.col("connectivity")) == "yes") & (
+                (f.lower(f.col("connectivity_RT")) == "yes") | 
+                (f.lower(f.col("connectivity_govt")) == "yes") |
+                (f.col("download_speed_contracted").isNotNull())
                 ), 0,
+        ).when(
+            (f.lower(f.col("connectivity")) == "no") & (
+                (f.lower(f.col("connectivity_RT")) == "no") & 
+                (f.lower(f.col("connectivity_govt")) == "no") &
+                (f.col("download_speed_contracted").isNull())
+                ), 0,
+        ).otherwise(1)
+    )
+    
+    # connectivity_govt = yes download speed not null/>0?
+    df = df.withColumn("dq_column_relation_checks-connectivity_govt_download_speed_contracted", 
+        f.when(
+            (f.col("download_speed_contracted").isNotNull()) &
+            (f.col("connectivity_govt").isNull())
+            , 1,
+        ).otherwise(0)
+    )
+    
+    # Connectivity_RT -- connectivity_RT_datasource -- connectivity_RT_ingestion_timestamp if 1 present all are present
+    df = df.withColumn("dq_column_relation_checks-connectivity_RT_connectivity_RT_datasource_connectivity_RT_ingestion_timestamp", 
+            f.when(
+                (f.col("connectivity_RT").isNull()) &
+                (f.col("connectivity_RT_datasource").isNull()) &
+                (f.col("connectivity_RT_ingestion_timestamp").isNull())
+                , 0,
             ).when(
-         (f.lower(f.col("connectivity")) == "no") & (
-            (f.lower(f.col("connectivity_RT")) == "no") & 
-            (f.lower(f.col("connectivity_govt")) == "no") &
-            (f.col("download_speed_contracted").isNull())
-                ), 0,
+                (f.col("connectivity_RT").isNotNull()) &
+                (f.col("connectivity_RT_datasource").isNotNull()) &
+                (f.col("connectivity_RT_ingestion_timestamp").isNotNull())
+                , 0,
             ).otherwise(1)
         )
 
@@ -325,7 +353,8 @@ if __name__ == "__main__":
     df_bronze = df_bronze.sort("school_name").limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-    df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted"])
+    # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
+    df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
