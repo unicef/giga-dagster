@@ -291,6 +291,26 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 
     return df
 
+def column_relation_checks(df: sql.DataFrame, dataset_type: str):
+    
+    # connectivity = 'Yes' then (connectivity_RT or connectivity_govt or download_speed_contracted) is not NULL
+    df = df.withColumn("dq_column_relation_checks", f.when(
+        (f.lower(f.col("connectivity")) == "yes") & (
+            (f.lower(f.col("connectivity_RT")) == "yes") | 
+            (f.lower(f.col("connectivity_govt")) == "yes") |
+            (f.col("download_speed_contracted").isNotNull())
+                ), 0,
+            ).when(
+         (f.lower(f.col("connectivity")) == "no") & (
+            (f.lower(f.col("connectivity_RT")) == "no") & 
+            (f.lower(f.col("connectivity_govt")) == "no") &
+            (f.col("download_speed_contracted").isNull())
+                ), 0,
+            ).otherwise(1)
+        )
+
+    return df
+
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
     from src.settings import settings
@@ -305,21 +325,23 @@ if __name__ == "__main__":
     df_bronze = df_bronze.sort("school_name").limit(10)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted"])
     df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
     # df = format_validation_checks(df_bronze)
-    df_bronze = df_bronze.select(*["school_id_giga", "school_id_govt"])
+    df = column_relation_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
-    df = standard_checks(df_bronze, 'master')
+    # df = standard_checks(df_bronze, 'master')
     df.show()
     
 
     # # df = dq_passed_rows(df, "coverage")
     # # df = dq_passed_rows(df, "coverage")
-    df = aggregate_report_spark_df(spark=spark, df=df)
     # df.orderBy("column").show()
-    df.show()
 
-    _json = aggregate_report_json(df, df_bronze)
-    print(_json)
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
+
+    # _json = aggregate_report_json(df, df_bronze)
+    # print(_json)
