@@ -12,12 +12,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        filepath = self._get_filepath(context)
-        table_path = self._get_table_path(context, filepath)
+        if context.step_key in ["staging", "silver", "gold"]:
+            return
 
         if output.isEmpty():
             context.log.warning("Output DataFrame is empty. Skipping write operation.")
             return
+
+        filepath = self._get_filepath(context)
+        table_path = self._get_table_path(context, filepath)
 
         schema_name = self._get_schema(context)
         type_transform_function = self._get_type_transform_function(context)

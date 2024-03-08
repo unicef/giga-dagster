@@ -14,7 +14,7 @@ WORKDIR /tmp
 # Update packages & install JDK, Spark, Hadoop, Scala
 RUN apt-get update && \
     apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
-    wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz && \
+    wget https://storage.googleapis.com/giga-test-app-downloads-mirror/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
     mkdir --parents "${SPARK_HOME}" && \
     mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}" && \

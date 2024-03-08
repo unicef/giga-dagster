@@ -1,11 +1,15 @@
 import json
+import os.path
 from io import BytesIO
 
 import pandas as pd
 from delta.tables import DeltaTable
+from loguru import logger
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 
+import azure.core.exceptions
 from azure.storage.filedatalake import DataLakeServiceClient
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
@@ -20,6 +24,28 @@ _adls = _client.get_file_system_client(file_system=settings.AZURE_BLOB_CONTAINER
 
 
 class ADLSFileClient(ConfigurableResource):
+    @staticmethod
+    def download_raw(filepath: str) -> bytes:
+        file_client = _adls.get_file_client(filepath)
+        with BytesIO() as buffer:
+            file_client.download_file().readinto(buffer)
+            buffer.seek(0)
+            return buffer.read()
+
+    @staticmethod
+    def upload_raw(data: bytes, filepath: str):
+        file_client = _adls.get_file_client(filepath)
+        with BytesIO(data) as buffer:
+            buffer.seek(0)
+            try:
+                file_client.upload_data(buffer.read())
+            except azure.core.exceptions.ResourceModifiedError:
+                logger.warning("ResourceModifiedError: Skipping write")
+                pass
+            except azure.core.exceptions.ResourceNotFoundError as e:
+                logger.error(f"ResourceNotFoundError: {filepath}")
+                raise e
+
     def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
         file_client = _adls.get_file_client(filepath)
         with BytesIO() as buffer:
@@ -32,10 +58,19 @@ class ADLSFileClient(ConfigurableResource):
                 return pd.read_excel(buffer)
 
     def download_csv_as_spark_dataframe(
-        self, filepath: str, spark: SparkSession
+        self, filepath: str, spark: SparkSession, schema: StructType = None
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+        reader_params = {
+            "path": adls_path,
+            "header": True,
+            "escape": '"',
+            "multiLine": True,
+        }
+        if schema is None:
+            return spark.read.csv(**reader_params)
+
+        return spark.read.csv(**reader_params, schema=schema)
 
     def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
         if len(splits := filepath.split(".")) < 2:
@@ -46,20 +81,44 @@ class ADLSFileClient(ConfigurableResource):
             case "csv" | "xls" | "xlsx":
                 bytes_data = data.to_csv(mode="w+", index=False).encode("utf-8-sig")
             case "json":
-                bytes_data = data.to_json().encode()
+                bytes_data = data.to_json(indent=2).encode()
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(buffer.read(), overwrite=True)
 
-    def download_delta_table_as_delta_table(self, table_path: str, spark: SparkSession):
+    def upload_spark_dataframe_as_file(
+        self, data: sql.DataFrame, filepath: str, spark: SparkSession
+    ):
+        if not (extension := os.path.splitext(filepath)[1]):
+            raise RuntimeError(f"Cannot infer format of file {filepath}")
+
+        full_remote_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+
+        match extension:
+            case ".csv":
+                data.write.csv(
+                    full_remote_path,
+                    mode="overwrite",
+                    quote='"',
+                    escapeQuotes=True,
+                    header=True,
+                )
+            case ".json":
+                data.write.json(full_remote_path, mode="overwrite")
+            case _:
+                raise OSError(f"Unsupported format for file {filepath}")
+
+    def download_delta_table_as_delta_table(
+        self, table_path: str, spark: SparkSession
+    ) -> DeltaTable:
         return DeltaTable.forPath(spark, f"{table_path}")
 
     def download_delta_table_as_spark_dataframe(
         self, table_path: str, spark: SparkSession
-    ):
+    ) -> sql.DataFrame:
         df = spark.read.format("delta").load(table_path)
         df.show()
         return df
@@ -99,13 +158,13 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json(self, data, filepath: str):
+    def upload_json(self, data: dict | list[dict], filepath: str):
         file_client = _adls.get_file_client(filepath)
-        json_data = json.dumps(data).encode("utf-8")
+        json_data = json.dumps(data, indent=2).encode()
 
         with BytesIO(json_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.getvalue(), overwrite=True)
+            file_client.upload_data(buffer.read(), overwrite=True)
 
     def list_paths(self, path: str, recursive=True):
         paths = _adls.get_paths(path=path, recursive=recursive)
@@ -125,13 +184,25 @@ class ADLSFileClient(ConfigurableResource):
 
 
 def get_filepath(source_path: str, dataset_type: str, step: str):
-    filename = (
-        source_path.split("/")[-1].replace(".csv", ".json")
-        if step == "data_quality_results"
-        else source_path.split("/")[-1]
-    )
+    if "dq_summary" in step:
+        filename = source_path.split("/")[-1].replace(".csv", ".json")
+    elif step in [
+        # "geolocation_dq_passed_rows",
+        # "geolocation_dq_failed_rows",
+        "geolocation_staging",
+        # "coverage_dq_passed_rows",
+        # "coverage_dq_failed_rows",
+        "coverage_staging",
+        # "manual_review_passed_rows",
+        # "manual_review_failed_rows",
+        "silver",
+        "gold",
+    ]:
+        filename = source_path.split("/")[-1].split("_")[1]
+    else:
+        filename = source_path.split("/")[-1]
 
-    destination_folder = constants.step_destination_folder_map(dataset_type)[step]
+    destination_folder = constants.step_folder_map(dataset_type)[step]
 
     if not destination_folder:
         raise ValueError(f"Unknown filepath: {source_path}")
@@ -141,10 +212,14 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
     return destination_filepath
 
 
-def get_output_filepath(context: OpExecutionContext):
+def get_output_filepath(context: OpExecutionContext, output_name: str = None):
+    if output_name:
+        step = output_name
+    else:
+        step = context.asset_key.to_user_string()
+
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
-    step = context.asset_key.to_user_string()
 
     destination_filepath = get_filepath(source_path, dataset_type, step)
 
@@ -154,10 +229,9 @@ def get_output_filepath(context: OpExecutionContext):
 def get_input_filepath(context: OpExecutionContext) -> str:
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
-    filename = source_path.split("/")[-1]
     step = context.asset_key.to_user_string()
+    origin_step = constants.step_origin_map[step]
 
-    upstream_step = constants.step_origin_folder_map[step]
-    upstream_path = f"{upstream_step}/{dataset_type}/{filename}"
+    source_filepath = get_filepath(source_path, dataset_type, origin_step)
 
-    return upstream_path
+    return source_filepath

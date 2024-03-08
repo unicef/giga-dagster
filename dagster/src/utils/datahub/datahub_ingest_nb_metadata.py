@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from functools import wraps
 
 import datahub.emitter.mce_builder as builder
@@ -11,8 +12,8 @@ from datahub.metadata.schema_classes import (
     PlatformTypeClass,
 )
 from loguru import logger
-from scripts.github_api_calls import list_ipynb_from_github_repo
 from src.settings import settings
+from src.utils.github_api_calls import list_ipynb_from_github_repo
 
 
 class NotebookIngestionAction:
@@ -74,8 +75,10 @@ class NotebookIngestionAction:
 
     @_log_progress("dataset properties")
     def upsert_dataset_properties(self):
+        # current date and time format: day/month/year 24-hour clock
+        now = datetime.now().isoformat()
         dataset_properties = DatasetPropertiesClass(
-            customProperties=self.notebook_metadata
+            customProperties=self.notebook_metadata | {"last_ingestion_time": now}
         )
         dataset_properties_mcp = MetadataChangeProposalWrapper(
             entityUrn=self.dataset_urn,

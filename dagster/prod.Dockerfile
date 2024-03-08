@@ -14,7 +14,7 @@ WORKDIR /tmp
 # Update packages & install JDK, Spark, Hadoop
 RUN apt-get update && \
     apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
-    wget https://dlcdn.apache.org/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz && \
+    wget https://storage.googleapis.com/giga-test-app-downloads-mirror/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
     mkdir --parents /opt/spark && \
     mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}" && \
@@ -57,8 +57,8 @@ WORKDIR /app
 
 # Copy source code into the container
 COPY src ./src
+COPY models ./models
 COPY scripts ./scripts
-COPY schemas ./schemas
 COPY sql ./sql
 
 # Read the PORT environment variable, otherwise default to the specified port

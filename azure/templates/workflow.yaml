@@ -29,6 +29,16 @@ stages:
           dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
           buildContext: $(Build.SourcesDirectory)
 
+  - stage: BuildAndPushHive
+    displayName: Build and push Hive Metastore image
+    dependsOn: [ ]
+    jobs:
+      - template: build-and-push.yaml
+        parameters:
+          displayName: Hive Metastore
+          repository: giga-dagster-hive-metastore
+          dockerfile: $(Build.SourcesDirectory)/hive/prod.Dockerfile
+
   - stage: CreateConfig
     displayName: Create/update K8s configuration resources
     dependsOn: [ ]
@@ -41,6 +51,7 @@ stages:
       - BuildAndPushDagster
       - BuildAndPushAuthProxy
       - BuildAndPushSpark
+      - BuildAndPushHive
       - CreateConfig
     jobs:
       - template: helm-deploy.yaml

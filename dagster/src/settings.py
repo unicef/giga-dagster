@@ -3,7 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseSettings
+from pydantic import AnyUrl, BaseSettings
 
 
 class Environment(StrEnum):
@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     AUTH_OIDC_CLIENT_ID: str
     AUTH_OIDC_TENANT_ID: str
     AUTH_OIDC_CLIENT_SECRET: str
+    HIVE_METASTORE_URI: str
+    AZURE_EMAIL_CONNECTION_STRING: str
+    EMAIL_RENDERER_BEARER_TOKEN: str
+    EMAIL_RENDERER_SERVICE_URL: AnyUrl
+    EMAIL_TEST_RECIPIENTS: list[str]
+    AZURE_EMAIL_SENDER: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
@@ -43,7 +49,6 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
-    SHORT_SHA: str = ""
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
@@ -84,6 +89,12 @@ class Settings(BaseSettings):
     @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
         return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
+
+    @property
+    def SPARK_WAREHOUSE_DIR(self) -> str:
+        if self.PYTHON_ENV == Environment.LOCAL:
+            return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
+        return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
 
 
 @lru_cache

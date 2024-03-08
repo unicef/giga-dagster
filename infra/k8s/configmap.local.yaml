@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: giga-dagster-configmap
+  labels:
+    app: giga-dagster
+data:
+  DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
+  DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"
+  DATAHUB_METADATA_SERVER_URL: "datahub-datahub-gms:8080"
+  SPARK_UI_URL: "http://spark-master-svc:8080"
+  SPARK_MASTER_HOST: "spark-master-svc"
+  HMS_DATABASE_URL: "jdbc:postgresql://hive-metastore-postgresql:5432/metastore_db"
+  HIVE_METASTORE_URI: "thrift://hive-metastore:9083"
+  oauth2_proxy.cfg: |
+    http_address = ":3001"
+    upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
+    email_domains = ["*"]
+    api_routes = ["^/graphql", "^/favicon.ico"]
+    cookie_name = "_oauth2_proxy"
+    cookie_expire = "168h"
+    cookie_secure = false
+    cookie_httponly = false
+    provider = "github"
+    code_challenge_method = "S256"
+    proxy_prefix = "/auth"
+    custom_sign_in_logo = "/app/static/dagster.svg"
+    proxy_websockets = true
+    footer = "-"

@@ -32,9 +32,23 @@ jobs:
                 releaseName: spark
                 namespace: $(kubernetesNamespace)
                 arguments: >
+                  --version 8.1.6
                   --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
                   --set image.registry="$(containerRegistryName).azurecr.io"
                   --set image.repository="giga-dagster-spark"
+                  --set image.tag="$(Build.SourceVersion)"
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy Hive Metastore
+              inputs:
+                command: upgrade
+                install: true
+                chartType: FilePath
+                chartPath: $(Build.SourcesDirectory)/infra/helm/hive-metastore
+                releaseName: hive-metastore
+                namespace: $(kubernetesNamespace)
+                arguments: >
+                  --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-hive-metastore"
                   --set image.tag="$(Build.SourceVersion)"
 
             - task: HelmDeploy@0
@@ -47,6 +61,7 @@ jobs:
                 releaseName: dagster
                 namespace: $(kubernetesNamespace)
                 arguments: >
+                  --version 1.5.0
                   --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
                   --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)

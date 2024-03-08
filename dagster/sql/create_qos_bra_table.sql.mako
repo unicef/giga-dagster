@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `${schema_name}`.`${table_name}` (
+CREATE OR REPLACE TABLE `${schema_name}`.`${table_name}` (
     id STRING NOT NULL,
     timestamp TIMESTAMP NOT NULL,
     date DATE NOT NULL,

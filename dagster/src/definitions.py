@@ -1,43 +1,22 @@
 from pyspark import sql
 
 from dagster import Definitions, load_assets_from_package_module
-from src.assets import common, datahub_assets, qos, school_coverage, school_geolocation
-from src.jobs import (
-    datahub__create_domains_job,
-    datahub__create_tags_job,
-    datahub__ingest_azure_ad_users_groups_job,
-    datahub__update_policies_job,
-    qos__convert_csv_to_deltatable_job,
-    qos__school_list_job,
-    school_master__convert_gold_csv_to_deltatable_job,
-    school_master_coverage__automated_data_checks_job,
-    school_master_coverage__failed_manual_checks_job,
-    school_master_coverage__successful_manual_checks_job,
-    school_master_geolocation__automated_data_checks_job,
-    school_master_geolocation__failed_manual_checks_job,
-    school_master_geolocation__successful_manual_checks_job,
-    school_reference__convert_gold_csv_to_deltatable_job,
+from src import jobs, sensors
+from src.assets import (
+    adhoc,
+    common,
+    datahub_assets,
+    migrations,
+    school_coverage,
+    school_geolocation,
 )
-from src.resources.io_managers import (
-    ADLSDeltaIOManager,
-    ADLSJSONIOManager,
-    ADLSPandasIOManager,
-)
+from src.resources import RESOURCE_DEFINITIONS
 from src.schedules import generate_qos__school_list_schedule
-from src.sensors import (
-    qos__csv_to_deltatable_sensor,
-    school_master__gold_csv_to_deltatable_sensor,
-    school_master_coverage__failed_manual_checks_sensor,
-    school_master_coverage__raw_file_uploads_sensor,
-    school_master_coverage__successful_manual_checks_sensor,
-    school_master_geolocation__failed_manual_checks_sensor,
-    school_master_geolocation__raw_file_uploads_sensor,
-    school_master_geolocation__successful_manual_checks_sensor,
-    school_reference__gold_csv_to_deltatable_sensor,
+from src.utils.load_module import (
+    load_jobs_from_package_module,
+    load_sensors_from_package_module,
 )
-from src.utils.adls import ADLSFileClient
 from src.utils.sentry import setup_sentry
-from src.utils.spark import pyspark
 
 setup_sentry()
 
@@ -59,44 +38,15 @@ defs = Definitions(
             package_module=school_coverage, group_name="school_coverage_data"
         ),
         *load_assets_from_package_module(package_module=common, group_name="common"),
-        *load_assets_from_package_module(package_module=qos, group_name="qos_data"),
         *load_assets_from_package_module(
             package_module=datahub_assets, group_name="datahub"
         ),
+        *load_assets_from_package_module(
+            package_module=migrations, group_name="migrations"
+        ),
+        *load_assets_from_package_module(package_module=adhoc, group_name="adhoc"),
     ],
-    jobs=[
-        datahub__create_domains_job,
-        datahub__create_tags_job,
-        datahub__ingest_azure_ad_users_groups_job,
-        datahub__update_policies_job,
-        qos__convert_csv_to_deltatable_job,
-        qos__school_list_job,
-        school_master_coverage__automated_data_checks_job,
-        school_master_coverage__failed_manual_checks_job,
-        school_master_coverage__successful_manual_checks_job,
-        school_master_geolocation__automated_data_checks_job,
-        school_master_geolocation__failed_manual_checks_job,
-        school_master_geolocation__successful_manual_checks_job,
-        school_master__convert_gold_csv_to_deltatable_job,
-        school_reference__convert_gold_csv_to_deltatable_job,
-    ],
-    resources={
-        "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
-        "adls_json_io_manager": ADLSJSONIOManager(),
-        "adls_pandas_io_manager": ADLSPandasIOManager(),
-        "adls_file_client": ADLSFileClient(),
-        "spark": pyspark,
-    },
-    schedules=schedules,
-    sensors=[
-        qos__csv_to_deltatable_sensor,
-        school_master_coverage__failed_manual_checks_sensor,
-        school_master_coverage__raw_file_uploads_sensor,
-        school_master_coverage__successful_manual_checks_sensor,
-        school_master_geolocation__failed_manual_checks_sensor,
-        school_master_geolocation__raw_file_uploads_sensor,
-        school_master_geolocation__successful_manual_checks_sensor,
-        school_master__gold_csv_to_deltatable_sensor,
-        school_reference__gold_csv_to_deltatable_sensor,
-    ],
+    resources=RESOURCE_DEFINITIONS,
+    jobs=load_jobs_from_package_module(jobs),
+    sensors=load_sensors_from_package_module(sensors),
 )
