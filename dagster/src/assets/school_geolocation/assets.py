@@ -9,7 +9,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
-from src.sensors.config import FileConfig
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import (
@@ -17,8 +17,8 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
@@ -30,7 +30,7 @@ def geolocation_raw(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    # emit_metadata_to_datahub(context, df=df)
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -40,7 +40,7 @@ def geolocation_bronze(
     geolocation_raw: sql.DataFrame,
 ) -> pd.DataFrame:
     df = create_bronze_layer_columns(geolocation_raw)
-    # emit_metadata_to_datahub(context, df=geolocation_raw)
+    emit_metadata_to_datahub(context, df=geolocation_raw)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
@@ -89,7 +89,7 @@ def geolocation_dq_passed_rows(
     geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_passed = geolocation_dq_results
-    # emit_metadata_to_datahub(context, df_passed)
+    emit_metadata_to_datahub(context, df_passed)
     yield Output(
         df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -101,7 +101,7 @@ def geolocation_dq_failed_rows(
     geolocation_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = geolocation_dq_results
-    # emit_metadata_to_datahub(context, df_failed)
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(
         df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
@@ -210,4 +210,4 @@ def geolocation_staging(
             spark.spark_session,
         )
 
-    # # emit_metadata_to_datahub(context, staging)
+    emit_metadata_to_datahub(context, staging)

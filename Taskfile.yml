@@ -21,8 +21,8 @@ tasks:
   up:
     desc: Build and start Docker containers
     cmds:
-      - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml up --detach --build --remove-orphans {{.CLI_ARGS}}
-      - docker compose --project-name {{.PROJECT_NAME}} up --detach --build --remove-orphans {{.CLI_ARGS}}
+      - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml up --build --detach --remove-orphans {{.CLI_ARGS}}
+      - docker compose --project-name {{.PROJECT_NAME}} up --build --detach --remove-orphans {{.CLI_ARGS}}
 
   setup:
     desc: Run all first-time setup tasks
@@ -44,7 +44,7 @@ tasks:
     internal: true
     cmds:
       - poetry env use 3.11
-      - poetry install --with dev,dagster,pipelines,spark,notebook
+      - poetry install --with dev,dagster,pipelines,spark,notebook --no-root
 
   setup-helm-repos:
     desc: Register all Helm chart repositories

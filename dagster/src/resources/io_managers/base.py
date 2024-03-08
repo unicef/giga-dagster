@@ -15,7 +15,11 @@ from src.utils.spark import (
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
     def _get_filepath(context: OutputContext):
-        if context.step_key in ["data_quality_results", "gold"]:
+        if context.step_key in [
+            "coverage_data_quality_results",
+            "geolocation_data_quality_results",
+            "gold",
+        ]:
             step = context.name
         else:
             step = context.step_key

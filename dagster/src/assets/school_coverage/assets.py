@@ -9,7 +9,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
-from src.sensors.config import FileConfig
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
@@ -18,8 +18,8 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
-# from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
@@ -32,7 +32,7 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    # emit_metadata_to_datahub(context, df=df)
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -91,7 +91,7 @@ def coverage_dq_failed_rows(
     coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = coverage_dq_results
-    # emit_metadata_to_datahub(context, df_failed)
+    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -130,7 +130,7 @@ def coverage_bronze(
         if silver:
             df = itu_coverage_merge(df, silver)
 
-    # # emit_metadata_to_datahub(context, df=raw) # check if df being passed in is correct
+    emit_metadata_to_datahub(context, df=df)  # check if df being passed in is correct
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
@@ -237,4 +237,4 @@ def coverage_staging(
             spark.spark_session,
         )
 
-    # # emit_metadata_to_datahub(context, staging)
+    emit_metadata_to_datahub(context, staging)

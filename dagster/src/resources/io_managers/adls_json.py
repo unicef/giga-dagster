@@ -1,5 +1,3 @@
-from pyspark import sql
-
 from dagster import InputContext, OutputContext
 from src.utils.adls import ADLSFileClient
 
@@ -9,13 +7,9 @@ adls_client = ADLSFileClient()
 
 
 class ADLSJSONIOManager(BaseConfigurableIOManager):
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: dict | list[dict]):
         filepath = self._get_filepath(context)
-        if output.isEmpty():
-            context.log.warning("Output DataFrame is empty. Skipping write operation.")
-            return
-
-        adls_client.upload_json(output.toPandas().to_json(), filepath)
+        adls_client.upload_json(output, filepath)
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
