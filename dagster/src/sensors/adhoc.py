@@ -112,25 +112,24 @@ def school_reference__gold_csv_to_deltatable_sensor():
 def school_qos_bra__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.qos_source_folder}/BRA")
+    file_list = sorted(
+        [
+            p
+            for p in adls.list_paths(f"{constants.qos_source_folder}/BRA")
+            if not p.is_directory and os.path.splitext(p.name)[1] == ".csv"
+        ],
+        key=lambda x: x.last_modified,
+    )
     run_requests = []
 
     for file_data in file_list:
-        if file_data["is_directory"]:
-            continue
-
-        filepath = file_data["name"]
-        if os.path.splitext(filepath)[1] != ".csv":
-            continue
-
+        filepath = file_data.name
         properties = adls.get_file_metadata(filepath=filepath)
-        metadata = properties["metadata"]
-        size = properties["size"]
         file_config = FileConfig(
             filepath=filepath,
             dataset_type="qos",
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata=properties.metadata,
+            file_size_bytes=properties.size,
             metastore_schema="qos",
             unique_identifier_column="gigasync_id",
             partition_columns=["date"],

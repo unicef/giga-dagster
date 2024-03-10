@@ -10,7 +10,11 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
 import azure.core.exceptions
-from azure.storage.filedatalake import DataLakeServiceClient
+from azure.storage.filedatalake import (
+    DataLakeServiceClient,
+    FileProperties,
+    PathProperties,
+)
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
@@ -166,11 +170,11 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True)
 
-    def list_paths(self, path: str, recursive=True):
+    def list_paths(self, path: str, recursive=True) -> list[PathProperties]:
         paths = _adls.get_paths(path=path, recursive=recursive)
         return list(paths)
 
-    def get_file_metadata(self, filepath: str):
+    def get_file_metadata(self, filepath: str) -> FileProperties:
         file_client = _adls.get_file_client(filepath)
         properties = file_client.get_file_properties()
         return properties
