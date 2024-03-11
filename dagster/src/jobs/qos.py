@@ -14,6 +14,17 @@ qos_list__automated_data_checks_job = define_asset_job(
 )
 
 
+school_list__successful_manual_checks_job = define_asset_job(
+    name="school_list__successful_manual_checks_job",
+    selection=[
+        "manual_review_passed_rows",
+        "silver",
+        "master",
+        "reference",
+    ],
+)
+
+
 qos_connectivity__automated_data_checks_job = define_asset_job(
     name="qos_connectivity__automated_data_checks_job",
     selection=[
@@ -25,6 +36,5 @@ qos_connectivity__automated_data_checks_job = define_asset_job(
         "connectivity_dq_failed_rows",
         "connectivity_silver",
         "connectivity_gold",
-        # "list_staging",
     ],
 )
