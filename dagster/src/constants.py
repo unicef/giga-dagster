@@ -104,6 +104,16 @@ class Constants(BaseSettings):
             "adhoc__qos_bra_transforms": "gold/dq-results/qos/transforms/BRA",
             "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
             "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
+            # qos
+            "list_raw": f"{self.raw_folder}/school-{dataset_type}-data",
+            "list_bronze": f"bronze/school-{dataset_type}-data",
+            "list_data_quality_results": f"logs-gx/school-{dataset_type}-data",
+            "list_dq_results": f"logs-gx/school-{dataset_type}-data",
+            "list_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
+            "list_dq_checks": f"logs-gx/school-{dataset_type}-data",
+            "list_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
+            "list_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
+            "list_staging": f"staging/pending-review/school-{dataset_type}-data",
         }
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
