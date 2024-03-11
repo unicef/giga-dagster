@@ -72,6 +72,30 @@ jobs:
                     externalName: "datahub-datahub-gms.io-datahub-$(deployEnv).svc.cluster.local"
 
             - task: Kubernetes@1
+              displayName: Create ingestion portal database external service
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Service
+                  metadata:
+                    name: ingestion-portal-database-external
+                    labels:
+                      app.kubernetes.io/name: giga-dagster
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  spec:
+                    type: ExternalName
+                    externalName: "ingestion-postgres-gms.io-datahub-$(deployEnv).svc.cluster.local"
+                    ports:
+                      - port: 8080
+                        targetPort: 8080
+                        protocol: TCP    
+
+            - task: Kubernetes@1
               displayName: Create authproxy secrets
               inputs:
                 namespace: $(kubernetesNamespace)
