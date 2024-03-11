@@ -3,16 +3,17 @@ from pathlib import Path
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
+from models.schema import Schema
 from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 from pyspark.sql.types import StructField
 
-import src.schemas
 from dagster import InputContext, OutputContext
+from src.constants import constants
 from src.resources.io_managers.base import BaseConfigurableIOManager
-from src.schemas import BaseSchema
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
@@ -29,13 +30,10 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         )
         schema_name = self._get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
-        columns = self._get_schema_object(schema_name)
 
         self._create_schema_if_not_exists(schema_name)
-        self._create_table_if_not_exists(
-            context, schema_name, table_name, columns, table_root_path
-        )
-        self._upsert_data(context, output, full_table_name, columns)
+        self._create_table_if_not_exists(schema_name, table_name)
+        self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
 
@@ -73,10 +71,39 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     def _get_schema_name(context: InputContext | OutputContext):
         return context.step_context.op_config["metastore_schema"]
 
+    def _get_schema_table(self, schema_name: str):
+        spark = self._get_spark_session()
+        metaschema_name = Schema.__schema_name__
+        full_table_name = f"{metaschema_name}.{schema_name}"
+
+        # This should be cheap if the migrations.migrate_schema asset is caching the table properly
+        return DeltaTable.forName(spark, full_table_name).toDF()
+
     def _get_schema_object(self, schema_name: str):
-        # TODO: Pull the correct Delta Table schema from ADLS
-        schema: BaseSchema = getattr(src.schemas, schema_name)
-        return schema.columns
+        df = self._get_schema_table(schema_name)
+        return [
+            StructField(
+                row.name,
+                getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
+                row.is_nullable,
+            )
+            for row in df.collect()
+        ]
+
+    def _get_primary_key(self, schema_name: str) -> str:
+        df = self._get_schema_table(schema_name)
+        return df.filter(df["primary_key"]).first().name
+
+    def _get_partition_columns(self, schema_name: str) -> list[str]:
+        df = self._get_schema_table(schema_name)
+        return [
+            row.name
+            for row in df.filter(
+                col("partition_order").isNotNull() & (col("partition_order") > 0)
+            )
+            .select("name")
+            .collect()
+        ]
 
     def _get_spark_session(self) -> SparkSession:
         spark: PySparkResource = self.pyspark
@@ -89,14 +116,13 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def _create_table_if_not_exists(
         self,
-        context: OutputContext,
         schema_name: str,
         table_name: str,
-        columns: list[StructField],
-        table_root_path: str = None,
     ):
         spark = self._get_spark_session()
         full_table_name = f"{schema_name}.{table_name}"
+        columns = self._get_schema_object(schema_name)
+        partition_columns = self._get_partition_columns(schema_name)
 
         query = (
             DeltaTable.createIfNotExists(spark)
@@ -104,12 +130,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             .addColumns(columns)
         )
 
-        if (
-            len(
-                partition_columns := context.step_context.op_config["partition_columns"]
-            )
-            > 0
-        ):
+        if len(partition_columns) > 0:
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
@@ -131,21 +152,20 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def _upsert_data(
         self,
-        context: OutputContext,
         data: sql.DataFrame,
+        schema_name: str,
         full_table_name: str,
-        columns: list[StructField],
     ):
         spark = self._get_spark_session()
-        unique_identifier_column = context.step_context.op_config[
-            "unique_identifier_column"
-        ]
+        columns = self._get_schema_object(schema_name)
+        primary_key = self._get_primary_key(schema_name)
+
         (
             DeltaTable.forName(spark, full_table_name)
             .alias("master")
             .merge(
                 data.alias("updates"),
-                f"master.{unique_identifier_column} = updates.{unique_identifier_column}",
+                f"master.{primary_key} = updates.{primary_key}",
             )
             .whenMatchedUpdate(
                 "master.signature <> updates.signature",

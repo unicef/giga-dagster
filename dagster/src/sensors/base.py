@@ -7,14 +7,25 @@ class FileConfig(Config):
     filepath: str = Field(
         description="The path of the file inside the ADLS container relative to the root."
     )
-    dataset_type: str = Field(description="The type of the dataset.")
+    dataset_type: str = Field(
+        description="The type of the dataset, e.g. geolocation, coverage, qos"
+    )
     metadata: dict = Field(
         default_factory=dict,
-        description="The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.",
+        description="""
+        The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
+        """,
     )
     file_size_bytes: int
     metastore_schema: str = Field(
-        description="The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table."
+        description="""
+        The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table.
+        To get the list of valid schemas, run
+        ```sql
+        SHOW TABLES IN `schemas`
+        ```
+        or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
+        """,
     )
     unique_identifier_column: str = Field(
         "school_id_giga", description="The name of the primary key column."
