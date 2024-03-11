@@ -17,7 +17,7 @@ USER root
 WORKDIR /tmp
 
 RUN apt-get update && \
-    apt-get install -y curl wget && \
+    apt-get install -y curl wget gdal-bin libgdal-dev libgeos-dev g++ && \
     apt-get clean
 
 COPY --from=deps /tmp/requirements.txt /tmp/requirements.txt

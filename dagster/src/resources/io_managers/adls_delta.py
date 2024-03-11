@@ -22,7 +22,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         filepath = self._get_filepath(context)
         table_path = self._get_table_path(context, filepath)
 
-        schema_name = self._get_schema(context)
+        schema_name = self._get_schema_name(context)
         type_transform_function = self._get_type_transform_function(context)
         output = type_transform_function(output, context)
         adls_client.upload_spark_dataframe_as_delta_table(
