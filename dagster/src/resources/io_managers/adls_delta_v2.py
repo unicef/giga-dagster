@@ -3,19 +3,21 @@ from pathlib import Path
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
-from models.schema import Schema
 from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
-from pyspark.sql.types import StructField
 
 from dagster import InputContext, OutputContext
-from src.constants import constants
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.schema import (
+    get_partition_columns,
+    get_primary_key,
+    get_schema_columns,
+    get_schema_name,
+)
 
 adls_client = ADLSFileClient()
 
@@ -28,7 +30,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         table_name, table_root_path, table_path = self._get_table_path(
             context, filepath
         )
-        schema_name = self._get_schema_name(context)
+        schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
@@ -43,7 +45,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             context, filepath
         )
         spark = self._get_spark_session()
-        schema_name = self._get_schema_name(context)
+        schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
         dt = DeltaTable.forName(spark, full_table_name)
 
@@ -67,45 +69,6 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             ic(f"{settings.AZURE_BLOB_CONNECTION_URI}/{table_root_path}/{table_name}"),
         )
 
-    @staticmethod
-    def _get_schema_name(context: InputContext | OutputContext):
-        return context.step_context.op_config["metastore_schema"]
-
-    def _get_schema_table(self, schema_name: str):
-        spark = self._get_spark_session()
-        metaschema_name = Schema.__schema_name__
-        full_table_name = f"{metaschema_name}.{schema_name}"
-
-        # This should be cheap if the migrations.migrate_schema asset is caching the table properly
-        return DeltaTable.forName(spark, full_table_name).toDF()
-
-    def _get_schema_object(self, schema_name: str):
-        df = self._get_schema_table(schema_name)
-        return [
-            StructField(
-                row.name,
-                getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
-                row.is_nullable,
-            )
-            for row in df.collect()
-        ]
-
-    def _get_primary_key(self, schema_name: str) -> str:
-        df = self._get_schema_table(schema_name)
-        return df.filter(df["primary_key"]).first().name
-
-    def _get_partition_columns(self, schema_name: str) -> list[str]:
-        df = self._get_schema_table(schema_name)
-        return [
-            row.name
-            for row in df.filter(
-                col("partition_order").isNotNull() & (col("partition_order") > 0)
-            )
-            .orderBy("partition_order")
-            .select("name")
-            .collect()
-        ]
-
     def _get_spark_session(self) -> SparkSession:
         spark: PySparkResource = self.pyspark
         s: SparkSession = spark.spark_session
@@ -123,8 +86,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     ):
         spark = self._get_spark_session()
         full_table_name = f"{schema_name}.{table_name}"
-        columns = self._get_schema_object(schema_name)
-        partition_columns = self._get_partition_columns(schema_name)
+        columns = get_schema_columns(spark, schema_name)
+        partition_columns = get_partition_columns(spark, schema_name)
 
         query = (
             DeltaTable.createIfNotExists(spark)
@@ -160,8 +123,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         full_table_name: str,
     ):
         spark = self._get_spark_session()
-        columns = self._get_schema_object(schema_name)
-        primary_key = self._get_primary_key(schema_name)
+        columns = get_schema_columns(spark, schema_name)
+        primary_key = get_primary_key(spark, schema_name)
 
         (
             DeltaTable.forName(spark, full_table_name)

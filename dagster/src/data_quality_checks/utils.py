@@ -5,7 +5,7 @@ from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
-    window as w, 
+    window as w,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -15,7 +15,6 @@ from pyspark.sql.types import (
     StructType,
 )
 
-import src.schemas
 from dagster import OpExecutionContext
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
@@ -32,10 +31,10 @@ from src.data_quality_checks.geometry import (
     school_density_check,
 )
 from src.data_quality_checks.precision import precision_check
-from src.data_quality_checks.standard import standard_checks, format_validation_checks
-from src.schemas import BaseSchema
+from src.data_quality_checks.standard import format_validation_checks, standard_checks
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.schema import get_schema_columns
 
 
 def aggregate_report_spark_df(
@@ -211,8 +210,8 @@ def aggregate_report_json(
 def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference"]:
         schema_name = f"school_{dataset_type}"
-        schema: BaseSchema = getattr(src.schemas, schema_name)
-        columns = [col.name for col in schema.columns]
+        schema_columns = get_schema_columns(df.sparkSession, schema_name)
+        columns = [col.name for col in schema_columns]
     else:
         columns = [col for col in df.columns if not col.startswith("dq_")]
 
@@ -278,7 +277,7 @@ def row_level_checks(
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):
-    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
+    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1))
 
     df = df.withColumn("row_num", f.row_number().over(window))
 
@@ -291,9 +290,10 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 
     return df
 
+
 if __name__ == "__main__":
-    from src.utils.spark import get_spark_session
     from src.settings import settings
+    from src.utils.spark import get_spark_session
 
     spark = get_spark_session()
     #
@@ -307,7 +307,9 @@ if __name__ == "__main__":
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
-    df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
+    df_bronze = df_bronze.withColumn(
+        "school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142")
+    )
     df = format_validation_checks(df_bronze)
     df.show()
     # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
@@ -320,14 +322,12 @@ if __name__ == "__main__":
     # df_duplicates.show()
     # df_deduplicated.show()
 
-    
     # df_bronze.groupBy("school_id_govt").agg(f.count("*").alias("count")).orderBy("count", ascending=False).show()
-    # window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
+    # window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1))
     # df_bronze = df_bronze.withColumn("test", f.row_number().over(window))
     # df_bronze.orderBy("test", ascending=False).show()
     # df_dups = df_bronze.where(df_bronze.test != 1)
     # df_dups.orderBy("school_id_govt").show(100000)
-
 
     # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
 

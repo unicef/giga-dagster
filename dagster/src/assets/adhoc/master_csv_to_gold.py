@@ -3,7 +3,6 @@ from io import BytesIO
 
 import numpy as np
 import pandas as pd
-import src.schemas
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
@@ -18,10 +17,10 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from src.schemas import BaseSchema
 from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
+from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -47,9 +46,7 @@ def adhoc__master_data_transforms(
     logger = ContextLoggerWithLoguruFallback(context)
 
     s: SparkSession = spark.spark_session
-
-    schema_name = config.metastore_schema
-    schema: BaseSchema = getattr(src.schemas, schema_name)
+    columns = get_schema_columns(s, config.metastore_schema)
 
     buffer = BytesIO(adhoc__load_master_csv)
     buffer.seek(0)
@@ -62,7 +59,7 @@ def adhoc__master_data_transforms(
 
     columns_to_add = {
         col.name: f.lit(None).cast(NullType())
-        for col in schema.columns
+        for col in columns
         if col.name not in sdf.columns
     }
 
