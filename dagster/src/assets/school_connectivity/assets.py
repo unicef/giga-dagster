@@ -20,10 +20,18 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 @asset(io_manager_key="adls_pandas_io_manager")
 def connectivity_raw(
     context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
 ) -> pd.DataFrame:
     row_data = context.get_step_execution_context().op_config
 
     df = pd.DataFrame.from_records(query_API_data(context, row_data))
+
+    archived_files = adls_file_client.list_paths("archive/missing-giga-school-id")
+
+    for file in archived_files:
+        archived_rows = pd.read_csv(file)
+        df = df.append(archived_rows, ignore_index=True)
+
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
