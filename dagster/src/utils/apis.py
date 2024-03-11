@@ -5,22 +5,22 @@ import requests
 from dagster import Config, OpExecutionContext
 
 
-class QOSSchoolListAPIData(Config):
+class QOSAPIData(Config):
     # API information
-    request_method: str  ## OK
-    api_endpoint: str  ## OK
-    data_key: str  ## OK
+    request_method: str
+    api_endpoint: str
+    data_key: str
     school_id_key: str
-    query_parameters: str  ## OK
-    request_body: str  ## OK
+    query_parameters: str
+    request_body: str
     columns_to_schema_mapping: str
 
     # authorization information
-    authorization_type: str  ## OK
-    bearer_auth_bearer_token: str  ## OK
-    basic_auth_username: str  ## OK
-    basic_auth_password: str  ## OK
-    api_auth_api_key: str  ## OK
+    authorization_type: str
+    bearer_auth_bearer_token: str
+    basic_auth_username: str
+    basic_auth_password: str
+    api_auth_api_key: str
 
     # pagination information
     pagination_type: str
@@ -41,7 +41,7 @@ class QOSSchoolListAPIData(Config):
     user_email: str
 
 
-def query_API_data(context: OpExecutionContext, row_data: QOSSchoolListAPIData) -> list:
+def query_API_data(context: OpExecutionContext, row_data: QOSAPIData) -> list:
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     data = []
@@ -104,7 +104,7 @@ def query_API_data(context: OpExecutionContext, row_data: QOSSchoolListAPIData) 
 def _make_API_request(
     context: OpExecutionContext,
     session: requests.Session,
-    row_data: QOSSchoolListAPIData,
+    row_data: QOSAPIData,
     pagination_parameters: dict = None,
 ) -> list:
     if row_data["send_query_in"] == "REQUEST_BODY":
@@ -148,7 +148,7 @@ def _make_API_request(
 
 
 def _generate_auth(
-    row_data: QOSSchoolListAPIData,
+    row_data: QOSAPIData,
 ):
     if row_data["authorization_type"] == "BASIC_AUTH":
         token = b64encode(
@@ -161,9 +161,7 @@ def _generate_auth(
         return {"X-API-Key": row_data["api_auth_api_key"]}
 
 
-def _generate_pagination_parameters(
-    row_data: QOSSchoolListAPIData, page: int, offset: int
-):
+def _generate_pagination_parameters(row_data: QOSAPIData, page: int, offset: int):
     pagination_params = {}
     if row_data.pagination_type == "PAGE_NUMBER":
         pagination_params[row_data["page_number_key"]] = page
