@@ -59,7 +59,6 @@ WORKDIR /app
 COPY src ./src
 COPY models ./models
 COPY scripts ./scripts
-COPY sql ./sql
 
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
