@@ -39,6 +39,7 @@ def list_bronze(
     context: OpExecutionContext,
     list_raw: sql.DataFrame,
 ) -> pd.DataFrame:
+    ## @RENZ NEED TO ADD TRANSFORM TO CONVERT COLUMNS TO SCHEMA COLUMNS
     df = create_bronze_layer_columns(list_raw)
     emit_metadata_to_datahub(context, df=list_raw)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
