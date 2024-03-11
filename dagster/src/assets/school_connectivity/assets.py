@@ -26,7 +26,9 @@ def connectivity_raw(
 
     df = pd.DataFrame.from_records(query_API_data(context, row_data))
 
-    archived_files = adls_file_client.list_paths("archive/missing-giga-school-id")
+    archived_files = adls_file_client.list_paths(
+        "archive/missing-giga-school-id"
+    )  # should we check all files? I think we'll get a lot of duplicates from previous runs -- should we just get the most recent archived file?
 
     for file in archived_files:
         archived_rows = pd.read_csv(file)
