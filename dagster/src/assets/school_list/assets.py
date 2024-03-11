@@ -17,6 +17,7 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
+from src.utils.apis import query_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -25,11 +26,10 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 @asset(io_manager_key="adls_pandas_io_manager")
 def list_raw(
     context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
 ) -> pd.DataFrame:
-    df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"]
-    )
+    row_data = context.get_step_execution_context().op_config
+
+    df = pd.DataFrame.from_records(query_API_data(context, row_data))
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
