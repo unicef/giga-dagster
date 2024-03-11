@@ -32,7 +32,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
-        self._create_table_if_not_exists(schema_name, table_name)
+        self._create_table_if_not_exists(context, schema_name, table_name)
         self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
@@ -101,6 +101,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             for row in df.filter(
                 col("partition_order").isNotNull() & (col("partition_order") > 0)
             )
+            .orderBy("partition_order")
             .select("name")
             .collect()
         ]
@@ -112,10 +113,11 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def _create_schema_if_not_exists(self, schema_name: str):
         spark = self._get_spark_session()
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`").show()
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
 
     def _create_table_if_not_exists(
         self,
+        context: InputContext | OutputContext,
         schema_name: str,
         table_name: str,
     ):
@@ -143,10 +145,11 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
                 # same table. Its corresponding entry in the metastore needs to be dropped first.
                 #
                 # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
-                spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`").show()
-                query.location(
-                    f"{settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db/{table_name.lower()}"
-                ).execute()
+                context.log.warning(
+                    f"Attempting to drop metastore entry for `{full_table_name}`..."
+                )
+                spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
+                query.execute()
             else:
                 raise exc
 
