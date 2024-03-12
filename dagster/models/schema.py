@@ -1,4 +1,10 @@
-from pyspark.sql.types import BooleanType, StringType, StructField, StructType
+from pyspark.sql.types import (
+    BooleanType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 from .base import BaseModel
 
@@ -13,6 +19,8 @@ class SchemaModel(BaseModel):
             StructField("data_type", StringType(), False),
             StructField("is_nullable", BooleanType(), False),
             StructField("description", StringType(), True),
+            StructField("primary_key", BooleanType(), True),
+            StructField("partition_order", IntegerType(), True),
         ]
 
     @property

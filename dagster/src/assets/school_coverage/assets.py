@@ -1,3 +1,4 @@
+import datahub.emitter.mce_builder as builder
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -16,6 +17,7 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -30,7 +32,18 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    emit_metadata_to_datahub(context, df=df)
+    # for testing only START - will be moved to io manager
+    filepath = context.run_tags["dagster/run_key"].split("/")[-1]
+    country_code = filepath.split("_")[1]
+    platform = builder.make_data_platform_urn("adlsGen2")
+    dataset_urn = builder.make_dataset_urn(
+        platform=platform,
+        env=settings.ADLS_ENVIRONMENT,
+        name=filepath.split(".")[0].replace("/", "."),
+    )
+    emit_metadata_to_datahub(context, df, country_code, dataset_urn)
+    # for testing only END - will be moved to io manager
+
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -58,6 +71,19 @@ def coverage_data_quality_results(
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
+
+    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
+    platform = builder.make_data_platform_urn("adlsGen2")
+    dataset_urn = builder.make_dataset_urn(
+        platform=platform,
+        env=settings.ADLS_ENVIRONMENT,
+        name=filepath.split(".")[0].replace("/", "."),
+    )
+    emit_assertions = EmitDatasetAssertionResults(
+        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
+    )
+    emit_assertions()
+    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
 
     yield Output(
         dq_results.toPandas(),
@@ -89,7 +115,6 @@ def coverage_dq_failed_rows(
     coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = coverage_dq_results
-    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -228,5 +253,3 @@ def coverage_staging(
             context.op_config["dataset_type"],
             spark.spark_session,
         )
-
-    emit_metadata_to_datahub(context, staging)

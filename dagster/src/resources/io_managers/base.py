@@ -38,7 +38,7 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
 
     @staticmethod
     def _get_schema_name(context: InputContext | OutputContext):
-        return context.step_context.op_config["dataset_type"]
+        return context.step_context.op_config["metastore_schema"]
 
     @staticmethod
     def _get_table_path(context: OutputContext, filepath: str):
