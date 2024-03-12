@@ -90,7 +90,7 @@ def query_API_data(context: OpExecutionContext, row_data: QOSAPIData) -> list:
                 context.log.info(
                     f"{row_data['name']} run # {page}, offset # {total_response_count} failed: {e}"
                 )
-                raise
+                raise e
             else:
                 offset += len(run_response)
                 page += 1
@@ -111,8 +111,6 @@ def _make_API_request(
         row_data["request_body"].update(pagination_parameters)
     elif row_data["send_query_in"] == "QUERY_PARAMETERS":
         row_data["query_parameters"].update(pagination_parameters)
-    elif row_data["send_query_in"] == "HEADERS":
-        row_data["headers"].update(pagination_parameters)
 
     try:
         if row_data["request_method"] == "GET":
@@ -130,15 +128,15 @@ def _make_API_request(
 
         response.raise_for_status()
 
-    except requests.HTTPError:
+    except requests.HTTPError as err:
         context.log.info(
             f"Error in {row_data["api_endpoint"]} endpoint: HTTP request returned status code"
             f" {response.status_code}"
         )
-        raise
+        raise err
     except Exception as e:
         context.log.info(f"Error in {row_data["api_endpoint"]} endpoint: {e}")
-        raise
+        raise e
     else:
         return (
             response.json()
@@ -158,7 +156,7 @@ def _generate_auth(
     elif row_data["authorization_type"] == "BEARER_TOKEN":
         return {"Authorization": f"Bearer {row_data['bearer_auth_bearer_token']}"}
     elif row_data["authorization_type"] == "API_KEY":
-        return {"X-API-Key": row_data["api_auth_api_key"]}
+        return {row_data["api_auth_api_key"]: row_data["api_auth_api_value"]}
 
 
 def _generate_pagination_parameters(row_data: QOSAPIData, page: int, offset: int):
