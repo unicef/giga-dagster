@@ -35,14 +35,16 @@ def identify_country_name(country_code: str) -> str:
 
 
 def create_dataset_urn(context: OpExecutionContext, is_upstream: bool) -> str:
+    platform = builder.make_data_platform_urn("adlsGen2")
     if is_upstream:
         input_filepath = get_input_filepath(context)
         upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
+
         return builder.make_dataset_urn(
-            platform="adls", name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
+            platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
         output_filepath = get_output_filepath(context)
@@ -50,7 +52,7 @@ def create_dataset_urn(context: OpExecutionContext, is_upstream: bool) -> str:
         dataset_urn_name = dataset_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
-        return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
+        return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 
 def define_dataset_properties(context: OpExecutionContext, country_code: str):

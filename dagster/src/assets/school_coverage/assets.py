@@ -37,8 +37,9 @@ def coverage_raw(
     # for testing only START - will be moved to io manager
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     country_code = filepath.split("_")[1]
+    platform = builder.make_data_platform_urn("adlsGen2")
     dataset_urn = builder.make_dataset_urn(
-        platform="adls",
+        platform=platform,
         env=settings.ADLS_ENVIRONMENT,
         name=filepath.split(".")[0].replace("/", "."),
     )
