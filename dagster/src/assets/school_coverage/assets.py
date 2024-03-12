@@ -1,5 +1,3 @@
-import time
-
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -95,9 +93,6 @@ def coverage_dq_failed_rows(
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
-# OUTPUT OF THIS IS A STAGING DATAFRAME COMPOSED OF INCOMING COVERAGE DATA + CURRENT SILVER COVERAGE
-
-
 # SOME QUESTIONS:
 # 1. What if multiple raw files
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -130,7 +125,7 @@ def coverage_bronze(
         if silver:
             df = itu_coverage_merge(df, silver)
 
-    emit_metadata_to_datahub(context, df=df)  # check if df being passed in is correct
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
@@ -147,7 +142,6 @@ def coverage_staging(
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[1]
 
-    # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
@@ -168,11 +162,7 @@ def coverage_staging(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
 
-    files_for_review.sort(
-        key=lambda x: time.mktime(
-            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
-        )
-    )
+    files_for_review.sort(key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 

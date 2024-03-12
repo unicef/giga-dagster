@@ -1,5 +1,3 @@
-import time
-
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -24,7 +22,7 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def list_raw(
+def qos_school_list_raw(
     context: OpExecutionContext,
 ) -> pd.DataFrame:
     row_data = context.get_step_execution_context().op_config
@@ -35,59 +33,64 @@ def list_raw(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
-def list_bronze(
+def qos_school_list_bronze(
     context: OpExecutionContext,
-    list_raw: sql.DataFrame,
+    qos_school_list_raw: sql.DataFrame,
 ) -> pd.DataFrame:
     ## @RENZ NEED TO ADD TRANSFORM TO CONVERT COLUMNS TO SCHEMA COLUMNS
-    df = create_bronze_layer_columns(list_raw)
-    emit_metadata_to_datahub(context, df=list_raw)
+    df = create_bronze_layer_columns(qos_school_list_raw)
+    emit_metadata_to_datahub(context, df=qos_school_list_raw)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @multi_asset(
     outs={
-        "list_dq_results": AssetOut(
+        "qos_school_list_dq_results": AssetOut(
             is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
-        "list_dq_summary_statistics": AssetOut(
+        "qos_school_list_dq_summary_statistics": AssetOut(
             is_required=True, io_manager_key="adls_json_io_manager"
         ),
     }
 )
-def list_data_quality_results(
+def qos_school_list_data_quality_results(
     context,
     config: FileConfig,
-    list_bronze: sql.DataFrame,
+    qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
-    dq_results = row_level_checks(list_bronze, "geolocation", country_code)
+    dq_results = row_level_checks(qos_school_list_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, dq_results), list_bronze
+        aggregate_report_spark_df(spark.spark_session, dq_results),
+        qos_school_list_bronze,
     )
 
     yield Output(
         dq_results.toPandas(),
-        metadata={"filepath": get_output_filepath(context, "list_dq_results")},
-        output_name="list_dq_results",
+        metadata={
+            "filepath": get_output_filepath(context, "qos_school_list_dq_results")
+        },
+        output_name="qos_school_list_dq_results",
     )
 
     yield Output(
         dq_summary_statistics,
         metadata={
-            "filepath": get_output_filepath(context, "list_dq_summary_statistics")
+            "filepath": get_output_filepath(
+                context, "qos_school_list_dq_summary_statistics"
+            )
         },
-        output_name="list_dq_summary_statistics",
+        output_name="qos_school_list_dq_summary_statistics",
     )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def list_dq_passed_rows(
+def qos_school_list_dq_passed_rows(
     context: OpExecutionContext,
-    list_dq_results: sql.DataFrame,
+    qos_school_list_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = list_dq_results
+    df_passed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_passed)
     yield Output(
         df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -95,11 +98,11 @@ def list_dq_passed_rows(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def list_dq_failed_rows(
+def qos_school_list_dq_failed_rows(
     context: OpExecutionContext,
-    list_dq_results: sql.DataFrame,
+    qos_school_list_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = list_dq_results
+    df_failed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(
         df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -107,9 +110,9 @@ def list_dq_failed_rows(
 
 
 @asset(io_manager_key="adls_delta_io_manager")
-def list_staging(
+def qos_school_list_staging(
     context: OpExecutionContext,
-    list_dq_passed_rows: sql.DataFrame,
+    qos_school_list_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ):
@@ -118,10 +121,10 @@ def list_staging(
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[1]
-    # If a staging table already exists, how do we prevent merging files that were already merged?
+
     # {filepath: str, date_modified: str}
     files_for_review = []
-    for file_data in adls_file_client.list_paths(
+    for file_data in adls_file_client.qos_school_list_paths(
         f"staging/pending-review/school-{dataset_type}-data"
     ):
         if (
@@ -139,11 +142,7 @@ def list_staging(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
 
-    files_for_review.sort(
-        key=lambda x: time.mktime(
-            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
-        )
-    )
+    files_for_review.sort(key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 
@@ -194,7 +193,7 @@ def list_staging(
         staging.execute()
 
     else:
-        staging = list_dq_passed_rows
+        staging = qos_school_list_dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(

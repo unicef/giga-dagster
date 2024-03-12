@@ -1,5 +1,3 @@
-import time
-
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -119,7 +117,7 @@ def geolocation_staging(
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[1]
-    # If a staging table already exists, how do we prevent merging files that were already merged?
+
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
@@ -140,11 +138,7 @@ def geolocation_staging(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
 
-    files_for_review.sort(
-        key=lambda x: time.mktime(
-            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
-        )
-    )
+    files_for_review.sort(key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 
