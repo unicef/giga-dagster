@@ -33,7 +33,6 @@ from src.data_quality_checks.geometry import (
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.data_quality_checks.column_relation import column_relation_checks
-from src.schemas import BaseSchema
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -319,7 +318,24 @@ if __name__ == "__main__":
     # df = standard_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
     # df = format_validation_checks(df_bronze)
-    df = row_level_checks(df_bronze, 'coverage', 'GIN')
+    df = column_relation_checks(df_bronze, 'coverage')
+    # transforms = {}
+    # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"] = f.when(
+    #             (f.lower(f.col("connectivity")) == "yes") & (
+    #                 (f.lower(f.col("connectivity_RT")) == "yes") | 
+    #                 (f.lower(f.col("connectivity_govt")) == "yes") |
+    #                 (f.col("download_speed_contracted").isNotNull())
+    #                 ), 0,
+    #         ).when(
+    #             (f.lower(f.col("connectivity")) == "no") & (
+    #                 ((f.lower(f.col("connectivity_RT")) == "no") | f.col("connectivity_RT").isNull()) & 
+    #                 ((f.lower(f.col("connectivity_govt")) == "no") | f.col("connectivity_govt").isNull()) &
+    #                 (f.col("download_speed_contracted").isNull())
+    #                 ), 0,
+    #         ).otherwise(1)
+    # print(transforms)
+    # df = df_bronze.withColumns(transforms)
+    # df.show()
     # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
     # df = standard_checks(df_bronze, 'master')
     # df.distinct().show()
