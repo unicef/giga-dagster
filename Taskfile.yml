@@ -229,6 +229,7 @@ tasks:
 
   helm-down:
     desc: Uninstall Helm charts
+    ignore_error: true
     cmds:
       - helm uninstall dagster-authproxy --namespace giga-dagster
       - helm uninstall dagster --namespace giga-dagster
@@ -239,8 +240,8 @@ tasks:
     desc: Clean K8s resources
     dir: infra
     cmds:
-      - kubectl delete pvc --all
-      - kubectl delete all --all
+      - kubectl delete pvc --all --namespace giga-dagster
+      - kubectl delete all --all --namespace giga-dagster
       - kubectl delete -f k8s/namespace.yaml
 
   python:
