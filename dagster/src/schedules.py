@@ -1,34 +1,32 @@
-import pandas as pd
-from pyspark import sql
+from models.qos_apis import SchoolList
 
 from dagster import RunConfig, RunRequest, ScheduleEvaluationContext, schedule
 from src.jobs.qos import qos_list__automated_data_checks_job
-from src.utils.apis import QOSSchoolListAPIData
+from src.utils.db import get_db_context
 
 
 @schedule(job=qos_list__automated_data_checks_job, cron_schedule="5-59/15 * * * *")
 def qos_list__schedule(context: ScheduleEvaluationContext):
     scheduled_date = context.scheduled_execution_time.strftime("%Y-%m-%d")
 
-    school_list_apis = sql.execute(
-        "SELECT * FROM school_list_apis WHERE enabled = True"
-    ).tolist()  # something like this
-
-    df = pd.DataFrame(school_list_apis)
-
-    for i in range(len(df)):
-        config: QOSSchoolListAPIData = df.loc[i, :].to_dict()
-
-        yield RunRequest(
-            run_key=f"{df.loc[i, "name"]}_{scheduled_date}",
-            run_config=RunConfig(
-                ops={
-                    "qos_school_list_raw": config,
-                    "qos_school_list_bronze": config,
-                    "qos_school_list_data_quality_results": config,
-                    "qos_school_list_dq_passed_rows": config,
-                    "qos_school_list_dq_failed_rows": config,
-                    "qos_school_list_staging": config,
-                }
-            ),
+    with get_db_context() as session:
+        school_list_apis: list[SchoolList] = (
+            session.query(SchoolList).filter(SchoolList.enabled is True).all()
         )
+
+        for api in school_list_apis:
+            config = api.__dict__
+
+            yield RunRequest(
+                run_key=f"{config["name"]}_{scheduled_date}",
+                run_config=RunConfig(
+                    ops={
+                        "qos_school_list_raw": config,
+                        "qos_school_list_bronze": config,
+                        "qos_school_list_data_quality_results": config,
+                        "qos_school_list_dq_passed_rows": config,
+                        "qos_school_list_dq_failed_rows": config,
+                        "qos_school_list_staging": config,
+                    }
+                ),
+            )

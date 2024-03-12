@@ -1,47 +1,14 @@
 from base64 import b64encode
 
 import requests
+from models.qos_apis import SchoolConnectivity, SchoolList
 
-from dagster import Config, OpExecutionContext
-
-
-class QOSAPIData(Config):
-    # API information
-    request_method: str
-    api_endpoint: str
-    data_key: str
-    school_id_key: str
-    query_parameters: str
-    request_body: str
-    columns_to_schema_mapping: str
-
-    # authorization information
-    authorization_type: str
-    bearer_auth_bearer_token: str
-    basic_auth_username: str
-    basic_auth_password: str
-    api_auth_api_key: str
-
-    # pagination information
-    pagination_type: str
-    size: str
-    page_size_key: str
-    send_query_in: str
-    page_number_key: str
-    page_starts_with: int
-    page_offset_key: str
-
-    # admin metadata
-    name: str
-    enabled: bool
-    date_created: str
-    date_modified: str
-    date_last_ingested: str
-    user_id: str
-    user_email: str
+from dagster import OpExecutionContext
 
 
-def query_API_data(context: OpExecutionContext, row_data: QOSAPIData) -> list:
+def query_API_data(
+    context: OpExecutionContext, row_data: SchoolList | SchoolConnectivity
+) -> list:
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     data = []
@@ -104,7 +71,7 @@ def query_API_data(context: OpExecutionContext, row_data: QOSAPIData) -> list:
 def _make_API_request(
     context: OpExecutionContext,
     session: requests.Session,
-    row_data: QOSAPIData,
+    row_data: SchoolList | SchoolConnectivity,
     pagination_parameters: dict = None,
 ) -> list:
     if row_data["send_query_in"] == "REQUEST_BODY":
@@ -146,7 +113,7 @@ def _make_API_request(
 
 
 def _generate_auth(
-    row_data: QOSAPIData,
+    row_data: SchoolList | SchoolConnectivity,
 ):
     if row_data["authorization_type"] == "BASIC_AUTH":
         token = b64encode(
@@ -159,7 +126,9 @@ def _generate_auth(
         return {row_data["api_auth_api_key"]: row_data["api_auth_api_value"]}
 
 
-def _generate_pagination_parameters(row_data: QOSAPIData, page: int, offset: int):
+def _generate_pagination_parameters(
+    row_data: SchoolList | SchoolConnectivity, page: int, offset: int
+):
     pagination_params = {}
     if row_data.pagination_type == "PAGE_NUMBER":
         pagination_params[row_data["page_number_key"]] = page
