@@ -101,10 +101,11 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> sql.DataFrame:
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     source = filepath.split("_")[3]
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     silver_table_name = filepath.split("/").split("_")[1]
 
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('/')[:-1]}/{silver_table_name}"
@@ -135,8 +136,9 @@ def coverage_staging(
     coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"

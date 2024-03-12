@@ -1,6 +1,7 @@
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
+from models.qos_apis import SchoolList
 from pyspark import sql
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -23,9 +24,9 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def qos_school_list_raw(
-    context: OpExecutionContext,
+    context: OpExecutionContext, config: SchoolList
 ) -> pd.DataFrame:
-    row_data = context.get_step_execution_context().op_config
+    row_data = config
 
     df = pd.DataFrame.from_records(query_API_data(context, row_data))
     emit_metadata_to_datahub(context, df=df)
@@ -115,8 +116,9 @@ def qos_school_list_staging(
     qos_school_list_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: SchoolList,
 ):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"

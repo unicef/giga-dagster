@@ -111,8 +111,9 @@ def geolocation_staging(
     geolocation_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
