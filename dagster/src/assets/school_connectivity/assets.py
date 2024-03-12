@@ -18,7 +18,7 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def connectivity_raw(
+def qos_school_connectivity_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
 ) -> pd.DataFrame:
@@ -39,61 +39,68 @@ def connectivity_raw(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
-def connectivity_bronze(
+def qos_school_connectivity_bronze(
     context: OpExecutionContext,
-    connectivity_raw: sql.DataFrame,
+    qos_school_connectivity_raw: sql.DataFrame,
 ) -> pd.DataFrame:
     ## @RENZ NEED TO ADD GIGA_SCHOOL_ID
-    df = create_bronze_layer_columns(connectivity_raw)
-    emit_metadata_to_datahub(context, df=connectivity_raw)
+    df = create_bronze_layer_columns(qos_school_connectivity_raw)
+    emit_metadata_to_datahub(context, df=qos_school_connectivity_raw)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @multi_asset(
     outs={
-        "connectivity_dq_results": AssetOut(
+        "qos_school_connectivity_dq_results": AssetOut(
             is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
-        "connectivity_dq_summary_statistics": AssetOut(
+        "qos_school_connectivity_dq_summary_statistics": AssetOut(
             is_required=True, io_manager_key="adls_json_io_manager"
         ),
     }
 )  # @RENZ WILL WE STILL HAVE STANDARD DQ CHECKS?
-def connectivity_data_quality_results(
+def qos_school_connectivity_data_quality_results(
     context,
     config: FileConfig,
-    connectivity_bronze: sql.DataFrame,
+    qos_school_connectivity_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
-    dq_results = row_level_checks(connectivity_bronze, "geolocation", country_code)
+    dq_results = row_level_checks(
+        qos_school_connectivity_bronze, "geolocation", country_code
+    )
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, dq_results), connectivity_bronze
+        aggregate_report_spark_df(spark.spark_session, dq_results),
+        qos_school_connectivity_bronze,
     )
 
     yield Output(
         dq_results.toPandas(),
-        metadata={"filepath": get_output_filepath(context, "connectivity_dq_results")},
-        output_name="connectivity_dq_results",
+        metadata={
+            "filepath": get_output_filepath(
+                context, "qos_school_connectivity_dq_results"
+            )
+        },
+        output_name="qos_school_connectivity_dq_results",
     )
 
     yield Output(
         dq_summary_statistics,
         metadata={
             "filepath": get_output_filepath(
-                context, "connectivity_dq_summary_statistics"
+                context, "qos_school_connectivity_dq_summary_statistics"
             )
         },
-        output_name="connectivity_dq_summary_statistics",
+        output_name="qos_school_connectivity_dq_summary_statistics",
     )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def connectivity_dq_passed_rows(
+def qos_school_connectivity_dq_passed_rows(
     context: OpExecutionContext,
-    connectivity_dq_results: sql.DataFrame,
+    qos_school_connectivity_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = connectivity_dq_results
+    df_passed = qos_school_connectivity_dq_results
     emit_metadata_to_datahub(context, df_passed)
     yield Output(
         df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -101,11 +108,11 @@ def connectivity_dq_passed_rows(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def connectivity_dq_failed_rows(
+def qos_school_connectivity_dq_failed_rows(
     context: OpExecutionContext,
-    connectivity_dq_results: sql.DataFrame,
+    qos_school_connectivity_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = connectivity_dq_results
+    df_failed = qos_school_connectivity_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(
         df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -113,9 +120,9 @@ def connectivity_dq_failed_rows(
 
 
 @asset(io_manager_key="adls_delta_io_manager")
-def connectivity_silver(
+def qos_school_connectivity_silver(
     context: OpExecutionContext,
-    connectivity_dq_passed_rows: sql.DataFrame,
+    qos_school_connectivity_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
@@ -134,7 +141,7 @@ def connectivity_silver(
         silver = (
             silver.alias("source")
             .merge(
-                connectivity_dq_passed_rows.alias("target"),
+                qos_school_connectivity_dq_passed_rows.alias("target"),
                 "source.school_id_giga = target.school_id_giga",
             )
             .whenMatchedUpdateAll()
@@ -142,14 +149,14 @@ def connectivity_silver(
             .execute()
         )
 
-    emit_metadata_to_datahub(context, df=connectivity_dq_passed_rows)
+    emit_metadata_to_datahub(context, df=qos_school_connectivity_dq_passed_rows)
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
 @asset
-def connectivity_gold(
+def qos_school_connectivity_gold(
     context: OpExecutionContext,
-    connectivity_silver: sql.DataFrame,
+    qos_school_connectivity_silver: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
 ) -> sql.DataFrame:
@@ -168,7 +175,7 @@ def connectivity_gold(
         gold = (
             gold.alias("source")
             .merge(
-                connectivity_silver.alias("target"),
+                qos_school_connectivity_silver.alias("target"),
                 "source.school_id_giga = target.school_id_giga",
             )
             .whenMatchedUpdateAll()
@@ -176,5 +183,5 @@ def connectivity_gold(
             .execute()
         )
 
-    emit_metadata_to_datahub(context, df=connectivity_dq_passed_rows)
+    emit_metadata_to_datahub(context, df=qos_school_connectivity_dq_passed_rows)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})
