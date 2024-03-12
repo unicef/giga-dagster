@@ -3,7 +3,6 @@ from io import BytesIO
 
 import numpy as np
 import pandas as pd
-import src.schemas
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
@@ -16,10 +15,9 @@ from src.data_quality_checks.utils import (
     dq_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
-from src.schemas import BaseSchema
-from src.sensors.config import FileConfig
-from src.utils import adhoc as adhoc_utils
+from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -47,7 +45,6 @@ def adhoc__reference_data_quality_checks(
     filename = filepath.split("/")[-1]
     file_stem = os.path.splitext(filename)[0]
     country_iso3 = file_stem.split("_")[0]
-    schema: BaseSchema = getattr(src.schemas, config.metastore_schema)
 
     buffer = BytesIO(adhoc__load_reference_csv)
     buffer.seek(0)
@@ -56,10 +53,9 @@ def adhoc__reference_data_quality_checks(
     df = df.loc[:, ~df.columns.str.contains(r".+\.\d+$")]
     sdf = s.createDataFrame(df)
 
+    columns = get_schema_columns(s, config.metastore_schema)
     columns_to_add = {}
-    for column in adhoc_utils.REFERENCE_COLUMNS_TO_ADD:
-        columns_to_add[column] = f.lit(None).cast(NullType())
-    for column in schema.columns:
+    for column in columns:
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 

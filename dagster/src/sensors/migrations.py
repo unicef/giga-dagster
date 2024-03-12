@@ -15,11 +15,11 @@ def migrations__schema_sensor():
     run_requests = []
 
     for path in paths:
-        if path["is_directory"]:
+        if path.is_directory:
             continue
-        else:
-            filepath = path["name"]
-            run_requests.append({"run_key": filepath})
+
+        filepath = path["name"]
+        run_requests.append({"run_key": filepath})
 
     for request in run_requests:
         yield RunRequest(**request)

@@ -5,7 +5,7 @@ from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
-    window as w, 
+    window as w,
 )
 from pyspark.sql.types import (
     ArrayType,
@@ -15,7 +15,6 @@ from pyspark.sql.types import (
     StructType,
 )
 
-import src.schemas
 from dagster import OpExecutionContext
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
@@ -37,6 +36,7 @@ from src.data_quality_checks.column_relation import column_relation_checks
 from src.schemas import BaseSchema
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.schema import get_schema_columns
 
 
 def aggregate_report_spark_df(
@@ -212,8 +212,8 @@ def aggregate_report_json(
 def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference"]:
         schema_name = f"school_{dataset_type}"
-        schema: BaseSchema = getattr(src.schemas, schema_name)
-        columns = [col.name for col in schema.columns]
+        schema_columns = get_schema_columns(df.sparkSession, schema_name)
+        columns = [col.name for col in schema_columns]
     else:
         columns = [col for col in df.columns if not col.startswith("dq_")]
 
@@ -283,16 +283,17 @@ def row_level_checks(
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):
-    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1)) 
+    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1))
 
     df = df.withColumn("row_num", f.row_number().over(window))
 
     return df
 
 
+
 if __name__ == "__main__":
-    from src.utils.spark import get_spark_session
     from src.settings import settings
+    from src.utils.spark import get_spark_session
 
     spark = get_spark_session()
     #
