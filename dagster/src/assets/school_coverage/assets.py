@@ -1,5 +1,4 @@
-import time
-
+import datahub.emitter.mce_builder as builder
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -18,6 +17,7 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -32,7 +32,18 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    emit_metadata_to_datahub(context, df=df)
+    # for testing only START - will be moved to io manager
+    filepath = context.run_tags["dagster/run_key"].split("/")[-1]
+    country_code = filepath.split("_")[1]
+    platform = builder.make_data_platform_urn("adlsGen2")
+    dataset_urn = builder.make_dataset_urn(
+        platform=platform,
+        env=settings.ADLS_ENVIRONMENT,
+        name=filepath.split(".")[0].replace("/", "."),
+    )
+    emit_metadata_to_datahub(context, df, country_code, dataset_urn)
+    # for testing only END - will be moved to io manager
+
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
@@ -60,6 +71,19 @@ def coverage_data_quality_results(
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
+
+    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
+    platform = builder.make_data_platform_urn("adlsGen2")
+    dataset_urn = builder.make_dataset_urn(
+        platform=platform,
+        env=settings.ADLS_ENVIRONMENT,
+        name=filepath.split(".")[0].replace("/", "."),
+    )
+    emit_assertions = EmitDatasetAssertionResults(
+        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
+    )
+    emit_assertions()
+    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
 
     yield Output(
         dq_results.toPandas(),
@@ -91,11 +115,7 @@ def coverage_dq_failed_rows(
     coverage_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
     df_failed = coverage_dq_results
-    emit_metadata_to_datahub(context, df_failed)
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
-
-
-# OUTPUT OF THIS IS A STAGING DATAFRAME COMPOSED OF INCOMING COVERAGE DATA + CURRENT SILVER COVERAGE
 
 
 # SOME QUESTIONS:
@@ -106,10 +126,11 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> sql.DataFrame:
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     source = filepath.split("_")[3]
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     silver_table_name = filepath.split("/").split("_")[1]
 
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('/')[:-1]}/{silver_table_name}"
@@ -130,7 +151,7 @@ def coverage_bronze(
         if silver:
             df = itu_coverage_merge(df, silver)
 
-    emit_metadata_to_datahub(context, df=df)  # check if df being passed in is correct
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
@@ -140,14 +161,14 @@ def coverage_staging(
     coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[1]
 
-    # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
@@ -168,11 +189,7 @@ def coverage_staging(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
 
-    files_for_review.sort(
-        key=lambda x: time.mktime(
-            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
-        )
-    )
+    files_for_review.sort(key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 
@@ -236,5 +253,3 @@ def coverage_staging(
             context.op_config["dataset_type"],
             spark.spark_session,
         )
-
-    emit_metadata_to_datahub(context, staging)

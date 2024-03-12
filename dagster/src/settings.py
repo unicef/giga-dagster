@@ -3,7 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AnyUrl, BaseSettings
+from pydantic import AnyUrl, BaseSettings, PostgresDsn
 
 
 class Environment(StrEnum):
@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE_URL: AnyUrl
     EMAIL_TEST_RECIPIENTS: list[str]
     AZURE_EMAIL_SENDER: str
+    POSTGRESQL_USERNAME: str
+    POSTGRESQL_PASSWORD: str
+    DB_HOST: str
+    DB_PORT: str
+    POSTGRESQL_DATABASE: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
@@ -95,6 +100,25 @@ class Settings(BaseSettings):
         if self.PYTHON_ENV == Environment.LOCAL:
             return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
         return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+
+    @property
+    def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
+        return {
+            "username": self.POSTGRESQL_USERNAME,
+            "password": self.POSTGRESQL_PASSWORD,
+            "host": self.DB_HOST,
+            "port": self.DB_PORT,
+            "path": self.POSTGRESQL_DATABASE,
+        }
+
+    @property
+    def INGESTION_DATABASE_URL(self) -> str:
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql+psycopg2",
+                **self.DATABASE_CONNECTION_DICT,
+            )
+        )
 
 
 @lru_cache

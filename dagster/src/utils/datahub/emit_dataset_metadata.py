@@ -35,14 +35,16 @@ def identify_country_name(country_code: str) -> str:
 
 
 def create_dataset_urn(context: OpExecutionContext, is_upstream: bool) -> str:
+    platform = builder.make_data_platform_urn("adlsGen2")
     if is_upstream:
         input_filepath = get_input_filepath(context)
         upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
+
         return builder.make_dataset_urn(
-            platform="adls", name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
+            platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
         output_filepath = get_output_filepath(context)
@@ -50,10 +52,10 @@ def create_dataset_urn(context: OpExecutionContext, is_upstream: bool) -> str:
         dataset_urn_name = dataset_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
-        return builder.make_dataset_urn(platform="adls", name=dataset_urn_name)
+        return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 
-def define_dataset_properties(context: OpExecutionContext):
+def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
 
@@ -62,7 +64,6 @@ def define_dataset_properties(context: OpExecutionContext):
     metadata = context.get_step_execution_context().op_config["metadata"]
 
     data_format = os.path.splitext(output_filepath)[1].lstrip(".")
-    country_code = output_filepath.split("/")[2].split("_")[0]
     country_name = identify_country_name(country_code=country_code)
     file_size_MB = file_size_bytes / (2 ** (10 * 2))  # bytes to MB
     run_tags = str.join(", ", [f"{k}={v}" for k, v in context.run_tags.items()])
@@ -143,7 +144,7 @@ def set_domain(context: OpExecutionContext):
         domain_urn = make_domain_urn("Infrastructure")
     else:
         context.log.info("UNKNOWN DOMAIN")
-        domain_urn = make_domain_urn("UNKOWN DOMAIN")
+        domain_urn = make_domain_urn("UNKNOWN DOMAIN")
 
     return domain_urn
 
@@ -161,15 +162,15 @@ def set_tag_mutation_query(country_name, dataset_urn):
     return query
 
 
-def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
+def emit_metadata_to_datahub(
+    context: OpExecutionContext, df: pd.DataFrame, country_code: str, dataset_urn: str
+):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
 
-    dataset_urn = create_dataset_urn(context, is_upstream=False)
-
-    dataset_properties = define_dataset_properties(context)
+    dataset_properties = define_dataset_properties(context, country_code=country_code)
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
         aspect=dataset_properties,
@@ -206,7 +207,6 @@ def emit_metadata_to_datahub(context: OpExecutionContext, df: pd.DataFrame):
     datahub_graph_client.execute_graphql(query=domain_query)
 
     output_filepath = get_output_filepath(context)
-    country_code = output_filepath.split("/")[2].split("_")[0]
     country_name = identify_country_name(country_code=country_code)
     tag_query = set_tag_mutation_query(
         country_name=country_name, dataset_urn=dataset_urn

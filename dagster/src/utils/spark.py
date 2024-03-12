@@ -8,11 +8,10 @@ from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
 from pyspark.sql.functions import col, count, udf
 
-import src.schemas
 from dagster import OpExecutionContext, OutputContext
-from src.schemas import BaseSchema
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.schema import get_schema_columns
 
 
 def _get_host_ip():
@@ -210,12 +209,9 @@ def transform_types(
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
 
-    schema: BaseSchema = getattr(src.schemas, schema_name)
+    columns = get_schema_columns(df.sparkSession, schema_name)
     df = df.withColumns(
-        {
-            column.name: col(column.name).cast(column.dataType)
-            for column in schema.columns
-        }
+        {column.name: col(column.name).cast(column.dataType) for column in columns}
     )
     logger.info("Transformed column types")
     df.printSchema()

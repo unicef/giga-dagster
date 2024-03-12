@@ -18,7 +18,7 @@ from azure.storage.filedatalake import (
 from dagster import ConfigurableResource, OpExecutionContext
 from src.constants import constants
 from src.settings import settings
-from src.utils.sql import load_sql_template
+from src.utils.schema import get_primary_key, get_schema_columns
 
 _client = DataLakeServiceClient(
     account_url=f"https://{settings.AZURE_DFS_SAS_HOST}",
@@ -131,27 +131,36 @@ class ADLSFileClient(ConfigurableResource):
         self,
         data: sql.DataFrame,
         table_path: str,
-        dataset_type: str,
+        schema_name: str,
         spark: SparkSession,
     ):
-        create_schema_sql = load_sql_template(
-            "create_schema",
-            schema_name=dataset_type,
-        )
-
         table_name = table_path.split("/")[-1]
+        full_table_name = f"{schema_name}.{table_name}"
         print(f"tablename: {table_name}, table path: {table_path}")
 
-        create_table_sql = load_sql_template(
-            f"create_{dataset_type}_table",
-            schema_name=dataset_type,
-            table_name=table_name,
-            location=table_path,
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+
+        columns = get_schema_columns(spark, schema_name)
+        primary_key = get_primary_key(spark, schema_name)
+        (
+            DeltaTable.createIfNotExists(spark)
+            .tableName(full_table_name)
+            .addColumns(columns)
+            .property("delta.enableChangeDataFeed", "true")
+            .execute()
         )
-        spark.sql(create_schema_sql)
-        spark.sql(create_table_sql)
-        data.write.format("delta").mode("overwrite").saveAsTable(
-            f"{dataset_type}.{table_name}"
+
+        # TODO: Apply logic for preventing unnecessary updates
+        # `master` and `updates` tables must both have a column containing the row hash
+        (
+            DeltaTable.forName(spark, full_table_name)
+            .alias("master")
+            .merge(
+                data.alias("updates"), f"master.{primary_key} = updates.{primary_key}"
+            )
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute()
         )
 
     def download_json(self, filepath: str):

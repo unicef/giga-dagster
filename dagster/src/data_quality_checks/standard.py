@@ -142,8 +142,26 @@ def format_validation_checks(df, context: OpExecutionContext = None):
             ).otherwise(1)  
 
     return df.withColumns(column_actions)
-        
 
+
+def is_string_less_than_255_characters_check(
+    df: sql.DataFrame,
+    context: OpExecutionContext = None,
+):
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Running character length checks...")
+
+    column_actions = {}
+    for column in df.columns:
+        if column != "school_name" and not column.startswith("dq"):
+            column_actions[f"dq_is_string_less_than_255_characters-{column}"] = f.when(
+                f.length(column) > 255,
+                1,
+            ).otherwise(0)
+
+    return df.withColumns(column_actions)
+
+        
 def standard_checks(
     df: sql.DataFrame,
     dataset_type: str,
@@ -153,6 +171,7 @@ def standard_checks(
     domain=True,
     range_=True,
     format_=True,
+    string_length=True,
 ):
     if duplicate:
         df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
@@ -164,5 +183,7 @@ def standard_checks(
         df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type], context)
     if format_:
         df = format_validation_checks(df, context)
+    if string_length:
+        df = is_string_less_than_255_characters_check(df, context)
 
     return df
