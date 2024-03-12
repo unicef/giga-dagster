@@ -31,7 +31,8 @@ from src.data_quality_checks.geometry import (
     school_density_check,
 )
 from src.data_quality_checks.precision import precision_check
-from src.data_quality_checks.standard import format_validation_checks, standard_checks
+from src.data_quality_checks.standard import standard_checks
+from src.data_quality_checks.column_relation import column_relation_checks
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -264,14 +265,18 @@ def row_level_checks(
         df = critical_error_checks(
             df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
         )
+        df = column_relation_checks(df, dataset_type, context)
         df = school_density_check(df, context)
     elif dataset_type in ["coverage", "reference"]:
         df = standard_checks(df, dataset_type, context)
+        df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_fb":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)
         df = fb_percent_sum_to_100_check(df, context)
+        df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_itu":
         df = standard_checks(df, dataset_type, context, domain=False)
+        df = column_relation_checks(df, dataset_type, context)
 
     return df
 
@@ -281,14 +286,8 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 
     df = df.withColumn("row_num", f.row_number().over(window))
 
-    ## outputs
-    # df_duplicates = df.where(df.row_num != 1)
-    # df_duplicates = df_duplicates.drop("row_num")
-
-    # df_deduplicated = df.where(df.row_num == 1)
-    # df_deduplicated = df_deduplicated.drop("row_num")
-
     return df
+
 
 
 if __name__ == "__main__":
@@ -298,50 +297,63 @@ if __name__ == "__main__":
     spark = get_spark_session()
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
+    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    df_bronze = spark.read.csv(file_url, header=True)
+    master = spark.read.csv(file_url_master, header=True)
+    reference = spark.read.csv(file_url_reference, header=True)
+    df_bronze = master.join(reference, how="left", on="school_id_giga")
+    # df_bronze = spark.read.csv(file_url, header=True)
+    df_bronze.show()
     print(df_bronze.count())
-    df_bronze = df_bronze.sort("school_name").limit(100)
+    # df_bronze = df_bronze.sort("school_name").limit(30)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-    df_bronze.show()
+    # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
+    # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
+    # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
+    # df_bronze = df_bronze.select(*["nearest_NR_id", "nearest_NR_distance","nearest_LTE_id", "nearest_LTE_distance","nearest_UMTS_id", "nearest_UMTS_distance","nearest_GSM_id", "nearest_GSM_distance"])
+    # df_bronze = df_bronze.select(*["electricity_availability", "electricity_type"])
+    # df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
-    df_bronze = df_bronze.withColumn(
-        "school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142")
-    )
-    df = format_validation_checks(df_bronze)
-    df.show()
-    # df = domain_checks(df_bronze, VALUES_DOMAIN_MASTER)
-    # df_test = has_similar_name(df_bronze)
-
-    # df_duplicates, df_deduplicated = extract_school_id_govt_duplicates(df_bronze)
-
-    # df_duplicates.where(df_duplicates.school_id_govt == '11514002').show()
-    # df_deduplicated.where(df_deduplicated.school_id_govt == '11514002').show()
-    # df_duplicates.show()
-    # df_deduplicated.show()
-
-    # df_bronze.groupBy("school_id_govt").agg(f.count("*").alias("count")).orderBy("count", ascending=False).show()
-    # window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1))
-    # df_bronze = df_bronze.withColumn("test", f.row_number().over(window))
-    # df_bronze.orderBy("test", ascending=False).show()
-    # df_dups = df_bronze.where(df_bronze.test != 1)
-    # df_dups.orderBy("school_id_govt").show(100000)
-
-    # df_bronze = df_bronze.withColumn("test", f.lower(f.col("admin2_id_giga")))
-
-    # # row_level_checks(df, dataset_type, country_code_iso3)
-    # df = row_level_checks(
-    #     df_bronze, "master", "GIN")
-    # # dataset plugged in should conform to updated schema! rename if necessary
+    # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
+    # df = format_validation_checks(df_bronze)
+    df = column_relation_checks(df_bronze, 'coverage')
+    # transforms = {}
+    # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"] = f.when(
+    #             (f.lower(f.col("connectivity")) == "yes") & (
+    #                 (f.lower(f.col("connectivity_RT")) == "yes") | 
+    #                 (f.lower(f.col("connectivity_govt")) == "yes") |
+    #                 (f.col("download_speed_contracted").isNotNull())
+    #                 ), 0,
+    #         ).when(
+    #             (f.lower(f.col("connectivity")) == "no") & (
+    #                 ((f.lower(f.col("connectivity_RT")) == "no") | f.col("connectivity_RT").isNull()) & 
+    #                 ((f.lower(f.col("connectivity_govt")) == "no") | f.col("connectivity_govt").isNull()) &
+    #                 (f.col("download_speed_contracted").isNull())
+    #                 ), 0,
+    #         ).otherwise(1)
+    # print(transforms)
+    # df = df_bronze.withColumns(transforms)
     # df.show()
-    # df = df.withColumn("dq_has_critical_error", f.lit(1))
+    # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
+    # df = standard_checks(df_bronze, 'master')
+    # df.distinct().show()
+    
+    # column_pairs = {
+    #     ("nearest_NR_id", "nearest_NR_distance"),
+    #     ("nearest_LTE_id", "nearest_LTE_distance"),
+    #     ("nearest_UMTS_id", "nearest_UMTS_distance"),
+    #     ("nearest_GSM_id", "nearest_GSM_distance"),
+    # }
+    # for id, distance in column_pairs:
+    #     print(id, distance)
 
     # # df = dq_passed_rows(df, "coverage")
     # # df = dq_passed_rows(df, "coverage")
-    df = aggregate_report_spark_df(spark=spark, df=df)
     # df.orderBy("column").show()
+
+    df = aggregate_report_spark_df(spark=spark, df=df)
     df.show()
 
     _json = aggregate_report_json(df, df_bronze)
