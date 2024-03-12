@@ -74,8 +74,9 @@ def coverage_data_quality_results(
     )
 
     context.log.info("EMITTING ASSERTIONS TO DATAHUB")
+    platform = builder.make_data_platform_urn("adlsGen2")
     dataset_urn = builder.make_dataset_urn(
-        platform="adls",
+        platform=platform,
         env=settings.ADLS_ENVIRONMENT,
         name=filepath.split(".")[0].replace("/", "."),
     )

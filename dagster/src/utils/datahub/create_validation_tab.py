@@ -98,9 +98,7 @@ class EmitDatasetAssertionResults:
                 timestampMillis=int(datetime.now().timestamp() * 1000),
                 assertionUrn=assertion_urn,
                 asserteeUrn=self.dataset_urn,
-                runId=str(
-                    uuid.uuid5(uuid.NAMESPACE_DNS, name=datetime.now().isoformat())
-                ),
+                runId=str(uuid.uuid4()),
                 status=AssertionRunStatus.COMPLETE,
                 result=AssertionResult(
                     type=AssertionResultType.SUCCESS,
