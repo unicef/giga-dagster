@@ -29,6 +29,7 @@ def adhoc__load_qos_bra_csv(
 def adhoc__qos_bra_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
+    config: FileConfig,
     adhoc__load_qos_bra_csv: bytes,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
@@ -39,17 +40,20 @@ def adhoc__qos_bra_transforms(
 
     sdf = s.createDataFrame(df)
     column_actions = {
+        "signature": f.sha2(f.concat_ws("|", *sdf.columns), 256),
         "gigasync_id": f.sha2(
-            f.concat(
+            f.concat_ws(
+                "_",
                 f.col("school_id_giga"),
-                f.lit("_"),
                 f.col("timestamp"),
             ),
             256,
         ),
         "date": f.to_date(f.col("timestamp")),
     }
-    sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
+    sdf = sdf.withColumns(column_actions).dropDuplicates(
+        [config.unique_identifier_column]
+    )
 
     yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
 

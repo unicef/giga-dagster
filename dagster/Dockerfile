@@ -11,18 +11,13 @@ ENV SPARK_HOME /opt/spark
 # Move to a temporary directory
 WORKDIR /tmp
 
-# Update packages & install JDK, Spark, Hadoop, Scala
+# Update packages & install JDK, Spark, Hadoop
 RUN apt-get update && \
-    apt-get install -y curl wget openjdk-11-jdk-headless libgdal-dev libgeos-dev && \
+    apt-get install -y curl wget openjdk-11-jdk-headless gdal-bin libgdal-dev libgeos-dev g++ && \
     wget https://storage.googleapis.com/giga-test-app-downloads-mirror/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
     mkdir --parents "${SPARK_HOME}" && \
     mv spark-3.5.0-bin-hadoop3/* "${SPARK_HOME}" && \
-    curl -fL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz | gzip -d > cs && \
-    chmod +x cs && \
-    ./cs setup --env --yes && \
-    ./cs install scala:2.12.18 && \
-    ./cs install scalac:2.12.18 && \
     apt-get clean
 
 # Move to Spark JARs directory and download additional dependencies

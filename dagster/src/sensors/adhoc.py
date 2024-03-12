@@ -24,13 +24,13 @@ def school_master__gold_csv_to_deltatable_sensor():
     run_requests = []
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
         else:
-            filepath = file_data["name"]
+            filepath = file_data.name
             properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+            metadata = properties.metadata
+            size = properties.size
             file_config = FileConfig(
                 filepath=filepath,
                 dataset_type="master",
@@ -39,20 +39,24 @@ def school_master__gold_csv_to_deltatable_sensor():
                 metastore_schema="school_master",
             )
 
+            ops_list = [
+                "adhoc__load_master_csv",
+                "adhoc__master_data_transforms",
+                "adhoc__df_duplicates",
+                "adhoc__master_data_quality_checks",
+                "adhoc__master_dq_checks_summary",
+                "adhoc__master_dq_checks_passed",
+                "adhoc__master_dq_checks_failed",
+                "adhoc__publish_master_to_gold",
+            ]
+
             run_requests.append(
                 {
                     "run_key": filepath,
                     "run_config": RunConfig(
-                        ops={
-                            "adhoc__load_master_csv": file_config,
-                            "adhoc__master_data_transforms": file_config,
-                            "adhoc__df_duplicates": file_config,
-                            "adhoc__master_data_quality_checks": file_config,
-                            "adhoc__master_dq_checks_summary": file_config,
-                            "adhoc__master_dq_checks_passed": file_config,
-                            "adhoc__master_dq_checks_failed": file_config,
-                            "adhoc__publish_master_to_gold": file_config,
-                        }
+                        ops=dict(
+                            zip(ops_list, [file_config] * len(ops_list), strict=True)
+                        )
                     ),
                 }
             )
@@ -72,13 +76,13 @@ def school_reference__gold_csv_to_deltatable_sensor():
     run_requests = []
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
         else:
-            filepath = file_data["name"]
+            filepath = file_data.name
             properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+            metadata = properties.metadata
+            size = properties.size
             file_config = FileConfig(
                 filepath=filepath,
                 dataset_type="reference",
@@ -86,17 +90,22 @@ def school_reference__gold_csv_to_deltatable_sensor():
                 file_size_bytes=size,
                 metastore_schema="school_reference",
             )
+
+            ops_list = [
+                "adhoc__load_reference_csv",
+                "adhoc__reference_data_quality_checks",
+                "adhoc__reference_dq_checks_passed",
+                "adhoc__reference_dq_checks_failed",
+                "adhoc__publish_reference_to_gold",
+            ]
+
             run_requests.append(
                 {
                     "run_key": filepath,
                     "run_config": RunConfig(
-                        ops={
-                            "adhoc__load_reference_csv": file_config,
-                            "adhoc__reference_data_quality_checks": file_config,
-                            "adhoc__reference_dq_checks_passed": file_config,
-                            "adhoc__reference_dq_checks_failed": file_config,
-                            "adhoc__publish_reference_to_gold": file_config,
-                        }
+                        ops=dict(
+                            zip(ops_list, [file_config] * len(ops_list), strict=True)
+                        )
                     ),
                 }
             )
@@ -112,25 +121,24 @@ def school_reference__gold_csv_to_deltatable_sensor():
 def school_qos_bra__gold_csv_to_deltatable_sensor():
     adls = ADLSFileClient()
 
-    file_list = adls.list_paths(f"{constants.qos_source_folder}/BRA")
+    file_list = sorted(
+        [
+            p
+            for p in adls.list_paths(f"{constants.qos_source_folder}/BRA")
+            if not p.is_directory and os.path.splitext(p.name)[1] == ".csv"
+        ],
+        key=lambda x: x.last_modified,
+    )
     run_requests = []
 
     for file_data in file_list:
-        if file_data["is_directory"]:
-            continue
-
-        filepath = file_data["name"]
-        if os.path.splitext(filepath)[1] != ".csv":
-            continue
-
+        filepath = file_data.name
         properties = adls.get_file_metadata(filepath=filepath)
-        metadata = properties["metadata"]
-        size = properties["size"]
         file_config = FileConfig(
             filepath=filepath,
             dataset_type="qos",
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata=properties.metadata,
+            file_size_bytes=properties.size,
             metastore_schema="qos",
             unique_identifier_column="gigasync_id",
             partition_columns=["date"],

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: datahub-gms-external
+  labels:
+    app.kubernetes.io/name: giga-dagster
+    app.kubernetes.io/part-of: giga-dataops-platform
+    app.kubernetes.io/component: dagster
+spec:
+  type: ExternalName
+  externalName: "datahub-datahub-gms.io-datahub-$(deployEnv).svc.cluster.local"
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
