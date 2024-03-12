@@ -23,12 +23,12 @@ def qos_list__schedule(context: ScheduleEvaluationContext):
             run_key=f"{df.loc[i, "name"]}_{scheduled_date}",
             run_config=RunConfig(
                 ops={
-                    "list_raw": config,
-                    "list_bronze": config,
-                    "list_data_quality_results": config,
-                    "list_dq_passed_rows": config,
-                    "list_dq_failed_rows": config,
-                    "list_staging": config,
+                    "qos_school_list_raw": config,
+                    "qos_school_list_bronze": config,
+                    "qos_school_list_data_quality_results": config,
+                    "qos_school_list_dq_passed_rows": config,
+                    "qos_school_list_dq_failed_rows": config,
+                    "qos_school_list_staging": config,
                 }
             ),
         )
