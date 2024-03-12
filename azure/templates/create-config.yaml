@@ -97,10 +97,10 @@ jobs:
                       app.kubernetes.io/component: dagster
                   spec:
                     type: ExternalName
-                    externalName: "ingestion-postgres-gms.io-datahub-$(deployEnv).svc.cluster.local"
+                    externalName: "ingestion-portal-postgresql.ictd-ooi-ingestionportal-$(deployEnv).svc.cluster.local"
                     ports:
-                      - port: 8080
-                        targetPort: 8080
+                      - port: 5432
+                        targetPort: 5432
                         protocol: TCP    
 
             - task: Kubernetes@1
