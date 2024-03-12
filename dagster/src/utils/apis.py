@@ -83,14 +83,13 @@ def _make_API_request(
         if row_data["request_method"] == "GET":
             response = session.get(
                 row_data["api_endpoint"],
-                params=eval(row_data["query_parameters"]),
-                data=eval(row_data["request_body"]),
+                params=row_data["query_parameters"],
             )
         elif row_data["request_method"] == "POST":
             response = session.post(
                 row_data["api_endpoint"],
-                params=eval(row_data["query_parameters"]),
-                data=eval(row_data["request_body"]),
+                params=row_data["query_parameters"],
+                data=row_data["request_body"],
             )
 
         response.raise_for_status()
