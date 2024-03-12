@@ -24,55 +24,40 @@ def school_master_geolocation__raw_file_uploads_sensor():
     file_list = adls.list_paths(f"{constants.raw_folder}/school-geolocation-data")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
-        else:
-            filepath = file_data["name"]
 
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+        filepath = file_data.name
 
-            file_config_params = {
-                "filepath": filepath,
-                "dataset_type": "geolocation",
-                "metadata": metadata,
-                "file_size_bytes": size,
-            }
+        properties = adls.get_file_metadata(filepath=filepath)
+        metadata = properties.metadata
+        size = properties.size
 
-            get_file_config = lambda layer, params: FileConfig(  # noqa: E731
-                **params,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=f"{layer}_{params['dataset_type'].replace('-', '_')}",
-            )
+        file_config = FileConfig(
+            filepath=filepath,
+            dataset_type="geolocation",
+            metadata=metadata,
+            file_size_bytes=size,
+            metastore_schema="school_geolocation",
+        )
 
-            print(f"FILE: {filepath}")
+        print(f"FILE: {filepath}")
 
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "geolocation_raw": get_file_config(
-                            "geolocation_raw", file_config_params
-                        ),
-                        "geolocation_bronze": get_file_config(
-                            "geolocation_bronze", file_config_params
-                        ),
-                        "geolocation_data_quality_results": get_file_config(
-                            "geolocation_data_quality_results", file_config_params
-                        ),
-                        "geolocation_dq_passed_rows": get_file_config(
-                            "geolocation_dq_passed_rows", file_config_params
-                        ),
-                        "geolocation_dq_failed_rows": get_file_config(
-                            "geolocation_dq_failed_rows", file_config_params
-                        ),
-                        # "geolocation_staging": get_file_config(
-                        #     "geolocation_staging", file_config_params
-                        # ),
-                    }
-                ),
-            )
+        ops_list = [
+            "geolocation_raw",
+            "geolocation_bronze",
+            "geolocation_data_quality_results",
+            "geolocation_dq_passed_rows",
+            "geolocation_dq_failed_rows",
+            # 'geolocation_staging',
+        ]
+
+        yield RunRequest(
+            run_key=f"{filepath}",
+            run_config=RunConfig(
+                ops=dict(zip(ops_list, [file_config] * len(ops_list), strict=True))
+            ),
+        )
 
 
 @sensor(
@@ -85,55 +70,40 @@ def school_master_coverage__raw_file_uploads_sensor():
     file_list = adls.list_paths(f"{constants.raw_folder}/school-coverage-data")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
-        else:
-            filepath = file_data["name"]
 
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+        filepath = file_data.name
 
-            file_config_params = {
-                "filepath": filepath,
-                "dataset_type": "coverage",
-                "metadata": metadata,
-                "file_size_bytes": size,
-            }
+        properties = adls.get_file_metadata(filepath=filepath)
+        metadata = properties.metadata
+        size = properties.size
 
-            get_file_config = lambda layer, params: FileConfig(  # noqa: E731
-                **params,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=f"{layer}_{params['dataset_type'].replace('-', '_')}",
-            )
+        file_config = FileConfig(
+            filepath=filepath,
+            dataset_type="coverage",
+            metadata=metadata,
+            file_size_bytes=size,
+            metastore_schema="school_coverage",
+        )
 
-            print(f"FILE: {filepath}")
+        print(f"FILE: {filepath}")
 
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "coverage_raw": get_file_config(
-                            "coverage_raw", file_config_params
-                        ),
-                        "coverage_data_quality_results": get_file_config(
-                            "coverage_data_quality_results", file_config_params
-                        ),
-                        "coverage_dq_passed_rows": get_file_config(
-                            "coverage_dq_passed_rows", file_config_params
-                        ),
-                        "coverage_dq_failed_rows": get_file_config(
-                            "coverage_dq_failed_rows", file_config_params
-                        ),
-                        "coverage_bronze": get_file_config(
-                            "coverage_bronze", file_config_params
-                        ),
-                        # "coverage_staging": get_file_config(
-                        #     "coverage_staging", file_config_params
-                        # ),
-                    }
-                ),
-            )
+        ops_list = [
+            "coverage_raw",
+            "coverage_data_quality_results",
+            "coverage_dq_passed_rows",
+            "coverage_dq_failed_rows",
+            "coverage_bronze",
+            # 'coverage_staging',
+        ]
+
+        yield RunRequest(
+            run_key=f"{filepath}",
+            run_config=RunConfig(
+                ops=dict(zip(ops_list, [file_config] * len(ops_list), strict=True))
+            ),
+        )
 
 
 @sensor(
@@ -146,46 +116,40 @@ def school_master_geolocation__successful_manual_checks_sensor():
     file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-geolocation-data")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
-        else:
-            filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if dataset_type is None:
-                continue
 
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+        filepath = file_data.name
+        dataset_type = get_dataset_type(filepath)
+        if dataset_type is None:
+            continue
 
-            file_config_params = {
-                "filepath": filepath,
-                "dataset_type": dataset_type,
-                "metadata": metadata,
-                "file_size_bytes": size,
-            }
+        properties = adls.get_file_metadata(filepath=filepath)
+        metadata = properties.metadata
+        size = properties.size
 
-            get_file_config = lambda layer, params: FileConfig(  # noqa: E731
-                **params,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=(
-                    f"manual_check_success_{params['dataset_type'].replace('-', '_')}"
-                ),
-            )
+        file_config = FileConfig(
+            filepath=filepath,
+            dataset_type=dataset_type,
+            metadata=metadata,
+            file_size_bytes=size,
+            metastore_schema="school_master",
+        )
 
-            print(f"FILE: {filepath}")
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "manual_review_passed_rows": get_file_config(
-                            "manual_review_passed", file_config_params
-                        ),
-                        "silver": get_file_config("silver", file_config_params),
-                        "gold": get_file_config("gold", file_config_params),
-                    }
-                ),
-            )
+        print(f"FILE: {filepath}")
+
+        ops_list = [
+            "manual_review_passed_rows",
+            "geolocation_bronze",
+            "geolocation_gold",
+        ]
+
+        yield RunRequest(
+            run_key=f"{filepath}",
+            run_config=RunConfig(
+                ops=dict(zip(ops_list, [file_config] * len(ops_list), strict=True))
+            ),
+        )
 
 
 @sensor(
@@ -198,46 +162,40 @@ def school_master_coverage__successful_manual_checks_sensor():
     file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-coverage-data")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
-        else:
-            filepath = file_data["name"]
-            dataset_type = get_dataset_type(filepath)
-            if dataset_type is None:
-                continue
 
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+        filepath = file_data.name
+        dataset_type = get_dataset_type(filepath)
+        if dataset_type is None:
+            continue
 
-            file_config_params = {
-                "filepath": filepath,
-                "dataset_type": dataset_type,
-                "metadata": metadata,
-                "file_size_bytes": size,
-            }
+        properties = adls.get_file_metadata(filepath=filepath)
+        metadata = properties.metadata
+        size = properties.size
 
-            get_file_config = lambda layer, params: FileConfig(  # noqa: E731
-                **params,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=(
-                    f"manual_check_success_{params['dataset_type'].replace('-', '_')}"
-                ),
-            )
+        file_config = FileConfig(
+            filepath=filepath,
+            dataset_type=dataset_type,
+            metadata=metadata,
+            file_size_bytes=size,
+            metastore_schema="school_master",
+        )
 
-            print(f"FILE: {filepath}")
-            yield RunRequest(
-                run_key=f"{filepath}",
-                run_config=RunConfig(
-                    ops={
-                        "manual_review_passed_rows": get_file_config(
-                            "manual_review_passed", file_config_params
-                        ),
-                        "silver": get_file_config("silver", file_config_params),
-                        "gold": get_file_config("gold", file_config_params),
-                    }
-                ),
-            )
+        print(f"FILE: {filepath}")
+
+        ops_list = [
+            "manual_review_passed_rows",
+            "coverage_bronze",
+            "coverage_gold",
+        ]
+
+        yield RunRequest(
+            run_key=f"{filepath}",
+            run_config=RunConfig(
+                ops=dict(zip(ops_list, [file_config] * len(ops_list), strict=True))
+            ),
+        )
 
 
 @sensor(
@@ -250,26 +208,23 @@ def school_master_geolocation__failed_manual_checks_sensor():
     file_list = adls.list_paths(f"{constants.archive_manual_review_rejected_folder}")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
         else:
-            filepath = file_data["name"]
+            filepath = file_data.name
             dataset_type = get_dataset_type(filepath)
             if dataset_type is None:
                 continue
 
             properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+            metadata = properties.metadata
+            size = properties.size
             file_config = FileConfig(
                 filepath=filepath,
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=(
-                    f"manual_review_failed_{dataset_type.replace('-', '_')}"
-                ),
+                metastore_schema="school_geolocation",
             )
 
             print(f"FILE: {filepath}")
@@ -293,26 +248,23 @@ def school_master_coverage__failed_manual_checks_sensor():
     file_list = adls.list_paths(f"{constants.archive_manual_review_rejected_folder}")
 
     for file_data in file_list:
-        if file_data["is_directory"]:
+        if file_data.is_directory:
             continue
         else:
-            filepath = file_data["name"]
+            filepath = file_data.name
             dataset_type = get_dataset_type(filepath)
             if dataset_type is None:
                 continue
 
             properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties["metadata"]
-            size = properties["size"]
+            metadata = properties.metadata
+            size = properties.size
             file_config = FileConfig(
                 filepath=filepath,
                 dataset_type=dataset_type,
                 metadata=metadata,
                 file_size_bytes=size,
-                # TODO: Add the correct metastore schema and table SQL definition
-                metastore_schema=(
-                    f"manual_review_failed_{dataset_type.replace('-', '_')}"
-                ),
+                metastore_schema="school_coverage",
             )
 
             print(f"FILE: {filepath}")
