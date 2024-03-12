@@ -7,6 +7,7 @@ from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
@@ -126,23 +127,47 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
 
-        (
-            DeltaTable.forName(spark, full_table_name)
-            .alias("master")
-            .merge(
-                data.alias("updates"),
-                f"master.{primary_key} = updates.{primary_key}",
+        master = DeltaTable.forName(spark, full_table_name).alias("master")
+        master_df = master.toDF()
+        incoming = data.alias("incoming")
+
+        master_ids = master_df.select(primary_key, "signature")
+        incoming_ids = incoming.select(primary_key, "signature")
+
+        updates_df = incoming_ids.join(master_ids, primary_key, "inner")
+        inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
+
+        updates_signature = updates_df.agg(
+            sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
+                "combined_signature"
             )
-            .whenMatchedUpdate(
-                "master.signature <> updates.signature",
+        ).first()["combined_signature"]
+        master_to_update_signature = master_ids.agg(
+            sha2(concat_ws("|", collect_list("signature")), 256).alias(
+                "combined_signature"
+            )
+        ).first()["combined_signature"]
+
+        has_updates = master_to_update_signature != updates_signature
+        has_insertions = inserts_df.count() > 0
+
+        if not (has_updates or has_insertions):
+            return
+
+        query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")
+
+        if has_updates:
+            query = query.whenMatchedUpdate(
+                "master.signature <> incoming.signature",
                 dict(
                     zip(
                         [c.name for c in columns],
-                        [f"updates.{c.name}" for c in columns],
+                        [f"incoming.{c.name}" for c in columns],
                         strict=True,
                     )
                 ),
             )
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
+        if has_insertions:
+            query = query.whenNotMatchedInsertAll()
+
+        query.execute()
