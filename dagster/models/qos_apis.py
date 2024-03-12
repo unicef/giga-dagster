@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 
 from pydantic import EmailStr
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -65,8 +65,9 @@ class ApiConfiguration(BaseModel):
         Enum(PaginationTypeEnum), default=PaginationTypeEnum.NONE, nullable=False
     )
 
-    query_parameters = Column(JSON, nullable=True)
-    request_body = Column(JSON, nullable=True)
+    query_parameters: Mapped[dict] = mapped_column(JSON, nullable=True)
+    request_body: Mapped[dict] = mapped_column(JSON, nullable=True)
+
     request_method: Mapped[RequestMethodEnum] = mapped_column(
         Enum(RequestMethodEnum), default=RequestMethodEnum.GET, nullable=False
     )
@@ -80,7 +81,9 @@ class ApiConfiguration(BaseModel):
 class SchoolList(ApiConfiguration):
     __tablename__ = "qos_school_list"
 
-    column_to_schema_mapping = Column(JSON, nullable=False, server_default="")
+    column_to_schema_mapping: Mapped[dict] = mapped_column(
+        JSON, nullable=False, server_default=""
+    )
     name: Mapped[str] = mapped_column(nullable=False, server_default="")
     user_email: Mapped[EmailStr] = mapped_column(String(), nullable=False)
     user_id: Mapped[str] = mapped_column(nullable=False)
