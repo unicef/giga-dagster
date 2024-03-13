@@ -29,11 +29,11 @@ jobs:
                 install: true
                 chartType: Name
                 chartName: bitnami/spark
+                chartVersion: 8.1.6
                 releaseName: spark
                 namespace: $(kubernetesNamespace)
+                valueFile: infra/helm/spark/values.yaml
                 arguments: >
-                  --version 8.1.6
-                  --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
                   --set image.registry="$(containerRegistryName).azurecr.io"
                   --set image.repository="giga-dagster-spark"
                   --set image.tag="$(Build.SourceVersion)"
@@ -58,11 +58,11 @@ jobs:
                 install: true
                 chartType: Name
                 chartName: dagster/dagster
+                chartVersion: 1.5.0
                 releaseName: dagster
                 namespace: $(kubernetesNamespace)
+                valueFile: infra/helm/dagster/values.yaml
                 arguments: >
-                  --version 1.5.0
-                  --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
                   --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
                   --set pipelineRun.image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
@@ -82,8 +82,41 @@ jobs:
                 arguments: >
                   --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
                   --set image.tag=$(Build.SourceVersion)
-                  --set ingress.enabled=true
-                  --set ingress.hosts[0]="$(appDomain)"
                   --set config.clientIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.clientSecretRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.tenantIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy nginx
+              condition: eq(variables.deployEnv, 'dev')
+              inputs:
+                command: upgrade
+                install: true
+                chartType: Name
+                chartName: bitnami/nginx
+                chartVersion: 15.14.0
+                releaseName: nginx
+                namespace: $(kubernetesNamespace)
+                valueFile: infra/helm/nginx-values.yaml
+                arguments: >
+                  --set ingress.enabled=true
+                  --set ingress.hostname="io-dagster-$(deployEnv).unitst.org"
+                  --set-file serverBlock=nginx/nginx.conf
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy production-config nginx
+              condition: or(eq(variables.deployEnv, 'stg'), eq(variables.deployEnv, 'prd'))
+              inputs:
+                command: upgrade
+                install: true
+                chartType: Name
+                chartName: bitnami/nginx
+                chartVersion: 15.14.0
+                releaseName: nginx
+                namespace: $(kubernetesNamespace)
+                valueFile: infra/helm/nginx-values.yaml
+                arguments: >
+                  --values infra/helm/nginx-values-override-prd.yaml
+                  --set ingress.enabled=true
+                  --set ingress.hostname="io-dagster-$(deployEnv).unitst.org"
+                  --set-file serverBlock=nginx/nginx.conf

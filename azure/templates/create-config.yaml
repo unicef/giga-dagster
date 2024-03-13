@@ -128,6 +128,7 @@ jobs:
                     rpc-authentication-secret: "$(sparkRpcAuthSecret)"
                     SPARK_SSL_NEED_CLIENT_AUTH: "yes"
                     SPARK_PUBLIC_DNS: "io-dagster-$(deployEnv).unitst.org"
+                    SPARK_UI_PROXYBASE: "/spark"
 
             - task: Kubernetes@1
               displayName: Create Hive Metastore secrets
