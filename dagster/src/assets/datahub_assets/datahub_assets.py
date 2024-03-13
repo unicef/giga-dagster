@@ -1,6 +1,7 @@
 import json
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
@@ -11,13 +12,17 @@ from src.utils.datahub.ingest_azure_ad import (
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import Config, OpExecutionContext, Output, asset
+
+
+class TestConnectionConfig(Config):
+    host: str = Field(settings.DATAHUB_METADATA_SERVER_URL)
 
 
 @asset
-def datahub_test_connection(context: OpExecutionContext):
+def datahub_test_connection(context: OpExecutionContext, config: TestConnectionConfig):
     emitter = DatahubRestEmitter(
-        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        gms_server=config.host,
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
     context.log.info(json.dumps(emitter.test_connection(), indent=2))
