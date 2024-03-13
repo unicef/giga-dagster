@@ -45,7 +45,6 @@ class Settings(BaseSettings):
     PYTHON_ENV: Environment = Environment.PRODUCTION
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
-    DATAHUB_KUBERNETES_NAMESPACE: str = ""
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
@@ -61,7 +60,7 @@ class Settings(BaseSettings):
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
         return (
-            f"http://datahub-datahub-gms.{self.DATAHUB_KUBERNETES_NAMESPACE}:8080"
+            "http://datahub-gms-external:8080"
             if self.IN_PRODUCTION
             else self.DATAHUB_METADATA_SERVER
         )
