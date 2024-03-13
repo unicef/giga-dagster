@@ -119,6 +119,7 @@ tasks:
       - task: helm-up-spark
       - task: helm-up-dagster
       - task: helm-up-authproxy
+      - task: helm-up-nginx
 
   helm-upi:
     desc: Install/upgrade Helm charts to a K8s cluster with configured HTTPS ingress
@@ -128,9 +129,36 @@ tasks:
       - kubectl apply -f k8s/secrets.yaml --namespace giga-dagster
       - kubectl apply -f k8s/configmap.yaml --namespace giga-dagster
       - task: helm-up-hms
-      - task: helm-up-spark-ing
+      - task: helm-up-spark
       - task: helm-up-dagster
-      - task: helm-up-authproxy-ing
+      - kubectl apply -f k8s/dagster-prd.yaml --namespace giga-dagster
+      - task: helm-up-authproxy
+      - task: helm-up-nginx-ing
+
+  helm-up-nginx:
+    desc: Install/upgrade Nginx Helm chart
+    internal: true
+    cmds:
+      - >
+        helm upgrade --install nginx bitnami/nginx
+        --version 15.14.0
+        --values ./infra/helm/nginx-values.yaml
+        --set-file serverBlock=./nginx/nginx.conf
+        --set service.type=LoadBalancer
+
+  helm-up-nginx-ing:
+    desc: Install/upgrade Nginx Helm chart with ingress
+    internal: true
+    cmds:
+      - >
+        helm upgrade --install nginx bitnami/nginx
+        --version 15.14.0
+        --values ./infra/helm/nginx-values.yaml
+        --values ./infra/helm/nginx-values-override-prd.yaml
+        --set ingress.enabled=true
+        --set ingress.annotations=null
+        --set ingress.hostname={{.DAGSTER_INGRESS_HOST}}
+        --set-file serverBlock=./nginx/nginx.conf
 
   helm-up-dagster:
     desc: Install/upgrade Dagster Helm chart
@@ -161,27 +189,9 @@ tasks:
         --namespace giga-dagster
         --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
         --set-string image.tag={{.COMMIT_SHA}}
-        --set service.type=LoadBalancer
         --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
         --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
         --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
-
-  helm-up-authproxy-ing:
-    desc: Install/upgrade authproxy Helm chart
-    dir: infra/helm
-    internal: true
-    cmds:
-      - >
-        helm upgrade --install dagster-authproxy ./oauth2-proxy
-        --namespace giga-dagster
-        --set image.repository={{.DAGSTER_AUTHPROXY_IMAGE_REPOSITORY}}
-        --set-string image.tag={{.COMMIT_SHA}}
-        --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
-        --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
-        --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
-        --set ingress.enabled=true
-        --set ingress.annotations=null
-        --set ingress.hosts[0]={{.DAGSTER_INGRESS_HOST}}
 
   helm-up-spark:
     desc: Install/upgrade Spark Helm chart
@@ -196,23 +206,6 @@ tasks:
         --set image.registry={{.SPARK_IMAGE_REGISTRY}}
         --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
         --set-string image.tag={{.COMMIT_SHA}}
-        --set service.type=LoadBalancer
-
-  helm-up-spark-ing:
-    desc: Install/upgrade Spark Helm chart
-    dir: infra/helm
-    internal: true
-    cmds:
-      - >
-        helm upgrade --install spark bitnami/spark
-        --version 8.1.6
-        --namespace giga-dagster
-        --values spark/values.yaml
-        --set image.registry={{.SPARK_IMAGE_REGISTRY}}
-        --set image.repository={{.SPARK_IMAGE_REPOSITORY}}
-        --set-string image.tag={{.COMMIT_SHA}}
-        --set ingress.enabled=true
-        --set ingress.hostname={{.SPARK_INGRESS_HOST}}
 
   helm-up-hms:
     desc: Install/upgrade Hive Metastore Helm chart
@@ -231,6 +224,7 @@ tasks:
     desc: Uninstall Helm charts
     ignore_error: true
     cmds:
+      - helm uninstall nginx --namespace giga-dagster
       - helm uninstall dagster-authproxy --namespace giga-dagster
       - helm uninstall dagster --namespace giga-dagster
       - helm uninstall spark --namespace giga-dagster
