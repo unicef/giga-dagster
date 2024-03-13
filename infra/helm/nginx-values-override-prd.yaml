@@ -8,3 +8,11 @@ autoscaling:
 pdb:
   create: true
   minAvailable: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 192Mi

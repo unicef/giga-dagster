@@ -26,7 +26,7 @@ data:
     proxy_prefix = "/auth"
     custom_sign_in_logo = "/app/static/dagster.svg"
     scope = "openid profile email"
-    proxy_websockets = true
+    reverse_proxy = "true"
     insecure_oidc_skip_issuer_verification = true
     oidc_email_claim = "preferred_username"
     footer = "-"
