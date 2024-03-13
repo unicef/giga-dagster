@@ -1,5 +1,4 @@
 trigger:
-  batch: true
   branches:
     include:
       - main
@@ -11,6 +10,8 @@ pool:
 
 variables:
   - template: templates/variables.yaml
+
+lockBehavior: runLatest
 
 stages:
   - template: templates/workflow.yaml
