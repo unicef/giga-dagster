@@ -180,11 +180,9 @@ def aggregate_report_json(
 
     # Summary Dictionary
     summary = {
-        "summary": {
-            "rows": rows_count,
-            "columns": columns_count,
-            "timestamp": timestamp,
-        }
+        "rows": rows_count,
+        "columns": columns_count,
+        "timestamp": timestamp,
     }
 
     # Initialize an empty dictionary for the transformed data
@@ -277,7 +275,8 @@ def row_level_checks(
     elif dataset_type == "coverage_itu":
         df = standard_checks(df, dataset_type, context, domain=False)
         df = column_relation_checks(df, dataset_type, context)
-
+    elif dataset_type == "QoS":
+        df = standard_checks(df, dataset_type, context, domain=False)
     return df
 
 
@@ -309,6 +308,8 @@ if __name__ == "__main__":
     # df_bronze = df_bronze.sort("school_name").limit(30)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    # df = row_level_checks(df_bronze, "QoS", "GIN")
+    # df.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
