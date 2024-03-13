@@ -95,6 +95,12 @@ jobs:
                       app.kubernetes.io/name: giga-dagster
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
+                  stringData:
+                    POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
+                    POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
+                    POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    DB_PORT: "$(ingestionPortalPostgresqlPort)"
+                    DB_HOST: "$(ingestionPortalPostgresqlHost)"
                   spec:
                     type: ExternalName
                     externalName: "ingestion-portal-postgresql.ictd-ooi-ingestionportal-$(deployEnv).svc.cluster.local"
