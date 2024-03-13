@@ -7,14 +7,7 @@ jobs:
         deploy:
           steps:
             - task: HelmDeploy@0
-              displayName: Helm uninstall nginx
-              inputs:
-                namespace: $(kubernetesNamespace)
-                command: uninstall
-                arguments: nginx
-
-            - task: HelmDeploy@0
-              displayName: Helm uninstall auth proxy
+              displayName: Helm uninstall authproxy
               inputs:
                 namespace: $(kubernetesNamespace)
                 command: uninstall
@@ -26,13 +19,6 @@ jobs:
                 namespace: $(kubernetesNamespace)
                 command: uninstall
                 arguments: dagster
-
-            - task: HelmDeploy@0
-              displayName: Helm uninstall Hive Metastore
-              inputs:
-                namespace: $(kubernetesNamespace)
-                command: uninstall
-                arguments: hive-metastore
 
             - task: HelmDeploy@0
               displayName: Helm uninstall Spark
