@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
         return (
-            "http://datahub-gms-external:8080"
+            f"http://datahub-datahub-gms.ictd-ooi-datahub-{self.DEPLOY_ENV.value}.svc.cluster.local:8080"
             if self.IN_PRODUCTION
             else self.DATAHUB_METADATA_SERVER
         )
