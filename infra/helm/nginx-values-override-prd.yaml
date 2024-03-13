@@ -1,0 +1,10 @@
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPU: 80
+  targetMemory: 80
+
+pdb:
+  create: true
+  minAvailable: 2
