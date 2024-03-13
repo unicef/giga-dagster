@@ -3,7 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import AnyUrl, BaseSettings
+from pydantic import BaseSettings
 
 
 class Environment(StrEnum):
@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     HIVE_METASTORE_URI: str
     AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
-    EMAIL_RENDERER_SERVICE_URL: AnyUrl
     EMAIL_TEST_RECIPIENTS: list[str]
     AZURE_EMAIL_SENDER: str
 
@@ -50,6 +49,7 @@ class Settings(BaseSettings):
     SPARK_MASTER_HOST: str = "spark-master"
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
+    EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
 
     # Derived settings
@@ -63,6 +63,14 @@ class Settings(BaseSettings):
             f"http://datahub-datahub-gms.ictd-ooi-datahub-{self.DEPLOY_ENV.value}.svc.cluster.local:8080"
             if self.IN_PRODUCTION
             else self.DATAHUB_METADATA_SERVER
+        )
+
+    @property
+    def EMAIL_RENDERER_SERVICE_URL(self) -> str:
+        return (
+            f"http://email-service.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local:3020"
+            if self.IN_PRODUCTION
+            else self.EMAIL_RENDERER_SERVICE
         )
 
     @property
