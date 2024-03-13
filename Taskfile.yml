@@ -131,6 +131,7 @@ tasks:
       - task: helm-up-hms
       - task: helm-up-spark
       - task: helm-up-dagster
+      - kubectl apply -f k8s/dagster-prd.yaml --namespace giga-dagster
       - task: helm-up-authproxy
       - task: helm-up-nginx-ing
 
