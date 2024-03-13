@@ -19,7 +19,9 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
             context.log.warning("Output DataFrame is empty.")
         #     return
 
-        adls_client.upload_pandas_dataframe_as_file(output, filepath)
+        adls_client.upload_pandas_dataframe_as_file(
+            context=context, data=output, filepath=filepath
+        )
 
         context.log.info(
             f"Uploaded {filepath.split('/')[-1]} to"
