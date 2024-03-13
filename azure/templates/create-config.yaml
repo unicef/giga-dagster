@@ -8,6 +8,13 @@ jobs:
           steps:
             - checkout: self
 
+            - task: HelmDeploy@0
+              displayName: Helm uninstall nginx
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: nginx
+
             - task: Kubernetes@1
               displayName: Create configmap
               inputs:
