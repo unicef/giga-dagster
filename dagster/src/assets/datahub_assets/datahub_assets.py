@@ -1,7 +1,6 @@
 import json
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
-from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
@@ -16,11 +15,12 @@ from dagster import Config, OpExecutionContext, Output, asset
 
 
 class TestConnectionConfig(Config):
-    host: str = Field(settings.DATAHUB_METADATA_SERVER_URL)
+    host: str
 
 
 @asset
 def datahub_test_connection(context: OpExecutionContext, config: TestConnectionConfig):
+    context.log.info(f"Using host {config.host}")
     emitter = DatahubRestEmitter(
         gms_server=config.host,
         token=settings.DATAHUB_ACCESS_TOKEN,
