@@ -1,4 +1,5 @@
 from src.utils.adls import ADLSFileClient
+from src.utils.db import PostgreSQLDatabase
 from src.utils.spark import pyspark
 
 from .io_managers.adls_delta import ADLSDeltaIOManager
@@ -15,4 +16,5 @@ RESOURCE_DEFINITIONS = {
     "adls_passthrough_io_manager": ADLSPassthroughIOManager(),
     "adls_file_client": ADLSFileClient(),
     "spark": pyspark,
+    "database": PostgreSQLDatabase(),
 }

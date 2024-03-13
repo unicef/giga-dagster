@@ -1,12 +1,13 @@
 from models.qos_apis import SchoolList
 
 from dagster import RunConfig, RunRequest, ScheduleEvaluationContext, schedule
-from src.jobs.qos import qos_list__automated_data_checks_job
+from src.jobs.qos import qos_school_list__automated_data_checks_job
 from src.utils.db import get_db_context
 
 
-@schedule(job=qos_list__automated_data_checks_job, cron_schedule="5-59/15 * * * *")
-def qos_list__schedule(context: ScheduleEvaluationContext):
+# one schedule for each freq of ingestion
+@schedule(job=qos_school_list__automated_data_checks_job, cron_schedule="*/15 * * * *")
+def qos_school_list__schedule(context: ScheduleEvaluationContext):
     scheduled_date = context.scheduled_execution_time.strftime("%Y-%m-%d")
 
     with get_db_context() as session:
