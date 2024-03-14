@@ -3,7 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import BaseSettings
+from pydantic import BaseSettings, PostgresDsn
 
 
 class Environment(StrEnum):
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_BEARER_TOKEN: str
     EMAIL_TEST_RECIPIENTS: list[str]
     AZURE_EMAIL_SENDER: str
+    INGESTION_POSTGRESQL_USERNAME: str
+    INGESTION_POSTGRESQL_PASSWORD: str
+    INGESTION_POSTGRESQL_DATABASE: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
@@ -51,6 +54,7 @@ class Settings(BaseSettings):
     DATAHUB_METADATA_SERVER: str = ""
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
+    INGESTION_DB_PORT: int = 5432
 
     # Derived settings
     @property
@@ -102,6 +106,33 @@ class Settings(BaseSettings):
         if self.PYTHON_ENV == Environment.LOCAL:
             return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
         return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+
+    @property
+    def INGESTION_DB_HOST(self) -> str:
+        return (
+            f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+            if self.IN_PRODUCTION
+            else "db"
+        )
+
+    @property
+    def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
+        return {
+            "username": self.INGESTION_POSTGRESQL_USERNAME,
+            "password": self.INGESTION_POSTGRESQL_PASSWORD,
+            "host": self.INGESTION_DB_HOST,
+            "port": self.INGESTION_DB_PORT,
+            "path": self.INGESTION_POSTGRESQL_DATABASE,
+        }
+
+    @property
+    def INGESTION_DATABASE_URL(self) -> str:
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql+psycopg2",
+                **self.INGESTION_DATABASE_CONNECTION_DICT,
+            )
+        )
 
 
 @lru_cache

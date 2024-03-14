@@ -69,7 +69,6 @@ class Constants(BaseSettings):
             "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
             "geolocation_staging": f"staging/pending-review/school-{dataset_type}-data",
-            #
             # coverage
             "coverage_raw": f"{self.raw_folder}/school-{dataset_type}-data",
             "coverage_data_quality_results": f"logs-gx/school-{dataset_type}-data",
@@ -80,7 +79,6 @@ class Constants(BaseSettings):
             "coverage_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "coverage_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
             "coverage_staging": f"staging/pending-review/school-{dataset_type}-data",
-            #
             # common
             "manual_review_passed_rows": (
                 f"{self.staging_approved_folder}/school-{dataset_type}-data"
@@ -91,7 +89,6 @@ class Constants(BaseSettings):
             "silver": f"silver/school-{dataset_type}-data",
             "gold_master": "gold/school-master",
             "gold_reference": "gold/school-reference",
-            #
             # adhoc
             "adhoc__load_master_csv": f"updated_master_schema/{dataset_type}",
             "adhoc__load_reference_csv": f"updated_master_schema/{dataset_type}",
@@ -109,6 +106,16 @@ class Constants(BaseSettings):
             "adhoc__qos_bra_transforms": "gold/dq-results/qos/transforms/BRA",
             "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
             "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
+            # qos
+            "qos_school_list_raw": f"{self.raw_folder}/school-{dataset_type}-data",
+            "qos_school_list_bronze": f"bronze/school-{dataset_type}-data",
+            "qos_school_list_data_quality_results": f"logs-gx/school-{dataset_type}-data",
+            "qos_school_list_dq_results": f"logs-gx/school-{dataset_type}-data",
+            "qos_school_list_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
+            "qos_school_list_dq_checks": f"logs-gx/school-{dataset_type}-data",
+            "qos_school_list_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
+            "qos_school_list_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
+            "qos_school_list_staging": f"staging/pending-review/school-{dataset_type}-data",
         }
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
