@@ -53,6 +53,12 @@ class ApiConfiguration(BaseModel):
     date_modified: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    date_last_successfully_ingested: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    date_last_ingested: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     enabled: Mapped[bool] = mapped_column(default=True)
     error_message: Mapped[str] = mapped_column(nullable=True)
@@ -72,8 +78,15 @@ class ApiConfiguration(BaseModel):
         Enum(RequestMethodEnum), default=RequestMethodEnum.GET, nullable=False
     )
     school_id_key: Mapped[str] = mapped_column(nullable=False)
-    send_query_in: Mapped[SendQueryInEnum] = mapped_column(
-        Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
+    page_send_query_in: Mapped[SendQueryInEnum] = (
+        mapped_column(
+            Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
+        ),
+    )
+    school_id_send_query_in: Mapped[SendQueryInEnum] = (
+        mapped_column(
+            Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
+        ),
     )
     size: Mapped[int] = mapped_column(nullable=True)
 

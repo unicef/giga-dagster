@@ -1,3 +1,7 @@
+import json
+
+from datahub.emitter.rest_emitter import DatahubRestEmitter
+from src.settings import settings
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
@@ -8,6 +12,16 @@ from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 
 from dagster import OpExecutionContext, Output, asset
+
+
+@asset
+def datahub_test_connection(context: OpExecutionContext):
+    context.log.info(f"Using {settings.DATAHUB_METADATA_SERVER_URL=}")
+    emitter = DatahubRestEmitter(
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        token=settings.DATAHUB_ACCESS_TOKEN,
+    )
+    context.log.info(json.dumps(emitter.test_connection(), indent=2))
 
 
 @asset

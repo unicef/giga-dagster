@@ -18,6 +18,7 @@ from src.utils.adls import (
 )
 from src.utils.apis import query_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.db import get_db_context
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -28,7 +29,10 @@ def qos_school_list_raw(
 ) -> pd.DataFrame:
     row_data = config
 
-    df = pd.DataFrame.from_records(query_API_data(context, row_data))
+    with get_db_context() as database_session:
+        df = pd.DataFrame.from_records(
+            query_API_data(context, database_session, row_data)
+        )
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 

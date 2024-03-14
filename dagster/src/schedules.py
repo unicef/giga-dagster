@@ -8,9 +8,8 @@ from src.jobs.qos import (
 from src.utils.db import get_db_context
 
 
-@schedule(
-    job=qos_school_list__automated_data_checks_job, cron_schedule="5-59/15 * * * *"
-)
+# one schedule for each freq of ingestion
+@schedule(job=qos_school_list__automated_data_checks_job, cron_schedule="*/15 * * * *")
 def qos_school_list__schedule(context: ScheduleEvaluationContext):
     scheduled_date = context.scheduled_execution_time.strftime("%Y-%m-%d")
 

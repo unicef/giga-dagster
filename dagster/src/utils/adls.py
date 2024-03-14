@@ -15,7 +15,7 @@ from azure.storage.filedatalake import (
     FileProperties,
     PathProperties,
 )
-from dagster import ConfigurableResource, OpExecutionContext
+from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
 from src.utils.schema import get_primary_key, get_schema_columns
@@ -37,12 +37,13 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(data: bytes, filepath: str):
+    def upload_raw(context: OutputContext, data: bytes, filepath: str):
         file_client = _adls.get_file_client(filepath)
+        metadata = context.step_context.op_config["metadata"]
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
-                file_client.upload_data(buffer.read())
+                file_client.upload_data(buffer.read(), metadata=metadata)
             except azure.core.exceptions.ResourceModifiedError:
                 logger.warning("ResourceModifiedError: Skipping write")
                 pass
@@ -76,7 +77,9 @@ class ADLSFileClient(ConfigurableResource):
 
         return spark.read.csv(**reader_params, schema=schema)
 
-    def upload_pandas_dataframe_as_file(self, data: pd.DataFrame, filepath: str):
+    def upload_pandas_dataframe_as_file(
+        self, context: OutputContext, data: pd.DataFrame, filepath: str
+    ):
         if len(splits := filepath.split(".")) < 2:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
@@ -89,9 +92,10 @@ class ADLSFileClient(ConfigurableResource):
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
+        metadata = context.step_context.op_config["metadata"]
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.read(), overwrite=True)
+            file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
     def upload_spark_dataframe_as_file(
         self, data: sql.DataFrame, filepath: str, spark: SparkSession

@@ -1,13 +1,17 @@
 from base64 import b64encode
+from datetime import datetime
 
 import requests
 from models.qos_apis import SchoolConnectivity, SchoolList
+from sqlalchemy.orm import Session, update
 
 from dagster import OpExecutionContext
 
 
 def query_API_data(
-    context: OpExecutionContext, row_data: SchoolList | SchoolConnectivity
+    context: OpExecutionContext,
+    database_session: Session,
+    row_data: SchoolList | SchoolConnectivity,
 ) -> list:
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
@@ -19,7 +23,36 @@ def query_API_data(
         session.headers.update(auth_headers)
 
     if row_data["pagination_type"] is None:
-        return _make_API_request(context, session, row_data)
+        try:
+            data = _make_API_request(context, session, row_data)
+        except Exception as e:
+            # @TODO: update database date_last_ingested
+            # @TODO: update database error_message to actual error message - make str error
+            update_statement = (
+                update(SchoolList)
+                .where(SchoolList.id == row_data["id"])
+                .values({"date_last_ingested": datetime.now(), "error_message": e})
+            )
+            database_session.execute(update_statement)
+            raise e
+        else:
+            # @TODO: update database date_last_succesfully_ingested
+            # @TODO: update database date_last_ingested
+            # @TODO: update database error_message to NONE
+            update_statement = (
+                update(SchoolList)
+                .where(SchoolList.id == row_data["id"])
+                .values(
+                    {
+                        "date_last_ingested": datetime.now(),
+                        "date_last_succesfully_ingested": datetime.now(),
+                        "error_message": None,
+                    }
+                )
+            )
+            database_session.execute(update_statement)
+
+        return data
 
     else:
         page = (
@@ -54,10 +87,19 @@ def query_API_data(
                 context.log.info(e)
                 break
             except Exception as e:
-                context.log.info(
-                    f"{row_data['name']} run # {page}, offset # {total_response_count} failed: {e}"
+                error_message = f"{row_data['name']} run # {page}, offset # {total_response_count} failed: {e}"
+                context.log.info(error_message)
+
+                # @TODO: update database date_last_ingested
+                # @TODO: update database error_message to actual error message - make str error
+                update_statement = (
+                    update(SchoolList)
+                    .where(SchoolList.id == row_data["id"])
+                    .values({"date_last_ingested": datetime.now(), "error_message": e})
                 )
-                raise e
+                database_session.execute(update_statement)
+                raise Exception(error_message) from e
+
             else:
                 offset += len(run_response)
                 page += 1
@@ -65,6 +107,21 @@ def query_API_data(
                     f"Next run: {row_data['name']} run # {page}, offset # {offset}"
                 )
 
+        # @TODO: update database date_last_succesfully_ingested
+        # @TODO: update database date_last_ingested
+        # @TODO: update database error_message to NONE
+        update_statement = (
+            update(SchoolList)
+            .where(SchoolList.id == row_data["id"])
+            .values(
+                {
+                    "date_last_ingested": datetime.now(),
+                    "date_last_succesfully_ingested": datetime.now(),
+                    "error_message": None,
+                }
+            )
+        )
+        database_session.execute(update_statement)
         return data
 
 
@@ -74,6 +131,7 @@ def _make_API_request(
     row_data: SchoolList | SchoolConnectivity,
     pagination_parameters: dict = None,
 ) -> list:
+    # @TODO: change names
     if row_data["send_query_in"] == "REQUEST_BODY":
         row_data["request_body"].update(pagination_parameters)
     elif row_data["send_query_in"] == "QUERY_PARAMETERS":
@@ -94,15 +152,14 @@ def _make_API_request(
 
         response.raise_for_status()
 
-    except requests.HTTPError as err:
-        context.log.info(
-            f"Error in {row_data["api_endpoint"]} endpoint: HTTP request returned status code"
-            f" {response.status_code}"
-        )
-        raise err
+    except requests.HTTPError as e:
+        error_message = f"Error in {row_data["api_endpoint"]} endpoint: HTTP request returned status code {response.status_code}"
+        context.log.info(error_message)
+        raise Exception(error_message) from e
     except Exception as e:
-        context.log.info(f"Error in {row_data["api_endpoint"]} endpoint: {e}")
-        raise e
+        error_message = f"Error in {row_data["api_endpoint"]} endpoint: {e}"
+        context.log.info(error_message)
+        raise Exception(error_message) from e
     else:
         return (
             response.json()

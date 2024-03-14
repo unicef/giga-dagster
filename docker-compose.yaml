@@ -1,8 +1,6 @@
 x-common-config: &common-config
   init: true
   restart: unless-stopped
-  networks:
-    - giga-dataops
 
 x-dagster-common-config: &dagster-common-config
   <<: *common-config
@@ -43,7 +41,8 @@ volumes:
   hms-db-storage:
 
 networks:
-  giga-dataops:
+  default:
+    name: giga-dataops
     external: true
 
 services:

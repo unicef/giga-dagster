@@ -42,3 +42,12 @@ def get_db_context() -> AbstractContextManager[Session]:
         raise err
     finally:
         session.close()
+
+
+class PostgreSQLDatabase:
+    def __init__(self):
+        pass
+
+    def get_session(self):
+        with get_db_context() as session:
+            return session
