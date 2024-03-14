@@ -121,8 +121,8 @@ class Settings(BaseSettings):
             "username": self.INGESTION_POSTGRESQL_USERNAME,
             "password": self.INGESTION_POSTGRESQL_PASSWORD,
             "host": self.INGESTION_DB_HOST,
-            "port": self.INGESTION_DB_PORT,
-            "path": self.INGESTION_POSTGRESQL_DATABASE,
+            "port": str(self.INGESTION_DB_PORT),
+            "path": f"/{self.INGESTION_POSTGRESQL_DATABASE}",
         }
 
     @property

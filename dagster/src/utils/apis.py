@@ -3,7 +3,8 @@ from datetime import datetime
 
 import requests
 from models.qos_apis import SchoolConnectivity, SchoolList
-from sqlalchemy.orm import Session, update
+from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from dagster import OpExecutionContext
 
@@ -153,11 +154,11 @@ def _make_API_request(
         response.raise_for_status()
 
     except requests.HTTPError as e:
-        error_message = f"Error in {row_data["api_endpoint"]} endpoint: HTTP request returned status code {response.status_code}"
+        error_message = f"Error in {row_data['api_endpoint']} endpoint: HTTP request returned status code {response.status_code}"
         context.log.info(error_message)
         raise Exception(error_message) from e
     except Exception as e:
-        error_message = f"Error in {row_data["api_endpoint"]} endpoint: {e}"
+        error_message = f"Error in {row_data['api_endpoint']} endpoint: {e}"
         context.log.info(error_message)
         raise Exception(error_message) from e
     else:
