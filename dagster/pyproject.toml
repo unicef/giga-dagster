@@ -46,6 +46,7 @@ country-converter = "^1.1.1"
 sqlalchemy = "^2.0.28"
 psycopg2-binary = "^2.9.9"
 pydantic = { extras = ["email"], version = "<2.0.0" }
+cuid2 = "^2.0.0"
 
 [tool.poetry.group.spark.dependencies]
 pyspark = "3.5.0"

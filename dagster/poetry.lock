@@ -1197,6 +1197,17 @@ test = ["certifi", "pretend", "pytest (>=6.2.0)", "pytest-benchmark", "pytest-co
 test-randomorder = ["pytest-randomly"]
 
 [[package]]
+name = "cuid2"
+version = "2.0.0"
+description = "Next generation GUIDs. Collision-resistant ids optimized for horizontal scaling and performance."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "cuid2-2.0.0-py3-none-any.whl", hash = "sha256:5105ae457fdd1448013f6de73008d221c2654766dd3dafd459ef02c59a34a077"},
+    {file = "cuid2-2.0.0.tar.gz", hash = "sha256:3595ca0b1f61ff9d65da1a3a1359d291e2243b682cdd52ed1e7bc05ab7b7247d"},
+]
+
+[[package]]
 name = "dagster"
 version = "1.5.0"
 description = "Dagster is an orchestration platform for the development, production, and observation of data assets."
@@ -6314,4 +6325,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "802a9f08315b95f4f62f6ab89a10fb8bcfe6a85a74744efeefe93e662bdaadc0"
+content-hash = "36a26349fff8b612f06381e2a46df40cf3ad712935e0d5b2766127ac810561b5"
