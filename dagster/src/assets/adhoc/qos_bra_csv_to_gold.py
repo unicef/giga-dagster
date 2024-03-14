@@ -54,6 +54,7 @@ def adhoc__qos_bra_transforms(
     sdf = sdf.withColumns(column_actions).dropDuplicates(
         [config.unique_identifier_column]
     )
+    context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
 
     yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
