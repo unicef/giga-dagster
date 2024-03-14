@@ -5,6 +5,8 @@ from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import current_timestamp, lit
+from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -12,7 +14,9 @@ from src.data_quality_checks.utils import (
 )
 from src.sensors.base import FileConfig
 from src.settings import settings
-from src.spark.transform_functions import create_bronze_layer_columns
+from src.spark.transform_functions import (
+    create_giga_school_id,
+)
 from src.utils.adls import (
     ADLSFileClient,
     deconstruct_filename_components,
@@ -28,6 +32,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.metadata import get_output_metadata
 from src.utils.pandas import pandas_loader
+from src.utils.schema import get_schema_columns
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -64,8 +69,17 @@ def geolocation_bronze(
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
+    schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
     df = s.createDataFrame(pdf)
-    df = create_bronze_layer_columns(df)
+    column_actions = {
+        col.name: lit(None).cast(NullType())
+        for col in schema_columns
+        if col not in df.columns
+    }
+    column_actions["connectivity_govt_ingestion_timestamp"] = current_timestamp()
+    df = df.withColumns(column_actions)
+    df = create_giga_school_id(df)
+
     dataset_urn = build_dataset_urn(config.filepath)
     filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
