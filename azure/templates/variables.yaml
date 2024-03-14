@@ -10,8 +10,6 @@ variables:
   ingestionPortalPostgresqlUsername: $(INGESTION_POSTGRESQL_USERNAME)
   ingestionPortalPostgresqlPassword: $(INGESTION_POSTGRESQL_PASSWORD)
   ingestionPortalPostgresqlDatabase: $(INGESTION_POSTGRESQL_DATABASE)
-  ingestionPortalPostgresqlPort: $(INGESTION_DB_PORT)
-  ingestionPortalPostgresqlHost: $(INGESTION_DB_HOST)
   appDomain: $(APP_DOMAIN)
   azureSasToken: $(AZURE_SAS_TOKEN)
   azureSasTokenEscaped: $(AZURE_SAS_TOKEN_ESCAPED)

@@ -42,8 +42,6 @@ class Settings(BaseSettings):
     INGESTION_POSTGRESQL_USERNAME: str
     INGESTION_POSTGRESQL_PASSWORD: str
     INGESTION_POSTGRESQL_DATABASE: str
-    INGESTION_DB_HOST: str
-    INGESTION_DB_PORT: str
 
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
@@ -56,6 +54,7 @@ class Settings(BaseSettings):
     DATAHUB_METADATA_SERVER: str = ""
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
+    INGESTION_DB_PORT: int = 5432
 
     # Derived settings
     @property
@@ -107,6 +106,14 @@ class Settings(BaseSettings):
         if self.PYTHON_ENV == Environment.LOCAL:
             return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
         return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+
+    @property
+    def INGESTION_DB_HOST(self) -> str:
+        return (
+            f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+            if self.IN_PRODUCTION
+            else "db"
+        )
 
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
