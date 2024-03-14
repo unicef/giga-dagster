@@ -28,6 +28,8 @@ class Constants(BaseSettings):
     gold_source_folder = "updated_master_schema"
     qos_source_folder = "gold/qos"
 
+    UPLOAD_PATH_PREFIX: str = "raw/uploads"
+
     step_origin_map: dict[str, str] = {
         "geolocation_raw": "",
         "geolocation_bronze": "geolocation_raw",
