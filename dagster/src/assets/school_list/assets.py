@@ -18,19 +18,21 @@ from src.utils.adls import (
 )
 from src.utils.apis import query_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
-from src.utils.db import PostgreSQLDatabase
+from src.utils.db import get_db_context
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def qos_school_list_raw(
-    context: OpExecutionContext, config: SchoolList, database: PostgreSQLDatabase
+    context: OpExecutionContext, config: SchoolList
 ) -> pd.DataFrame:
     row_data = config
-    database_session = database.get_session()
 
-    df = pd.DataFrame.from_records(query_API_data(context, database_session, row_data))
+    with get_db_context() as database_session:
+        df = pd.DataFrame.from_records(
+            query_API_data(context, database_session, row_data)
+        )
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
