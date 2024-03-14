@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
         return {
-            "username": self.INGESTION_POSTGRESQL_USERNAME,
+            "user": self.INGESTION_POSTGRESQL_USERNAME,
             "password": self.INGESTION_POSTGRESQL_PASSWORD,
             "host": self.INGESTION_DB_HOST,
             "port": str(self.INGESTION_DB_PORT),

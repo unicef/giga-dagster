@@ -3,18 +3,21 @@ from io import BytesIO
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
+from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_timestamp, lit
-from pyspark.sql.types import NullType
+from pyspark.sql.functions import current_timestamp
+from sqlalchemy import select
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.schemas.file_upload import FileUploadConfig
 from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import (
+    add_missing_columns,
     create_giga_school_id,
 )
 from src.utils.adls import (
@@ -30,6 +33,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     create_dataset_urn,
     emit_metadata_to_datahub,
 )
+from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns
@@ -64,21 +68,27 @@ def geolocation_bronze(
     spark: PySparkResource,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
+    filename_components = deconstruct_filename_components(config.filepath)
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == filename_components.id)
+        )
+        file_upload = FileUploadConfig.from_orm(file_upload)
+
+    column_mapping = {
+        k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
+    }
     schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
     df = s.createDataFrame(pdf)
-    column_actions = {
-        col.name: lit(None).cast(NullType())
-        for col in schema_columns
-        if col not in df.columns
-    }
-    column_actions["connectivity_govt_ingestion_timestamp"] = current_timestamp()
-    df = df.withColumns(column_actions)
+    df = df.withColumnsRenamed(column_mapping)
+    df = add_missing_columns(df, schema_columns)
     df = create_giga_school_id(df)
+    df = df.withColumn("connectivity_govt_ingestion_timestamp", current_timestamp())
 
     dataset_urn = build_dataset_urn(config.filepath)
     filename_components = deconstruct_filename_components(config.filepath)
