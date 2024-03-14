@@ -54,6 +54,11 @@ jobs:
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
                     EMAIL_TEST_RECIPIENTS: '$(emailTestRecipients)'
+                    INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
+                    INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
+                    INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    INGESTION_DB_PORT: "$(ingestionPortalPostgresqlPort)"
+                    INGESTION_DB_HOST: "$(ingestionPortalPostgresqlHost)"
 
             - task: Kubernetes@1
               displayName: Create Datahub external service
@@ -95,12 +100,6 @@ jobs:
                       app.kubernetes.io/name: giga-dagster
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
-                  stringData:
-                    POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
-                    POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
-                    POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
-                    DB_PORT: "$(ingestionPortalPostgresqlPort)"
-                    DB_HOST: "$(ingestionPortalPostgresqlHost)"
                   spec:
                     type: ExternalName
                     externalName: "ingestion-portal-postgresql.ictd-ooi-ingestionportal-$(deployEnv).svc.cluster.local"
