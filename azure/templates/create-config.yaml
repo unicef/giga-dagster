@@ -156,7 +156,8 @@ jobs:
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     rpc-authentication-secret: "$(sparkRpcAuthSecret)"
                     SPARK_SSL_NEED_CLIENT_AUTH: "yes"
-                    SPARK_PUBLIC_DNS: "$(appDomain)"
+                    SPARK_PUBLIC_DNS: "io-dagster-$(deployEnv).unitst.org"
+                    SPARK_UI_PROXYBASE: "/spark"
 
             - task: Kubernetes@1
               displayName: Create Hive Metastore secrets
@@ -182,3 +183,13 @@ jobs:
                       HMS_POSTGRESQL_USERNAME: "$(hmsPostgresqlUsername)"
                       HMS_POSTGRESQL_PASSWORD: "$(hmsPostgresqlPassword)"
                       HMS_POSTGRESQL_DATABASE: "metastore_db"
+
+            - task: Kubernetes@1
+              displayName: Create Dagster webserver PDB/HPA
+              condition: or(eq(variables.deployEnv, 'stg'), eq(variables.deployEnv, 'prd'))
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: configuration
+                command: apply
+                useConfigurationFile: true
+                configuration: infra/k8s/dagster-prd.yaml

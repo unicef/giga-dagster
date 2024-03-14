@@ -1,5 +1,10 @@
 from dagster import define_asset_job
 
+datahub__test_connection_job = define_asset_job(
+    name="datahub__test_connection_job",
+    selection=["datahub_test_connection"],
+)
+
 datahub__ingest_azure_ad_users_groups_job = define_asset_job(
     name="datahub__ingest_azure_ad_users_job",
     selection=["azure_ad_users_groups"],
