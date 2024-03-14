@@ -138,6 +138,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         updates_df = incoming_ids.join(master_ids, primary_key, "inner")
         inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
 
+        # TODO: Might need to specify a predictable order, although by default it's insertion order
         updates_signature = updates_df.agg(
             sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
                 "combined_signature"
