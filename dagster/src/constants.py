@@ -18,9 +18,11 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from src.settings import settings
+
 
 class Constants(BaseSettings):
-    raw_folder = "adls-testing-raw"
+    raw_folder = "raw/uploads" if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = "raw_schema"
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
