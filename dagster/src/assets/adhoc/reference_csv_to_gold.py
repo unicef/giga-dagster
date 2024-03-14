@@ -46,9 +46,10 @@ def adhoc__reference_data_quality_checks(
     file_stem = os.path.splitext(filename)[0]
     country_iso3 = file_stem.split("_")[0]
 
-    buffer = BytesIO(adhoc__load_reference_csv)
-    buffer.seek(0)
-    df: pd.DataFrame = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+    with BytesIO(adhoc__load_reference_csv) as buffer:
+        buffer.seek(0)
+        df: pd.DataFrame = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
     df = df.loc[:, ~df.columns.duplicated(keep="first")]
     df = df.loc[:, ~df.columns.str.contains(r".+\.\d+$")]
     sdf = s.createDataFrame(df)

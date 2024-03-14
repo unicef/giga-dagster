@@ -34,9 +34,9 @@ def adhoc__qos_bra_transforms(
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
 
-    buffer = BytesIO(adhoc__load_qos_bra_csv)
-    buffer.seek(0)
-    df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
+    with BytesIO(adhoc__load_qos_bra_csv) as buffer:
+        buffer.seek(0)
+        df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
 
     sdf = s.createDataFrame(df)
     column_actions = {

@@ -48,9 +48,10 @@ def adhoc__master_data_transforms(
     s: SparkSession = spark.spark_session
     columns = get_schema_columns(s, config.metastore_schema)
 
-    buffer = BytesIO(adhoc__load_master_csv)
-    buffer.seek(0)
-    df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+    with BytesIO(adhoc__load_master_csv) as buffer:
+        buffer.seek(0)
+        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
     for col, dtype in df.dtypes.items():
         if dtype == "object":
             df[col] = df[col].astype("string")

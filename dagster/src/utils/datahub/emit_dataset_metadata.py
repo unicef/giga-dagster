@@ -163,7 +163,10 @@ def set_tag_mutation_query(country_name, dataset_urn):
 
 
 def emit_metadata_to_datahub(
-    context: OpExecutionContext, df: pd.DataFrame, country_code: str, dataset_urn: str
+    context: OpExecutionContext,
+    df: pd.DataFrame | bytes,
+    country_code: str,
+    dataset_urn: str,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -179,14 +182,15 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING DATASET METADATA")
     datahub_emitter.emit(dataset_metadata_event)
 
-    schema_properties = define_schema_properties(df)
-    schema_metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=dataset_urn,
-        aspect=schema_properties,
-    )
+    if isinstance(df, pd.DataFrame):
+        schema_properties = define_schema_properties(df)
+        schema_metadata_event = MetadataChangeProposalWrapper(
+            entityUrn=dataset_urn,
+            aspect=schema_properties,
+        )
 
-    context.log.info("EMITTING SCHEMA")
-    datahub_emitter.emit(schema_metadata_event)
+        context.log.info("EMITTING SCHEMA")
+        datahub_emitter.emit(schema_metadata_event)
 
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(

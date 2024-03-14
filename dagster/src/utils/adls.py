@@ -1,6 +1,8 @@
 import json
 import os.path
+from datetime import datetime
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -17,6 +19,7 @@ from azure.storage.filedatalake import (
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
+from src.schemas.filename_components import FilenameComponents
 from src.settings import settings
 from src.utils.schema import get_primary_key, get_schema_columns
 
@@ -56,11 +59,14 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
+            ext = os.path.splitext(filepath)[1]
 
-            if filepath.endswith(".csv"):
+            if ext == ".csv":
                 return pd.read_csv(buffer)
-            elif filepath.endswith(".xls") or filepath.endswith(".xlsx"):
+            elif ext in [".xls", ".xlsx"]:
                 return pd.read_excel(buffer)
+            else:
+                raise ValueError(f"Unsupported format for file: {filepath}")
 
     def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession, schema: StructType = None
@@ -252,3 +258,66 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     source_filepath = get_filepath(source_path, dataset_type, origin_step)
 
     return source_filepath
+
+
+def validate_filename(filepath: str):
+    path = Path(filepath)
+    path_parent = path.parent.name
+    splits = path.stem.split("_")
+
+    if len(splits) < 2:
+        raise Exception(
+            f"Expected at least 2 required components for filename `{path.name}`; got {len(splits)}"
+        )
+
+    if len(splits[1]) != 3:
+        raise Exception(
+            f"Expected 2nd component of filename to be 3-letter ISO country code; got {splits[1]}"
+        )
+
+    if "geolocation" in path_parent and len(splits) != 4:
+        raise Exception(
+            f"Expected 4 components for geolocation filename `{path.name}`; got {len(splits)}"
+        )
+
+    if "coverage" in path_parent and len(splits) != 5:
+        raise Exception(
+            f"Expected 5 components for coverage filename `{path.name}`; got {len(splits)}"
+        )
+
+
+def deconstruct_filename_components(filepath: str):
+    """Deconstruct filename components for files uploaded through the Ingestion Portal"""
+
+    validate_filename(filepath)
+    path = Path(filepath)
+    path_parent = path.parent.name
+    splits = path.stem.split("_")
+    expected_timestamp_format = "%Y%m%d-%H%M%S"
+
+    if "geolocation" in path_parent:
+        id, country_code, dataset_type, timestamp = splits
+        return FilenameComponents(
+            id=id,
+            dataset_type=dataset_type,
+            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
+            country_code=country_code,
+        )
+
+    if "coverage" in path_parent:
+        id, country_code, dataset_type, source, timestamp = splits
+        return FilenameComponents(
+            id=id,
+            dataset_type=dataset_type,
+            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
+            source=source,
+            country_code=country_code,
+        )
+
+    id, country_code, *rest = splits
+    return FilenameComponents(
+        id=id,
+        dataset_type="unstructured",
+        country_code=country_code,
+        rest="_".join(rest),
+    )
