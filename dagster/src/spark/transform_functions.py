@@ -251,21 +251,22 @@ if __name__ == "__main__":
     # df_bronze = master.join(reference, how="left", on="school_id_giga")
 
 
-    df = spark.read.csv(file_url, header=True)
-    df = create_bronze_layer_columns(df)
-    df.show() 
-    # data = [(i, 1) for i in range(10)]
+    # df = spark.read.csv(file_url, header=True)
+    # df = create_bronze_layer_columns(df)
+    # df.show() 
+    data = [(i, 1) for i in range(10)]
 
-    # # Create DataFrame
-    # df = spark.createDataFrame(data, ["id", "code"])
-    # df.show()
-    # columnMapping =  {
-    #   'school_id_govt': 'id',
-    #   'school_name': 'code',
-    #   }
-    # df = column_mapping_rename(df, columnMapping)
-    # df = impute_geolocation_columns(df)
-    # df.show()
+    # Create DataFrame
+    df = spark.createDataFrame(data, ["id", "code"])
+    df.show()
+    columnMapping =  {
+      'school_id_govt': 'id',
+      'school_name': 'code',
+      }
+    df = column_mapping_rename(df, columnMapping)
+    df = impute_geolocation_columns(df)
+    df = create_school_id_giga(df)
+    df.show()
 
     # print(len(df.columns))
     # list_inventory = [
