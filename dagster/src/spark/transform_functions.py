@@ -17,6 +17,12 @@ generate_uuid_udf = f.udf(generate_uuid)
 
 
 def create_giga_school_id(df):
+    school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
+    for column in school_id_giga_prereqs:
+        if column not in df.columns:
+            df = df.withColumn("school_id_giga", f.lit(None))
+            return df 
+    
     df = df.withColumn(
         "identifier_concat",
         f.concat(
@@ -27,7 +33,15 @@ def create_giga_school_id(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("school_id_giga", generate_uuid_udf(f.col("identifier_concat")))
+    df = df.withColumn("school_id_giga", f.when(
+                (f.col("school_id_govt").isNull()) |
+                (f.col("school_name").isNull()) |
+                (f.col("education_level").isNull()) |
+                (f.col("latitude").isNull()) |
+                (f.col("longitude").isNull()) 
+            , f.lit(None),
+        ).otherwise(generate_uuid_udf(f.col("identifier_concat"))))
+    
     return df.drop("identifier_concat")
 
 
@@ -97,7 +111,7 @@ def h3_geo_to_h3(latitude, longitude):
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
-def rename_raw_columns(df):
+def rename_raw_columns(df): ## function for renaming raw files. adhoc
     # Iterate over mapping set and perform actions
     for raw_col, delta_col in config.COLUMN_RENAME_GEOLOCATION:
         # Check if the raw column exists in the DataFrame
@@ -115,17 +129,38 @@ def rename_raw_columns(df):
     return df
 
 
+def find_key_by_value(dictionary, value):
+    for key, val in dictionary.items():
+        if val == value:
+            return key
+    return None
+
+
+def column_mapping_rename(df, column_mapping):
+    for column in df.columns:
+        renamed_column = find_key_by_value(column_mapping, column)
+        df = df.withColumnRenamed(f"{column}", f"{renamed_column}")
+    return df
+
+
+def impute_geolocation_columns(df):
+    for column in config.GEOLOCATION_COLUMNS:
+        if column not in df.columns:
+            df = df.withColumn(f"{column}", f.lit(None))
+    return df
+
+
 def bronze_prereq_columns(df):
-    bronze_prereq_columns = [
-        delta_col for _, delta_col in config.COLUMN_RENAME_GEOLOCATION
-    ]
-    df = df.select(*bronze_prereq_columns)
+    df = df.select(*config.GEOLOCATION_COLUMNS)
 
     return df
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
 def create_bronze_layer_columns(df):
+    # Impute missing cols with null
+    df = impute_geolocation_columns(df)
+
     # Select required columns for bronze
     df = bronze_prereq_columns(df)
 
@@ -205,12 +240,33 @@ if __name__ == "__main__":
 
     #
     file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+
+    
     spark = get_spark_session()
+    # master = spark.read.csv(file_url_master, header=True)
+    # reference = spark.read.csv(file_url_reference, header=True)
+    # df_bronze = master.join(reference, how="left", on="school_id_giga")
+
+
     df = spark.read.csv(file_url, header=True)
-    df = rename_raw_columns(df)
     df = create_bronze_layer_columns(df)
-    df.sort("school_name").limit(10).show()
+    df.show() 
+    # data = [(i, 1) for i in range(10)]
+
+    # # Create DataFrame
+    # df = spark.createDataFrame(data, ["id", "code"])
+    # df.show()
+    # columnMapping =  {
+    #   'school_id_govt': 'id',
+    #   'school_name': 'code',
+    #   }
+    # df = column_mapping_rename(df, columnMapping)
+    # df = impute_geolocation_columns(df)
+    # df.show()
+
     # print(len(df.columns))
     # list_inventory = [
     # "school_id_giga",
