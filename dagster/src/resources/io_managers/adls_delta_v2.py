@@ -163,8 +163,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
                 "master.signature <> incoming.signature",
                 dict(
                     zip(
-                        [c.name for c in update_columns],
-                        [f"incoming.{c.name}" for c in update_columns],
+                        update_columns,
+                        [f"incoming.{c}" for c in update_columns],
                         strict=True,
                     )
                 ),
