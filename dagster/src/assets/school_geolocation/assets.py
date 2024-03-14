@@ -11,6 +11,8 @@ from sqlalchemy import select
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
+    dq_failed_rows,
+    dq_passed_rows,
     row_level_checks,
 )
 from src.schemas.file_upload import FileUploadConfig
@@ -70,10 +72,6 @@ def geolocation_bronze(
     s: SparkSession = spark.spark_session
     filename_components = deconstruct_filename_components(config.filepath)
 
-    with BytesIO(geolocation_raw) as buffer:
-        buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath)
-
     with get_db_context() as db:
         file_upload = db.scalar(
             select(FileUpload).where(FileUpload.id == filename_components.id)
@@ -83,6 +81,11 @@ def geolocation_bronze(
     column_mapping = {
         k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
     }
+
+    with BytesIO(geolocation_raw) as buffer:
+        buffer.seek(0)
+        pdf = pandas_loader(buffer, config.filepath)
+
     schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
     df = s.createDataFrame(pdf)
     df = df.withColumnsRenamed(column_mapping)
@@ -117,7 +120,8 @@ def geolocation_data_quality_results(
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
-    country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
+    filename_components = deconstruct_filename_components(config.filepath)
+    country_code = filename_components.country_code
     dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
@@ -154,8 +158,15 @@ def geolocation_dq_passed_rows(
     geolocation_dq_results: sql.DataFrame,
     config: FileConfig,
 ) -> sql.DataFrame:
-    df_passed = geolocation_dq_results
-    emit_metadata_to_datahub(context, df_passed)
+    df_passed = dq_passed_rows(geolocation_dq_results, config.dataset_type)
+    dataset_urn = build_dataset_urn(config.filepath)
+    filename_components = deconstruct_filename_components(config.filepath)
+    emit_metadata_to_datahub(
+        context,
+        df_passed,
+        country_code=filename_components.country_code,
+        dataset_urn=dataset_urn,
+    )
     yield Output(df_passed.toPandas(), metadata=get_output_metadata(config))
 
 
@@ -165,8 +176,15 @@ def geolocation_dq_failed_rows(
     geolocation_dq_results: sql.DataFrame,
     config: FileConfig,
 ) -> sql.DataFrame:
-    df_failed = geolocation_dq_results
-    emit_metadata_to_datahub(context, df_failed)
+    df_failed = dq_failed_rows(geolocation_dq_results, config.dataset_type)
+    dataset_urn = build_dataset_urn(config.filepath)
+    filename_components = deconstruct_filename_components(config.filepath)
+    emit_metadata_to_datahub(
+        context,
+        df_failed,
+        country_code=filename_components.country_code,
+        dataset_urn=dataset_urn,
+    )
     yield Output(df_failed.toPandas(), metadata=get_output_metadata(config))
 
 
@@ -178,33 +196,30 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
-    dataset_type = config["dataset_type"]
-    filepath = context.run_tags["dagster/run_key"]
-    silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
-    staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
-    country_code = filepath.split("/")[-1].split("_")[1]
+    dataset_type = config.dataset_type
+    filename_components = deconstruct_filename_components(config.filepath)
+    silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'silver').split('_')[0]}"
+    staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'staging').split('_')[0]}"
 
     # {filepath: str, date_modified: str}
     files_for_review = []
-    for file_data in adls_file_client.list_paths(
+    for file_data in adls_file_client.list_paths_generator(
         f"staging/pending-review/school-{dataset_type}-data"
     ):
-        if (
-            file_data["is_directory"]
-            or file_data["name"].split("/")[-1].split("_")[0] != country_code
+        pending_filename_components = deconstruct_filename_components(file_data.name)
+        if file_data.is_directory or (
+            pending_filename_components.country_code != filename_components.country_code
         ):
             continue
-        else:
-            properties = adls_file_client.get_file_metadata(file_data["name"])
-            date_modified = properties["metadata"]["Date_Modified"]
-            context.log.info(
-                f"filepath: {file_data['name']}, date_modified: {date_modified}"
-            )
-            files_for_review.append(
-                {"filepath": file_data["name"], "date_modified": date_modified}
-            )
 
-    files_for_review.sort(key=lambda x: x["date_modified"])
+        properties = adls_file_client.get_file_metadata(file_data["name"])
+        date_modified = properties.last_modified
+        context.log.info(f"filepath: {file_data.name}, date_modified: {date_modified}")
+        files_for_review.append(
+            {"filepath": file_data.name, "date_modified": date_modified}
+        )
+
+    files_for_review.sort(key=lambda x: x.last_modified)
 
     context.log.info(f"files_for_review: {files_for_review}")
 
@@ -270,4 +285,8 @@ def geolocation_staging(
             spark.spark_session,
         )
 
-    emit_metadata_to_datahub(context, staging)
+    dataset_urn = build_dataset_urn(config.filepath)
+    filename_components = deconstruct_filename_components(config.filepath)
+    emit_metadata_to_datahub(
+        context, staging, filename_components.country_code, dataset_urn
+    )

@@ -10,8 +10,8 @@ from src.spark.config_expectations import config
 
 
 # STANDARDIZATION FUNCTIONS
-def generate_uuid(column_name):
-    return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(column_name)))
+def generate_uuid(identifier_concat: str):
+    return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(identifier_concat)))
 
 
 generate_uuid_udf = f.udf(generate_uuid)

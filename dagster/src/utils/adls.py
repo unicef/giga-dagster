@@ -1,5 +1,6 @@
 import json
 import os.path
+from collections.abc import Iterator
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
@@ -192,6 +193,11 @@ class ADLSFileClient(ConfigurableResource):
     def list_paths(self, path: str, recursive=True) -> list[PathProperties]:
         paths = _adls.get_paths(path=path, recursive=recursive)
         return list(paths)
+
+    def list_paths_generator(
+        self, path: str, recursive=True
+    ) -> Iterator[PathProperties]:
+        return _adls.get_paths(path=path, recursive=recursive)
 
     def get_file_metadata(self, filepath: str) -> FileProperties:
         file_client = _adls.get_file_client(filepath)
