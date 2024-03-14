@@ -126,6 +126,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         spark = self._get_spark_session()
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
+        update_columns = [c.name for c in columns if c.name != primary_key]
 
         master = DeltaTable.forName(spark, full_table_name).alias("master")
         master_df = master.toDF()
@@ -161,8 +162,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
                 "master.signature <> incoming.signature",
                 dict(
                     zip(
-                        [c.name for c in columns],
-                        [f"incoming.{c.name}" for c in columns],
+                        [c.name for c in update_columns],
+                        [f"incoming.{c.name}" for c in update_columns],
                         strict=True,
                     )
                 ),
