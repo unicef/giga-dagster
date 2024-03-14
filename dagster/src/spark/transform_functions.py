@@ -16,7 +16,7 @@ def generate_uuid(column_name):
 generate_uuid_udf = f.udf(generate_uuid)
 
 
-def create_giga_school_id(df):
+def create_school_id_giga(df):
     school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
@@ -165,7 +165,7 @@ def create_bronze_layer_columns(df):
     df = bronze_prereq_columns(df)
 
     # ID
-    df = create_giga_school_id(df)  # school_id_giga
+    df = create_school_id_giga(df)  # school_id_giga
 
     ## Clean up columns -- function shouldnt exist, uploads should be clean
     # df = standardize_internet_speed(df)
