@@ -133,13 +133,18 @@ def format_validation_checks(df, context: OpExecutionContext = None):
             column_actions[f"dq_is_not_numeric-{column}"] = f.when(
                 f.regexp_extract(f.col(column), r"^-?\d+(\.\d+)?$", 0) != "",
                 0,
-            ).otherwise(1)   
+            ).otherwise(1)
         # special format validation for school_id_giga
         if column in df.columns and column == "school_id_giga":
             column_actions[f"dq_is_not_36_character_hash-{column}"] = f.when(
-                f.regexp_extract(f.col(column), r"\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b", 0) != "",
+                f.regexp_extract(
+                    f.col(column),
+                    r"\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b",
+                    0,
+                )
+                != "",
                 0,
-            ).otherwise(1)  
+            ).otherwise(1)
 
     return df.withColumns(column_actions)
 
@@ -161,7 +166,7 @@ def is_string_less_than_255_characters_check(
 
     return df.withColumns(column_actions)
 
-        
+
 def standard_checks(
     df: sql.DataFrame,
     dataset_type: str,
