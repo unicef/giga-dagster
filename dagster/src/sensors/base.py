@@ -1,6 +1,9 @@
 from pydantic import Field
 
 from dagster import Config
+from src.schemas.filename_components import FilenameComponents
+from src.utils.adls import deconstruct_filename_components
+from src.utils.datahub.builders import build_dataset_urn
 
 
 class FileConfig(Config):
@@ -34,6 +37,14 @@ class FileConfig(Config):
         default_factory=list,
         description="The list of columns to partition the Delta Lake table by.",
     )
+
+    @property
+    def filename_components(self) -> FilenameComponents:
+        return deconstruct_filename_components(self.filepath)
+
+    @property
+    def datahub_dataset_urn(self) -> str:
+        return build_dataset_urn(self.filepath)
 
 
 def get_dataset_type(filepath: str) -> str | None:

@@ -1,0 +1,2 @@
+class FilenameValidationException(Exception):
+    pass

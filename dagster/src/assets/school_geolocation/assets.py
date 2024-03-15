@@ -29,7 +29,6 @@ from src.utils.adls import (
     get_output_filepath,
     validate_filename,
 )
-from src.utils.datahub.builders import build_dataset_urn
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
     create_dataset_urn,
@@ -51,13 +50,11 @@ def geolocation_raw(
 ) -> bytes:
     validate_filename(config.filepath)
     raw = adls_file_client.download_raw(config.filepath)
-    dataset_urn = build_dataset_urn(config.filepath)
-    filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
         context,
         df=raw,
-        country_code=filename_components.country_code,
-        dataset_urn=dataset_urn,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_dataset_urn,
     )
     yield Output(raw, metadata=get_output_metadata(config))
 
@@ -70,11 +67,10 @@ def geolocation_bronze(
     spark: PySparkResource,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
-    filename_components = deconstruct_filename_components(config.filepath)
 
     with get_db_context() as db:
         file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == filename_components.id)
+            select(FileUpload).where(FileUpload.id == config.filename_components.id)
         )
         file_upload = FileUploadConfig.from_orm(file_upload)
 
@@ -93,13 +89,11 @@ def geolocation_bronze(
     df = create_giga_school_id(df)
     df = df.withColumn("connectivity_govt_ingestion_timestamp", current_timestamp())
 
-    dataset_urn = build_dataset_urn(config.filepath)
-    filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
         context,
         df=df,
-        country_code=filename_components.country_code,
-        dataset_urn=dataset_urn,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_dataset_urn,
     )
     yield Output(df.toPandas(), metadata=get_output_metadata(config))
 
@@ -120,8 +114,7 @@ def geolocation_data_quality_results(
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
-    filename_components = deconstruct_filename_components(config.filepath)
-    country_code = filename_components.country_code
+    country_code = config.filename_components.country_code
     dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
@@ -159,13 +152,11 @@ def geolocation_dq_passed_rows(
     config: FileConfig,
 ) -> sql.DataFrame:
     df_passed = dq_passed_rows(geolocation_dq_results, config.dataset_type)
-    dataset_urn = build_dataset_urn(config.filepath)
-    filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
         context,
         df_passed,
-        country_code=filename_components.country_code,
-        dataset_urn=dataset_urn,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_dataset_urn,
     )
     yield Output(df_passed.toPandas(), metadata=get_output_metadata(config))
 
@@ -177,13 +168,11 @@ def geolocation_dq_failed_rows(
     config: FileConfig,
 ) -> sql.DataFrame:
     df_failed = dq_failed_rows(geolocation_dq_results, config.dataset_type)
-    dataset_urn = build_dataset_urn(config.filepath)
-    filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
         context,
         df_failed,
-        country_code=filename_components.country_code,
-        dataset_urn=dataset_urn,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_dataset_urn,
     )
     yield Output(df_failed.toPandas(), metadata=get_output_metadata(config))
 
@@ -197,7 +186,6 @@ def geolocation_staging(
     config: FileConfig,
 ):
     dataset_type = config.dataset_type
-    filename_components = deconstruct_filename_components(config.filepath)
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'staging').split('_')[0]}"
 
@@ -208,7 +196,8 @@ def geolocation_staging(
     ):
         pending_filename_components = deconstruct_filename_components(file_data.name)
         if file_data.is_directory or (
-            pending_filename_components.country_code != filename_components.country_code
+            pending_filename_components.country_code
+            != config.filename_components.country_code
         ):
             continue
 
@@ -285,8 +274,9 @@ def geolocation_staging(
             spark.spark_session,
         )
 
-    dataset_urn = build_dataset_urn(config.filepath)
-    filename_components = deconstruct_filename_components(config.filepath)
     emit_metadata_to_datahub(
-        context, staging, filename_components.country_code, dataset_urn
+        context,
+        df=staging,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_dataset_urn,
     )

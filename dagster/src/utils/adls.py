@@ -20,6 +20,7 @@ from azure.storage.filedatalake import (
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
+from src.exceptions import FilenameValidationException
 from src.schemas.filename_components import FilenameComponents
 from src.settings import settings
 from src.utils.schema import get_primary_key, get_schema_columns
@@ -272,22 +273,22 @@ def validate_filename(filepath: str):
     splits = path.stem.split("_")
 
     if len(splits) < 2:
-        raise Exception(
+        raise FilenameValidationException(
             f"Expected at least 2 required components for filename `{path.name}`; got {len(splits)}"
         )
 
     if len(splits[1]) != 3:
-        raise Exception(
+        raise FilenameValidationException(
             f"Expected 2nd component of filename to be 3-letter ISO country code; got {splits[1]}"
         )
 
     if "geolocation" in path_parent and len(splits) != 4:
-        raise Exception(
+        raise FilenameValidationException(
             f"Expected 4 components for geolocation filename `{path.name}`; got {len(splits)}"
         )
 
     if "coverage" in path_parent and len(splits) != 5:
-        raise Exception(
+        raise FilenameValidationException(
             f"Expected 5 components for coverage filename `{path.name}`; got {len(splits)}"
         )
 

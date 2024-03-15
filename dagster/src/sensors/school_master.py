@@ -1,5 +1,6 @@
-from dagster import RunConfig, RunRequest, sensor
+from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
 from src.constants import constants
+from src.exceptions import FilenameValidationException
 from src.jobs.school_master import (
     school_master_coverage__automated_data_checks_job,
     school_master_coverage__failed_manual_checks_job,
@@ -18,7 +19,9 @@ from .base import FileConfig, get_dataset_type
     job=school_master_geolocation__automated_data_checks_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_master_geolocation__raw_file_uploads_sensor():
+def school_master_geolocation__raw_file_uploads_sensor(
+    context: SensorEvaluationContext,
+):
     adls = ADLSFileClient()
 
     file_list = adls.list_paths(f"{constants.raw_folder}/school-geolocation-data")
@@ -33,13 +36,17 @@ def school_master_geolocation__raw_file_uploads_sensor():
         metadata = properties.metadata
         size = properties.size
 
-        file_config = FileConfig(
-            filepath=filepath,
-            dataset_type="geolocation",
-            metadata=metadata,
-            file_size_bytes=size,
-            metastore_schema="school_geolocation",
-        )
+        try:
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type="geolocation",
+                metadata=metadata,
+                file_size_bytes=size,
+                metastore_schema="school_geolocation",
+            )
+        except FilenameValidationException as exc:
+            context.log.error(exc)
+            continue
 
         print(f"FILE: {filepath}")
 
@@ -64,7 +71,7 @@ def school_master_geolocation__raw_file_uploads_sensor():
     job=school_master_coverage__automated_data_checks_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_master_coverage__raw_file_uploads_sensor():
+def school_master_coverage__raw_file_uploads_sensor(context: SensorEvaluationContext):
     adls = ADLSFileClient()
 
     file_list = adls.list_paths(f"{constants.raw_folder}/school-coverage-data")
@@ -79,13 +86,17 @@ def school_master_coverage__raw_file_uploads_sensor():
         metadata = properties.metadata
         size = properties.size
 
-        file_config = FileConfig(
-            filepath=filepath,
-            dataset_type="coverage",
-            metadata=metadata,
-            file_size_bytes=size,
-            metastore_schema="school_coverage",
-        )
+        try:
+            file_config = FileConfig(
+                filepath=filepath,
+                dataset_type="coverage",
+                metadata=metadata,
+                file_size_bytes=size,
+                metastore_schema="school_coverage",
+            )
+        except FilenameValidationException as exc:
+            context.log.error(exc)
+            continue
 
         print(f"FILE: {filepath}")
 

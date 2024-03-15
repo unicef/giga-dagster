@@ -33,11 +33,11 @@ def create_school_id_giga(df: sql.DataFrame):
     df = df.withColumn(
         "identifier_concat",
         f.concat(
-            f.col("school_id_govt"),
-            f.col("school_name"),
-            f.col("education_level"),
-            f.col("latitude"),
-            f.col("longitude"),
+            f.col("school_id_govt").cast(StringType()),
+            f.col("school_name").cast(StringType()),
+            f.col("education_level").cast(StringType()),
+            f.col("latitude").cast(StringType()),
+            f.col("longitude").cast(StringType()),
         ),
     )
     df = df.withColumn(
