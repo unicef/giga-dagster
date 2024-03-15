@@ -1,12 +1,10 @@
 import enum
-from datetime import datetime
 
-from pydantic import EmailStr
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from models.base import BaseModel
+from models.base_database import BaseModel
 
 
 class AuthorizationTypeEnum(enum.Enum):
@@ -47,16 +45,16 @@ class ApiConfiguration(BaseModel):
     bearer_auth_bearer_token: Mapped[str] = mapped_column(nullable=True)
 
     data_key: Mapped[str] = mapped_column(nullable=True)
-    date_created: Mapped[datetime] = mapped_column(
+    date_created: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    date_modified: Mapped[datetime] = mapped_column(
+    date_modified: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    date_last_successfully_ingested: Mapped[datetime] = mapped_column(
+    date_last_successfully_ingested: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    date_last_ingested: Mapped[datetime] = mapped_column(
+    date_last_ingested: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
@@ -98,7 +96,7 @@ class SchoolList(ApiConfiguration):
         JSON, nullable=False, server_default=""
     )
     name: Mapped[str] = mapped_column(nullable=False, server_default="")
-    user_email: Mapped[EmailStr] = mapped_column(String(), nullable=False)
+    user_email: Mapped[str] = mapped_column(String(), nullable=False)
     user_id: Mapped[str] = mapped_column(nullable=False)
 
     school_connectivity: Mapped["SchoolConnectivity"] = relationship(

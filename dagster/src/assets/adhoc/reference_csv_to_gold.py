@@ -77,6 +77,10 @@ def adhoc__reference_dq_checks_passed(
     dq_passed = extract_dq_passed_rows(
         adhoc__reference_data_quality_checks, "reference"
     )
+    dq_passed = dq_passed.withColumn(
+        "signature", f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256)
+    )
+    context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
     yield Output(
         dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )

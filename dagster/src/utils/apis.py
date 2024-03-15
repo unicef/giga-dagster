@@ -3,7 +3,8 @@ from datetime import datetime
 
 import requests
 from models.qos_apis import SchoolConnectivity, SchoolList
-from sqlalchemy.orm import Session, update
+from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from dagster import OpExecutionContext
 

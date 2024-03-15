@@ -130,6 +130,12 @@ def adhoc__master_dq_checks_passed(
     context.log.info(
         f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}"
     )
+
+    dq_passed = dq_passed.withColumn(
+        "signature", f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256)
+    )
+    context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
+
     yield Output(
         dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )

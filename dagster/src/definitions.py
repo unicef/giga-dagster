@@ -2,6 +2,7 @@ from dagster import Definitions, load_assets_from_package_module
 from src import jobs, schedules, sensors
 from src.assets import (
     adhoc,
+    admin,
     common,
     datahub_assets,
     migrations,
@@ -39,6 +40,7 @@ defs = Definitions(
             package_module=migrations, group_name="migrations"
         ),
         *load_assets_from_package_module(package_module=adhoc, group_name="adhoc"),
+        *load_assets_from_package_module(package_module=admin, group_name="admin"),
     ],
     resources=RESOURCE_DEFINITIONS,
     jobs=load_jobs_from_package_module(jobs),
