@@ -20,7 +20,6 @@ from src.spark.coverage_transform_functions import (
 )
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
-from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -34,17 +33,17 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    # for testing only START - will be moved to io manager
-    filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    country_code = filepath.split("_")[1]
-    platform = builder.make_data_platform_urn("adlsGen2")
-    dataset_urn = builder.make_dataset_urn(
-        platform=platform,
-        env=settings.ADLS_ENVIRONMENT,
-        name=filepath.split(".")[0].replace("/", "."),
-    )
-    emit_metadata_to_datahub(context, df, country_code, dataset_urn)
-    # for testing only END - will be moved to io manager
+    # # for testing only START - will be moved to io manager
+    # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
+    # country_code = filepath.split("_")[1]
+    # platform = builder.make_data_platform_urn("adlsGen2")
+    # dataset_urn = builder.make_dataset_urn(
+    #     platform=platform,
+    #     env=settings.ADLS_ENVIRONMENT,
+    #     name=filepath.split(".")[0].replace("/", "."),
+    # )
+    # emit_metadata_to_datahub(context, df, country_code, dataset_urn)
+    # # for testing only END - will be moved to io manager
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
