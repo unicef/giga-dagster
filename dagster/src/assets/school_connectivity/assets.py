@@ -2,6 +2,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark import sql
+from schemas.qos import SchoolConnectivityConfig
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -11,7 +12,7 @@ from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
-from src.utils.apis import query_API_data
+from src.utils.apis.school_connectivity_APIs import query_school_connectivity_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
@@ -21,18 +22,46 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 def qos_school_connectivity_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+    config: SchoolConnectivityConfig,
 ) -> pd.DataFrame:
-    row_data = context.get_step_execution_context().op_config
+    # Is QOS connectivity ingestion by country? Not sure which country to select if it's not
+    school_list_filename = f"{settings.AZURE_BLOB_CONNECTION_URI}/silver/school-list-data/{config['school_list']['name']}"
 
-    df = pd.DataFrame.from_records(query_API_data(context, row_data))
+    school_list_data = adls_file_client.download_delta_table_as_spark_dataframe(
+        school_list_filename, spark.spark_session
+    ).toPandas()
 
     archived_files = adls_file_client.list_paths(
         "archive/missing-giga-school-id"
     )  # should we check all files? I think we'll get a lot of duplicates from previous runs -- should we just get the most recent archived file?
 
-    for file in archived_files:
-        archived_rows = pd.read_csv(file)
-        df = df.append(archived_rows, ignore_index=True)
+    archived_files.sort(key=lambda x: x["date_modified"], reverse=True)
+
+    # Get the most recent archived file (should have all archived rows)
+    school_list_data_archived = (
+        adls_file_client.download_delta_table_as_spark_dataframe(
+            f"{settings.AZURE_BLOB_CONNECTION_URI}/{archived_files[0]}",
+            spark.spark_session,
+        ).toPandas()
+    )
+
+    school_ids_new: list[int] = list(
+        school_list_data[config["school_list"]["school_id_key"]]
+    )
+    school_ids_archived: list[int] = list(
+        school_list_data_archived[config["school_list"]["school_id_key"]]
+    )
+
+    school_ids = school_ids_new.extend(school_ids_archived)
+
+    df = pd.DataFrame()
+    for id in school_ids:
+        school_connectivity_data = pd.DataFrame.from_records(
+            query_school_connectivity_API_data(context, config, id)
+        )
+
+        df = df.append(school_connectivity_data, ignore_index=True)
 
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})

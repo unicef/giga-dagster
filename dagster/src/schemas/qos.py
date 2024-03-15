@@ -53,17 +53,10 @@ class ApiConfiguration(Config):
     request_body: str | None
     request_method: RequestMethodEnum
     school_id_key: str
-    school_id_send_query_in: SendQueryInEnum
     size: int | None
 
     class Config:
         from_attributes = True
-
-
-class SchoolConnectivityConfig(ApiConfiguration):
-    ingestion_frequency_minutes: int
-    schema_url: str
-    school_list_id: str
 
 
 class SchoolListConfig(ApiConfiguration):
@@ -71,4 +64,11 @@ class SchoolListConfig(ApiConfiguration):
     name: str
     user_email: str
     user_id: str
-    school_connectivity: SchoolConnectivityConfig
+
+
+class SchoolConnectivityConfig(ApiConfiguration):
+    ingestion_frequency_minutes: int
+    school_id_send_query_in: SendQueryInEnum
+    schema_url: str
+    school_list_id: str
+    school_list: SchoolListConfig
