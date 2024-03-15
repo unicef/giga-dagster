@@ -1,5 +1,3 @@
-import time
-
 import datahub.emitter.mce_builder as builder
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -119,9 +117,6 @@ def coverage_dq_failed_rows(
     yield Output(df_failed, metadata={"filepath": get_output_filepath(context)})
 
 
-# OUTPUT OF THIS IS A STAGING DATAFRAME COMPOSED OF INCOMING COVERAGE DATA + CURRENT SILVER COVERAGE
-
-
 # SOME QUESTIONS:
 # 1. What if multiple raw files
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -130,10 +125,11 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> sql.DataFrame:
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     source = filepath.split("_")[3]
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     silver_table_name = filepath.split("/").split("_")[1]
 
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('/')[:-1]}/{silver_table_name}"
@@ -154,6 +150,7 @@ def coverage_bronze(
         if silver:
             df = itu_coverage_merge(df, silver)
 
+    emit_metadata_to_datahub(context, df=df)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
@@ -163,14 +160,14 @@ def coverage_staging(
     coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ):
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
+    dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
     staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'staging').split('_')[0]}"
     country_code = filepath.split("/")[-1].split("_")[1]
 
-    # If a staging table already exists, how do we prevent merging files that were already merged?
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.list_paths(
@@ -191,11 +188,7 @@ def coverage_staging(
                 {"filepath": file_data["name"], "date_modified": date_modified}
             )
 
-    files_for_review.sort(
-        key=lambda x: time.mktime(
-            time.strptime(x["date_modified"], "%d/%m/%Y %H:%M:%S")
-        )
-    )
+    files_for_review.sort(key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 

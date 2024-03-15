@@ -7,6 +7,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.schemas.qos import SchoolListConfig
 from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
@@ -15,90 +16,86 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
-from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
-from src.utils.datahub.emit_dataset_metadata import (
-    create_dataset_urn,
-    emit_metadata_to_datahub,
-)
+from src.utils.apis import query_API_data
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.db import get_db_context
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def geolocation_raw(
-    context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
+def qos_school_list_raw(
+    context: OpExecutionContext, config: SchoolListConfig
 ) -> pd.DataFrame:
-    df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"]
-    )
+    row_data = config
+
+    with get_db_context() as database_session:
+        df = pd.DataFrame.from_records(
+            query_API_data(context, database_session, row_data)
+        )
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
 @asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
-def geolocation_bronze(
+def qos_school_list_bronze(
     context: OpExecutionContext,
-    geolocation_raw: sql.DataFrame,
+    qos_school_list_raw: sql.DataFrame,
 ) -> pd.DataFrame:
-    df = create_bronze_layer_columns(geolocation_raw)
-    emit_metadata_to_datahub(context, df=geolocation_raw)
+    ## @RENZ NEED TO ADD TRANSFORM TO CONVERT COLUMNS TO SCHEMA COLUMNS
+    df = create_bronze_layer_columns(qos_school_list_raw)
+    emit_metadata_to_datahub(context, df=qos_school_list_raw)
     yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
 @multi_asset(
     outs={
-        "geolocation_dq_results": AssetOut(
+        "qos_school_list_dq_results": AssetOut(
             is_required=True, io_manager_key="adls_pandas_io_manager"
         ),
-        "geolocation_dq_summary_statistics": AssetOut(
+        "qos_school_list_dq_summary_statistics": AssetOut(
             is_required=True, io_manager_key="adls_json_io_manager"
         ),
     }
 )
-def geolocation_data_quality_results(
+def qos_school_list_data_quality_results(
     context,
     config: FileConfig,
-    geolocation_bronze: sql.DataFrame,
+    qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
-    dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
+    dq_results = row_level_checks(qos_school_list_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
+        aggregate_report_spark_df(spark.spark_session, dq_results),
+        qos_school_list_bronze,
     )
 
     yield Output(
         dq_results.toPandas(),
-        metadata={"filepath": get_output_filepath(context, "geolocation_dq_results")},
-        output_name="geolocation_dq_results",
+        metadata={
+            "filepath": get_output_filepath(context, "qos_school_list_dq_results")
+        },
+        output_name="qos_school_list_dq_results",
     )
-
-    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
-    dataset_urn = create_dataset_urn(context, is_upstream=False)
-    emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
-    )
-    emit_assertions()
-    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
 
     yield Output(
         dq_summary_statistics,
         metadata={
             "filepath": get_output_filepath(
-                context, "geolocation_dq_summary_statistics"
+                context, "qos_school_list_dq_summary_statistics"
             )
         },
-        output_name="geolocation_dq_summary_statistics",
+        output_name="qos_school_list_dq_summary_statistics",
     )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def geolocation_dq_passed_rows(
+def qos_school_list_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_dq_results: sql.DataFrame,
+    qos_school_list_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_passed = geolocation_dq_results
+    df_passed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_passed)
     yield Output(
         df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -106,11 +103,11 @@ def geolocation_dq_passed_rows(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def geolocation_dq_failed_rows(
+def qos_school_list_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_dq_results: sql.DataFrame,
+    qos_school_list_dq_results: sql.DataFrame,
 ) -> sql.DataFrame:
-    df_failed = geolocation_dq_results
+    df_failed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(
         df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
@@ -118,12 +115,12 @@ def geolocation_dq_failed_rows(
 
 
 @asset(io_manager_key="adls_delta_io_manager")
-def geolocation_staging(
+def qos_school_list_staging(
     context: OpExecutionContext,
-    geolocation_dq_passed_rows: sql.DataFrame,
+    qos_school_list_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: FileConfig,
+    config: SchoolListConfig,
 ):
     dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
@@ -133,7 +130,7 @@ def geolocation_staging(
 
     # {filepath: str, date_modified: str}
     files_for_review = []
-    for file_data in adls_file_client.list_paths(
+    for file_data in adls_file_client.qos_school_list_paths(
         f"staging/pending-review/school-{dataset_type}-data"
     ):
         if (
@@ -202,7 +199,7 @@ def geolocation_staging(
         staging.execute()
 
     else:
-        staging = geolocation_dq_passed_rows
+        staging = qos_school_list_dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
