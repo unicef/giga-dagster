@@ -111,13 +111,15 @@ def geolocation_bronze(
     }
 )
 def geolocation_data_quality_results(
-    context,
+    context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
     country_code = config.filename_components.country_code
-    dq_results = row_level_checks(geolocation_bronze, "geolocation", country_code)
+    dq_results = row_level_checks(
+        geolocation_bronze, "geolocation", country_code, context
+    )
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
     )
@@ -131,7 +133,9 @@ def geolocation_data_quality_results(
     )
 
     context.log.info("EMITTING ASSERTIONS TO DATAHUB")
-    dataset_urn = create_dataset_urn(context, is_upstream=False)
+    dataset_urn = create_dataset_urn(
+        context, is_upstream=False, output_name="geolocation_dq_results"
+    )
     emit_assertions = EmitDatasetAssertionResults(
         dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
     )

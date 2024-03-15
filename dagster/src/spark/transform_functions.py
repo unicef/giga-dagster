@@ -140,7 +140,9 @@ def rename_raw_columns(df):  ## function for renaming raw files. adhoc
 
 
 def column_mapping_rename(df, column_mapping):
-    column_mapping = {k: v for k, v in column_mapping.items() if v is not None}
+    column_mapping = {
+        k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)
+    }
 
     return df.withColumnsRenamed(column_mapping)
 
