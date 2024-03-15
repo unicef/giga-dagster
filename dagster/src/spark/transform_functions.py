@@ -1,8 +1,9 @@
 import uuid
 
 import h3
+from pyspark import sql
 from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, StringType
+from pyspark.sql.types import ArrayType, StringType, NullType, StructField
 
 from src.settings import settings
 from src.spark.config_expectations import config
@@ -20,7 +21,7 @@ def create_school_id_giga(df):
     school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
-            df = df.withColumn("school_id_giga1", f.lit(None))
+            df = df.withColumn("school_id_giga", f.lit(None))
             return df 
     
     df = df.withColumn(
@@ -33,7 +34,7 @@ def create_school_id_giga(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("school_id_giga1", f.when(
+    df = df.withColumn("school_id_giga", f.when(
                 (f.col("school_id_govt").isNull()) |
                 (f.col("school_name").isNull()) |
                 (f.col("education_level").isNull()) |
@@ -143,11 +144,13 @@ def column_mapping_rename(df, column_mapping):
     return df
 
 
-def impute_geolocation_columns(df):
-    for column in config.GEOLOCATION_COLUMNS:
-        if column not in df.columns:
-            df = df.withColumn(f"{column}", f.lit(None))
-    return df
+def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
+    columns_to_add = {
+        col.name: f.lit(None).cast(NullType())
+        for col in schema_columns
+        if col.name not in df.columns
+    }
+    return df.withColumns(columns_to_add)
 
 
 def bronze_prereq_columns(df):
@@ -157,9 +160,9 @@ def bronze_prereq_columns(df):
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
-def create_bronze_layer_columns(df):
+def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     # Impute missing cols with null
-    df = impute_geolocation_columns(df)
+    df = add_missing_columns(df, schema_columns )
 
     # Select required columns for bronze
     df = bronze_prereq_columns(df)
@@ -259,10 +262,10 @@ if __name__ == "__main__":
     # data = [(i, 1) for i in range(10)]
     # df = spark.createDataFrame(data, ["id", "code"])
     # df.show()
-    # columnMapping =  {
-    #   'school_id_govt': 'id',
-    #   'school_name': 'code',
-    #   }
+    columnMapping =  {
+      'school_id_govt': 'id',
+      'school_name': 'code',
+      }
     # df = column_mapping_rename(df, columnMapping)
     # df = impute_geolocation_columns(df)
     df = df_bronze.select(["school_id_giga", "school_id_govt","school_name","education_level","latitude","longitude"])
