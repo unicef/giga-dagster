@@ -6,7 +6,6 @@ from delta.tables import DeltaTable
 from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import current_timestamp
 from sqlalchemy import select
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -19,8 +18,7 @@ from src.schemas.file_upload import FileUploadConfig
 from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import (
-    add_missing_columns,
-    create_giga_school_id,
+    create_bronze_layer_columns,
 )
 from src.utils.adls import (
     ADLSFileClient,
@@ -77,6 +75,7 @@ def geolocation_bronze(
     column_mapping = {
         k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
     }
+    context.op_config["metadata"].update({"column_mapping": column_mapping})
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
@@ -84,10 +83,7 @@ def geolocation_bronze(
 
     schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
     df = s.createDataFrame(pdf)
-    df = df.withColumnsRenamed(column_mapping)
-    df = add_missing_columns(df, schema_columns)
-    df = create_giga_school_id(df)
-    df = df.withColumn("connectivity_govt_ingestion_timestamp", current_timestamp())
+    df = create_bronze_layer_columns(df, schema_columns)
 
     emit_metadata_to_datahub(
         context,
@@ -95,7 +91,13 @@ def geolocation_bronze(
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_dataset_urn,
     )
-    yield Output(df.toPandas(), metadata=get_output_metadata(config))
+    yield Output(
+        df.toPandas(),
+        metadata={
+            **get_output_metadata(config),
+            "column_mapping": column_mapping,
+        },
+    )
 
 
 @multi_asset(

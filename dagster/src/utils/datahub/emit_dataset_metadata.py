@@ -1,5 +1,6 @@
 import os.path
 from datetime import datetime
+from typing import Any
 
 import country_converter as cc
 import datahub.emitter.mce_builder as builder
@@ -61,7 +62,9 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
 
     domain = context.get_step_execution_context().op_config["dataset_type"]
     file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
-    metadata = context.get_step_execution_context().op_config["metadata"]
+    metadata: dict[str, Any] = context.get_step_execution_context().op_config[
+        "metadata"
+    ]
 
     data_format = os.path.splitext(output_filepath)[1].lstrip(".")
     country_name = identify_country_name(country_code=country_code)
@@ -83,6 +86,7 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
         "Dagster Job Name": context.job_def.name,
         "Dagster Run Created Timestamp": start_time,
         "Dagster Sensor Name": context.run_tags.get("dagster/sensor_name"),
+        "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now().isoformat(),
         "Domain": domain,
         "Data Format": data_format,
@@ -90,9 +94,17 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
         "Country": country_name,
     }
 
+    formatted_metadata = {}
+    for k, v in metadata.items():
+        if k == "column_mapping":
+            v = ", ".join([f"{k} -> {v}" for k, v in v.items()])
+
+        friendly_name = k.replace("_", " ").title()
+        formatted_metadata[friendly_name] = v
+
     dataset_properties = DatasetPropertiesClass(
         description=step,
-        customProperties={**metadata, **custom_metadata},
+        customProperties={**formatted_metadata, **custom_metadata},
     )
 
     return dataset_properties

@@ -101,6 +101,8 @@ class ADLSFileClient(ConfigurableResource):
                 raise OSError(f"Unsupported format for file {filepath}")
 
         metadata = context.step_context.op_config["metadata"]
+        metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
+
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)

@@ -154,8 +154,9 @@ def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     return df.withColumns(columns_to_add)
 
 
-def bronze_prereq_columns(df):
-    df = df.select(*config.GEOLOCATION_COLUMNS)
+def bronze_prereq_columns(df, schema_columns: list[StructField]):
+    column_names = [col.name for col in schema_columns]
+    df = df.select(*column_names)
 
     return df
 
@@ -166,7 +167,7 @@ def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructFi
     df = add_missing_columns(df, schema_columns)
 
     # Select required columns for bronze
-    df = bronze_prereq_columns(df)
+    df = bronze_prereq_columns(df, schema_columns)
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
