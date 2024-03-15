@@ -162,7 +162,7 @@ def bronze_prereq_columns(df):
 # Note: Temporary function for transforming raw files to standardized columns.
 def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     # Impute missing cols with null
-    df = add_missing_columns(df, schema_columns )
+    df = add_missing_columns(df, schema_columns)
 
     # Select required columns for bronze
     df = bronze_prereq_columns(df)
