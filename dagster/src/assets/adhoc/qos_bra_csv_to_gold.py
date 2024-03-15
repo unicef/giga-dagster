@@ -8,7 +8,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.spark import transform_types
 
@@ -19,7 +19,7 @@ from dagster import OpExecutionContext, Output, asset
 def adhoc__load_qos_bra_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
@@ -29,7 +29,7 @@ def adhoc__load_qos_bra_csv(
 def adhoc__qos_bra_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
-    config: FileConfig,
+    config: AssetFileConfig,
     adhoc__load_qos_bra_csv: bytes,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
@@ -63,7 +63,7 @@ def adhoc__qos_bra_transforms(
 def adhoc__publish_qos_bra_to_gold(
     context: OpExecutionContext,
     adhoc__qos_bra_transforms: sql.DataFrame,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> sql.DataFrame:
     df_transformed = transform_types(
         adhoc__qos_bra_transforms, config.metastore_schema, context

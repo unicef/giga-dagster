@@ -8,7 +8,7 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas.qos import SchoolListConfig
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import (
@@ -60,7 +60,7 @@ def qos_school_list_bronze(
 )
 def qos_school_list_data_quality_results(
     context,
-    config: FileConfig,
+    config: AssetFileConfig,
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):

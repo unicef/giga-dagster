@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
@@ -52,7 +52,7 @@ def silver(
     manual_review_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> sql.DataFrame:
     dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
@@ -89,7 +89,7 @@ def silver(
 )
 def gold(
     context: OpExecutionContext,
-    config: FileConfig,
+    config: AssetFileConfig,
     silver: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,

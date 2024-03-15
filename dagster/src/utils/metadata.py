@@ -1,7 +1,7 @@
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 
 
-def get_output_metadata(config: FileConfig, filepath: str = None):
+def get_output_metadata(config: AssetFileConfig, filepath: str = None):
     metadata = {
         **config.dict(exclude={"metadata"}),
         **config.metadata,

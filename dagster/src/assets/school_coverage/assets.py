@@ -8,7 +8,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 from src.settings import settings
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
@@ -61,7 +61,7 @@ def coverage_raw(
 )
 def coverage_data_quality_results(
     context,
-    config: FileConfig,
+    config: AssetFileConfig,
     coverage_raw: sql.DataFrame,
     spark: PySparkResource,
 ):
@@ -130,7 +130,7 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> sql.DataFrame:
     filepath = context.run_tags["dagster/run_key"].split("/")[-1]
     source = filepath.split("_")[3]
@@ -165,7 +165,7 @@ def coverage_staging(
     coverage_bronze: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: FileConfig,
+    config: AssetFileConfig,
 ):
     dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]

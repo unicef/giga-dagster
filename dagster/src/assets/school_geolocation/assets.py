@@ -15,7 +15,7 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas.file_upload import FileUploadConfig
-from src.sensors.base import FileConfig
+from src.sensors.base import AssetFileConfig
 from src.settings import settings
 from src.spark.transform_functions import (
     create_bronze_layer_columns,
@@ -44,7 +44,7 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 def geolocation_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> bytes:
     validate_filename(config.filepath)
     raw = adls_file_client.download_raw(config.filepath)
@@ -61,7 +61,7 @@ def geolocation_raw(
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
-    config: FileConfig,
+    config: AssetFileConfig,
     spark: PySparkResource,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
@@ -112,7 +112,7 @@ def geolocation_bronze(
 )
 def geolocation_data_quality_results(
     context: OpExecutionContext,
-    config: FileConfig,
+    config: AssetFileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
 ):
@@ -155,7 +155,7 @@ def geolocation_data_quality_results(
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_dq_results: sql.DataFrame,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> sql.DataFrame:
     df_passed = dq_passed_rows(geolocation_dq_results, config.dataset_type)
     emit_metadata_to_datahub(
@@ -171,7 +171,7 @@ def geolocation_dq_passed_rows(
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_dq_results: sql.DataFrame,
-    config: FileConfig,
+    config: AssetFileConfig,
 ) -> sql.DataFrame:
     df_failed = dq_failed_rows(geolocation_dq_results, config.dataset_type)
     emit_metadata_to_datahub(
@@ -189,7 +189,7 @@ def geolocation_staging(
     geolocation_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: FileConfig,
+    config: AssetFileConfig,
 ):
     dataset_type = config.dataset_type
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'silver').split('_')[0]}"

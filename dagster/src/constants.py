@@ -20,15 +20,21 @@ from pyspark.sql.types import (
 
 
 class Constants(BaseSettings):
+    UPLOAD_PATH_PREFIX: str = "raw/uploads"
+
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = "raw_schema"
+    bronze_folder = "bronze"
+    silver_folder = "silver"
+    gold_folder = "gold"
+    dq_results_folder = "data-quality-results"
+    staging_folder = "staging"
+
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
     qos_source_folder = "gold/qos"
-
-    UPLOAD_PATH_PREFIX: str = "raw/uploads"
 
     step_origin_map: dict[str, str] = {
         "geolocation_raw": "",
