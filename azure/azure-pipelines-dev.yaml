@@ -21,8 +21,8 @@ variables:
   - template: templates/variables.yaml
 
 stages:
-  - template: templates/test-workflow.yaml
-    condition: eq(Build.Reason, 'PullRequest')
+  - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+      - template: templates/test-workflow.yaml
 
-  - template: templates/deploy-workflow.yaml
-    condition: not(eq(Build.Reason, 'PullRequest'))
+  - ${{ if not(eq(variables['Build.Reason'], 'PullRequest')) }}:
+      - template: templates/deploy-workflow.yaml
