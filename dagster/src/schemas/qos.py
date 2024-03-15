@@ -67,7 +67,7 @@ class SchoolListConfig(ApiConfiguration):
 
 
 class SchoolConnectivityConfig(ApiConfiguration):
-    ingestion_frequency_minutes: int
+    ingestion_frequency_cron: str
     school_id_send_query_in: SendQueryInEnum
     schema_url: str
     school_list_id: str
