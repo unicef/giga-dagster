@@ -20,7 +20,7 @@ def create_school_id_giga(df):
     school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
-            df = df.withColumn("school_id_giga", f.lit(None))
+            df = df.withColumn("school_id_giga1", f.lit(None))
             return df 
     
     df = df.withColumn(
@@ -33,7 +33,7 @@ def create_school_id_giga(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("school_id_giga", f.when(
+    df = df.withColumn("school_id_giga1", f.when(
                 (f.col("school_id_govt").isNull()) |
                 (f.col("school_name").isNull()) |
                 (f.col("education_level").isNull()) |
@@ -239,32 +239,34 @@ if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
     #
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
-    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
     
     spark = get_spark_session()
-    # master = spark.read.csv(file_url_master, header=True)
-    # reference = spark.read.csv(file_url_reference, header=True)
-    # df_bronze = master.join(reference, how="left", on="school_id_giga")
+    master = spark.read.csv(file_url_master, header=True)
+    reference = spark.read.csv(file_url_reference, header=True)
+    df_bronze = master.join(reference, how="left", on="school_id_giga")
 
 
     # df = spark.read.csv(file_url, header=True)
     # df = create_bronze_layer_columns(df)
     # df.show() 
-    data = [(i, 1) for i in range(10)]
 
     # Create DataFrame
-    df = spark.createDataFrame(data, ["id", "code"])
-    df.show()
-    columnMapping =  {
-      'school_id_govt': 'id',
-      'school_name': 'code',
-      }
-    df = column_mapping_rename(df, columnMapping)
-    df = impute_geolocation_columns(df)
+    # data = [(i, 1) for i in range(10)]
+    # df = spark.createDataFrame(data, ["id", "code"])
+    # df.show()
+    # columnMapping =  {
+    #   'school_id_govt': 'id',
+    #   'school_name': 'code',
+    #   }
+    # df = column_mapping_rename(df, columnMapping)
+    # df = impute_geolocation_columns(df)
+    df = df_bronze.select(["school_id_giga", "school_id_govt","school_name","education_level","latitude","longitude"])
+    df = df.withColumn("school_name", f.trim(f.col("school_name")))
     df = create_school_id_giga(df)
     df.show()
 
