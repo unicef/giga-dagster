@@ -275,8 +275,8 @@ def row_level_checks(
     elif dataset_type == "coverage_itu":
         df = standard_checks(df, dataset_type, context, domain=False)
         df = column_relation_checks(df, dataset_type, context)
-    elif dataset_type == "QoS":
-        df = standard_checks(df, dataset_type, context, domain=False)
+    # elif dataset_type == "qos": # no configs yet, commenting out
+    #     df = standard_checks(df, dataset_type, context, domain=False)
     return df
 
 
@@ -292,22 +292,28 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 if __name__ == "__main__":
     from src.settings import settings
     from src.utils.spark import get_spark_session
+    from src.spark.transform_functions import create_giga_school_id
 
     spark = get_spark_session()
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
-    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     master = spark.read.csv(file_url_master, header=True)
     reference = spark.read.csv(file_url_reference, header=True)
     df_bronze = master.join(reference, how="left", on="school_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
-    df_bronze.show()
+    # df_bronze.show()
     print(df_bronze.count())
     # df_bronze = df_bronze.sort("school_name").limit(30)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    df_bronze.show()
+    df = create_giga_school_id(df_bronze)
+    df.show()
     # df = row_level_checks(df_bronze, "QoS", "GIN")
     # df.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
@@ -319,7 +325,7 @@ if __name__ == "__main__":
     # df = standard_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
     # df = format_validation_checks(df_bronze)
-    df = column_relation_checks(df_bronze, 'coverage')
+    # df = column_relation_checks(df_bronze, 'coverage')
     # transforms = {}
     # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"] = f.when(
     #             (f.lower(f.col("connectivity")) == "yes") & (
@@ -354,8 +360,8 @@ if __name__ == "__main__":
     # # df = dq_passed_rows(df, "coverage")
     # df.orderBy("column").show()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
 
-    _json = aggregate_report_json(df, df_bronze)
-    print(_json)
+    # _json = aggregate_report_json(df, df_bronze)
+    # print(_json)
