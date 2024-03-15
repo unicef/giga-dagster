@@ -130,18 +130,12 @@ def rename_raw_columns(df): ## function for renaming raw files. adhoc
     return df
 
 
-def find_key_by_value(dictionary, value):
-    for key, val in dictionary.items():
-        if val == value:
-            return key
-    return None
-
-
 def column_mapping_rename(df, column_mapping):
-    for column in df.columns:
-        renamed_column = find_key_by_value(column_mapping, column)
-        df = df.withColumnRenamed(f"{column}", f"{renamed_column}")
-    return df
+    column_mapping = {
+        k: v for k, v in column_mapping.items() if v is not None
+    }
+
+    return df.withColumnsRenamed(column_mapping)
 
 
 def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
