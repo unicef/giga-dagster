@@ -1,13 +1,13 @@
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
-from models.qos_apis import SchoolList
 from pyspark import sql
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.schemas.qos import SchoolListConfig
 from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
@@ -25,7 +25,7 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def qos_school_list_raw(
-    context: OpExecutionContext, config: SchoolList
+    context: OpExecutionContext, config: SchoolListConfig
 ) -> pd.DataFrame:
     row_data = config
 
@@ -120,7 +120,7 @@ def qos_school_list_staging(
     qos_school_list_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: SchoolList,
+    config: SchoolListConfig,
 ):
     dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]

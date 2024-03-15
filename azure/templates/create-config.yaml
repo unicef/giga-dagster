@@ -57,8 +57,6 @@ jobs:
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
-                    INGESTION_DB_PORT: "$(ingestionPortalPostgresqlPort)"
-                    INGESTION_DB_HOST: "$(ingestionPortalPostgresqlHost)"
 
             - task: Kubernetes@1
               displayName: Create Datahub external service

@@ -18,9 +18,11 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from src.settings import settings
+
 
 class Constants(BaseSettings):
-    raw_folder = "adls-testing-raw"
+    raw_folder = "raw/uploads" if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = "raw_schema"
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
@@ -114,14 +116,6 @@ class Constants(BaseSettings):
             "qos_school_list_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "qos_school_list_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
             "qos_school_list_staging": f"staging/pending-review/school-{dataset_type}-data",
-            "qos_school_connectivity_raw": f"{self.raw_folder}/school-{dataset_type}-data",
-            "qos_school_connectivity_bronze": f"bronze/school-{dataset_type}-data",
-            "qos_school_connectivity_data_quality_results": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_connectivity_dq_results": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_connectivity_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_connectivity_dq_checks": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_connectivity_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
-            "qos_school_connectivity_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
         }
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
