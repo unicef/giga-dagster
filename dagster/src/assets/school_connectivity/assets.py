@@ -67,7 +67,7 @@ def qos_school_connectivity_raw(
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
+@asset(io_manager_key="adls_pandas_io_manager")
 def qos_school_connectivity_bronze(
     context: OpExecutionContext,
     qos_school_connectivity_raw: sql.DataFrame,
