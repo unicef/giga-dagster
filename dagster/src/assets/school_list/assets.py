@@ -16,7 +16,7 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
-from src.utils.apis import query_API_data
+from src.utils.apis.school_list_APIs import query_school_list_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.db import get_db_context
 
@@ -31,7 +31,7 @@ def qos_school_list_raw(
 
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_API_data(context, database_session, row_data)
+            query_school_list_API_data(context, database_session, row_data)
         )
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
