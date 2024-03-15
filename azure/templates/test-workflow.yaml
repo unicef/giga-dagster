@@ -3,7 +3,7 @@ stages:
     displayName: Run PR checks
     jobs:
       - job: PRChecks
-        displayName: Run PR checks
+        displayName: Run pre-commit
         strategy:
           matrix:
             Python311:
