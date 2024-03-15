@@ -46,12 +46,12 @@ def qos_school_connectivity_raw(
         ).toPandas()
     )
 
-    school_ids_new: list[int] = list(
-        school_list_data[config["school_list"]["school_id_key"]]
-    )
-    school_ids_archived: list[int] = list(
-        school_list_data_archived[config["school_list"]["school_id_key"]]
-    )
+    school_ids_new: list[int] = school_list_data[
+        config["school_list"]["school_id_key"]
+    ].to_list()
+    school_ids_archived: list[int] = school_list_data_archived[
+        config["school_list"]["school_id_key"]
+    ].to_list()
 
     school_ids = school_ids_new.extend(school_ids_archived)
 
