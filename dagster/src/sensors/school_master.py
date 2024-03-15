@@ -23,6 +23,15 @@ def school_master_geolocation__raw_file_uploads_sensor():
 
     file_list = adls.list_paths(f"{constants.raw_folder}/school-geolocation-data")
 
+    ops_list = [
+        "geolocation_raw",
+        "geolocation_bronze",
+        "geolocation_data_quality_results",
+        "geolocation_dq_passed_rows",
+        "geolocation_dq_failed_rows",
+        # 'geolocation_staging',
+    ]
+
     for file_data in file_list:
         if file_data.is_directory:
             continue
@@ -43,15 +52,6 @@ def school_master_geolocation__raw_file_uploads_sensor():
 
         print(f"FILE: {filepath}")
 
-        ops_list = [
-            "geolocation_raw",
-            "geolocation_bronze",
-            "geolocation_data_quality_results",
-            "geolocation_dq_passed_rows",
-            "geolocation_dq_failed_rows",
-            # 'geolocation_staging',
-        ]
-
         yield RunRequest(
             run_key=f"{filepath}",
             run_config=RunConfig(
@@ -68,6 +68,15 @@ def school_master_coverage__raw_file_uploads_sensor():
     adls = ADLSFileClient()
 
     file_list = adls.list_paths(f"{constants.raw_folder}/school-coverage-data")
+
+    ops_list = [
+        "coverage_raw",
+        "coverage_data_quality_results",
+        "coverage_dq_passed_rows",
+        "coverage_dq_failed_rows",
+        "coverage_bronze",
+        # 'coverage_staging',
+    ]
 
     for file_data in file_list:
         if file_data.is_directory:
@@ -89,15 +98,6 @@ def school_master_coverage__raw_file_uploads_sensor():
 
         print(f"FILE: {filepath}")
 
-        ops_list = [
-            "coverage_raw",
-            "coverage_data_quality_results",
-            "coverage_dq_passed_rows",
-            "coverage_dq_failed_rows",
-            "coverage_bronze",
-            # 'coverage_staging',
-        ]
-
         yield RunRequest(
             run_key=f"{filepath}",
             run_config=RunConfig(
@@ -114,6 +114,12 @@ def school_master_geolocation__successful_manual_checks_sensor():
     adls = ADLSFileClient()
 
     file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-geolocation-data")
+
+    ops_list = [
+        "manual_review_passed_rows",
+        "geolocation_bronze",
+        "geolocation_gold",
+    ]
 
     for file_data in file_list:
         if file_data.is_directory:
@@ -137,12 +143,6 @@ def school_master_geolocation__successful_manual_checks_sensor():
         )
 
         print(f"FILE: {filepath}")
-
-        ops_list = [
-            "manual_review_passed_rows",
-            "geolocation_bronze",
-            "geolocation_gold",
-        ]
 
         yield RunRequest(
             run_key=f"{filepath}",
@@ -161,6 +161,12 @@ def school_master_coverage__successful_manual_checks_sensor():
 
     file_list = adls.list_paths(f"{constants.dq_passed_folder}/school-coverage-data")
 
+    ops_list = [
+        "manual_review_passed_rows",
+        "coverage_bronze",
+        "coverage_gold",
+    ]
+
     for file_data in file_list:
         if file_data.is_directory:
             continue
@@ -183,12 +189,6 @@ def school_master_coverage__successful_manual_checks_sensor():
         )
 
         print(f"FILE: {filepath}")
-
-        ops_list = [
-            "manual_review_passed_rows",
-            "coverage_bronze",
-            "coverage_gold",
-        ]
 
         yield RunRequest(
             run_key=f"{filepath}",
