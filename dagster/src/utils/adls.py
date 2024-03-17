@@ -1,9 +1,7 @@
 import json
 import os.path
 from collections.abc import Iterator
-from datetime import datetime
 from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -20,8 +18,7 @@ from azure.storage.filedatalake import (
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
-from src.exceptions import FilenameValidationException
-from src.schemas.filename_components import FilenameComponents
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.schema import get_primary_key, get_schema_columns
 
@@ -88,19 +85,23 @@ class ADLSFileClient(ConfigurableResource):
     def upload_pandas_dataframe_as_file(
         self, context: OutputContext, data: pd.DataFrame, filepath: str
     ):
-        if len(splits := filepath.split(".")) < 2:
+        name, ext = os.path.splitext(filepath)
+        if not ext:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
         file_client = _adls.get_file_client(filepath)
-        match splits[-1]:
-            case "csv" | "xls" | "xlsx":
-                bytes_data = data.to_csv(mode="w+", index=False).encode("utf-8-sig")
-            case "json":
-                bytes_data = data.to_json(indent=2).encode()
+        match ext:
+            case ".csv" | ".xls" | ".xlsx":
+                bytes_data = data.to_csv(index=False).encode("utf-8-sig")
+            case ".json":
+                bytes_data = data.to_json(index=False, indent=2).encode()
+            case ".parquet":
+                bytes_data = data.to_parquet(index=False)
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
-        metadata = context.step_context.op_config["metadata"]
+        config = FileConfig(**context.step_context.op_config)
+        metadata = config.metadata
         metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
 
         with BytesIO(bytes_data) as buffer:
@@ -267,66 +268,3 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     source_filepath = get_filepath(source_path, dataset_type, origin_step)
 
     return source_filepath
-
-
-def validate_filename(filepath: str):
-    path = Path(filepath)
-    path_parent = path.parent.name
-    splits = path.stem.split("_")
-
-    if len(splits) < 2:
-        raise FilenameValidationException(
-            f"Expected at least 2 required components for filename `{path.name}`; got {len(splits)}"
-        )
-
-    if len(splits[1]) != 3:
-        raise FilenameValidationException(
-            f"Expected 2nd component of filename to be 3-letter ISO country code; got {splits[1]}"
-        )
-
-    if "geolocation" in path_parent and len(splits) != 4:
-        raise FilenameValidationException(
-            f"Expected 4 components for geolocation filename `{path.name}`; got {len(splits)}"
-        )
-
-    if "coverage" in path_parent and len(splits) != 5:
-        raise FilenameValidationException(
-            f"Expected 5 components for coverage filename `{path.name}`; got {len(splits)}"
-        )
-
-
-def deconstruct_filename_components(filepath: str):
-    """Deconstruct filename components for files uploaded through the Ingestion Portal"""
-
-    validate_filename(filepath)
-    path = Path(filepath)
-    path_parent = path.parent.name
-    splits = path.stem.split("_")
-    expected_timestamp_format = "%Y%m%d-%H%M%S"
-
-    if "geolocation" in path_parent:
-        id, country_code, dataset_type, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            country_code=country_code,
-        )
-
-    if "coverage" in path_parent:
-        id, country_code, dataset_type, source, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            source=source,
-            country_code=country_code,
-        )
-
-    id, country_code, *rest = splits
-    return FilenameComponents(
-        id=id,
-        dataset_type="unstructured",
-        country_code=country_code,
-        rest="_".join(rest),
-    )

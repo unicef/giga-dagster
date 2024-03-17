@@ -1,6 +1,5 @@
 import os.path
 from datetime import datetime
-from typing import Any
 
 import country_converter as cc
 import datahub.emitter.mce_builder as builder
@@ -19,8 +18,9 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
+from src.sensors.base import FileConfig
 from src.settings import settings
-from src.utils.adls import get_input_filepath, get_output_filepath
+from src.utils.adls import get_output_filepath
 
 from dagster import OpExecutionContext, version
 
@@ -39,9 +39,11 @@ def create_dataset_urn(
     context: OpExecutionContext, is_upstream: bool, output_name: str = None
 ) -> str:
     platform = builder.make_data_platform_urn("adlsGen2")
+    config = FileConfig(**context.get_step_execution_context().op_config)
+
     if is_upstream:
-        input_filepath = get_input_filepath(context)
-        upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
+        input_filepath = config.filepath_object
+        upstream_urn_name = str(input_filepath.parent / input_filepath.stem)
         upstream_urn_name = upstream_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
@@ -50,8 +52,8 @@ def create_dataset_urn(
             platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
-        output_filepath = get_output_filepath(context, output_name)
-        dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
+        output_filepath = config.destination_filepath_object
+        dataset_urn_name = str(output_filepath.parent / output_filepath.stem)
         dataset_urn_name = dataset_urn_name.replace(
             "/", "."
         )  # Datahub reads '.' as folder
@@ -61,12 +63,11 @@ def create_dataset_urn(
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
+    config = FileConfig(**context.get_step_execution_context().op_config)
 
-    domain = context.get_step_execution_context().op_config["dataset_type"]
-    file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
-    metadata: dict[str, Any] = context.get_step_execution_context().op_config[
-        "metadata"
-    ]
+    domain = config.dataset_type
+    file_size_bytes = config.file_size_bytes
+    metadata = config.metadata
 
     data_format = os.path.splitext(output_filepath)[1].lstrip(".")
     country_name = identify_country_name(country_code=country_code)
@@ -146,7 +147,8 @@ def define_schema_properties(df: pd.DataFrame):
 
 
 def set_domain(context: OpExecutionContext):
-    domain = context.get_step_execution_context().op_config["dataset_type"]
+    config = FileConfig(**context.get_step_execution_context().op_config)
+    domain = config.dataset_type
 
     if "school" in domain:
         domain_urn = make_domain_urn("School")

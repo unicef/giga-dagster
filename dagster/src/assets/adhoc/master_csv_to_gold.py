@@ -12,12 +12,12 @@ from pyspark.sql import (
 from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
-    dq_failed_rows as extract_dq_failed_rows,
-    dq_passed_rows as extract_dq_passed_rows,
+    dq_split_failed_rows as extract_dq_failed_rows,
+    dq_split_passed_rows as extract_dq_passed_rows,
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from src.sensors.base import AssetFileConfig
+from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.schema import get_schema_columns
@@ -30,7 +30,7 @@ from dagster import OpExecutionContext, Output, asset
 def adhoc__load_master_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
@@ -41,7 +41,7 @@ def adhoc__master_data_transforms(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
     spark: PySparkResource,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> pd.DataFrame:
     logger = ContextLoggerWithLoguruFallback(context)
 
@@ -95,7 +95,7 @@ def adhoc__df_duplicates(
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> pd.DataFrame:
     logger = ContextLoggerWithLoguruFallback(context)
 
@@ -174,7 +174,7 @@ def adhoc__master_dq_checks_summary(
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
-    config: AssetFileConfig,
+    config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
 ) -> sql.DataFrame:
     gold = transform_types(

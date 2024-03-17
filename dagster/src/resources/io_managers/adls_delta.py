@@ -38,7 +38,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
+        filepath = self._get_filepath(context)
         table_path = self._get_table_path(context.upstream_output, filepath)
 
         data = adls_client.download_delta_table_as_spark_dataframe(

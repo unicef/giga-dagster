@@ -6,8 +6,8 @@ school_master_geolocation__automated_data_checks_job = define_asset_job(
         # TODO: Replace with AssetSelection notation
         "geolocation_raw",
         "geolocation_bronze",
-        "geolocation_dq_results",
-        "geolocation_dq_summary_statistics",
+        "geolocation_data_quality_results",
+        "geolocation_data_quality_results_summary",
         "geolocation_dq_passed_rows",
         "geolocation_dq_failed_rows",
         # "geolocation_staging",

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
 from src.constants import constants
 from src.jobs.school_master import (
@@ -9,8 +11,7 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
 from .base import (
-    AssetOpDestinationMapping,
-    MultiAssetOpDestinationMapping,
+    OpDestinationMapping,
     generate_run_ops,
 )
 
@@ -32,56 +33,63 @@ def school_master_geolocation__raw_file_uploads_sensor(
         if file_data.is_directory:
             continue
 
-        filepath = file_data.name
-        properties = adls_file_client.get_file_metadata(filepath=filepath)
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
-            "geolocation_raw": AssetOpDestinationMapping(
-                path=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}",
+            "geolocation_raw": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_bronze": AssetOpDestinationMapping(
-                path=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}",
+            "geolocation_bronze": OpDestinationMapping(
+                source_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
+                destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_data_quality_results": MultiAssetOpDestinationMapping(
-                path={
-                    "geolocation_dq_results": f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall",
-                    "geolocation_dq_summary_statistics": f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary",
-                },
-                metastore_schema={
-                    "geolocation_dq_results": metastore_schema,
-                    "geolocation_dq_summary_statistics": metastore_schema,
-                },
-            ),
-            "geolocation_dq_passed_rows": AssetOpDestinationMapping(
-                path=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows",
+            "geolocation_data_quality_results": OpDestinationMapping(
+                source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_dq_failed_rows": AssetOpDestinationMapping(
-                path=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows",
+            "geolocation_data_quality_results_summary": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
+                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{stem}.json",
                 metastore_schema=metastore_schema,
             ),
-            # "geolocation_staging": AssetOpDestinationMapping(
-            #     path=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}", metastore_schema=metastore_schema
+            "geolocation_dq_passed_rows": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
+                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "geolocation_dq_failed_rows": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
+                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            # "geolocation_staging": OpDestinationMapping(
+            #     source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{stem}.csv",
+            #     destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+            #     metastore_schema=metastore_schema
             # ),
         }
 
         run_ops = generate_run_ops(
             context,
             ops_destination_mapping,
-            filepath=filepath,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
         )
 
-        context.log.info(f"FILE: {filepath}")
+        context.log.info(f"FILE: {str(path)}")
         yield RunRequest(
-            run_key=filepath,
+            run_key=str(path),
             run_config=RunConfig(ops=run_ops),
         )
 
@@ -100,44 +108,48 @@ def school_master_geolocation__successful_manual_checks_sensor(
         if file_data.is_directory:
             continue
 
-        filepath = file_data.name
-        properties = adls_file_client.get_file_metadata(filepath=filepath)
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
-            "manual_review_passed_rows": AssetOpDestinationMapping(
-                path=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows",
+            "manual_review_passed_rows": OpDestinationMapping(
+                source_filepath=str(path),
+                # TODO: Finalize format
+                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_silver": AssetOpDestinationMapping(
-                path=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}",
+            "geolocation_silver": OpDestinationMapping(
+                source_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{stem}.csv",
+                destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_gold": MultiAssetOpDestinationMapping(
-                path={
-                    "master": f"{constants.gold_folder}/school-master",
-                    "reference": f"{constants.gold_folder}/school-reference",
-                },
-                metastore_schema={
-                    "master": "school_master",
-                    "reference": "school_reference",
-                },
+            "geolocation_gold_master": OpDestinationMapping(
+                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+                metastore_schema="school_master",
+            ),
+            "geolocation_gold_reference": OpDestinationMapping(
+                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+                metastore_schema="school_reference",
             ),
         }
 
         run_ops = generate_run_ops(
             context,
             ops_destination_mapping,
-            filepath=filepath,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
         )
 
-        context.log.info(f"FILE: {filepath}")
-        yield RunRequest(run_key=f"{filepath}", run_config=RunConfig(ops=run_ops))
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
 
 
 @sensor(
@@ -154,15 +166,18 @@ def school_master_geolocation__failed_manual_checks_sensor(
         if file_data.is_directory:
             continue
 
-        filepath = file_data.name
-        properties = adls_file_client.get_file_metadata(filepath=filepath)
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
-            "manual_review_failed_rows": AssetOpDestinationMapping(
-                path=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/rejected-rows",
+            "manual_review_failed_rows": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/rejected-rows/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -170,11 +185,10 @@ def school_master_geolocation__failed_manual_checks_sensor(
         run_ops = generate_run_ops(
             context,
             ops_destination_mapping,
-            filepath=filepath,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
         )
 
-        context.log.info(f"FILE: {filepath}")
-        yield RunRequest(run_key=f"{filepath}", run_config=RunConfig(ops=run_ops))
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))

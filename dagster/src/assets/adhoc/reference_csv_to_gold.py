@@ -11,11 +11,11 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
-    dq_failed_rows as extract_dq_failed_rows,
-    dq_passed_rows as extract_dq_passed_rows,
+    dq_split_failed_rows as extract_dq_failed_rows,
+    dq_split_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
-from src.sensors.base import AssetFileConfig
+from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
@@ -27,7 +27,7 @@ from dagster import OpExecutionContext, Output, asset
 def adhoc__load_reference_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
@@ -38,7 +38,7 @@ def adhoc__reference_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_reference_csv: bytes,
     spark: PySparkResource,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
     filepath = config.filepath
@@ -103,7 +103,7 @@ def adhoc__reference_dq_checks_failed(
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
-    config: AssetFileConfig,
+    config: FileConfig,
     adhoc__reference_dq_checks_passed: sql.DataFrame,
 ) -> sql.DataFrame:
     gold = transform_types(

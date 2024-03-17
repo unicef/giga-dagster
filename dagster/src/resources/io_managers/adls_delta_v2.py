@@ -41,7 +41,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
+        filepath = self._get_filepath(context)
         table_name, table_root_path, table_path = self._get_table_path(
             context, filepath
         )

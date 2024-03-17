@@ -9,7 +9,7 @@ from src.jobs.school_master import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-from .base import AssetFileConfig, get_dataset_type
+from .base import FileConfig, get_dataset_type
 
 
 @sensor(
@@ -32,7 +32,7 @@ def school_master_coverage__raw_file_uploads_sensor(context: SensorEvaluationCon
         size = properties.size
 
         try:
-            file_config = AssetFileConfig(
+            file_config = FileConfig(
                 filepath=filepath,
                 dataset_type="coverage",
                 metadata=metadata,
@@ -84,7 +84,7 @@ def school_master_coverage__successful_manual_checks_sensor():
         metadata = properties.metadata
         size = properties.size
 
-        file_config = AssetFileConfig(
+        file_config = FileConfig(
             filepath=filepath,
             dataset_type=dataset_type,
             metadata=metadata,
@@ -129,7 +129,7 @@ def school_master_coverage__failed_manual_checks_sensor():
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties.metadata
             size = properties.size
-            file_config = AssetFileConfig(
+            file_config = FileConfig(
                 filepath=filepath,
                 dataset_type=dataset_type,
                 metadata=metadata,

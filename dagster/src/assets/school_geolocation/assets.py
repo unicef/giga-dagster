@@ -10,22 +10,19 @@ from sqlalchemy import select
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
-    dq_failed_rows,
-    dq_passed_rows,
+    dq_split_failed_rows,
+    dq_split_passed_rows,
     row_level_checks,
 )
 from src.schemas.file_upload import FileUploadConfig
-from src.sensors.base import AssetFileConfig
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import (
     create_bronze_layer_columns,
 )
 from src.utils.adls import (
     ADLSFileClient,
-    deconstruct_filename_components,
     get_filepath,
-    get_output_filepath,
-    validate_filename,
 )
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -33,18 +30,19 @@ from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
-from src.utils.metadata import get_output_metadata
+from src.utils.filename import deconstruct_filename_components, validate_filename
+from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns
 
-from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
 def geolocation_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
-    config: AssetFileConfig,
+    config: FileConfig,
 ) -> bytes:
     validate_filename(config.filepath)
     raw = adls_file_client.download_raw(config.filepath)
@@ -61,7 +59,7 @@ def geolocation_raw(
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
-    config: AssetFileConfig,
+    config: FileConfig,
     spark: PySparkResource,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
@@ -75,7 +73,7 @@ def geolocation_bronze(
     column_mapping = {
         k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
     }
-    context.op_config["metadata"].update({"column_mapping": column_mapping})
+    config.metadata.update({"column_mapping": column_mapping})
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
@@ -91,45 +89,51 @@ def geolocation_bronze(
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_dataset_urn,
     )
+    df_pandas = df.toPandas()
     yield Output(
-        df.toPandas(),
+        df_pandas,
         metadata={
             **get_output_metadata(config),
             "column_mapping": column_mapping,
+            "preview": get_table_preview(df_pandas),
         },
     )
 
 
-@multi_asset(
-    outs={
-        "geolocation_dq_results": AssetOut(
-            is_required=True, io_manager_key="adls_pandas_io_manager"
-        ),
-        "geolocation_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_json_io_manager"
-        ),
-    }
-)
+@asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_data_quality_results(
     context: OpExecutionContext,
-    config: AssetFileConfig,
+    config: FileConfig,
     geolocation_bronze: sql.DataFrame,
-    spark: PySparkResource,
 ):
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
         geolocation_bronze, "geolocation", country_code, context
     )
-    dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, dq_results), geolocation_bronze
+
+    dq_pandas = dq_results.toPandas()
+    yield Output(
+        dq_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(dq_pandas),
+        },
     )
 
-    yield Output(
-        dq_results.toPandas(),
-        metadata=get_output_metadata(
-            config, get_output_filepath(context, "geolocation_dq_results")
+
+@asset(io_manager_key="adls_json_io_manager")
+def geolocation_data_quality_results_summary(
+    context: OpExecutionContext,
+    geolocation_bronze: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> dict | list[dict]:
+    dq_summary_statistics = aggregate_report_json(
+        aggregate_report_spark_df(
+            spark.spark_session, geolocation_data_quality_results
         ),
-        output_name="geolocation_dq_results",
+        geolocation_bronze,
     )
 
     context.log.info("EMITTING ASSERTIONS TO DATAHUB")
@@ -137,50 +141,64 @@ def geolocation_data_quality_results(
         context, is_upstream=False, output_name="geolocation_dq_results"
     )
     emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
+        dataset_urn=dataset_urn,
+        dq_summary_statistics=dq_summary_statistics,
+        context=context,
     )
     emit_assertions()
     context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
 
-    yield Output(
-        dq_summary_statistics,
-        metadata=get_output_metadata(
-            config, get_output_filepath(context, "geolocation_dq_summary_statistics")
-        ),
-        output_name="geolocation_dq_summary_statistics",
-    )
+    yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_dq_results: sql.DataFrame,
-    config: AssetFileConfig,
+    geolocation_data_quality_results: sql.DataFrame,
+    config: FileConfig,
 ) -> sql.DataFrame:
-    df_passed = dq_passed_rows(geolocation_dq_results, config.dataset_type)
+    df_passed = dq_split_passed_rows(
+        geolocation_data_quality_results, config.dataset_type
+    )
     emit_metadata_to_datahub(
         context,
         df_passed,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_dataset_urn,
     )
-    yield Output(df_passed.toPandas(), metadata=get_output_metadata(config))
+    df_pandas = df_passed.toPandas()
+    yield Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_dq_results: sql.DataFrame,
-    config: AssetFileConfig,
+    geolocation_data_quality_results: sql.DataFrame,
+    config: FileConfig,
 ) -> sql.DataFrame:
-    df_failed = dq_failed_rows(geolocation_dq_results, config.dataset_type)
+    df_failed = dq_split_failed_rows(
+        geolocation_data_quality_results, config.dataset_type
+    )
     emit_metadata_to_datahub(
         context,
         df_failed,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_dataset_urn,
     )
-    yield Output(df_failed.toPandas(), metadata=get_output_metadata(config))
+    df_pandas = df_failed.toPandas()
+    yield Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
 
 
 @asset(io_manager_key="adls_delta_io_manager")
@@ -189,7 +207,7 @@ def geolocation_staging(
     geolocation_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
-    config: AssetFileConfig,
+    config: FileConfig,
 ):
     dataset_type = config.dataset_type
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'silver').split('_')[0]}"

@@ -10,7 +10,7 @@ from src.jobs.adhoc import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-from .base import AssetFileConfig
+from .base import FileConfig
 
 
 @sensor(
@@ -31,7 +31,7 @@ def school_master__gold_csv_to_deltatable_sensor():
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties.metadata
             size = properties.size
-            file_config = AssetFileConfig(
+            file_config = FileConfig(
                 filepath=filepath,
                 dataset_type="master",
                 metadata=metadata,
@@ -83,7 +83,7 @@ def school_reference__gold_csv_to_deltatable_sensor():
             properties = adls.get_file_metadata(filepath=filepath)
             metadata = properties.metadata
             size = properties.size
-            file_config = AssetFileConfig(
+            file_config = FileConfig(
                 filepath=filepath,
                 dataset_type="reference",
                 metadata=metadata,
@@ -134,7 +134,7 @@ def school_qos_bra__gold_csv_to_deltatable_sensor():
     for file_data in file_list:
         filepath = file_data.name
         properties = adls.get_file_metadata(filepath=filepath)
-        file_config = AssetFileConfig(
+        file_config = FileConfig(
             filepath=filepath,
             dataset_type="qos",
             metadata=properties.metadata,

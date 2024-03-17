@@ -1,23 +1,23 @@
-from abc import ABC
-from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from dagster import Config, SensorEvaluationContext
 from src.exceptions import FilenameValidationException
 from src.schemas.filename_components import FilenameComponents
-from src.utils.adls import deconstruct_filename_components
 from src.utils.datahub.builders import build_dataset_urn
+from src.utils.filename import deconstruct_filename_components
 
 
-class BaseFileConfig(Config, ABC):
+class FileConfig(Config):
     filepath: str = Field(
         description="The path of the file inside the ADLS container relative to the root."
     )
     dataset_type: str = Field(
         description="The type of the dataset, e.g. geolocation, coverage, qos"
     )
-    metadata: dict = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="""
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
@@ -25,19 +25,6 @@ class BaseFileConfig(Config, ABC):
     )
     file_size_bytes: int
 
-    @property
-    def filename_components(self) -> FilenameComponents:
-        return deconstruct_filename_components(self.filepath)
-
-    @property
-    def datahub_dataset_urn(self) -> str:
-        return build_dataset_urn(self.filepath)
-
-    def validate_filename(self):
-        assert self.filename_components
-
-
-class AssetFileConfig(BaseFileConfig):
     destination_filepath: str = Field(
         description="""
         The destination path of the file inside the ADLS container relative to the root.
@@ -56,35 +43,34 @@ class AssetFileConfig(BaseFileConfig):
         """,
     )
 
+    @property
+    def filepath_object(self) -> Path:
+        return Path(self.filepath)
 
-class MultiAssetFileConfig(BaseFileConfig):
-    destination_filepath: Mapping[str, str] = Field(
-        description="""
-        The destination path of the file inside the ADLS container relative to the root.
+    @property
+    def destination_filepath_object(self) -> Path:
+        return Path(self.destination_filepath)
 
-        For multi-assets, pass in a mapping of the output name to the destination path.
-        """,
-    )
-    metastore_schema: Mapping[str, str] = Field(
-        description="""
-        A mapping of asset keys to names of the Hive Metastore schemas to register the datasets to. Used if the output
-        format is a Delta Table. To get the list of valid schemas, run
-        ```sql
-        SHOW TABLES IN `schemas`
-        ```
-        or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
-        """,
-    )
+    @property
+    def filename_components(self) -> FilenameComponents:
+        return deconstruct_filename_components(self.filepath)
+
+    @property
+    def destination_filename_components(self) -> FilenameComponents:
+        return deconstruct_filename_components(self.destination_filepath)
+
+    @property
+    def datahub_dataset_urn(self) -> str:
+        return build_dataset_urn(self.filepath)
+
+    def validate_filename(self):
+        assert self.filename_components
 
 
-class AssetOpDestinationMapping(BaseModel):
-    path: str
+class OpDestinationMapping(BaseModel):
+    source_filepath: str
+    destination_filepath: str
     metastore_schema: str
-
-
-class MultiAssetOpDestinationMapping(BaseModel):
-    path: dict[str, str]
-    metastore_schema: dict[str, str]
 
 
 def get_dataset_type(filepath: str) -> str | None:
@@ -104,10 +90,7 @@ def get_dataset_type(filepath: str) -> str | None:
 
 def generate_run_ops(
     context: SensorEvaluationContext,
-    ops_destination_mapping: dict[
-        str, AssetOpDestinationMapping | MultiAssetOpDestinationMapping
-    ],
-    filepath: str,
+    ops_destination_mapping: dict[str, OpDestinationMapping],
     dataset_type: str,
     metadata: dict,
     file_size_bytes: int,
@@ -115,28 +98,14 @@ def generate_run_ops(
     run_ops = {}
 
     for asset_key, op_mapping in ops_destination_mapping.items():
-        common_config = {
-            "filepath": filepath,
-            "dataset_type": dataset_type,
-            "metadata": metadata,
-            "file_size_bytes": file_size_bytes,
-        }
-
-        if isinstance(op_mapping, MultiAssetOpDestinationMapping):
-            file_config = MultiAssetFileConfig(
-                **common_config,
-                destination_filepath=op_mapping.path,
-                metastore_schema=op_mapping.metastore_schema,
-            )
-        else:
-            file_config = AssetFileConfig(
-                filepath=filepath,
-                dataset_type=dataset_type,
-                metadata=metadata,
-                file_size_bytes=file_size_bytes,
-                destination_filepath=op_mapping.path,
-                metastore_schema=op_mapping.metastore_schema,
-            )
+        file_config = FileConfig(
+            filepath=op_mapping.source_filepath,
+            destination_filepath=op_mapping.destination_filepath,
+            metastore_schema=op_mapping.metastore_schema,
+            dataset_type=dataset_type,
+            metadata=metadata,
+            file_size_bytes=file_size_bytes,
+        )
 
         try:
             file_config.validate_filename()
