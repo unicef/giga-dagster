@@ -44,11 +44,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
         ops_destination_mapping = {
             "geolocation_raw": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
+                destination_filepath=str(path),
                 metastore_schema=metastore_schema,
             ),
             "geolocation_bronze": OpDestinationMapping(
-                source_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
+                source_filepath=str(path),
                 destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
@@ -80,7 +80,6 @@ def school_master_geolocation__raw_file_uploads_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
@@ -141,7 +140,6 @@ def school_master_geolocation__successful_manual_checks_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
@@ -184,7 +182,6 @@ def school_master_geolocation__failed_manual_checks_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,

@@ -3,8 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from dagster import Config, SensorEvaluationContext
-from src.exceptions import FilenameValidationException
+from dagster import Config
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import deconstruct_filename_components
@@ -67,9 +66,6 @@ class FileConfig(Config):
     def datahub_destination_dataset_urn(self) -> str:
         return build_dataset_urn(self.destination_filepath)
 
-    def validate_filename(self):
-        assert self.filename_components
-
 
 class OpDestinationMapping(BaseModel):
     source_filepath: str
@@ -77,23 +73,7 @@ class OpDestinationMapping(BaseModel):
     metastore_schema: str
 
 
-def get_dataset_type(filepath: str) -> str | None:
-    if "geolocation" in filepath:
-        return "geolocation"
-    elif "coverage" in filepath:
-        return "coverage"
-    elif "reference" in filepath:
-        return "reference"
-    elif "master" in filepath:
-        return "master"
-    elif "qos" in filepath:
-        return "qos"
-    else:
-        return None
-
-
 def generate_run_ops(
-    context: SensorEvaluationContext,
     ops_destination_mapping: dict[str, OpDestinationMapping],
     dataset_type: str,
     metadata: dict,
@@ -110,13 +90,6 @@ def generate_run_ops(
             metadata=metadata,
             file_size_bytes=file_size_bytes,
         )
-
-        try:
-            file_config.validate_filename()
-        except FilenameValidationException as exc:
-            context.log.error(exc)
-            continue
-
         run_ops[asset_key] = file_config
 
     return run_ops

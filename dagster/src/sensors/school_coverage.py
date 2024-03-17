@@ -77,7 +77,6 @@ def school_master_coverage__raw_file_uploads_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
@@ -135,7 +134,6 @@ def school_master_coverage__successful_manual_checks_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,
@@ -178,7 +176,6 @@ def school_master_coverage__failed_manual_checks_sensor(
         }
 
         run_ops = generate_run_ops(
-            context,
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
             metadata=metadata,

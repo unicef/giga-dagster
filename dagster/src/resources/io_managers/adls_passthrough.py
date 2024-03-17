@@ -12,6 +12,7 @@ class ADLSPassthroughIOManager(BaseConfigurableIOManager):
 
     def load_input(self, context: InputContext) -> bytes:
         path = self._get_filepath(context)
+        context.log.info(f"Downloading {path}...")
         data = adls_client.download_raw(str(path))
         context.log.info(f"Downloaded {str(path)} from ADLS.")
         return data

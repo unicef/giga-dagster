@@ -34,13 +34,12 @@ def validate_filename(filepath: str):
 def deconstruct_filename_components(filepath: str):
     """Deconstruct filename components for files uploaded through the Ingestion Portal"""
 
-    validate_filename(filepath)
     path = Path(filepath)
-    path_parent = path.parent.name
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
 
-    if "geolocation" in path_parent:
+    if "geolocation" in path.parent.name:
+        validate_filename(filepath)
         id, country_code, dataset_type, timestamp = splits
         return FilenameComponents(
             id=id,
@@ -49,7 +48,8 @@ def deconstruct_filename_components(filepath: str):
             country_code=country_code,
         )
 
-    if "coverage" in path_parent:
+    if "coverage" in path.parent.name:
+        validate_filename(filepath)
         id, country_code, dataset_type, source, timestamp = splits
         return FilenameComponents(
             id=id,
@@ -59,10 +59,15 @@ def deconstruct_filename_components(filepath: str):
             country_code=country_code,
         )
 
-    id, country_code, *rest = splits
-    return FilenameComponents(
-        id=id,
-        dataset_type="unstructured",
-        country_code=country_code,
-        rest="_".join(rest),
-    )
+    if "qos" in path.parts:
+        if len(path.parent.name) != 3:
+            raise FilenameValidationException(
+                f"Expected 3-letter ISO country code for QoS directory; got `{path.parent.name}`"
+            )
+
+        return FilenameComponents(
+            dataset_type="qos",
+            country_code=path.parent.name,
+        )
+
+    return None

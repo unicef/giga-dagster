@@ -1,6 +1,7 @@
 import os.path
+from pathlib import Path
 
-from dagster import RunConfig, RunRequest, sensor
+from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
 from src.constants import constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
@@ -10,151 +11,198 @@ from src.jobs.adhoc import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-from .base import FileConfig
+from .base import OpDestinationMapping, generate_run_ops
 
 
 @sensor(
     job=school_master__convert_gold_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_master__gold_csv_to_deltatable_sensor():
-    adls = ADLSFileClient()
-
-    file_list = adls.list_paths(f"{constants.gold_source_folder}/master")
-    run_requests = []
-
-    for file_data in file_list:
+def school_master__gold_csv_to_deltatable_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    for file_data in adls_file_client.list_paths_generator(
+        f"{constants.gold_source_folder}/master", recursive=False
+    ):
         if file_data.is_directory:
+            context.log.warning(f"Skipping {file_data.name}")
             continue
-        else:
-            filepath = file_data.name
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties.metadata
-            size = properties.size
-            file_config = FileConfig(
-                filepath=filepath,
-                dataset_type="master",
-                metadata=metadata,
-                file_size_bytes=size,
-                metastore_schema="school_master",
-            )
 
-            ops_list = [
-                "adhoc__load_master_csv",
-                "adhoc__master_data_transforms",
-                "adhoc__df_duplicates",
-                "adhoc__master_data_quality_checks",
-                "adhoc__master_dq_checks_summary",
-                "adhoc__master_dq_checks_passed",
-                "adhoc__master_dq_checks_failed",
-                "adhoc__publish_master_to_gold",
-            ]
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+        metastore_schema = "school_master"
 
-            run_requests.append(
-                {
-                    "run_key": filepath,
-                    "run_config": RunConfig(
-                        ops=dict(
-                            zip(ops_list, [file_config] * len(ops_list), strict=True)
-                        )
-                    ),
-                }
-            )
+        ops_destination_mapping = {
+            "adhoc__load_master_csv": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__master_data_transforms": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__df_duplicates": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/duplicates/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__master_data_quality_checks": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__master_dq_checks_summary": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/summary/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__master_dq_checks_passed": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__master_dq_checks_failed": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/failed/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__publish_master_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+                metastore_schema=metastore_schema,
+            ),
+        }
 
-    for request in run_requests:
-        yield RunRequest(**request)
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type="master",
+            metadata=metadata,
+            file_size_bytes=size,
+        )
+
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
 
 
 @sensor(
     job=school_reference__convert_gold_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_reference__gold_csv_to_deltatable_sensor():
-    adls = ADLSFileClient()
-
-    file_list = adls.list_paths(f"{constants.gold_source_folder}/reference")
-    run_requests = []
-
-    for file_data in file_list:
+def school_reference__gold_csv_to_deltatable_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    for file_data in adls_file_client.list_paths_generator(
+        f"{constants.gold_source_folder}/reference", recursive=False
+    ):
         if file_data.is_directory:
+            context.log.warning(f"Skipping {file_data.name}")
             continue
-        else:
-            filepath = file_data.name
-            properties = adls.get_file_metadata(filepath=filepath)
-            metadata = properties.metadata
-            size = properties.size
-            file_config = FileConfig(
-                filepath=filepath,
-                dataset_type="reference",
-                metadata=metadata,
-                file_size_bytes=size,
-                metastore_schema="school_reference",
-            )
 
-            ops_list = [
-                "adhoc__load_reference_csv",
-                "adhoc__reference_data_quality_checks",
-                "adhoc__reference_dq_checks_passed",
-                "adhoc__reference_dq_checks_failed",
-                "adhoc__publish_reference_to_gold",
-            ]
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+        metastore_schema = "school_reference"
 
-            run_requests.append(
-                {
-                    "run_key": filepath,
-                    "run_config": RunConfig(
-                        ops=dict(
-                            zip(ops_list, [file_config] * len(ops_list), strict=True)
-                        )
-                    ),
-                }
-            )
+        ops_destination_mapping = {
+            "adhoc__load_reference_csv": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__reference_data_quality_checks": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__reference_dq_checks_passed": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__reference_dq_checks_failed": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/failed/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__publish_reference_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+                metastore_schema=metastore_schema,
+            ),
+        }
 
-    for request in run_requests:
-        yield RunRequest(**request)
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type="reference",
+            metadata=metadata,
+            file_size_bytes=size,
+        )
+
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
 
 
 @sensor(
     job=school_qos_bra__convert_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_qos_bra__gold_csv_to_deltatable_sensor():
-    adls = ADLSFileClient()
+def school_qos_bra__gold_csv_to_deltatable_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    for file_data in adls_file_client.list_paths_generator(
+        f"{constants.qos_source_folder}/BRA", recursive=False
+    ):
+        if (
+            file_data.is_directory
+            or os.path.splitext(file_data.name)[1].lower() != ".csv"
+        ):
+            context.log.warning(f"Skipping {file_data.name}")
+            continue
 
-    file_list = sorted(
-        [
-            p
-            for p in adls.list_paths(f"{constants.qos_source_folder}/BRA")
-            if not p.is_directory and os.path.splitext(p.name)[1] == ".csv"
-        ],
-        key=lambda x: x.last_modified,
-    )
-    run_requests = []
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+        metastore_schema = "qos"
 
-    for file_data in file_list:
-        filepath = file_data.name
-        properties = adls.get_file_metadata(filepath=filepath)
-        file_config = FileConfig(
-            filepath=filepath,
+        ops_destination_mapping = {
+            "adhoc__load_qos_bra_csv": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__qos_bra_transforms": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{stem}.csv",
+                metastore_schema=metastore_schema,
+            ),
+            "adhoc__publish_qos_bra_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/qos/{stem}",
+                metastore_schema=metastore_schema,
+            ),
+        }
+
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
             dataset_type="qos",
-            metadata=properties.metadata,
-            file_size_bytes=properties.size,
-            metastore_schema="qos",
-            unique_identifier_column="gigasync_id",
-            partition_columns=["date"],
-        )
-        run_requests.append(
-            {
-                "run_key": filepath,
-                "run_config": RunConfig(
-                    ops={
-                        "adhoc__load_qos_bra_csv": file_config,
-                        "adhoc__qos_bra_transforms": file_config,
-                        "adhoc__publish_qos_bra_to_gold": file_config,
-                    }
-                ),
-            }
+            metadata=metadata,
+            file_size_bytes=size,
         )
 
-    for request in run_requests:
-        yield RunRequest(**request)
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
