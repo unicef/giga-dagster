@@ -72,11 +72,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            # "geolocation_staging": OpDestinationMapping(
-            #     source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{stem}.csv",
-            #     destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
-            #     metastore_schema=metastore_schema
-            # ),
+            "geolocation_staging": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{stem}.csv",
+                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                metastore_schema=metastore_schema,
+            ),
         }
 
         run_ops = generate_run_ops(

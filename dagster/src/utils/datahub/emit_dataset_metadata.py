@@ -44,11 +44,13 @@ def create_dataset_urn(
     # TODO: Handle multiple upstreams
     if is_upstream:
         upstream_urn_name = config.datahub_source_dataset_urn
+        context.log.info(f"{upstream_urn_name=}")
         return builder.make_dataset_urn(
             platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
         dataset_urn_name = config.datahub_destination_dataset_urn
+        context.log.info(f"{dataset_urn_name=}")
         return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 
