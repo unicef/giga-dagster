@@ -87,7 +87,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             file_size_bytes=size,
         )
 
-        context.log.info(f"FILE: {str(path)}")
+        context.log.info(f"FILE: {path}")
         yield RunRequest(
             run_key=str(path),
             run_config=RunConfig(ops=run_ops),
@@ -123,17 +123,17 @@ def school_master_geolocation__successful_manual_checks_sensor(
                 destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_silver": OpDestinationMapping(
+            "silver": OpDestinationMapping(
                 source_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{stem}.csv",
                 destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
                 metastore_schema=metastore_schema,
             ),
-            "geolocation_gold_master": OpDestinationMapping(
+            "gold_master": OpDestinationMapping(
                 source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
                 metastore_schema="school_master",
             ),
-            "geolocation_gold_reference": OpDestinationMapping(
+            "gold_reference": OpDestinationMapping(
                 source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
                 metastore_schema="school_reference",
@@ -161,7 +161,8 @@ def school_master_geolocation__failed_manual_checks_sensor(
     adls_file_client: ADLSFileClient,
 ):
     for file_data in adls_file_client.list_paths_generator(
-        f"{constants.archive_manual_review_rejected_folder}", recursive=False
+        f"{constants.archive_manual_review_rejected_folder}/{SCHOOL_DATASET_TYPE}",
+        recursive=False,
     ):
         if file_data.is_directory:
             continue
