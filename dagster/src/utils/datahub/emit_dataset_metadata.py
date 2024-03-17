@@ -41,22 +41,14 @@ def create_dataset_urn(
     platform = builder.make_data_platform_urn("adlsGen2")
     config = FileConfig(**context.get_step_execution_context().op_config)
 
+    # TODO: Handle multiple upstreams
     if is_upstream:
-        input_filepath = config.filepath_object
-        upstream_urn_name = str(input_filepath.parent / input_filepath.stem)
-        upstream_urn_name = upstream_urn_name.replace(
-            "/", "."
-        )  # Datahub reads '.' as folder
-
+        upstream_urn_name = config.datahub_source_dataset_urn
         return builder.make_dataset_urn(
             platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
     else:
-        output_filepath = config.destination_filepath_object
-        dataset_urn_name = str(output_filepath.parent / output_filepath.stem)
-        dataset_urn_name = dataset_urn_name.replace(
-            "/", "."
-        )  # Datahub reads '.' as folder
+        dataset_urn_name = config.datahub_destination_dataset_urn
         return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 

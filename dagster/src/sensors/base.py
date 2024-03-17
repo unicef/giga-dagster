@@ -60,8 +60,12 @@ class FileConfig(Config):
         return deconstruct_filename_components(self.destination_filepath)
 
     @property
-    def datahub_dataset_urn(self) -> str:
+    def datahub_source_dataset_urn(self) -> str:
         return build_dataset_urn(self.filepath)
+
+    @property
+    def datahub_destination_dataset_urn(self) -> str:
+        return build_dataset_urn(self.destination_filepath)
 
     def validate_filename(self):
         assert self.filename_components
