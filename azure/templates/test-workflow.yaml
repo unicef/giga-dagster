@@ -2,7 +2,7 @@ stages:
   - stage: PRChecks
     displayName: Run PR checks
     jobs:
-      - job: PRChecks
+      - job: PreCommit
         displayName: Run pre-commit
         strategy:
           matrix:
