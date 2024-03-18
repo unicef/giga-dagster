@@ -57,7 +57,7 @@ class ApiConfiguration(Config):
     size: int | None
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class SchoolConnectivityConfig(ApiConfiguration):

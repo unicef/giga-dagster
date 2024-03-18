@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
@@ -11,6 +9,7 @@ from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.schema import (
@@ -27,9 +26,9 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        filepath = self._get_filepath(context)
+        path = self._get_filepath(context)
         table_name, table_root_path, table_path = self._get_table_path(
-            context, filepath
+            context, str(path)
         )
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
@@ -41,9 +40,9 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
+        path = self._get_filepath(context)
         table_name, table_root_path, table_path = self._get_table_path(
-            context, filepath
+            context, str(path)
         )
         spark = self._get_spark_session()
         schema_name = get_schema_name(context)
@@ -58,12 +57,14 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     def _get_table_path(
         context: InputContext | OutputContext, filepath: str
     ) -> tuple[str, str, AnyUrl]:
-        if context.step_context.op_config["dataset_type"] == "qos":
-            table_name = Path(context.step_context.op_config["filepath"]).parent.name
-        else:
-            table_name = Path(filepath).name.split("_")[0]
+        config = FileConfig(**context.step_context.op_config)
 
-        table_root_path = "/".join(filepath.split("/")[:-1])
+        if config.dataset_type == "qos":
+            table_name = config.filepath_object.parent.name
+        else:
+            table_name = config.filepath_object.name.split("_")[0]
+
+        table_root_path = str(config.filepath_object.parent)
         return (
             ic(table_name),
             ic(table_root_path),

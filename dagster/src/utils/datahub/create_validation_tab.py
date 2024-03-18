@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 from functools import wraps
 
+import loguru
 from datahub.emitter import mce_builder as builder
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -19,23 +20,31 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
     DatasetAssertionScope,
 )
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
-from loguru import logger
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
+from dagster import OpExecutionContext
+
 
 class EmitDatasetAssertionResults:
-    def __init__(self, dataset_urn: str, dq_summary_statistics: dict):
+    def __init__(
+        self,
+        dataset_urn: str,
+        dq_summary_statistics: dict,
+        context: OpExecutionContext = None,
+    ):
         self.emitter = DatahubRestEmitter(
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
         self.dataset_urn = dataset_urn
+        self.context = context
+
         dq_summary_statistics.pop("summary")
         self.dq_summary_statistics = []
         for value in dq_summary_statistics.values():
             self.dq_summary_statistics.extend(value)
-        logger.info(json.dumps(self.emitter.test_connection(), indent=2))
+        self.logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
     def __call__(self):
         self.upsert_validation_tab()
@@ -45,13 +54,19 @@ class EmitDatasetAssertionResults:
         def log_inner(func: callable):
             @wraps(func)
             def wrapper_func(self):
-                logger.info(f"Creating {entity_type.lower()}...")
+                self.logger.info(f"Creating {entity_type.lower()}...")
                 func(self)
-                logger.info(f"{entity_type.capitalize()} created!")
+                self.logger.info(f"{entity_type.capitalize()} created!")
 
             return wrapper_func
 
         return log_inner
+
+    @property
+    def logger(self):
+        if self.context is None:
+            return loguru.logger
+        return self.context.log
 
     @staticmethod
     def extract_assertion_info_of_column(column_dq_result: dict, dataset_urn: str):
@@ -81,7 +96,11 @@ class EmitDatasetAssertionResults:
     @_log_progress("validation tab")
     def upsert_validation_tab(self):
         for column_dq_result in self.dq_summary_statistics:
-            logger.info(
+            if not column_dq_result.get("column"):
+                # TODO: Might need to do something else with checks that aren't specific to a column
+                continue
+
+            self.logger.info(
                 f"Creating assertion info for column: {column_dq_result['column']}..."
             )
 
@@ -109,6 +128,7 @@ class EmitDatasetAssertionResults:
                 ),
             )
 
+            # TODO: Figure out how to emit this by batch; check out MetadataChangeProposalWrapper.construct_many()
             assertion_mcp = MetadataChangeProposalWrapper(
                 entityUrn=assertion_urn, aspect=col_assertion_info
             )
@@ -122,7 +142,7 @@ class EmitDatasetAssertionResults:
             self.emitter.emit_mcp(assertion_run_mcp)
             self.emitter.emit_mcp(assertion_data_platform_mcp)
 
-            logger.info(
+            self.logger.info(
                 f"Success! Assertion info for column: {column_dq_result['column']} emitted!"
             )
 

@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime
 
 from pyspark import sql
@@ -171,7 +170,7 @@ def aggregate_report_spark_df(
 
 
 def aggregate_report_json(
-    df_aggregated, df_bronze
+    df_aggregated: sql.DataFrame, df_bronze: sql.DataFrame
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     rows_count = df_bronze.count()
@@ -186,27 +185,24 @@ def aggregate_report_json(
     }
 
     # Initialize an empty dictionary for the transformed data
-    json_array = df_aggregated.toJSON().collect()
+    agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary}
 
     # Iterate through each JSON line
-    for line in json_array:
-        # Parse the JSON line into a dictionary
-        data = json.loads(line)
-
+    for agg in agg_array:
         # Extract the 'type' value to use as a key
-        key = data.pop("type")
+        key = agg.pop("type")
 
         # Append the rest of the dictionary to the list associated with the 'type' key
-        if key not in transformed_data:
-            transformed_data[key] = [data]
+        if key not in transformed_data.keys():
+            transformed_data[key] = [agg]
         else:
-            transformed_data[key].append(data)
+            transformed_data[key].append(agg)
 
     return transformed_data
 
 
-def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference"]:
         schema_name = f"school_{dataset_type}"
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
@@ -228,7 +224,7 @@ def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
     return df
 
 
-def dq_failed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
     else:

@@ -3,46 +3,55 @@ import uuid
 import h3
 from pyspark import sql
 from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, StringType, NullType, StructField
+from pyspark.sql.types import ArrayType, NullType, StringType, StructField
 
 from src.settings import settings
 from src.spark.config_expectations import config
 
 
 # STANDARDIZATION FUNCTIONS
-def generate_uuid(column_name):
-    return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(column_name)))
+def generate_uuid(identifier_concat: str):
+    return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(identifier_concat)))
 
 
 generate_uuid_udf = f.udf(generate_uuid)
 
 
-def create_school_id_giga(df):
-    school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
+def create_school_id_giga(df: sql.DataFrame):
+    school_id_giga_prereqs = [
+        "school_id_govt",
+        "school_name",
+        "education_level",
+        "latitude",
+        "longitude",
+    ]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
             df = df.withColumn("school_id_giga", f.lit(None))
-            return df 
-    
+            return df
+
     df = df.withColumn(
         "identifier_concat",
         f.concat(
-            f.col("school_id_govt"),
-            f.col("school_name"),
-            f.col("education_level"),
-            f.col("latitude"),
-            f.col("longitude"),
+            f.col("school_id_govt").cast(StringType()),
+            f.col("school_name").cast(StringType()),
+            f.col("education_level").cast(StringType()),
+            f.col("latitude").cast(StringType()),
+            f.col("longitude").cast(StringType()),
         ),
     )
-    df = df.withColumn("school_id_giga", f.when(
-                (f.col("school_id_govt").isNull()) |
-                (f.col("school_name").isNull()) |
-                (f.col("education_level").isNull()) |
-                (f.col("latitude").isNull()) |
-                (f.col("longitude").isNull()) 
-            , f.lit(None),
-        ).otherwise(generate_uuid_udf(f.col("identifier_concat"))))
-    
+    df = df.withColumn(
+        "school_id_giga",
+        f.when(
+            (f.col("school_id_govt").isNull())
+            | (f.col("school_name").isNull())
+            | (f.col("education_level").isNull())
+            | (f.col("latitude").isNull())
+            | (f.col("longitude").isNull()),
+            f.lit(None),
+        ).otherwise(generate_uuid_udf(f.col("identifier_concat"))),
+    )
+
     return df.drop("identifier_concat")
 
 
@@ -112,7 +121,7 @@ def h3_geo_to_h3(latitude, longitude):
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
-def rename_raw_columns(df): ## function for renaming raw files. adhoc
+def rename_raw_columns(df):  ## function for renaming raw files. adhoc
     # Iterate over mapping set and perform actions
     for raw_col, delta_col in config.COLUMN_RENAME_GEOLOCATION:
         # Check if the raw column exists in the DataFrame
@@ -132,7 +141,7 @@ def rename_raw_columns(df): ## function for renaming raw files. adhoc
 
 def column_mapping_rename(df, column_mapping):
     column_mapping = {
-        k: v for k, v in column_mapping.items() if v is not None
+        k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)
     }
 
     return df.withColumnsRenamed(column_mapping)
@@ -147,8 +156,9 @@ def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     return df.withColumns(columns_to_add)
 
 
-def bronze_prereq_columns(df):
-    df = df.select(*config.GEOLOCATION_COLUMNS)
+def bronze_prereq_columns(df, schema_columns: list[StructField]):
+    column_names = [col.name for col in schema_columns]
+    df = df.select(*column_names)
 
     return df
 
@@ -159,7 +169,7 @@ def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructFi
     df = add_missing_columns(df, schema_columns)
 
     # Select required columns for bronze
-    df = bronze_prereq_columns(df)
+    df = bronze_prereq_columns(df, schema_columns)
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
@@ -241,28 +251,35 @@ if __name__ == "__main__":
     file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
-    
     spark = get_spark_session()
     master = spark.read.csv(file_url_master, header=True)
     reference = spark.read.csv(file_url_reference, header=True)
     df_bronze = master.join(reference, how="left", on="school_id_giga")
 
-
     # df = spark.read.csv(file_url, header=True)
     # df = create_bronze_layer_columns(df)
-    # df.show() 
+    # df.show()
 
     # Create DataFrame
     # data = [(i, 1) for i in range(10)]
     # df = spark.createDataFrame(data, ["id", "code"])
     # df.show()
-    columnMapping =  {
-      'school_id_govt': 'id',
-      'school_name': 'code',
-      }
+    columnMapping = {
+        "school_id_govt": "id",
+        "school_name": "code",
+    }
     # df = column_mapping_rename(df, columnMapping)
     # df = impute_geolocation_columns(df)
-    df = df_bronze.select(["school_id_giga", "school_id_govt","school_name","education_level","latitude","longitude"])
+    df = df_bronze.select(
+        [
+            "school_id_giga",
+            "school_id_govt",
+            "school_name",
+            "education_level",
+            "latitude",
+            "longitude",
+        ]
+    )
     df = df.withColumn("school_name", f.trim(f.col("school_name")))
     df = create_school_id_giga(df)
     df.show()
