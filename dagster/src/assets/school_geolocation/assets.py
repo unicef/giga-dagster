@@ -68,6 +68,11 @@ def geolocation_bronze(
         file_upload = db.scalar(
             select(FileUpload).where(FileUpload.id == config.filename_components.id)
         )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found"
+            )
+
         file_upload = FileUploadConfig.from_orm(file_upload)
 
     column_mapping = {
