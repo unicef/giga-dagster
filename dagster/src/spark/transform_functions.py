@@ -21,7 +21,7 @@ def create_school_id_giga(df):
     school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
-            df = df.withColumn("school_id_giga", f.lit(None))
+            df = df.withColumn("school_id_giga_test", f.lit(None))
             return df 
     
     df = df.withColumn(
@@ -34,7 +34,7 @@ def create_school_id_giga(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("school_id_giga", f.when(
+    df = df.withColumn("school_id_giga_test", f.when(
                 (f.col("school_id_govt").isNull()) |
                 (f.col("school_name").isNull()) |
                 (f.col("education_level").isNull()) |
@@ -262,8 +262,11 @@ if __name__ == "__main__":
       }
     # df = column_mapping_rename(df, columnMapping)
     # df = impute_geolocation_columns(df)
+    df_bronze = df_bronze.sort("school_name").limit(30)
     df = df_bronze.select(["school_id_giga", "school_id_govt","school_name","education_level","latitude","longitude"])
     df = df.withColumn("school_name", f.trim(f.col("school_name")))
+    df = df.filter("school_name" == "P12001")
+    # df = df.withColumn("longitude", f.lit(-87.9774246)) #ambergris MATCH
     df = create_school_id_giga(df)
     df.show()
 
