@@ -13,4 +13,4 @@ variables:
   - template: templates/variables.yaml
 
 stages:
-  - template: templates/workflow.yaml
+  - template: templates/deploy-workflow.yaml
