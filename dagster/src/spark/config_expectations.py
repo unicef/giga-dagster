@@ -171,6 +171,18 @@ class Config(BaseSettings):
         ("school_id_govt_type", "STRING"),
         ("school_address", "STRING"),
         ("is_school_open", "STRING"),
+        ("tile_bigint", "INT"),
+        ("clean_lat", "DOUBLE"),
+        ("clean_lon", "DOUBLE"),
+        ("school_id", "STRING"),
+        ("name", "STRING"),
+        ("education_level", "STRING"),
+        ("percent_2G", "DOUBLE"),
+        ("percent_3G", "DOUBLE"),
+        ("percent_4G", "DOUBLE"),
+        ("2G_coverage", "INT"),
+        ("3G_coverage", "INT"),
+        ("4G_coverage", "INT"),
     }
 
     date_today: date = date.today()
@@ -364,6 +376,12 @@ class Config(BaseSettings):
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
     }
 
+    VALUES_DOMAIN_COVERAGE_ITU: dict[str, list[str]] = {
+        "2G_coverage": [1, 0],
+        "3G_coverage": [1, 0],
+        "4G_coverage": [1, 0],
+    }
+
     @property
     def VALUES_DOMAIN_ALL(self) -> dict[str, list[str]]:
         return {
@@ -371,6 +389,7 @@ class Config(BaseSettings):
             **self.VALUES_DOMAIN_REFERENCE,
             **self.VALUES_DOMAIN_GEOLOCATION,
             **self.VALUES_DOMAIN_COVERAGE,
+            **self.VALUES_DOMAIN_COVERAGE_ITU,
         }
 
     @property
