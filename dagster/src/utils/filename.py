@@ -38,7 +38,7 @@ def deconstruct_filename_components(filepath: str):
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
 
-    if "geolocation" in path.parent.name:
+    if "school-geolocation" in path.parts:
         validate_filename(filepath)
         id, country_code, dataset_type, timestamp = splits
         return FilenameComponents(
@@ -48,7 +48,7 @@ def deconstruct_filename_components(filepath: str):
             country_code=country_code,
         )
 
-    if "coverage" in path.parent.name:
+    if "school-coverage" in path.parts:
         validate_filename(filepath)
         id, country_code, dataset_type, source, timestamp = splits
         return FilenameComponents(
