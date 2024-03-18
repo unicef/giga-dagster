@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
+from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import constants
 from src.jobs.school_master import (
     school_master_geolocation__automated_data_checks_job,
@@ -27,8 +27,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
+    count = 0
+    source_directory = f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}"
+
     for file_data in adls_file_client.list_paths_generator(
-        f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}", recursive=False
+        source_directory, recursive=False
     ):
         if file_data.is_directory:
             continue
@@ -87,10 +90,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(
-            run_key=str(path),
-            run_config=RunConfig(ops=run_ops),
-        )
+        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        count += 1
+
+    if count == 0:
+        yield SkipReason(f"No uploads detected in {source_directory}")
 
 
 @sensor(
@@ -101,8 +105,11 @@ def school_master_geolocation__successful_manual_checks_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
+    count = 0
+    source_directory = f"{constants.dq_passed_folder}/{SCHOOL_DATASET_TYPE}"
+
     for file_data in adls_file_client.list_paths_generator(
-        f"{constants.dq_passed_folder}/{SCHOOL_DATASET_TYPE}", recursive=False
+        source_directory, recursive=False
     ):
         if file_data.is_directory:
             continue
@@ -148,6 +155,10 @@ def school_master_geolocation__successful_manual_checks_sensor(
 
         context.log.info(f"FILE: {path}")
         yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        count += 1
+
+    if count == 0:
+        yield SkipReason(f"No files detected in {source_directory}")
 
 
 @sensor(
@@ -158,8 +169,13 @@ def school_master_geolocation__failed_manual_checks_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
+    count = 0
+    source_directory = (
+        f"{constants.archive_manual_review_rejected_folder}/{SCHOOL_DATASET_TYPE}"
+    )
+
     for file_data in adls_file_client.list_paths_generator(
-        f"{constants.archive_manual_review_rejected_folder}/{SCHOOL_DATASET_TYPE}",
+        source_directory,
         recursive=False,
     ):
         if file_data.is_directory:
@@ -190,3 +206,7 @@ def school_master_geolocation__failed_manual_checks_sensor(
 
         context.log.info(f"FILE: {path}")
         yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        count += 1
+
+    if count == 0:
+        yield SkipReason(f"No files detected in {source_directory}")
