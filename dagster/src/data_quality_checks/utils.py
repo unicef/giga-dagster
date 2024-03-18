@@ -273,7 +273,7 @@ def row_level_checks(
         df = fb_percent_sum_to_100_check(df, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_itu":
-        df = standard_checks(df, dataset_type, context, domain=False)
+        df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     # elif dataset_type == "qos": # no configs yet, commenting out
     #     df = standard_checks(df, dataset_type, context, domain=False)
@@ -308,7 +308,7 @@ if __name__ == "__main__":
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
     print(df_bronze.count())
-    # df_bronze = df_bronze.sort("school_name").limit(30)
+    df_bronze = df_bronze.sort("school_name").limit(30)
     df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
     df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     df_bronze.show()
