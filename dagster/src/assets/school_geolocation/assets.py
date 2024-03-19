@@ -50,7 +50,7 @@ def geolocation_raw(
         context,
         df=raw,
         country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+        dataset_urn=config.datahub_destination_dataset_urn,
     )
     yield Output(raw, metadata=get_output_metadata(config))
 
@@ -92,7 +92,7 @@ def geolocation_bronze(
         context,
         df=df,
         country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+        dataset_urn=config.datahub_destination_dataset_urn,
     )
     df_pandas = df.toPandas()
     yield Output(
@@ -110,7 +110,7 @@ def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
-):
+) -> pd.DataFrame:
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
         geolocation_bronze, "geolocation", country_code, context
@@ -167,7 +167,7 @@ def geolocation_dq_passed_rows(
         context,
         df_passed,
         country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+        dataset_urn=config.datahub_destination_dataset_urn,
     )
     df_pandas = df_passed.toPandas()
     yield Output(
@@ -192,7 +192,7 @@ def geolocation_dq_failed_rows(
         context,
         df_failed,
         country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+        dataset_urn=config.datahub_destination_dataset_urn,
     )
     df_pandas = df_failed.toPandas()
     yield Output(
@@ -305,5 +305,5 @@ def geolocation_staging(
         context,
         df=staging,
         country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+        dataset_urn=config.datahub_destination_dataset_urn,
     )

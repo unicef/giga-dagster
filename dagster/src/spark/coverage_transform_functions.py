@@ -1,3 +1,4 @@
+from pyspark import sql
 from pyspark.sql import functions as f
 
 from src.settings import settings
@@ -41,7 +42,7 @@ def fb_percent_to_boolean(df):
     return df
 
 
-def fb_transforms(fb):
+def fb_transforms(fb: sql.DataFrame):
     # fb
     fb = fb_percent_to_boolean(fb)
     fb = coverage_column_filter(fb, config.FB_COLUMNS)
@@ -82,7 +83,7 @@ def fb_transforms(fb):
     return fb
 
 
-def fb_coverage_merge(fb, cov):
+def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
     # add suffixes
     for col in fb.columns:
         if col != "school_id_giga":  # add suffix except join key
