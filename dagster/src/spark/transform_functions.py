@@ -21,7 +21,7 @@ def create_school_id_giga(df):
     school_id_giga_prereqs = ["school_id_govt","school_name","education_level","latitude","longitude"]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
-            df = df.withColumn("school_id_giga_test", f.lit(None))
+            df = df.withColumn("school_id_giga", f.lit(None))
             return df 
     
     df = df.withColumn(
@@ -34,7 +34,7 @@ def create_school_id_giga(df):
             f.col("longitude"),
         ),
     )
-    df = df.withColumn("school_id_giga_test", f.when(
+    df = df.withColumn("school_id_giga", f.when(
                 (f.col("school_id_govt").isNull()) |
                 (f.col("school_name").isNull()) |
                 (f.col("education_level").isNull()) |
