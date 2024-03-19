@@ -271,6 +271,16 @@ class Config(BaseSettings):
         "pop_within_10km",
     ]
 
+    NONEMPTY_COLUMNS_QOS: list[str] = [
+        "timestamp",
+        "country_id",
+        "school_id_giga",
+        "school_id_govt",
+        "speed_upload",
+        "speed_download",
+        "provider",
+    ]
+
     NONEMPTY_COLUMNS_CRITICAL: list[str] = [
         "school_name",
         "longitude",
@@ -285,6 +295,7 @@ class Config(BaseSettings):
             *self.NONEMPTY_COLUMNS_GEOLOCATION,
             *self.NONEMPTY_COLUMNS_COVERAGE,
             *self.NONEMPTY_COLUMNS_CRITICAL,
+            *self.NONEMPTY_COLUMNS_QOS,
         ]
 
     VALUES_DOMAIN_MASTER: dict[str, list[str]] = {

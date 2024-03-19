@@ -265,8 +265,8 @@ if __name__ == "__main__":
     df_bronze = df_bronze.sort("school_name").limit(30)
     df = df_bronze.select(["school_id_giga", "school_id_govt","school_name","education_level","latitude","longitude"])
     df = df.withColumn("school_name", f.trim(f.col("school_name")))
-    df = df.filter("school_name" == "P12001")
-    # df = df.withColumn("longitude", f.lit(-87.9774246)) #ambergris MATCH
+    df = df.filter(f.col("school_id_govt") == "P12001")
+    df = df.withColumn("latitude", f.lit(17.5066649)) 
     df = create_school_id_giga(df)
     df.show()
 
