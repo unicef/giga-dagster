@@ -7,6 +7,7 @@ CONFIG_UNIQUE_COLUMNS = {
     "coverage": config.UNIQUE_COLUMNS_COVERAGE,
     "coverage_fb": config.UNIQUE_COLUMNS_COVERAGE_FB,
     "coverage_itu": config.UNIQUE_COLUMNS_COVERAGE_ITU,
+    "qos": config.UNIQUE_COLUMNS_QOS,
 }
 CONFIG_NONEMPTY_COLUMNS = {
     "master": config.NONEMPTY_COLUMNS_MASTER,

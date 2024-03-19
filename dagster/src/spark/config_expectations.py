@@ -200,6 +200,8 @@ class Config(BaseSettings):
 
     UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
+    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_govt", "school_id_giga"]
+
     UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
 
     NONEMPTY_COLUMNS_MASTER: list[str] = [
