@@ -33,3 +33,9 @@ school_qos_bra__convert_csv_to_deltatable_job = define_asset_job(
         "adhoc__publish_qos_bra_to_gold",
     ],
 )
+
+
+school_master__generate_mock_table_cdf_job = define_asset_job(
+    name="school_master__generate_mock_table_cdf_job",
+    selection="*adhoc__generate_v3",
+)
