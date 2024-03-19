@@ -17,6 +17,7 @@ from src.data_quality_checks.utils import (
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import settings
 from src.spark.transform_functions import (
+    column_mapping_rename,
     create_bronze_layer_columns,
 )
 from src.utils.adls import (
@@ -75,19 +76,16 @@ def geolocation_bronze(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
-    column_mapping = {
-        k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
-    }
-    config.metadata.update({"column_mapping": column_mapping})
-
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
     schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
     df = s.createDataFrame(pdf)
+    df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     df = create_bronze_layer_columns(df, schema_columns)
 
+    config.metadata.update({"column_mapping": column_mapping})
     emit_metadata_to_datahub(
         context,
         df=df,

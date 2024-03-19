@@ -21,7 +21,10 @@ from src.spark.coverage_transform_functions import (
     itu_coverage_merge,
     itu_transforms,
 )
-from src.spark.transform_functions import create_bronze_layer_columns
+from src.spark.transform_functions import (
+    column_mapping_rename,
+    create_bronze_layer_columns,
+)
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -82,11 +85,6 @@ def coverage_data_quality_results(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
-    column_mapping = {
-        k: v for k, v in file_upload.column_to_schema_mapping.items() if v is not None
-    }
-    config.metadata.update({"column_mapping": column_mapping})
-
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
@@ -96,7 +94,10 @@ def coverage_data_quality_results(
     schema_columns = get_schema_columns(s, metaschema_name)
 
     df_raw = s.createDataFrame(pdf)
-    dq_results = create_bronze_layer_columns(df_raw, schema_columns)
+    df, column_mapping = column_mapping_rename(
+        df_raw, file_upload.column_to_schema_mapping
+    )
+    dq_results = create_bronze_layer_columns(df, schema_columns)
     dq_results = row_level_checks(
         dq_results,
         f"coverage_{source}",
@@ -104,6 +105,13 @@ def coverage_data_quality_results(
         context,
     )
 
+    config.metadata.update({"column_mapping": column_mapping})
+    emit_metadata_to_datahub(
+        context,
+        dq_results,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_destination_dataset_urn,
+    )
     dq_pandas = dq_results.toPandas()
     yield Output(
         dq_pandas,
