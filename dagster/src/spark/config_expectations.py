@@ -183,8 +183,7 @@ class Config(BaseSettings):
         ("2G_coverage", "INT"),
         ("3G_coverage", "INT"),
         ("4G_coverage", "INT"),
-        
-        #qos
+        # qos
         ("timestamp", "TIMESTAMP"),
         ("country_id", "STRING"),
         ("speed_upload", "DOUBLE"),
