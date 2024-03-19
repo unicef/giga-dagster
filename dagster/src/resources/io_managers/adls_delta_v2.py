@@ -60,7 +60,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         config = FileConfig(**context.step_context.op_config)
 
         if config.dataset_type == "qos":
-            table_name = config.filepath_object.parent.name
+            table_name = config.filename_components.country_code
         else:
             table_name = config.filepath_object.name.split("_")[0]
 

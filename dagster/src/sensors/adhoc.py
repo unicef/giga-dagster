@@ -1,11 +1,10 @@
-import os.path
 from pathlib import Path
 
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
 from src.constants import constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
-    school_qos_bra__convert_csv_to_deltatable_job,
+    school_qos__convert_csv_to_deltatable_job,
     school_reference__convert_gold_csv_to_deltatable_job,
 )
 from src.settings import settings
@@ -154,45 +153,48 @@ def school_reference__gold_csv_to_deltatable_sensor(
 
 
 @sensor(
-    job=school_qos_bra__convert_csv_to_deltatable_job,
+    job=school_qos__convert_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_qos_bra__gold_csv_to_deltatable_sensor(
+def school_qos__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
     for file_data in adls_file_client.list_paths_generator(
-        f"{constants.qos_source_folder}/BRA", recursive=False
+        constants.qos_source_folder, recursive=True
     ):
-        if (
-            file_data.is_directory
-            or os.path.splitext(file_data.name)[1].lower() != ".csv"
-        ):
-            context.log.warning(f"Skipping {file_data.name}")
-            continue
-
         adls_filepath = file_data.name
         path = Path(adls_filepath)
+
+        if (
+            file_data.is_directory
+            or len(path.parent.name) != 3
+            or path.suffix.lower() != ".csv"
+        ):
+            context.log.warning(f"Skipping {adls_filepath}")
+            continue
+
         stem = path.stem
+        country_code = path.parent.name
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "qos"
 
         ops_destination_mapping = {
-            "adhoc__load_qos_bra_csv": OpDestinationMapping(
+            "adhoc__load_qos_csv": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=metastore_schema,
             ),
-            "adhoc__qos_bra_transforms": OpDestinationMapping(
+            "adhoc__qos_transforms": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "adhoc__publish_qos_bra_to_gold": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/qos/{stem}",
+            "adhoc__publish_qos_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/qos/{country_code}/{stem}",
                 metastore_schema=metastore_schema,
             ),
         }

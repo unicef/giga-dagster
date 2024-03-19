@@ -18,7 +18,7 @@ from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
-def adhoc__load_qos_bra_csv(
+def adhoc__load_qos_csv(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> bytes:
@@ -27,15 +27,15 @@ def adhoc__load_qos_bra_csv(
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
-def adhoc__qos_bra_transforms(
+def adhoc__qos_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
-    adhoc__load_qos_bra_csv: bytes,
+    adhoc__load_qos_csv: bytes,
 ) -> pd.DataFrame:
     s: SparkSession = spark.spark_session
 
-    with BytesIO(adhoc__load_qos_bra_csv) as buffer:
+    with BytesIO(adhoc__load_qos_csv) as buffer:
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
 
@@ -67,13 +67,13 @@ def adhoc__qos_bra_transforms(
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
-def adhoc__publish_qos_bra_to_gold(
+def adhoc__publish_qos_to_gold(
     context: OpExecutionContext,
-    adhoc__qos_bra_transforms: sql.DataFrame,
+    adhoc__qos_transforms: sql.DataFrame,
     config: FileConfig,
 ) -> sql.DataFrame:
     df_transformed = transform_types(
-        adhoc__qos_bra_transforms, config.metastore_schema, context
+        adhoc__qos_transforms, config.metastore_schema, context
     )
     yield Output(
         df_transformed,
