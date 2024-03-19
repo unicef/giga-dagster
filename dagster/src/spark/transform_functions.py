@@ -270,6 +270,7 @@ if __name__ == "__main__":
     }
     # df = column_mapping_rename(df, columnMapping)
     # df = impute_geolocation_columns(df)
+    df_bronze = df_bronze.sort("school_name").limit(30)
     df = df_bronze.select(
         [
             "school_id_giga",
@@ -281,6 +282,8 @@ if __name__ == "__main__":
         ]
     )
     df = df.withColumn("school_name", f.trim(f.col("school_name")))
+    df = df.filter(f.col("school_id_govt") == "P12001")
+    df = df.withColumn("latitude", f.lit(17.5066649))
     df = create_school_id_giga(df)
     df.show()
 
