@@ -1,9 +1,10 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark.sql import functions as f
+from src.utils.delta import run_query_with_error_handler
 from src.utils.schema import get_schema_columns
 
-from dagster import asset
+from dagster import OpExecutionContext, asset
 
 SOURCE_TABLE_NAME = "school_master.ben"
 ZCDF_TABLE_NAME = "school_master.zcdf"
@@ -11,17 +12,20 @@ ZCDF_TABLE_NAME = "school_master.zcdf"
 
 @asset
 def adhoc__copy_original(
+    context: OpExecutionContext,
     spark: PySparkResource,
 ):
     original = DeltaTable.forName(spark.spark_session, SOURCE_TABLE_NAME).toDF()
     columns = get_schema_columns(spark.spark_session, "school_master")
 
-    (
+    query = (
         DeltaTable.createOrReplace(spark.spark_session)
         .tableName(ZCDF_TABLE_NAME)
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
-        .execute()
+    )
+    run_query_with_error_handler(
+        context, spark.spark_session, query, *ZCDF_TABLE_NAME.split(".")
     )
 
     (

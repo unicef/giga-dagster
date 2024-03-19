@@ -3,7 +3,6 @@ from delta import DeltaTable
 from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
-from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import collect_list, concat_ws, sha2
 
@@ -12,6 +11,7 @@ from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.delta import run_query_with_error_handler
 from src.utils.schema import (
     get_partition_columns,
     get_primary_key,
@@ -101,22 +101,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-
-        try:
-            query.execute()
-        except AnalysisException as exc:
-            if "DELTA_TABLE_NOT_FOUND" in str(exc):
-                # This error gets raised when you delete the Delta Table in ADLS and subsequently try to re-ingest the
-                # same table. Its corresponding entry in the metastore needs to be dropped first.
-                #
-                # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
-                context.log.warning(
-                    f"Attempting to drop metastore entry for `{full_table_name}`..."
-                )
-                spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
-                query.execute()
-            else:
-                raise exc
+        run_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     def _upsert_data(
         self,
