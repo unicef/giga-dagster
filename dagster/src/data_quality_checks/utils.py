@@ -276,7 +276,7 @@ def row_level_checks(
         df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "qos":
-        df = standard_checks(df, dataset_type, context, domain=False, range_=False, format_=False)
+        df = standard_checks(df, dataset_type, context, domain=False, range_=False)
     return df
 
 
