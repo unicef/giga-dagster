@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime
 
 from pyspark import sql
@@ -16,6 +15,7 @@ from pyspark.sql.types import (
 )
 
 from dagster import OpExecutionContext
+from src.data_quality_checks.column_relation import column_relation_checks
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
     CONFIG_NONEMPTY_COLUMNS,
@@ -32,7 +32,6 @@ from src.data_quality_checks.geometry import (
 )
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
-from src.data_quality_checks.column_relation import column_relation_checks
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -171,7 +170,7 @@ def aggregate_report_spark_df(
 
 
 def aggregate_report_json(
-    df_aggregated, df_bronze
+    df_aggregated: sql.DataFrame, df_bronze: sql.DataFrame
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     rows_count = df_bronze.count()
@@ -186,27 +185,24 @@ def aggregate_report_json(
     }
 
     # Initialize an empty dictionary for the transformed data
-    json_array = df_aggregated.toJSON().collect()
+    agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary}
 
     # Iterate through each JSON line
-    for line in json_array:
-        # Parse the JSON line into a dictionary
-        data = json.loads(line)
-
+    for agg in agg_array:
         # Extract the 'type' value to use as a key
-        key = data.pop("type")
+        key = agg.pop("type")
 
         # Append the rest of the dictionary to the list associated with the 'type' key
-        if key not in transformed_data:
-            transformed_data[key] = [data]
+        if key not in transformed_data.keys():
+            transformed_data[key] = [agg]
         else:
-            transformed_data[key].append(data)
+            transformed_data[key].append(agg)
 
     return transformed_data
 
 
-def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference"]:
         schema_name = f"school_{dataset_type}"
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
@@ -228,7 +224,7 @@ def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
     return df
 
 
-def dq_failed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
     else:
@@ -288,7 +284,6 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
     return df
 
 
-
 if __name__ == "__main__":
     from src.settings import settings
     from src.utils.spark import get_spark_session
@@ -332,13 +327,13 @@ if __name__ == "__main__":
     # transforms = {}
     # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"] = f.when(
     #             (f.lower(f.col("connectivity")) == "yes") & (
-    #                 (f.lower(f.col("connectivity_RT")) == "yes") | 
+    #                 (f.lower(f.col("connectivity_RT")) == "yes") |
     #                 (f.lower(f.col("connectivity_govt")) == "yes") |
     #                 (f.col("download_speed_contracted").isNotNull())
     #                 ), 0,
     #         ).when(
     #             (f.lower(f.col("connectivity")) == "no") & (
-    #                 ((f.lower(f.col("connectivity_RT")) == "no") | f.col("connectivity_RT").isNull()) & 
+    #                 ((f.lower(f.col("connectivity_RT")) == "no") | f.col("connectivity_RT").isNull()) &
     #                 ((f.lower(f.col("connectivity_govt")) == "no") | f.col("connectivity_govt").isNull()) &
     #                 (f.col("download_speed_contracted").isNull())
     #                 ), 0,
@@ -349,7 +344,7 @@ if __name__ == "__main__":
     # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
     # df = standard_checks(df_bronze, 'master')
     # df.distinct().show()
-    
+
     # column_pairs = {
     #     ("nearest_NR_id", "nearest_NR_distance"),
     #     ("nearest_LTE_id", "nearest_LTE_distance"),

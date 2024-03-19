@@ -33,7 +33,6 @@ tasks:
 
   setup-pre-commit:
     desc: Run first-time setup tasks for pre-commit
-    internal: true
     cmds:
       - pip install -U pre-commit
       - pre-commit install --install-hooks -t pre-commit -t commit-msg

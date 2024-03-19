@@ -12,8 +12,8 @@ from pyspark.sql import (
 from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
-    dq_failed_rows as extract_dq_failed_rows,
-    dq_passed_rows as extract_dq_passed_rows,
+    dq_split_failed_rows as extract_dq_failed_rows,
+    dq_split_passed_rows as extract_dq_passed_rows,
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
@@ -48,9 +48,10 @@ def adhoc__master_data_transforms(
     s: SparkSession = spark.spark_session
     columns = get_schema_columns(s, config.metastore_schema)
 
-    buffer = BytesIO(adhoc__load_master_csv)
-    buffer.seek(0)
-    df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+    with BytesIO(adhoc__load_master_csv) as buffer:
+        buffer.seek(0)
+        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
     for col, dtype in df.dtypes.items():
         if dtype == "object":
             df[col] = df[col].astype("string")

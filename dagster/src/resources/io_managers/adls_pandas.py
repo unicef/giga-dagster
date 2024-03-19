@@ -14,27 +14,23 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: pd.DataFrame):
-        filepath = self._get_filepath(context)
+        path = self._get_filepath(context)
+
         if output.empty:
             context.log.warning("Output DataFrame is empty.")
-        #     return
 
         adls_client.upload_pandas_dataframe_as_file(
-            context=context, data=output, filepath=filepath
+            context=context, data=output, filepath=str(path)
         )
 
-        context.log.info(
-            f"Uploaded {filepath.split('/')[-1]} to"
-            f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
-        )
+        context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
+        path = self._get_filepath(context)
+
         data = adls_client.download_csv_as_spark_dataframe(
-            filepath, self.pyspark.spark_session
+            str(path), self.pyspark.spark_session
         )
-        context.log.info(
-            f"Downloaded {filepath.split('/')[-1]} from"
-            f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
-        )
+
+        context.log.info(f"Downloaded {path.name} from {path.parent} in ADLS.")
         return data

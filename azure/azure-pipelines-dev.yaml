@@ -3,8 +3,16 @@ trigger:
   branches:
     include:
       - main
+  paths:
+    exclude:
+      - docs
 
-pr: none
+pr:
+  autoCancel: true
+  drafts: true
+  paths:
+    exclude:
+      - docs
 
 pool:
   vmImage: ubuntu-latest
@@ -13,4 +21,8 @@ variables:
   - template: templates/variables.yaml
 
 stages:
-  - template: templates/workflow.yaml
+  - ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+      - template: templates/test-workflow.yaml
+
+  - ${{ if not(eq(variables['Build.Reason'], 'PullRequest')) }}:
+      - template: templates/deploy-workflow.yaml
