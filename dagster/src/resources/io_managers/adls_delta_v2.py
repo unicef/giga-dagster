@@ -27,9 +27,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
         path = self._get_filepath(context)
-        table_name, table_root_path, table_path = self._get_table_path(
-            context, str(path)
-        )
+        table_name, _, table_path = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
 
@@ -37,19 +35,21 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         self._create_table_if_not_exists(context, schema_name, table_name)
         self._upsert_data(output, schema_name, full_table_name)
 
-        context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
+        context.log.info(
+            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+        )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         path = self._get_filepath(context)
-        table_name, table_root_path, table_path = self._get_table_path(
-            context, str(path)
-        )
+        table_name, _, table_path = self._get_table_path(context, str(path))
         spark = self._get_spark_session()
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
         dt = DeltaTable.forName(spark, full_table_name)
 
-        context.log.info(f"Downloaded {table_name} from {table_root_path} in ADLS.")
+        context.log.info(
+            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+        )
 
         return dt.toDF()
 
