@@ -183,9 +183,9 @@ def standard_checks(
     if completeness:
         df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
     if domain:
-        df = domain_checks(df, CONFIG_VALUES_DOMAIN[dataset_type], context)
+        df = domain_checks(df, CONFIG_VALUES_DOMAIN.get(dataset_type, []), context)
     if range_:
-        df = range_checks(df, CONFIG_VALUES_RANGE[dataset_type], context)
+        df = range_checks(df, CONFIG_VALUES_RANGE.get(dataset_type, []), context)
     if format_:
         df = format_validation_checks(df, context)
     if string_length:

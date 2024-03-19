@@ -1,8 +1,10 @@
 from pyspark import sql
 from pyspark.sql import functions as f
+from pyspark.sql.types import NullType
 
 from src.settings import settings
 from src.spark.config_expectations import config
+from src.utils.schema import get_schema_columns
 
 # General Transform Components
 
@@ -18,12 +20,12 @@ def rename_raw_columns(df):
     return df
 
 
-def coverage_column_filter(df, CONFIG_COLUMNS_TO_KEEP):
-    df = df.select(*CONFIG_COLUMNS_TO_KEEP)
+def coverage_column_filter(df: sql.DataFrame, config_columns_to_keep: list[str]):
+    df = df.select(*config_columns_to_keep)
     return df
 
 
-def coverage_row_filter(df):
+def coverage_row_filter(df: sql.DataFrame):
     df = df.filter(f.col("school_id_giga").isNotNull())
     return df
 
@@ -31,7 +33,7 @@ def coverage_row_filter(df):
 # FB Transform Components
 
 
-def fb_percent_to_boolean(df):
+def fb_percent_to_boolean(df: sql.DataFrame):
     df = df.withColumn("2G_coverage", f.col("percent_2G") > 0)
     df = df.withColumn("3G_coverage", f.col("percent_3G") > 0)
     df = df.withColumn("4G_coverage", f.col("percent_4G") > 0)
@@ -43,6 +45,8 @@ def fb_percent_to_boolean(df):
 
 
 def fb_transforms(fb: sql.DataFrame):
+    spark = fb.sparkSession
+
     # fb
     fb = fb_percent_to_boolean(fb)
     fb = coverage_column_filter(fb, config.FB_COLUMNS)
@@ -51,34 +55,29 @@ def fb_transforms(fb: sql.DataFrame):
     # coverage availability and type columns
     fb = fb.withColumn(
         "cellular_coverage_type",
-        f.expr(
-            "CASE "
-            "WHEN 4G_coverage IS TRUE THEN '4G' "
-            "WHEN 3G_coverage IS TRUE THEN '3G' "
-            "WHEN 2G_coverage IS TRUE THEN '2G' "
-            "ELSE 'no coverage' "
-            "END"
+        (
+            f.when(f.col("4G_coverage"), f.lit("4G"))
+            .when(f.col("3G_coverage"), f.lit("3G"))
+            .when(f.col("2G_coverage"), f.lit("2G"))
+            .otherwise(f.lit("no coverage"))
         ),
     )
     fb = fb.withColumn(
         "cellular_coverage_availability",
-        f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
-            "ELSE 'yes' "
-            "END"
-        ),
+        f.when(f.col("cellular_coverage_type") == "no coverage", "no").otherwise("yes"),
     )
 
     # add cov schema
-    for col in config.COV_COLUMNS:
-        if col not in fb.columns:
-            fb = fb.withColumn(col, f.lit(None))
+    cov_columns = get_schema_columns(spark, "coverage_fb")
+    columns_to_add = {
+        col.name: f.lit(None).cast(NullType())
+        for col in cov_columns
+        if col.name not in fb.columns
+    }
+    fb = fb.withColumns(columns_to_add)
 
     # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    fb = fb.drop("2G_coverage")
-    fb = fb.drop("3G_coverage")
-    fb = fb.drop("4G_coverage")
+    fb = fb.drop("2G_coverage", "3G_coverage", "4G_coverage")
 
     return fb
 
@@ -130,7 +129,7 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
 # ITU Transform Components
 
 
-def itu_binary_to_boolean(df):
+def itu_binary_to_boolean(df: sql.DataFrame):
     df = df.withColumn("2G_coverage", f.col("2G") >= 1)
     df = df.withColumn("3G_coverage", f.col("3G") == 1)
     df = df.withColumn("4G_coverage", f.col("4G") == 1)
@@ -141,13 +140,13 @@ def itu_binary_to_boolean(df):
     return df
 
 
-def itu_lower_columns(df):
+def itu_lower_columns(df: sql.DataFrame):
     for col_name in config.ITU_COLUMNS_TO_RENAME:
         df = df.withColumnRenamed(col_name, col_name.lower())
     return df
 
 
-def itu_transforms(itu):
+def itu_transforms(itu: sql.DataFrame):
     # fb
     itu = itu_binary_to_boolean(itu)
     itu = itu_lower_columns(itu)  ## should i remove given column mapping portal?
@@ -157,39 +156,34 @@ def itu_transforms(itu):
     # coverage availability and type columns
     itu = itu.withColumn(
         "cellular_coverage_type",
-        f.expr(
-            "CASE "
-            "WHEN 4G_coverage IS TRUE THEN '4G' "
-            "WHEN 3G_coverage IS TRUE THEN '3G' "
-            "WHEN 2G_coverage IS TRUE THEN '2G' "
-            "ELSE 'no coverage' "
-            "END"
+        (
+            f.when(f.col("4G_coverage"), f.lit("4G"))
+            .when(f.col("3G_coverage"), f.lit("3G"))
+            .when(f.col("2G_coverage"), f.lit("2G"))
+            .otherwise("no coverage")
         ),
     )
     itu = itu.withColumn(
         "cellular_coverage_availability",
-        f.expr(
-            "CASE "
-            "WHEN cellular_coverage_type = 'no coverage' then 'no' "
-            "ELSE 'yes' "
-            "END"
-        ),
+        f.when(f.col("cellular_coverage_type") == "no coverage", "no").otherwise("yes"),
     )
 
     # add cov schema
-    for col in config.COV_COLUMNS:
-        if col not in itu.columns:
-            itu = itu.withColumn(col, f.lit(None))
+    cov_columns = get_schema_columns(itu.sparkSession, "coverage_itu")
+    columns_to_add = {
+        col.name: f.lit(None).cast(NullType())
+        for col in cov_columns
+        if col.name not in fb.columns
+    }
+    itu = itu.withColumns(columns_to_add)
 
     # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    itu = itu.drop("2G_coverage")
-    itu = itu.drop("3G_coverage")
-    itu = itu.drop("4G_coverage")
+    itu = itu.drop("2G_coverage", "3G_coverage", "4G_coverage")
 
     return itu
 
 
-def itu_coverage_merge(itu, cov):
+def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
     # add suffixes
     for col in itu.columns:
         if col != "school_id_giga":  # add suffix except join key

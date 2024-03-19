@@ -15,7 +15,11 @@ school_master_geolocation__automated_data_checks_job = define_asset_job(
 school_master_coverage__automated_data_checks_job = define_asset_job(
     name="school_master_coverage__automated_data_checks_job",
     # TODO: Include staging
-    selection="*coverage_bronze",
+    selection=[
+        "*coverage_data_quality_results_summary",
+        "*coverage_dq_failed_rows",
+        "*coverage_bronze",
+    ],
 )
 
 

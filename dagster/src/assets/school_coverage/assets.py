@@ -3,6 +3,7 @@ from io import BytesIO
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
+from icecream import ic
 from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
@@ -210,7 +211,7 @@ def coverage_bronze(
     config: FileConfig,
 ) -> sql.DataFrame:
     s: SparkSession = spark.spark_session
-    source = config.filename_components.source
+    source = ic(config.filename_components.source)
     silver_table_name = config.filename_components.country_code.lower()
     full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
 
