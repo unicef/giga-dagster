@@ -9,9 +9,10 @@ from pyspark.sql import (
     functions as f,
 )
 from src.sensors.base import FileConfig
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
-from src.utils.schema import get_primary_key
+from src.utils.schema import get_primary_key, get_schema_columns
 from src.utils.spark import transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -39,7 +40,9 @@ def adhoc__qos_transforms(
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
 
+    schema_columns = get_schema_columns(s, "qos")
     sdf = s.createDataFrame(df)
+    sdf = add_missing_columns(sdf, schema_columns)
     primary_key = get_primary_key(s, config.metastore_schema)
     column_actions = {
         "signature": f.sha2(f.concat_ws("|", *sdf.columns), 256),

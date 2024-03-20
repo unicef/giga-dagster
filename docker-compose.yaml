@@ -11,6 +11,7 @@ x-dagster-common-config: &dagster-common-config
   environment:
     DAGSTER_HOME: /app
     COMMIT_SHA: ${COMMIT_SHA}
+    DAGSTER_SENSOR_GRPC_TIMEOUT_SECONDS: 300
 
 x-spark-common-config: &spark-common-config
   <<: *common-config
