@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
+    SPARK_DRIVER_CORES: str = "2"
+    SPARK_DRIVER_MEMORY: str = "2g"
 
     # Derived settings
     @property
