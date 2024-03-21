@@ -19,7 +19,7 @@ from datahub.metadata.schema_classes import (
     StringTypeClass,
 )
 from src.settings import settings
-from src.utils.adls import get_input_filepath, get_output_filepath
+from src.utils.adls import get_output_filepath
 
 from dagster import OpExecutionContext, version
 
@@ -34,25 +34,14 @@ def identify_country_name(country_code: str) -> str:
     return country_name
 
 
-def create_dataset_urn(context: OpExecutionContext, is_upstream: bool) -> str:
-    platform = builder.make_data_platform_urn("adlsGen2")
-    if is_upstream:
-        input_filepath = get_input_filepath(context)
-        upstream_urn_name = input_filepath.split(".")[0]  # Removes file extension
-        upstream_urn_name = upstream_urn_name.replace(
-            "/", "."
-        )  # Datahub reads '.' as folder
-
-        return builder.make_dataset_urn(
-            platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
-        )
-    else:
-        output_filepath = get_output_filepath(context)
-        dataset_urn_name = output_filepath.split(".")[0]  # Removes file extension
-        dataset_urn_name = dataset_urn_name.replace(
-            "/", "."
-        )  # Datahub reads '.' as folder
-        return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
+def create_dataset_urn(
+    filepath: str, platform: str, env=settings.ADLS_ENVIRONMENT
+) -> str:
+    # Removes file extension
+    dataset_urn_name = filepath.split(".")[0]
+    # Datahub reads '.' as folder separator
+    dataset_urn_name = dataset_urn_name.replace("/", ".")
+    return builder.make_dataset_urn(platform=platform, name=dataset_urn_name, env=env)
 
 
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
