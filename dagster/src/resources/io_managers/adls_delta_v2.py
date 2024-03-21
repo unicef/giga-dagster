@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import datahub.emitter.mce_builder as builder
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
@@ -13,6 +14,7 @@ from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_lineage import emit_lineage
 from src.utils.schema import (
     get_partition_columns,
     get_primary_key,
@@ -51,6 +53,16 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         dt = DeltaTable.forName(spark, full_table_name)
 
         context.log.info(f"Downloaded {table_name} from {table_root_path} in ADLS.")
+
+        current_filepath = self._get_filepath_from_InputContext(context)
+        context.log.info(f"current_filepath: {current_filepath}")
+        platform = builder.make_data_platform_urn("adlsGen2")
+        emit_lineage(
+            context,
+            dataset_filepath=current_filepath,
+            upstream_filepath=filepath,
+            platform=platform,
+        )
 
         return dt.toDF()
 
