@@ -37,6 +37,33 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         return destination_filepath
 
     @staticmethod
+    def _get_filepath_from_InputContext(context: InputContext):
+        context.log.info(
+            f"context.asset_key_InputContext: {context.asset_key.to_user_string()}"
+        )
+        context.log.info(f"context.name_InputContext: {context.name}")
+        if context.asset_key.to_user_string() in [
+            "coverage_data_quality_results",
+            "geolocation_data_quality_results",
+            "gold",
+        ]:
+            step = context.name
+        else:
+            step = context.asset_key.to_user_string()
+
+        filepath = context.step_context.op_config["filepath"]
+
+        parent_folder = context.step_context.op_config["dataset_type"]
+
+        destination_filepath = get_filepath(filepath, parent_folder, step)
+
+        context.log.info(
+            f"Original filepath: {filepath}, new filepath: {destination_filepath}"
+        )
+
+        return destination_filepath
+
+    @staticmethod
     def _get_schema_name(context: InputContext | OutputContext):
         return context.step_context.op_config["metastore_schema"]
 
