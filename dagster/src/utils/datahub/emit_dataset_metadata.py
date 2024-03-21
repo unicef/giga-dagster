@@ -18,6 +18,7 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import get_output_filepath
 
@@ -35,22 +36,32 @@ def identify_country_name(country_code: str) -> str:
 
 
 def create_dataset_urn(
-    filepath: str, platform: str, env=settings.ADLS_ENVIRONMENT
+    context: OpExecutionContext, is_upstream: bool, output_name: str = None
 ) -> str:
-    # Removes file extension
-    dataset_urn_name = filepath.split(".")[0]
-    # Datahub reads '.' as folder separator
-    dataset_urn_name = dataset_urn_name.replace("/", ".")
-    return builder.make_dataset_urn(platform=platform, name=dataset_urn_name, env=env)
+    platform = builder.make_data_platform_urn("adlsGen2")
+    config = FileConfig(**context.get_step_execution_context().op_config)
+
+    # TODO: Handle multiple upstreams
+    if is_upstream:
+        upstream_urn_name = config.datahub_source_dataset_urn
+        context.log.info(f"{upstream_urn_name=}")
+        return builder.make_dataset_urn(
+            platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
+        )
+    else:
+        dataset_urn_name = config.datahub_destination_dataset_urn
+        context.log.info(f"{dataset_urn_name=}")
+        return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
     output_filepath = get_output_filepath(context)
+    config = FileConfig(**context.get_step_execution_context().op_config)
 
-    domain = context.get_step_execution_context().op_config["dataset_type"]
-    file_size_bytes = context.get_step_execution_context().op_config["file_size_bytes"]
-    metadata = context.get_step_execution_context().op_config["metadata"]
+    domain = config.dataset_type
+    file_size_bytes = config.file_size_bytes
+    metadata = config.metadata
 
     data_format = os.path.splitext(output_filepath)[1].lstrip(".")
     country_name = identify_country_name(country_code=country_code)
@@ -72,6 +83,7 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
         "Dagster Job Name": context.job_def.name,
         "Dagster Run Created Timestamp": start_time,
         "Dagster Sensor Name": context.run_tags.get("dagster/sensor_name"),
+        "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now().isoformat(),
         "Domain": domain,
         "Data Format": data_format,
@@ -79,9 +91,17 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
         "Country": country_name,
     }
 
+    formatted_metadata = {}
+    for k, v in metadata.items():
+        if k == "column_mapping":
+            v = ", ".join([f"{k} -> {v}" for k, v in v.items()])
+
+        friendly_name = k.replace("_", " ").title()
+        formatted_metadata[friendly_name] = v
+
     dataset_properties = DatasetPropertiesClass(
         description=step,
-        customProperties={**metadata, **custom_metadata},
+        customProperties={**formatted_metadata, **custom_metadata},
     )
 
     return dataset_properties
@@ -121,7 +141,8 @@ def define_schema_properties(df: pd.DataFrame):
 
 
 def set_domain(context: OpExecutionContext):
-    domain = context.get_step_execution_context().op_config["dataset_type"]
+    config = FileConfig(**context.get_step_execution_context().op_config)
+    domain = config.dataset_type
 
     if "school" in domain:
         domain_urn = make_domain_urn("School")
@@ -152,7 +173,10 @@ def set_tag_mutation_query(country_name, dataset_urn):
 
 
 def emit_metadata_to_datahub(
-    context: OpExecutionContext, df: pd.DataFrame, country_code: str, dataset_urn: str
+    context: OpExecutionContext,
+    df: pd.DataFrame | bytes,
+    country_code: str,
+    dataset_urn: str,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -168,14 +192,15 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING DATASET METADATA")
     datahub_emitter.emit(dataset_metadata_event)
 
-    schema_properties = define_schema_properties(df)
-    schema_metadata_event = MetadataChangeProposalWrapper(
-        entityUrn=dataset_urn,
-        aspect=schema_properties,
-    )
+    if isinstance(df, pd.DataFrame):
+        schema_properties = define_schema_properties(df)
+        schema_metadata_event = MetadataChangeProposalWrapper(
+            entityUrn=dataset_urn,
+            aspect=schema_properties,
+        )
 
-    context.log.info("EMITTING SCHEMA")
-    datahub_emitter.emit(schema_metadata_event)
+        context.log.info("EMITTING SCHEMA")
+        datahub_emitter.emit(schema_metadata_event)
 
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(

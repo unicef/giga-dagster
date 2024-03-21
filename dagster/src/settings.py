@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
+    SPARK_DRIVER_CORES: str = "2"
+    SPARK_DRIVER_MEMORY: str = "2g"
 
     # Derived settings
     @property
@@ -118,7 +120,7 @@ class Settings(BaseSettings):
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
         return {
-            "username": self.INGESTION_POSTGRESQL_USERNAME,
+            "user": self.INGESTION_POSTGRESQL_USERNAME,
             "password": self.INGESTION_POSTGRESQL_PASSWORD,
             "host": self.INGESTION_DB_HOST,
             "port": str(self.INGESTION_DB_PORT),

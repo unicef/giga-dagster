@@ -9,7 +9,7 @@ trigger:
 
 pr:
   autoCancel: true
-  drafts: false
+  drafts: true
   paths:
     exclude:
       - docs

@@ -1,11 +1,12 @@
 from abc import ABC
 from collections.abc import Callable
+from pathlib import Path
 
 from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
+from src.sensors.base import FileConfig
 from src.settings import settings
-from src.utils.adls import get_filepath
 from src.utils.spark import (
     transform_qos_bra_types,
     transform_school_types,
@@ -14,58 +15,18 @@ from src.utils.spark import (
 
 class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
-    def _get_filepath(context: OutputContext):
-        if context.step_key in [
-            "coverage_data_quality_results",
-            "geolocation_data_quality_results",
-            "gold",
-        ]:
-            step = context.name
-        else:
-            step = context.step_key
+    def _get_filepath(context: InputContext | OutputContext) -> Path:
+        if isinstance(context, InputContext):
+            config = FileConfig(**context.upstream_output.step_context.op_config)
+            return config.filepath_object
 
-        filepath = context.step_context.op_config["filepath"]
-
-        parent_folder = context.step_context.op_config["dataset_type"]
-
-        destination_filepath = get_filepath(filepath, parent_folder, step)
-
-        context.log.info(
-            f"Original filepath: {filepath}, new filepath: {destination_filepath}"
-        )
-
-        return destination_filepath
+        config = FileConfig(**context.step_context.op_config)
+        return config.destination_filepath_object
 
     @staticmethod
-    def _get_filepath_from_InputContext(context: InputContext):
-        context.log.info(
-            f"context.asset_key_InputContext: {context.asset_key.to_user_string()}"
-        )
-        context.log.info(f"context.name_InputContext: {context.name}")
-        if context.asset_key.to_user_string() in [
-            "coverage_data_quality_results",
-            "geolocation_data_quality_results",
-            "gold",
-        ]:
-            step = context.name
-        else:
-            step = context.asset_key.to_user_string()
-
-        filepath = context.step_context.op_config["filepath"]
-
-        parent_folder = context.step_context.op_config["dataset_type"]
-
-        destination_filepath = get_filepath(filepath, parent_folder, step)
-
-        context.log.info(
-            f"Original filepath: {filepath}, new filepath: {destination_filepath}"
-        )
-
-        return destination_filepath
-
-    @staticmethod
-    def _get_schema_name(context: InputContext | OutputContext):
-        return context.step_context.op_config["metastore_schema"]
+    def _get_schema_name(context: OutputContext):
+        config: FileConfig = context.step_context.op_config
+        return config.metastore_schema
 
     @staticmethod
     def _get_table_path(context: OutputContext, filepath: str):

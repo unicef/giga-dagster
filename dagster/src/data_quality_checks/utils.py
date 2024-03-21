@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, datetime
 
 from pyspark import sql
@@ -171,7 +170,7 @@ def aggregate_report_spark_df(
 
 
 def aggregate_report_json(
-    df_aggregated, df_bronze
+    df_aggregated: sql.DataFrame, df_bronze: sql.DataFrame
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     rows_count = df_bronze.count()
@@ -186,27 +185,24 @@ def aggregate_report_json(
     }
 
     # Initialize an empty dictionary for the transformed data
-    json_array = df_aggregated.toJSON().collect()
+    agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary}
 
     # Iterate through each JSON line
-    for line in json_array:
-        # Parse the JSON line into a dictionary
-        data = json.loads(line)
-
+    for agg in agg_array:
         # Extract the 'type' value to use as a key
-        key = data.pop("type")
+        key = agg.pop("type")
 
         # Append the rest of the dictionary to the list associated with the 'type' key
-        if key not in transformed_data:
-            transformed_data[key] = [data]
+        if key not in transformed_data.keys():
+            transformed_data[key] = [agg]
         else:
-            transformed_data[key].append(data)
+            transformed_data[key].append(agg)
 
     return transformed_data
 
 
-def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference"]:
         schema_name = f"school_{dataset_type}"
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
@@ -228,7 +224,7 @@ def dq_passed_rows(df: sql.DataFrame, dataset_type: str):
     return df
 
 
-def dq_failed_rows(df: sql.DataFrame, dataset_type: str):
+def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
     else:
@@ -273,10 +269,10 @@ def row_level_checks(
         df = fb_percent_sum_to_100_check(df, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_itu":
-        df = standard_checks(df, dataset_type, context, domain=False)
+        df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
-    # elif dataset_type == "qos": # no configs yet, commenting out
-    #     df = standard_checks(df, dataset_type, context, domain=False)
+    elif dataset_type == "qos":
+        df = standard_checks(df, dataset_type, context, domain=False, range_=False)
     return df
 
 
@@ -290,31 +286,36 @@ def extract_school_id_govt_duplicates(df: sql.DataFrame):
 
 if __name__ == "__main__":
     from src.settings import settings
-    from src.spark.transform_functions import create_giga_school_id
     from src.utils.spark import get_spark_session
+    # from src.spark.transform_functions import create_giga_school_id
 
     spark = get_spark_session()
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
     # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
-    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    file_url_qos = (
+        f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
+    )
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    master = spark.read.csv(file_url_master, header=True)
-    reference = spark.read.csv(file_url_reference, header=True)
-    df_bronze = master.join(reference, how="left", on="school_id_giga")
+    # master = spark.read.csv(file_url_master, header=True)
+    # reference = spark.read.csv(file_url_reference, header=True)
+    qos = spark.read.csv(file_url_qos, header=True)
+    # df_bronze = master.join(reference, how="left", on="school_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
-    print(df_bronze.count())
+    # print(df_bronze.count())
     # df_bronze = df_bronze.sort("school_name").limit(30)
-    df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
-    df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
-    df_bronze.show()
-    df = create_giga_school_id(df_bronze)
-    df.show()
-    # df = row_level_checks(df_bronze, "QoS", "GIN")
+    # df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
+    # df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
+    # df_bronze.show()
+    # df = create_giga_school_id(df_bronze)
     # df.show()
+    qos.show()
+    df = row_level_checks(qos, "qos", "BRA")
+    df.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
@@ -359,8 +360,8 @@ if __name__ == "__main__":
     # # df = dq_passed_rows(df, "coverage")
     # df.orderBy("column").show()
 
-    # df = aggregate_report_spark_df(spark=spark, df=df)
-    # df.show()
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    df.show()
 
-    # _json = aggregate_report_json(df, df_bronze)
-    # print(_json)
+    _json = aggregate_report_json(df, qos)
+    print(_json)

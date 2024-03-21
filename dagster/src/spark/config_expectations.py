@@ -171,6 +171,31 @@ class Config(BaseSettings):
         ("school_id_govt_type", "STRING"),
         ("school_address", "STRING"),
         ("is_school_open", "STRING"),
+        ("tile_bigint", "INT"),
+        ("clean_lat", "DOUBLE"),
+        ("clean_lon", "DOUBLE"),
+        ("school_id", "STRING"),
+        ("name", "STRING"),
+        ("education_level", "STRING"),
+        ("percent_2G", "DOUBLE"),
+        ("percent_3G", "DOUBLE"),
+        ("percent_4G", "DOUBLE"),
+        ("2G_coverage", "INT"),
+        ("3G_coverage", "INT"),
+        ("4G_coverage", "INT"),
+        # qos
+        ("timestamp", "TIMESTAMP"),
+        ("country_id", "STRING"),
+        ("speed_upload", "DOUBLE"),
+        ("speed_download", "DOUBLE"),
+        ("roundtrip_time", "DOUBLE"),
+        ("jitter_upload", "DOUBLE"),
+        ("jitter_download", "DOUBLE"),
+        ("rtt_packet_loss_pct", "DOUBLE"),
+        ("provider", "STRING"),
+        ("latency", "DOUBLE"),
+        ("report_id", "STRING"),
+        ("agent_id", "STRING"),
     }
 
     date_today: date = date.today()
@@ -187,6 +212,8 @@ class Config(BaseSettings):
     UNIQUE_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
 
     UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
+
+    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_govt", "school_id_giga"]
 
     UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
 
@@ -238,6 +265,35 @@ class Config(BaseSettings):
         "2G",
         "3G",
         "4G",
+        "fiber_node_distance",
+        "microwave_node_distance",
+        "nearest_school_distance",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "schools_within_10km",
+        "nearest_NR_id",
+        "nearest_NR_distance",
+        "nearest_LTE_id",
+        "nearest_LTE_distance",
+        "nearest_UMTS_id",
+        "nearest_UMTS_distance",
+        "nearest_GSM_id",
+        "nearest_GSM_distance",
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "pop_within_10km",
+    ]
+
+    NONEMPTY_COLUMNS_QOS: list[str] = [
+        "timestamp",
+        "country_id",
+        "school_id_giga",
+        "school_id_govt",
+        "speed_upload",
+        "speed_download",
+        "provider",
     ]
 
     NONEMPTY_COLUMNS_CRITICAL: list[str] = [
@@ -254,6 +310,7 @@ class Config(BaseSettings):
             *self.NONEMPTY_COLUMNS_GEOLOCATION,
             *self.NONEMPTY_COLUMNS_COVERAGE,
             *self.NONEMPTY_COLUMNS_CRITICAL,
+            *self.NONEMPTY_COLUMNS_QOS,
         ]
 
     VALUES_DOMAIN_MASTER: dict[str, list[str]] = {
@@ -345,6 +402,12 @@ class Config(BaseSettings):
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
     }
 
+    VALUES_DOMAIN_COVERAGE_ITU: dict[str, list[str]] = {
+        "2G_coverage": [1, 0],
+        "3G_coverage": [1, 0],
+        "4G_coverage": [1, 0],
+    }
+
     @property
     def VALUES_DOMAIN_ALL(self) -> dict[str, list[str]]:
         return {
@@ -352,6 +415,7 @@ class Config(BaseSettings):
             **self.VALUES_DOMAIN_REFERENCE,
             **self.VALUES_DOMAIN_GEOLOCATION,
             **self.VALUES_DOMAIN_COVERAGE,
+            **self.VALUES_DOMAIN_COVERAGE_ITU,
         }
 
     @property

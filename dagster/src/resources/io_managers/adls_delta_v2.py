@@ -1,20 +1,17 @@
-from pathlib import Path
-
-import datahub.emitter.mce_builder as builder
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
-from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.datahub.emit_lineage import emit_lineage
+from src.utils.delta import run_query_with_error_handler
 from src.utils.schema import (
     get_partition_columns,
     get_primary_key,
@@ -29,10 +26,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        filepath = self._get_filepath(context)
-        table_name, table_root_path, table_path = self._get_table_path(
-            context, filepath
-        )
+        path = self._get_filepath(context)
+        table_name, _, table_path = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
 
@@ -40,29 +35,31 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         self._create_table_if_not_exists(context, schema_name, table_name)
         self._upsert_data(output, schema_name, full_table_name)
 
-        context.log.info(f"Uploaded {table_name} to {table_root_path} in ADLS.")
+        context.log.info(
+            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+        )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
-        table_name, table_root_path, table_path = self._get_table_path(
-            context, filepath
-        )
+        path = self._get_filepath(context)
+        table_name, _, table_path = self._get_table_path(context, str(path))
         spark = self._get_spark_session()
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
         dt = DeltaTable.forName(spark, full_table_name)
 
-        context.log.info(f"Downloaded {table_name} from {table_root_path} in ADLS.")
-
-        current_filepath = self._get_filepath_from_InputContext(context)
-        context.log.info(f"current_filepath: {current_filepath}")
-        platform = builder.make_data_platform_urn("adlsGen2")
-        emit_lineage(
-            context,
-            dataset_filepath=current_filepath,
-            upstream_filepath=filepath,
-            platform=platform,
+        context.log.info(
+            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
         )
+
+        # current_filepath = self._get_filepath_from_InputContext(context)
+        # context.log.info(f"current_filepath: {current_filepath}")
+        # platform = builder.make_data_platform_urn("adlsGen2")
+        # emit_lineage(
+        #     context,
+        #     dataset_filepath=current_filepath,
+        #     upstream_filepath=filepath,
+        #     platform=platform,
+        # )
 
         return dt.toDF()
 
@@ -70,12 +67,14 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     def _get_table_path(
         context: InputContext | OutputContext, filepath: str
     ) -> tuple[str, str, AnyUrl]:
-        if context.step_context.op_config["dataset_type"] == "qos":
-            table_name = Path(context.step_context.op_config["filepath"]).parent.name
-        else:
-            table_name = Path(filepath).name.split("_")[0]
+        config = FileConfig(**context.step_context.op_config)
 
-        table_root_path = "/".join(filepath.split("/")[:-1])
+        if config.dataset_type == "qos":
+            table_name = config.filename_components.country_code
+        else:
+            table_name = config.filepath_object.name.split("_")[0]
+
+        table_root_path = str(config.filepath_object.parent)
         return (
             ic(table_name),
             ic(table_root_path),
@@ -112,22 +111,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-
-        try:
-            query.execute()
-        except AnalysisException as exc:
-            if "DELTA_TABLE_NOT_FOUND" in str(exc):
-                # This error gets raised when you delete the Delta Table in ADLS and subsequently try to re-ingest the
-                # same table. Its corresponding entry in the metastore needs to be dropped first.
-                #
-                # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
-                context.log.warning(
-                    f"Attempting to drop metastore entry for `{full_table_name}`..."
-                )
-                spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
-                query.execute()
-            else:
-                raise exc
+        run_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     def _upsert_data(
         self,

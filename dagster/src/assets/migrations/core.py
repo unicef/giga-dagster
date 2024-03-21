@@ -3,8 +3,8 @@ import os
 from delta import DeltaTable
 from models import VALID_PRIMITIVES, Schema
 from pyspark import sql
-from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql.functions import col, when
+from src.utils.delta import run_query_with_error_handler
 
 from dagster import OpExecutionContext
 
@@ -41,22 +41,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     query = (
         DeltaTable.createOrReplace(spark).tableName(full_table_name).addColumns(columns)
     )
-
-    try:
-        query.execute()
-    except AnalysisException as exc:
-        if "DELTA_TABLE_NOT_FOUND" in str(exc):
-            # This error gets raised when you delete the Delta Table in ADLS and subsequently try to re-ingest the
-            # same table. Its corresponding entry in the metastore needs to be dropped first.
-            #
-            # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
-            context.log.warning(
-                f"Attempting to drop metastore entry for `{full_table_name}`..."
-            )
-            spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
-            query.execute()
-        else:
-            raise exc
+    run_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     (
         DeltaTable.forName(spark, full_table_name)

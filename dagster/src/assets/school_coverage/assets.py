@@ -16,8 +16,11 @@ from src.spark.coverage_transform_functions import (
     itu_coverage_merge,
     itu_transforms,
 )
+from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.schema import get_schema_columns
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -66,7 +69,9 @@ def coverage_data_quality_results(
     country_code = filepath.split("_")[1]
     source = filepath.split("_")[3]
 
-    dq_results = row_level_checks(coverage_raw, f"coverage_{source}", country_code)
+    schema_columns = get_schema_columns(spark.spark_session, "school_coverage")
+    dq_results = create_bronze_layer_columns(coverage_raw, schema_columns)
+    dq_results = row_level_checks(dq_results, f"coverage_{source}", country_code)
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
