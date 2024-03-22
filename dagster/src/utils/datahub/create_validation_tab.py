@@ -141,6 +141,7 @@ class EmitDatasetAssertionResults:
                 self.emitter.emit_mcp(assertion_data_platform_mcp)
             except Exception as error:
                 self.context.log.info(f"ERROR on Assertion Run: {error}")
+        self.logger.info(f"Dataset URN: {self.dataset_urn}")
 
 
 if __name__ == "__main__":
