@@ -20,6 +20,7 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
     DatasetAssertionScope,
 )
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
+from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
@@ -29,7 +30,6 @@ from dagster import OpExecutionContext
 class EmitDatasetAssertionResults:
     def __init__(
         self,
-        dataset_urn: str,
         dq_summary_statistics: dict,
         context: OpExecutionContext = None,
     ):
@@ -37,8 +37,9 @@ class EmitDatasetAssertionResults:
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
-        self.dataset_urn = dataset_urn
         self.context = context
+        config = FileConfig(**context.get_step_execution_context().op_config)
+        self.dataset_urn = config.datahub_destination_dataset_urn
 
         dq_summary_statistics.pop("summary")
         self.dq_summary_statistics = []
@@ -138,13 +139,14 @@ class EmitDatasetAssertionResults:
             assertion_data_platform_mcp = MetadataChangeProposalWrapper(
                 entityUrn=assertion_urn, aspect=assertion_data_platform_instance
             )
-            self.emitter.emit_mcp(assertion_mcp)
-            self.emitter.emit_mcp(assertion_run_mcp)
-            self.emitter.emit_mcp(assertion_data_platform_mcp)
+            try:
+                self.emitter.emit_mcp(assertion_mcp)
+                self.emitter.emit_mcp(assertion_run_mcp)
+                self.emitter.emit_mcp(assertion_data_platform_mcp)
+            except Exception as error:
+                self.context.log.info(f"ERROR on Assertion Run: {error}")
 
-            self.logger.info(
-                f"Success! Assertion info for column: {column_dq_result['column']} emitted!"
-            )
+        self.logger.info("DATASET VALIDATION TAB HAS BEEN CREATED IN DATAHUB")
 
 
 if __name__ == "__main__":
