@@ -101,10 +101,6 @@ class EmitDatasetAssertionResults:
                 # TODO: Might need to do something else with checks that aren't specific to a column
                 continue
 
-            self.logger.info(
-                f"Creating assertion info for column: {column_dq_result['column']}..."
-            )
-
             col_assertion_info = self.extract_assertion_info_of_column(
                 column_dq_result=column_dq_result, dataset_urn=self.dataset_urn
             )
