@@ -51,16 +51,6 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
         )
 
-        # current_filepath = self._get_filepath_from_InputContext(context)
-        # context.log.info(f"current_filepath: {current_filepath}")
-        # platform = builder.make_data_platform_urn("adlsGen2")
-        # emit_lineage(
-        #     context,
-        #     dataset_filepath=current_filepath,
-        #     upstream_filepath=filepath,
-        #     platform=platform,
-        # )
-
         return dt.toDF()
 
     @staticmethod
