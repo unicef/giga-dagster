@@ -22,7 +22,6 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
 from src.sensors.base import FileConfig
 from src.settings import settings
-from src.utils.adls import ADLSFileClient
 
 from dagster import OpExecutionContext
 
@@ -142,15 +141,3 @@ class EmitDatasetAssertionResults:
             except Exception as error:
                 self.context.log.info(f"ERROR on Assertion Run: {error}")
         self.logger.info(f"Dataset URN: {self.dataset_urn}")
-
-
-if __name__ == "__main__":
-    adls = ADLSFileClient()
-    dq_results_filepath = "logs-gx/school-coverage-data/randomstring_BIH_school-coverage_itu_20240227.json"
-    dq_summary_statistics = adls.download_json(dq_results_filepath)
-    dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:adls,adls-testing-raw.school-coverage-data.BIH_school_coverage_test_pipeline_correct_schema,DEV)"
-
-    emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
-    )
-    emit_assertions()
