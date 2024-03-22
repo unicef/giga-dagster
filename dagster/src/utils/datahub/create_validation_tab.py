@@ -142,8 +142,6 @@ class EmitDatasetAssertionResults:
             except Exception as error:
                 self.context.log.info(f"ERROR on Assertion Run: {error}")
 
-        self.logger.info("DATASET VALIDATION TAB HAS BEEN CREATED IN DATAHUB")
-
 
 if __name__ == "__main__":
     adls = ADLSFileClient()
