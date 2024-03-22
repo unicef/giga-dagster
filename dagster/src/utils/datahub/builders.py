@@ -9,6 +9,6 @@ def build_dataset_urn(filepath: str, platform: str = "adlsGen2"):
     platform = builder.make_data_platform_urn(platform)
     return builder.make_dataset_urn(
         platform=platform,
-        name=stem.replace("/", "."),
+        name=stem,
         env=settings.ADLS_ENVIRONMENT,
     )

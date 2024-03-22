@@ -22,6 +22,7 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
 from src.sensors.base import FileConfig
 from src.settings import settings
+from src.utils.datahub.builders import build_dataset_urn
 
 from dagster import OpExecutionContext
 
@@ -38,7 +39,10 @@ class EmitDatasetAssertionResults:
         )
         self.context = context
         config = FileConfig(**context.get_step_execution_context().op_config)
-        self.dataset_urn = config.datahub_destination_dataset_urn
+        bronze_filepath = (
+            f"bronze/school-{config.dataset_type}/{config.filepath_object.name}"
+        )
+        self.dataset_urn = build_dataset_urn(bronze_filepath)
 
         dq_summary_statistics.pop("summary")
         self.dq_summary_statistics = []
