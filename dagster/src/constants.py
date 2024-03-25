@@ -21,6 +21,7 @@ from pyspark.sql.types import (
 
 class Constants(BaseSettings):
     UPLOAD_PATH_PREFIX: str = "raw/uploads"
+    datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = "raw_schema"

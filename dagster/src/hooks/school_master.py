@@ -2,8 +2,8 @@ from models.file_upload import FileUpload
 from sqlalchemy import update
 
 from dagster import HookContext, success_hook
-from src.sensors.base import FileConfig
 from src.utils.db import get_db_context
+from src.utils.op_config import FileConfig
 
 
 @success_hook

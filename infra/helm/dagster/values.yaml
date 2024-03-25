@@ -19,7 +19,7 @@ global:
   # to false below.
   celeryConfigSecretName: "dagster-celery-config-secret"
 
-x-dagster-version: &dagster-version "1.5.0"
+x-dagster-version: &dagster-version "1.6.13"
 
 nameOverride: ""
 fullnameOverride: ""

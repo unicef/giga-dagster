@@ -15,8 +15,8 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
-from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
 

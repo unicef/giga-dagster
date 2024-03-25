@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
+from dagster import (
+    RunConfig,
+    RunRequest,
+    SensorEvaluationContext,
+    SkipReason,
+    sensor,
+)
 from src.constants import constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
@@ -9,8 +15,7 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-
-from .base import OpDestinationMapping, generate_run_ops
+from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 
 @sensor(
@@ -21,9 +26,12 @@ def school_master__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/master", recursive=False
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -87,7 +95,11 @@ def school_master__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -98,9 +110,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/reference", recursive=False
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -149,7 +164,11 @@ def school_reference__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -160,6 +179,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
+    run_requests = []
+
     for file_data in adls_file_client.list_paths_generator(
         constants.qos_source_folder, recursive=True
     ):
@@ -207,4 +228,11 @@ def school_qos__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests

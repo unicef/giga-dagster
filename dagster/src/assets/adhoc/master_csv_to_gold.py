@@ -17,9 +17,9 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.logger import ContextLoggerWithLoguruFallback
+from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
 

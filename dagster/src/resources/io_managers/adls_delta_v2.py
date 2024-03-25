@@ -8,10 +8,10 @@ from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import run_query_with_error_handler
+from src.utils.delta import execute_query_with_error_handler
+from src.utils.op_config import FileConfig
 from src.utils.schema import (
     get_partition_columns,
     get_primary_key,
@@ -32,7 +32,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
-        self._create_table_if_not_exists(context, schema_name, table_name)
+        self._create_table_if_not_exists(context, output, schema_name, table_name)
         self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(
@@ -83,13 +83,19 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     def _create_table_if_not_exists(
         self,
         context: InputContext | OutputContext,
+        data: sql.DataFrame,
         schema_name: str,
         table_name: str,
     ):
         spark = self._get_spark_session()
         full_table_name = f"{schema_name}.{table_name}"
-        columns = get_schema_columns(spark, schema_name)
-        partition_columns = get_partition_columns(spark, schema_name)
+
+        if schema_name == "qos":
+            columns = data.schema.fields
+            partition_columns = ["date"]
+        else:
+            columns = get_schema_columns(spark, schema_name)
+            partition_columns = get_partition_columns(spark, schema_name)
 
         query = (
             DeltaTable.createIfNotExists(spark)
@@ -101,7 +107,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-        run_query_with_error_handler(context, spark, query, schema_name, table_name)
+        execute_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     def _upsert_data(
         self,
@@ -110,8 +116,14 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         full_table_name: str,
     ):
         spark = self._get_spark_session()
-        columns = get_schema_columns(spark, schema_name)
-        primary_key = get_primary_key(spark, schema_name)
+
+        if schema_name == "qos":
+            columns = data.schema.fields
+            primary_key = "gigasync_id"
+        else:
+            columns = get_schema_columns(spark, schema_name)
+            primary_key = get_primary_key(spark, schema_name)
+
         update_columns = [c.name for c in columns if c.name != primary_key]
 
         master = DeltaTable.forName(spark, full_table_name).alias("master")

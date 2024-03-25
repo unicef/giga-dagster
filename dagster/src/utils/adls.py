@@ -18,8 +18,8 @@ from azure.storage.filedatalake import (
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
-from src.sensors.base import FileConfig
 from src.settings import settings
+from src.utils.op_config import FileConfig
 from src.utils.schema import get_primary_key, get_schema_columns
 
 _client = DataLakeServiceClient(
