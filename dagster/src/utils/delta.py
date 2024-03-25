@@ -6,11 +6,11 @@ from dagster import InputContext, OpExecutionContext, OutputContext
 
 
 def execute_query_with_error_handler(
-    context: InputContext | OutputContext | OpExecutionContext,
     spark: SparkSession,
     query: DeltaTableBuilder,
     schema_name: str,
     table_name: str,
+    context: InputContext | OutputContext | OpExecutionContext,
 ):
     full_table_name = f"{schema_name}.{table_name}"
 

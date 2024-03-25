@@ -107,7 +107,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-        execute_query_with_error_handler(context, spark, query, schema_name, table_name)
+        execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
     def _upsert_data(
         self,

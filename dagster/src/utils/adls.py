@@ -19,6 +19,7 @@ from azure.storage.filedatalake import (
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
+from src.utils.delta import execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_primary_key, get_schema_columns
 
@@ -145,25 +146,24 @@ class ADLSFileClient(ConfigurableResource):
     def upload_spark_dataframe_as_delta_table(
         self,
         data: sql.DataFrame,
-        table_path: str,
         schema_name: str,
+        table_name: str,
         spark: SparkSession,
+        context: OutputContext,
     ):
-        table_name = table_path.split("/")[-1]
         full_table_name = f"{schema_name}.{table_name}"
-        print(f"tablename: {table_name}, table path: {table_path}")
 
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+        spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
 
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
-        (
+        query = (
             DeltaTable.createIfNotExists(spark)
             .tableName(full_table_name)
             .addColumns(columns)
             .property("delta.enableChangeDataFeed", "true")
-            .execute()
         )
+        execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
         # TODO: Apply logic for preventing unnecessary updates
         # `master` and `updates` tables must both have a column containing the row hash

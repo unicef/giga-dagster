@@ -15,14 +15,12 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas.file_upload import FileUploadConfig
-from src.settings import settings
 from src.spark.transform_functions import (
     column_mapping_rename,
     create_bronze_layer_columns,
 )
 from src.utils.adls import (
     ADLSFileClient,
-    get_filepath,
 )
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -30,6 +28,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
+from src.utils.delta import execute_query_with_error_handler
 from src.utils.filename import deconstruct_filename_components, validate_filename
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -56,7 +55,7 @@ def geolocation_raw(
     yield Output(raw, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
+@asset(io_manager_key="adls_pandas_io_manager")
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
@@ -210,9 +209,12 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
+    s: SparkSession = spark.spark_session
     dataset_type = config.dataset_type
-    silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'silver').split('_')[0]}"
-    staging_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(config.filepath, dataset_type, 'staging').split('_')[0]}"
+    schema_name = config.metastore_schema
+    country_code = config.filename_components.country_code
+    silver_table_name = f"{schema_name}_silver.{country_code}"
+    staging_table_name = f"{schema_name}_staging.{country_code}"
 
     # {filepath: str, date_modified: str}
     files_for_review = []
@@ -226,38 +228,37 @@ def geolocation_staging(
         ):
             continue
 
-        properties = adls_file_client.get_file_metadata(file_data["name"])
+        properties = adls_file_client.get_file_metadata(file_data.name)
         date_modified = properties.last_modified
         context.log.info(f"filepath: {file_data.name}, date_modified: {date_modified}")
         files_for_review.append(
             {"filepath": file_data.name, "date_modified": date_modified}
         )
 
-    files_for_review.sort(key=lambda x: x.last_modified)
+    files_for_review = sorted(files_for_review, key=lambda x: x["date_modified"])
 
     context.log.info(f"files_for_review: {files_for_review}")
 
     # If silver table exists and no staging table exists, clone it to staging
     # If silver table exists and staging table exists, merge files for review to existing staging table
     # If silver table does not exist, merge files for review into one spark dataframe
-    if DeltaTable.isDeltaTable(spark.spark_session, silver_table_path):
-        if not DeltaTable.isDeltaTable(spark.spark_session, staging_table_path):
+    if s.catalog.tableExists(silver_table_name):
+        if not s.catalog.tableExists(staging_table_name):
             # Clone silver table to staging folder
-            silver = adls_file_client.download_delta_table_as_spark_dataframe(
-                silver_table_path, spark.spark_session
+            silver = DeltaTable.forName(silver_table_name).alias("silver").toDF()
+            query = (
+                DeltaTable.create(s)
+                .tableName(staging_table_name)
+                .addColumns(silver.schema)
+                .property("delta.enableChangeDataFeed", "true")
             )
-
-            adls_file_client.upload_spark_dataframe_as_delta_table(
-                silver,
-                staging_table_path,
-                context.op_config["dataset_type"],
-                spark.spark_session,
+            execute_query_with_error_handler(
+                s, query, schema_name, staging_table_name, context
             )
+            silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
         # Load new table (silver clone in staging) as a deltatable
-        staging = adls_file_client.download_delta_table_as_delta_table(
-            staging_table_path, spark.spark_session
-        )
+        staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
 
         # Merge each pending file for the same country
         for file_info in files_for_review:
@@ -265,23 +266,21 @@ def geolocation_staging(
                 file_info["filepath"], spark.spark_session
             )
 
-            staging = (
-                staging.alias("source")
+            (
+                staging.alias("staging")
                 .merge(
-                    existing_file.alias("target"),
-                    "source.school_id_giga = target.school_id_giga",
+                    existing_file.alias("updates"),
+                    "staging.school_id_giga = updates.school_id_giga",
                 )
                 .whenMatchedUpdateAll()
                 .whenNotMatchedInsertAll()
+                .execute()
             )
 
             adls_file_client.rename_file(
                 file_info["filepath"], f"{file_info['filepath']}/merged-files"
             )
-
             context.log.info(f"Staging: table {staging}")
-
-        staging.execute()
 
     else:
         staging = geolocation_dq_passed_rows
@@ -293,10 +292,7 @@ def geolocation_staging(
             staging = staging.union(existing_file)
 
         adls_file_client.upload_spark_dataframe_as_delta_table(
-            staging,
-            staging_table_path,
-            context.op_config["dataset_type"],
-            spark.spark_session,
+            staging, schema_name, staging_table_name, s
         )
 
     emit_metadata_to_datahub(
