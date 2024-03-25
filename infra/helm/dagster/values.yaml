@@ -421,33 +421,6 @@ dagster-user-deployments:
         annotations: { }
 
 ####################################################################################################
-# Pipeline Run: Configuration for user code containers.
-#
-# `DAGSTER_K8S_PIPELINE_RUN_IMAGE` environment variable will point to the image specified below.
-# The run config for the celery executor can set `job_image` to fetch from environment variable
-# `DAGSTER_K8S_PIPELINE_RUN_IMAGE`, so that celery workers will launch k8s jobs with said image.
-#
-####################################################################################################
-pipelineRun:
-  image:
-    # When a tag is not supplied for a Dagster provided image,
-    # it will default as the Helm chart version.
-    repository: ~
-    tag: ~
-    pullPolicy: Always
-
-  # Additional environment variables to set.
-  # A Kubernetes ConfigMap will be created with these environment variables. See:
-  # https://kubernetes.io/docs/concepts/configuration/configmap/
-  #
-  # Example:
-  #
-  # env:
-  #   ENV_ONE: one
-  #   ENV_TWO: two
-  env: { }
-
-####################################################################################################
 # Scheduler: Configuration for the scheduler
 ####################################################################################################
 scheduler:
@@ -1361,3 +1334,30 @@ retention:
 #     run_tags:
 #       key: value
 additionalInstanceConfig: { }
+
+####################################################################################################
+# Pipeline Run: Configuration for user code containers.
+#
+# `DAGSTER_K8S_PIPELINE_RUN_IMAGE` environment variable will point to the image specified below.
+# The run config for the celery executor can set `job_image` to fetch from environment variable
+# `DAGSTER_K8S_PIPELINE_RUN_IMAGE`, so that celery workers will launch k8s jobs with said image.
+#
+####################################################################################################
+pipelineRun:
+  image:
+    # When a tag is not supplied for a Dagster provided image,
+    # it will default as the Helm chart version.
+    repository: ~
+    tag: ~
+    pullPolicy: Always
+
+  # Additional environment variables to set.
+  # A Kubernetes ConfigMap will be created with these environment variables. See:
+  # https://kubernetes.io/docs/concepts/configuration/configmap/
+  #
+  # Example:
+  #
+  # env:
+  #   ENV_ONE: one
+  #   ENV_TWO: two
+  env: { }
