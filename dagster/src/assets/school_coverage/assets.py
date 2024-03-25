@@ -34,17 +34,17 @@ def coverage_raw(
         context.run_tags["dagster/run_key"]
     )
 
-    # for testing only START - will be moved to io manager
-    filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    country_code = filepath.split("_")[1]
-    platform = builder.make_data_platform_urn("adlsGen2")
-    dataset_urn = builder.make_dataset_urn(
-        platform=platform,
-        env=settings.ADLS_ENVIRONMENT,
-        name=filepath.split(".")[0].replace("/", "."),
-    )
-    emit_metadata_to_datahub(context, df, country_code, dataset_urn)
-    # for testing only END - will be moved to io manager
+    # # for testing only START - will be moved to io manager
+    # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
+    # country_code = filepath.split("_")[1]
+    # platform = builder.make_data_platform_urn("adlsGen2")
+    # dataset_urn = builder.make_dataset_urn(
+    #     platform=platform,
+    #     env=settings.ADLS_ENVIRONMENT,
+    #     name=filepath.split(".")[0].replace("/", "."),
+    # )
+    # emit_metadata_to_datahub(context, df, country_code, dataset_urn)
+    # # for testing only END - will be moved to io manager
 
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
