@@ -29,7 +29,7 @@ from dagster import (
     partitions_def=MultiPartitionsDefinition(
         {
             "country": StaticPartitionsDefinition(get_country_codes_list()),
-            "datetime": HourlyPartitionsDefinition(start_date="2023-01-01-00:00"),
+            "datetime": HourlyPartitionsDefinition(start_date="2024-01-01-00:00"),
         }
     ),
 )
