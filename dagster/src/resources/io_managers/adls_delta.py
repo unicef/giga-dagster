@@ -4,6 +4,7 @@ from pyspark import sql
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_lineage import emit_lineage
 
 adls_client = ADLSFileClient()
 
@@ -36,6 +37,11 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             f"Uploaded {filepath.split('/')[-1]} to"
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
         )
+
+        context.log.info(
+            f"EMIT LINEAGE CALLED FROM IO MANAGER: {self.__class__.__name__}"
+        )
+        emit_lineage(context=context)
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         filepath = self._get_filepath(context)

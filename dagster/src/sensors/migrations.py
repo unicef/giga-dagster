@@ -12,14 +12,13 @@ from src.utils.adls import ADLSFileClient
 def migrations__schema_sensor():
     adls = ADLSFileClient()
     paths = adls.list_paths(constants.raw_schema_folder)
-    run_requests = []
 
     for path in paths:
         if path.is_directory:
             continue
 
         filepath = path["name"]
-        run_requests.append({"run_key": filepath})
+        properties = adls.get_file_metadata(filepath=filepath)
+        last_modified = properties["last_modified"].strftime("%Y%m%d-%H%M%S")
 
-    for request in run_requests:
-        yield RunRequest(**request)
+        yield RunRequest(run_key=f"{filepath}:{last_modified}")

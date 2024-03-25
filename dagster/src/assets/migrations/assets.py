@@ -8,7 +8,7 @@ from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, asset
 
-from .core import save_schema_delta_table, validate_raw_schema
+from .core import get_filepath, save_schema_delta_table, validate_raw_schema
 
 
 @asset
@@ -27,7 +27,7 @@ def migrate_schema(
     spark: PySparkResource,
 ) -> None:
     s: SparkSession = spark.spark_session
-    filepath = context.run_tags["dagster/run_key"]
+    filepath = get_filepath(context)
     pdf = adls_file_client.download_csv_as_pandas_dataframe(filepath)
 
     filename = os.path.splitext(filepath.split("/")[-1])[0]
