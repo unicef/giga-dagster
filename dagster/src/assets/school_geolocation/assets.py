@@ -24,6 +24,7 @@ from src.utils.adls import (
     ADLSFileClient,
     get_filepath,
 )
+from src.utils.datahub.builders import build_dataset_urn
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
@@ -141,10 +142,14 @@ def geolocation_data_quality_results_summary(
     )
 
     try:
+        config = FileConfig(**context.get_step_execution_context().op_config)
+        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+
         context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
         emit_assertions = EmitDatasetAssertionResults(
             dq_summary_statistics=dq_summary_statistics,
             context=context,
+            dataset_urn=dq_target_dataset_urn,
         )
         emit_assertions()
     except Exception as error:

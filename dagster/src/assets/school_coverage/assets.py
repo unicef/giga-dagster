@@ -1,4 +1,3 @@
-import datahub.emitter.mce_builder as builder
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
@@ -18,6 +17,7 @@ from src.spark.coverage_transform_functions import (
 )
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
+from src.utils.datahub.builders import build_dataset_urn
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.schema import get_schema_columns
@@ -76,18 +76,19 @@ def coverage_data_quality_results(
         aggregate_report_spark_df(spark.spark_session, dq_results), coverage_raw
     )
 
-    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
-    platform = builder.make_data_platform_urn("adlsGen2")
-    dataset_urn = builder.make_dataset_urn(
-        platform=platform,
-        env=settings.ADLS_ENVIRONMENT,
-        name=filepath.split(".")[0].replace("/", "."),
-    )
-    emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
-    )
-    emit_assertions()
-    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
+    try:
+        config = FileConfig(**context.get_step_execution_context().op_config)
+        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+
+        context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
+        emit_assertions = EmitDatasetAssertionResults(
+            dq_summary_statistics=dq_summary_statistics,
+            context=context,
+            dataset_urn=dq_target_dataset_urn,
+        )
+        emit_assertions()
+    except Exception as error:
+        context.log.info(f"Assertion Run ERROR: {error}")
 
     yield Output(
         dq_results.toPandas(),
