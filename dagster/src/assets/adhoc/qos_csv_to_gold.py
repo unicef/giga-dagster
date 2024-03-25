@@ -11,6 +11,7 @@ from pyspark.sql import (
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.spark import transform_types
 
 from dagster import (
     OpExecutionContext,
@@ -69,13 +70,17 @@ def adhoc__qos_transforms(
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_qos_to_gold(
+    context: OpExecutionContext,
     adhoc__qos_transforms: sql.DataFrame,
     config: FileConfig,
 ) -> sql.DataFrame:
+    df_transformed = transform_types(
+        adhoc__qos_transforms, config.metastore_schema, context
+    )
     yield Output(
-        adhoc__qos_transforms,
+        df_transformed,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(adhoc__qos_transforms),
+            "preview": get_table_preview(df_transformed),
         },
     )

@@ -27,5 +27,6 @@ def execute_query_with_error_handler(
             )
             spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
             query.execute()
+            context.log.info("ok")
         else:
             raise exc
