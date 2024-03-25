@@ -53,6 +53,7 @@ def school_master_coverage__raw_file_uploads_sensor(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
                 destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{stem}.json",
                 metastore_schema=metastore_schema,
+                dq_target_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
             ),
             "coverage_dq_passed_rows": OpDestinationMapping(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",

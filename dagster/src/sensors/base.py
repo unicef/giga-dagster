@@ -31,6 +31,11 @@ class FileConfig(Config):
         For regular assets, simply pass in the destination path as a string.
         """,
     )
+    dq_target_filepath: str = Field(
+        description="""
+        The path of the file inside the ADLS container where we run data quality checks on.
+        """,
+    )
     metastore_schema: str = Field(
         description="""
         The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table.
@@ -71,6 +76,7 @@ class OpDestinationMapping(BaseModel):
     source_filepath: str
     destination_filepath: str
     metastore_schema: str
+    dq_target_filepath: str = ""
 
 
 def generate_run_ops(
@@ -85,6 +91,7 @@ def generate_run_ops(
         file_config = FileConfig(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
+            dq_target_filepath=op_mapping.dq_target_filepath,
             metastore_schema=op_mapping.metastore_schema,
             dataset_type=dataset_type,
             metadata=metadata,
