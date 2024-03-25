@@ -8,7 +8,6 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
@@ -20,6 +19,7 @@ from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset

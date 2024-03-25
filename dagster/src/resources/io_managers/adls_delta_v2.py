@@ -8,10 +8,10 @@ from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import execute_query_with_error_handler
+from src.utils.op_config import FileConfig
 from src.utils.schema import (
     get_partition_columns,
     get_primary_key,

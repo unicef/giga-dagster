@@ -8,31 +8,18 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient
-from src.utils.country import get_country_codes_list
 from src.utils.metadata import get_output_metadata, get_table_preview
-from src.utils.spark import transform_types
+from src.utils.op_config import FileConfig
 
 from dagster import (
-    HourlyPartitionsDefinition,
-    MultiPartitionsDefinition,
     OpExecutionContext,
     Output,
-    StaticPartitionsDefinition,
     asset,
 )
 
 
-@asset(
-    io_manager_key="adls_passthrough_io_manager",
-    partitions_def=MultiPartitionsDefinition(
-        {
-            "country": StaticPartitionsDefinition(get_country_codes_list()),
-            "datetime": HourlyPartitionsDefinition(start_date="2024-01-01-00:05"),
-        }
-    ),
-)
+@asset(io_manager_key="adls_passthrough_io_manager")
 def adhoc__load_qos_csv(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
@@ -82,17 +69,13 @@ def adhoc__qos_transforms(
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
 def adhoc__publish_qos_to_gold(
-    context: OpExecutionContext,
     adhoc__qos_transforms: sql.DataFrame,
     config: FileConfig,
 ) -> sql.DataFrame:
-    df_transformed = transform_types(
-        adhoc__qos_transforms, config.metastore_schema, context
-    )
     yield Output(
-        df_transformed,
+        adhoc__qos_transforms,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(df_transformed),
+            "preview": get_table_preview(adhoc__qos_transforms),
         },
     )

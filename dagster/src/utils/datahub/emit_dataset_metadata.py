@@ -18,9 +18,9 @@ from datahub.metadata.schema_classes import (
     SchemaMetadataClass,
     StringTypeClass,
 )
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import get_output_filepath
+from src.utils.op_config import FileConfig
 
 from dagster import OpExecutionContext, version
 

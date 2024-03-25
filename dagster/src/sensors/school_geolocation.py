@@ -10,10 +10,7 @@ from src.jobs.school_master import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-from .base import (
-    OpDestinationMapping,
-    generate_run_ops,
-)
+from ..utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 SCHOOL_DATASET_TYPE = f"school-{DATASET_TYPE}"
