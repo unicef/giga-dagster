@@ -21,6 +21,7 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
 )
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
 from src.settings import settings
+from src.utils.adls import ADLSFileClient
 
 from dagster import OpExecutionContext
 
@@ -39,9 +40,10 @@ class EmitDatasetAssertionResults:
         self.context = context
         self.dataset_urn = dataset_urn
 
-        dq_summary_statistics.pop("summary")
+        dq_results = dict(dq_summary_statistics)
+        dq_results.pop("summary")
         self.dq_summary_statistics = []
-        for value in dq_summary_statistics.values():
+        for value in dq_results.values():
             self.dq_summary_statistics.extend(value)
         self.logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
@@ -140,3 +142,22 @@ class EmitDatasetAssertionResults:
             except Exception as error:
                 self.context.log.info(f"ERROR on Assertion Run: {error}")
         self.logger.info(f"Dataset URN: {self.dataset_urn}")
+
+
+if __name__ == "__main__":
+    adls = ADLSFileClient()
+    dq_results_filepath = "data-quality-results/school-geolocation/dq-summary/l2wkbpxgyts291f0au9pyh6p_BEN_geolocation_20240321-130111.json"
+    dq_summary_statistics = adls.download_json(dq_results_filepath)
+    print(dq_summary_statistics)
+    dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:adlsGen2,bronze/school-geolocation/l2wkbpxgyts291f0au9pyh6p_BEN_geolocation_20240321-130111,DEV)"
+
+    emit_assertions = EmitDatasetAssertionResults(
+        dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics
+    )
+    emit_assertions()
+
+    test_dict = {"1": "one", "two": "2"}
+    test_dict_copy = dict(test_dict)
+    test_dict_copy.pop("1")
+    print(test_dict)
+    print(test_dict_copy)
