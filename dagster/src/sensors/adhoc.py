@@ -21,9 +21,12 @@ def school_master__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/master", recursive=False
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -87,7 +90,11 @@ def school_master__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -98,9 +105,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/reference", recursive=False
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -149,7 +159,11 @@ def school_reference__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -160,9 +174,12 @@ def school_qos__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         constants.qos_source_folder, recursive=True
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         adls_filepath = file_data.name
         path = Path(adls_filepath)
 
@@ -207,4 +224,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests

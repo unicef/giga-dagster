@@ -10,13 +10,29 @@ from pyspark.sql import (
 )
 from src.sensors.base import FileConfig
 from src.utils.adls import ADLSFileClient
+from src.utils.country import get_country_codes_list
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.spark import transform_types
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import (
+    HourlyPartitionsDefinition,
+    MultiPartitionsDefinition,
+    OpExecutionContext,
+    Output,
+    StaticPartitionsDefinition,
+    asset,
+)
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(
+    io_manager_key="adls_passthrough_io_manager",
+    partitions_def=MultiPartitionsDefinition(
+        {
+            "country": StaticPartitionsDefinition(get_country_codes_list()),
+            "datetime": HourlyPartitionsDefinition(start_date="2023-01-01-00:00"),
+        }
+    ),
+)
 def adhoc__load_qos_csv(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
