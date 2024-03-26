@@ -142,9 +142,7 @@ def geolocation_data_quality_results_summary(
     )
 
     context.log.info("EMITTING ASSERTIONS TO DATAHUB")
-    dataset_urn = create_dataset_urn(
-        context, is_upstream=False, output_name="geolocation_dq_results"
-    )
+    dataset_urn = create_dataset_urn(context, is_upstream=False)
     emit_assertions = EmitDatasetAssertionResults(
         dataset_urn=dataset_urn,
         dq_summary_statistics=dq_summary_statistics,

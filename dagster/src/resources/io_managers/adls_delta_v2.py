@@ -151,7 +151,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         has_updates = master_to_update_signature != updates_signature
         has_insertions = inserts_df.count() > 0
 
-        if not (has_updates or has_insertions):
+        if not (ic(has_updates) or ic(has_insertions)):
             return
 
         query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")

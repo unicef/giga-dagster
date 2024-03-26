@@ -60,10 +60,14 @@ class FileConfig(Config):
 
     @property
     def datahub_source_dataset_urn(self) -> str:
+        if not self.destination_filepath_object.suffix:
+            return build_dataset_urn(self.filepath, platform="deltaLake")
         return build_dataset_urn(self.filepath)
 
     @property
     def datahub_destination_dataset_urn(self) -> str:
+        if not self.destination_filepath_object.suffix:
+            return build_dataset_urn(self.destination_filepath, platform="deltaLake")
         return build_dataset_urn(self.destination_filepath)
 
 
