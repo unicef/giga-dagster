@@ -35,6 +35,7 @@ class FileConfig(Config):
         description="""
         The path of the file inside the ADLS container where we run data quality checks on.
         """,
+        default=None,
     )
     metastore_schema: str = Field(
         description="""
@@ -76,7 +77,6 @@ class OpDestinationMapping(BaseModel):
     source_filepath: str
     destination_filepath: str
     metastore_schema: str
-    dq_target_filepath: str = ""
 
 
 def generate_run_ops(
@@ -84,6 +84,7 @@ def generate_run_ops(
     dataset_type: str,
     metadata: dict,
     file_size_bytes: int,
+    dq_target_filepath: str,
 ):
     run_ops = {}
 
@@ -91,11 +92,11 @@ def generate_run_ops(
         file_config = FileConfig(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
-            dq_target_filepath=op_mapping.dq_target_filepath,
             metastore_schema=op_mapping.metastore_schema,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,
+            dq_target_filepath=dq_target_filepath,
         )
         run_ops[asset_key] = file_config
 

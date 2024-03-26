@@ -64,7 +64,6 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
                 destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{stem}.json",
                 metastore_schema=metastore_schema,
-                dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
             ),
             "geolocation_dq_passed_rows": OpDestinationMapping(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
@@ -88,6 +87,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
+            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
         )
 
         context.log.info(f"FILE: {path}")
