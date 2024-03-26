@@ -15,6 +15,7 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.filename import deconstruct_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 
@@ -29,6 +30,12 @@ def school_master__gold_csv_to_deltatable_sensor(
     paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/master", recursive=False
     )
+    paths_list.extend(
+        adls_file_client.list_paths(
+            constants.adhoc_master_updates_source_folder, recursive=True
+        )
+    )
+
     run_requests = []
 
     for file_data in paths_list:
@@ -43,6 +50,11 @@ def school_master__gold_csv_to_deltatable_sensor(
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_master"
+
+        filename_components = deconstruct_filename_components(file_data.name)
+
+        if not stem.startswith(filename_components.country_code):
+            stem = f"{filename_components.country_code}_{stem}"
 
         ops_destination_mapping = {
             "adhoc__load_master_csv": OpDestinationMapping(
@@ -96,7 +108,11 @@ def school_master__gold_csv_to_deltatable_sensor(
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
-            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+            RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": filename_components.country_code},
+            )
         )
 
     yield from run_requests

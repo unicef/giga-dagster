@@ -38,7 +38,7 @@ def deconstruct_filename_components(filepath: str):
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
 
-    if any("geolocation" in p for p in path.parts):
+    if any("geolocation" in p for p in path.parts[:-1]):
         validate_filename(filepath)
         id, country_code, dataset_type, timestamp = splits
         return FilenameComponents(
@@ -48,7 +48,7 @@ def deconstruct_filename_components(filepath: str):
             country_code=country_code,
         )
 
-    if any("coverage" in p for p in path.parts):
+    if any("coverage" in p for p in path.parts[:-1]):
         validate_filename(filepath)
         id, country_code, dataset_type, source, timestamp = splits
         return FilenameComponents(
@@ -59,7 +59,7 @@ def deconstruct_filename_components(filepath: str):
             country_code=country_code,
         )
 
-    if any("qos" in p for p in path.parts):
+    if any("qos" in p for p in path.parts[:-1]):
         if len(path.parent.name) != 3:
             raise FilenameValidationException(
                 f"Expected 3-letter ISO country code for QoS directory; got `{path.parent.name}`"
@@ -70,4 +70,8 @@ def deconstruct_filename_components(filepath: str):
             country_code=path.parent.name,
         )
 
-    return None
+    if len(country_code := path.stem.split("_")[0]) != 3:
+        if len(country_code := path.parent.name) != 3:
+            return None
+
+    return FilenameComponents(country_code=country_code)
