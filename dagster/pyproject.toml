@@ -58,7 +58,7 @@ jupyter = "^1.0.0"
 notebook = "^7.0.6"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.1.13"
+ruff = "^0.3.4"
 ipython = "^8.22.2"
 mypy = "^1.9.0"
 
@@ -76,12 +76,20 @@ ignore-init-module-imports = true
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "C", "B", "UP"]
 ignore = ["E203", "E266", "E501", "E402", "C408"]
-
-[tool.ruff.mccabe]
-max-complexity = 10
+task-tags = ["TODO", "FIXME", "HACK"]
 
 [tool.ruff.lint.flake8-builtins]
 builtins-ignorelist = ["id"]
+
+[tool.ruff.lint.flake8-comprehensions]
+allow-dict-calls-with-keyword-arguments = true
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+banned-module-level-imports = ["numpy"]
+
+[tool.ruff.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
