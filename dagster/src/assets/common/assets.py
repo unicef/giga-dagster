@@ -1,10 +1,10 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.op_config import FileConfig
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset

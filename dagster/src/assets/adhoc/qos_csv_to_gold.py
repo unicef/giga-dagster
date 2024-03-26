@@ -8,14 +8,16 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from src.sensors.base import FileConfig
-from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
-from src.utils.schema import get_primary_key, get_schema_columns
+from src.utils.op_config import FileConfig
 from src.utils.spark import transform_types
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import (
+    OpExecutionContext,
+    Output,
+    asset,
+)
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
@@ -40,10 +42,7 @@ def adhoc__qos_transforms(
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
 
-    schema_columns = get_schema_columns(s, "qos")
     sdf = s.createDataFrame(df)
-    sdf = add_missing_columns(sdf, schema_columns)
-    primary_key = get_primary_key(s, config.metastore_schema)
     column_actions = {
         "signature": f.sha2(f.concat_ws("|", *sdf.columns), 256),
         "gigasync_id": f.sha2(
@@ -56,7 +55,7 @@ def adhoc__qos_transforms(
         ),
         "date": f.to_date(f.col("timestamp")),
     }
-    sdf = sdf.withColumns(column_actions).dropDuplicates([primary_key])
+    sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
     context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
 
     df_pandas = sdf.toPandas()

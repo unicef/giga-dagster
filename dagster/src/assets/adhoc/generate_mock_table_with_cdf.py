@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark.sql import functions as f
-from src.utils.delta import run_query_with_error_handler
+from src.utils.delta import execute_query_with_error_handler
 from src.utils.schema import get_schema_columns
 
 from dagster import OpExecutionContext, asset
@@ -24,7 +24,7 @@ def adhoc__copy_original(
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
     )
-    run_query_with_error_handler(
+    execute_query_with_error_handler(
         context, spark.spark_session, query, *ZCDF_TABLE_NAME.split(".")
     )
 

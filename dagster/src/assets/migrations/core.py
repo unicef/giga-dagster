@@ -4,7 +4,7 @@ from delta import DeltaTable
 from models import VALID_PRIMITIVES, Schema
 from pyspark import sql
 from pyspark.sql.functions import col, when
-from src.utils.delta import run_query_with_error_handler
+from src.utils.delta import execute_query_with_error_handler
 
 from dagster import OpExecutionContext
 
@@ -45,7 +45,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     query = (
         DeltaTable.createOrReplace(spark).tableName(full_table_name).addColumns(columns)
     )
-    run_query_with_error_handler(context, spark, query, schema_name, table_name)
+    execute_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     (
         DeltaTable.forName(spark, full_table_name)

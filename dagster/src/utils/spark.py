@@ -210,6 +210,9 @@ def transform_types(
     logger = get_context_with_fallback_logger(context)
 
     columns = get_schema_columns(df.sparkSession, schema_name)
+    if schema_name == "qos":
+        columns = [c for c in columns if c.name in df.columns]
+
     df = df.withColumns(
         {column.name: col(column.name).cast(column.dataType) for column in columns}
     )

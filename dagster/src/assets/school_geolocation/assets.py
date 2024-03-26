@@ -15,7 +15,6 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas.file_upload import FileUploadConfig
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import (
     create_bronze_layer_columns,
@@ -32,6 +31,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.db import get_db_context
 from src.utils.filename import deconstruct_filename_components, validate_filename
 from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns
 

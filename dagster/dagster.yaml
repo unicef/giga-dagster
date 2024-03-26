@@ -36,3 +36,11 @@ local_artifact_storage:
   class: LocalArtifactStorage
   config:
     base_dir: /app/artifacts
+
+sensors:
+  use_threads: true
+  num_workers: 4
+
+schedules:
+  use_threads: true
+  num_workers: 4
