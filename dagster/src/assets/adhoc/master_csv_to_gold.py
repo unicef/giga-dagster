@@ -28,7 +28,7 @@ from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
-from src.utils.spark import transform_types
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -257,9 +257,7 @@ def adhoc__publish_master_to_gold(
     gold = transform_types(
         adhoc__master_dq_checks_passed, config.metastore_schema, context
     )
-    gold = gold.withColumn(
-        "signature", f.sha2(f.concat_ws("|", *sorted(gold.columns)), 256)
-    )
+    gold = compute_row_hash(gold)
 
     emit_metadata_to_datahub(
         context,
