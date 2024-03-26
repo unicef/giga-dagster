@@ -257,6 +257,9 @@ def adhoc__publish_master_to_gold(
     gold = transform_types(
         adhoc__master_dq_checks_passed, config.metastore_schema, context
     )
+    gold = gold.withColumn(
+        "signature", f.sha2(f.concat_ws("|", *sorted(gold.columns)), 256)
+    )
 
     emit_metadata_to_datahub(
         context,
