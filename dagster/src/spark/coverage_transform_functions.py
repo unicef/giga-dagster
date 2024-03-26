@@ -9,7 +9,7 @@ from src.utils.schema import get_schema_columns
 # General Transform Components
 
 
-def rename_raw_columns(df):
+def rename_raw_columns(df: sql.DataFrame):
     # Iterate over mapping set and perform actions
     for raw_col, delta_col in config.COV_COLUMN_RENAME:
         # Check if the raw column exists in the DataFrame
@@ -149,7 +149,7 @@ def itu_lower_columns(df: sql.DataFrame):
 def itu_transforms(itu: sql.DataFrame):
     # fb
     itu = itu_binary_to_boolean(itu)
-    itu = itu_lower_columns(itu)  ## should i remove given column mapping portal?
+    itu = itu_lower_columns(itu)  # should i remove given column mapping portal?
     itu = coverage_column_filter(itu, config.ITU_COLUMNS)
     itu = coverage_row_filter(itu)
 
@@ -173,7 +173,7 @@ def itu_transforms(itu: sql.DataFrame):
     columns_to_add = {
         col.name: f.lit(None).cast(NullType())
         for col in cov_columns
-        if col.name not in fb.columns
+        if col.name not in itu.columns
     }
     itu = itu.withColumns(columns_to_add)
 
@@ -228,68 +228,72 @@ def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
 
 
 if __name__ == "__main__":
-    from src.data_quality_checks.utils import (
-        aggregate_report_json,
-        aggregate_report_spark_df,
-        row_level_checks,
-    )
-    from src.utils.spark import get_spark_session
 
-    #
-    file_url_fb = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
-    file_url_itu = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_itu_20230927-091823.csv"
-    file_url_cov = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/silver/coverage_data/UZB_school-coverage_master.csv"
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    spark = get_spark_session()
-    fb = spark.read.csv(file_url_fb, header=True)
-    itu = spark.read.csv(file_url_itu, header=True)
-    cov = spark.read.csv(file_url_cov, header=True)
+    def test():
+        from src.data_quality_checks.utils import (
+            aggregate_report_json,
+            aggregate_report_spark_df,
+            row_level_checks,
+        )
+        from src.utils.spark import get_spark_session
 
-    # itu.show()
-    ## CONFORM TEST FILES TO PROPER SCHEMA
-    # fb = rename_raw_columns(fb)
-    itu = rename_raw_columns(itu)
-    itu = itu.withColumn("nearest_NR_id", f.lit(None))
-    itu = itu.withColumn("nearest_NR_distance", f.lit(None))
-    # cov = rename_raw_columns(cov)
-    # cov = cov.withColumn("nearest_NR_id", f.lit(None))
-    # cov = cov.withColumn("nearest_NR_distance", f.lit(None))
-    # cov = cov.select(*config.COV_COLUMNS)
-    itu.show()
+        #
+        # file_url_fb = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
+        file_url_itu = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_itu_20230927-091823.csv"
+        # file_url_cov = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/silver/coverage_data/UZB_school-coverage_master.csv"
+        # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+        spark = get_spark_session()
+        # fb = spark.read.csv(file_url_fb, header=True)
+        itu = spark.read.csv(file_url_itu, header=True)
+        # cov = spark.read.csv(file_url_cov, header=True)
 
-    df = row_level_checks(
-        itu, "coverage_itu", "UZB"
-    )  # dataset plugged in should conform to updated schema! rename if necessary
-    df.show()
+        # itu.show()
+        ## CONFORM TEST FILES TO PROPER SCHEMA
+        # fb = rename_raw_columns(fb)
+        itu = rename_raw_columns(itu)
+        itu = itu.withColumn("nearest_NR_id", f.lit(None))
+        itu = itu.withColumn("nearest_NR_distance", f.lit(None))
+        # cov = rename_raw_columns(cov)
+        # cov = cov.withColumn("nearest_NR_id", f.lit(None))
+        # cov = cov.withColumn("nearest_NR_distance", f.lit(None))
+        # cov = cov.select(*config.COV_COLUMNS)
+        itu.show()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    # df.show()
+        df = row_level_checks(
+            itu, "coverage_itu", "UZB"
+        )  # dataset plugged in should conform to updated schema! rename if necessary
+        df.show()
 
-    _json = aggregate_report_json(df, itu)
-    print(_json)
+        df = aggregate_report_spark_df(spark=spark, df=df)
+        # df.show()
 
-    # ## filter to one entry for testing
-    # fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    # cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+        _json = aggregate_report_json(df, itu)
+        print(_json)
 
-    # ## DAGSTER WORKFLOW ##
+        # ## filter to one entry for testing
+        # fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+        # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+        # cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
 
-    # ## TRANSFORM STEP
-    # # FB
-    # fb = fb_transforms(fb)
-    # fb = fb.withColumn("cellular_coverage_type", f.lit("3G"))
-    # fb.show()
-    # df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
-    # print("Merged FB and (Silver) Coverage Dataset")
-    # df1.show()
+        # ## DAGSTER WORKFLOW ##
 
-    # # ITU
-    # itu = itu_transforms(itu)
-    # itu.show()
-    # cov.show()
-    # df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
-    # print("Merged ITU and (Silver) Coverage Dataset")
-    # df2.show()
+        # ## TRANSFORM STEP
+        # # FB
+        # fb = fb_transforms(fb)
+        # fb = fb.withColumn("cellular_coverage_type", f.lit("3G"))
+        # fb.show()
+        # df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
+        # print("Merged FB and (Silver) Coverage Dataset")
+        # df1.show()
 
-    # from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
+        # # ITU
+        # itu = itu_transforms(itu)
+        # itu.show()
+        # cov.show()
+        # df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
+        # print("Merged ITU and (Silver) Coverage Dataset")
+        # df2.show()
+
+        # from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
+
+    test()

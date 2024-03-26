@@ -24,7 +24,6 @@ from src.spark.coverage_transform_functions import (
 )
 from src.spark.transform_functions import (
     column_mapping_rename,
-    create_bronze_layer_columns,
 )
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
@@ -37,7 +36,6 @@ from src.utils.filename import deconstruct_filename_components, validate_filenam
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -91,16 +89,13 @@ def coverage_data_quality_results(
         pdf = pandas_loader(buffer, config.filepath)
 
     source = config.filename_components.source
-    metaschema_name = f"coverage_{source}"
-    schema_columns = get_schema_columns(s, metaschema_name)
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
         df_raw, file_upload.column_to_schema_mapping
     )
-    dq_results = create_bronze_layer_columns(df, schema_columns)
     dq_results = row_level_checks(
-        dq_results,
+        df,
         f"coverage_{source}",
         config.filename_components.country_code,
         context,
