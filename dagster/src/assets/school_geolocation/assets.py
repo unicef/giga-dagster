@@ -7,6 +7,7 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -28,12 +29,16 @@ from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
-from src.utils.delta import execute_query_with_error_handler
+from src.utils.delta import create_delta_table
 from src.utils.filename import deconstruct_filename_components, validate_filename
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
+from src.utils.schema import (
+    construct_full_table_name,
+    construct_schema_name_for_tier,
+    get_schema_columns,
+)
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -213,29 +218,29 @@ def geolocation_staging(
     dataset_type = config.dataset_type
     schema_name = config.metastore_schema
     country_code = config.filename_components.country_code
-    silver_table_name = f"{schema_name}_silver.{country_code}"
-    staging_table_name = f"{schema_name}_staging.{country_code}"
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        schema_name, DataTier.SILVER
+    )
+    staging_tier_schema_name = construct_schema_name_for_tier(
+        schema_name, DataTier.STAGING
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+    staging_table_name = construct_full_table_name(
+        staging_tier_schema_name, country_code
+    )
 
-    # {filepath: str, date_modified: str}
-    files_for_review = []
-    for file_data in adls_file_client.list_paths_generator(
-        f"staging/pending-review/school-{dataset_type}-data"
-    ):
-        pending_filename_components = deconstruct_filename_components(file_data.name)
-        if file_data.is_directory or (
-            pending_filename_components.country_code
+    files_for_review = sorted(
+        [
+            p
+            for p in adls_file_client.list_paths(
+                f"staging/pending-review/school-{dataset_type}-data"
+            )
+            if p.is_directory
+            or deconstruct_filename_components(p.name).country_code
             != config.filename_components.country_code
-        ):
-            continue
-
-        properties = adls_file_client.get_file_metadata(file_data.name)
-        date_modified = properties.last_modified
-        context.log.info(f"filepath: {file_data.name}, date_modified: {date_modified}")
-        files_for_review.append(
-            {"filepath": file_data.name, "date_modified": date_modified}
-        )
-
-    files_for_review = sorted(files_for_review, key=lambda x: x["date_modified"])
+        ],
+        key=lambda x: x.date_modified,
+    )
 
     context.log.info(f"files_for_review: {files_for_review}")
 
@@ -244,16 +249,10 @@ def geolocation_staging(
     # If silver table does not exist, merge files for review into one spark dataframe
     if s.catalog.tableExists(silver_table_name):
         if not s.catalog.tableExists(staging_table_name):
-            # Clone silver table to staging folder
+            # Clone silver table to staging
             silver = DeltaTable.forName(silver_table_name).alias("silver").toDF()
-            query = (
-                DeltaTable.create(s)
-                .tableName(staging_table_name)
-                .addColumns(silver.schema)
-                .property("delta.enableChangeDataFeed", "true")
-            )
-            execute_query_with_error_handler(
-                s, query, schema_name, staging_table_name, context
+            create_delta_table(
+                s, staging_tier_schema_name, country_code, silver.schema, context
             )
             silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
