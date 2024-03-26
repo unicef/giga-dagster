@@ -213,11 +213,11 @@ def geolocation_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-):
+) -> None:
     s: SparkSession = spark.spark_session
-    dataset_type = config.dataset_type
     schema_name = config.metastore_schema
     country_code = config.filename_components.country_code
+    schema_columns = get_schema_columns(s, schema_name)
     silver_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.SILVER
     )
@@ -233,9 +233,9 @@ def geolocation_staging(
         [
             p
             for p in adls_file_client.list_paths(
-                f"staging/pending-review/school-{dataset_type}-data"
+                str(config.filepath_object.parent), recursive=False
             )
-            if p.is_directory
+            if not p.is_directory
             or deconstruct_filename_components(p.name).country_code
             != config.filename_components.country_code
         ],
@@ -252,7 +252,7 @@ def geolocation_staging(
             # Clone silver table to staging
             silver = DeltaTable.forName(silver_table_name).alias("silver").toDF()
             create_delta_table(
-                s, staging_tier_schema_name, country_code, silver.schema, context
+                s, staging_tier_schema_name, country_code, schema_columns, context
             )
             silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
@@ -262,7 +262,7 @@ def geolocation_staging(
         # Merge each pending file for the same country
         for file_info in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
-                file_info["filepath"], spark.spark_session
+                file_info.name, spark.spark_session
             )
 
             (
@@ -277,22 +277,23 @@ def geolocation_staging(
             )
 
             adls_file_client.rename_file(
-                file_info["filepath"], f"{file_info['filepath']}/merged-files"
+                file_info.name, f"{file_info.name}/merged-files"
             )
             context.log.info(f"Staging: table {staging}")
 
     else:
         staging = geolocation_dq_passed_rows
         # If no existing silver table, just merge the spark dataframes
-        for file_date in files_for_review:
+        for file_info in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
-                file_date["filepath"], spark.spark_session
+                file_info.name, spark.spark_session
             )
             staging = staging.union(existing_file)
 
-        adls_file_client.upload_spark_dataframe_as_delta_table(
-            staging, schema_name, staging_table_name, s
+        create_delta_table(
+            s, staging_tier_schema_name, country_code, schema_columns, context
         )
+        staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
     emit_metadata_to_datahub(
         context,
