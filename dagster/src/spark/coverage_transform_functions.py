@@ -233,6 +233,11 @@ def itu_coverage_merge(itu, cov):
 
 
 if __name__ == "__main__":
+    from src.data_quality_checks.utils import (
+        aggregate_report_json,
+        aggregate_report_spark_df,
+        row_level_checks,
+    )
     from src.utils.spark import get_spark_session
 
     #
@@ -245,47 +250,51 @@ if __name__ == "__main__":
     itu = spark.read.csv(file_url_itu, header=True)
     cov = spark.read.csv(file_url_cov, header=True)
 
+    # itu.show()
     ## CONFORM TEST FILES TO PROPER SCHEMA
-    fb = rename_raw_columns(fb)
+    # fb = rename_raw_columns(fb)
     itu = rename_raw_columns(itu)
     itu = itu.withColumn("nearest_NR_id", f.lit(None))
     itu = itu.withColumn("nearest_NR_distance", f.lit(None))
-    cov = rename_raw_columns(cov)
-    cov = cov.withColumn("nearest_NR_id", f.lit(None))
-    cov = cov.withColumn("nearest_NR_distance", f.lit(None))
-    cov = cov.select(*config.COV_COLUMNS)
-
-    ## filter to one entry for testing
-    fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-    cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
-
-    ## DAGSTER WORKFLOW ##
-
-    ## TRANSFORM STEP
-    # FB
-    fb = fb_transforms(fb)
-    fb = fb.withColumn("cellular_coverage_type", f.lit("3G"))
-    fb.show()
-    df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
-    print("Merged FB and (Silver) Coverage Dataset")
-    df1.show()
-
-    # ITU
-    itu = itu_transforms(itu)
+    # cov = rename_raw_columns(cov)
+    # cov = cov.withColumn("nearest_NR_id", f.lit(None))
+    # cov = cov.withColumn("nearest_NR_distance", f.lit(None))
+    # cov = cov.select(*config.COV_COLUMNS)
     itu.show()
-    cov.show()
-    df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
-    print("Merged ITU and (Silver) Coverage Dataset")
-    df2.show()
+
+    df = row_level_checks(
+        itu, "coverage_itu", "UZB"
+    )  # dataset plugged in should conform to updated schema! rename if necessary
+    df.show()
+
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
+
+    _json = aggregate_report_json(df, itu)
+    print(_json)
+
+    # ## filter to one entry for testing
+    # fb = fb.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+    # cov = cov.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+
+    # ## DAGSTER WORKFLOW ##
+
+    # ## TRANSFORM STEP
+    # # FB
+    # fb = fb_transforms(fb)
+    # fb = fb.withColumn("cellular_coverage_type", f.lit("3G"))
+    # fb.show()
+    # df1 = fb_coverage_merge(fb, cov)  # NEED SILVER COVERAGE INPUT
+    # print("Merged FB and (Silver) Coverage Dataset")
+    # df1.show()
+
+    # # ITU
+    # itu = itu_transforms(itu)
+    # itu.show()
+    # cov.show()
+    # df2 = itu_coverage_merge(itu, cov)  # NEED SILVER COVERAGE INPUT
+    # print("Merged ITU and (Silver) Coverage Dataset")
+    # df2.show()
 
     # from src.spark.data_quality_tests import (row_level_checks, aggregate_report_sparkdf, aggregate_report_json)
-
-    # df = row_level_checks(itu, "coverage_itu", "UZB") # dataset plugged in should conform to updated schema! rename if necessary
-    # df.show()
-
-    # df = aggregate_report_sparkdf(df)
-    # df.show()
-
-    # _json = aggregate_report_json(df, fb)
-    # print(_json)
