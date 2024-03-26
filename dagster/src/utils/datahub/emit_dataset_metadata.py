@@ -27,11 +27,8 @@ from dagster import OpExecutionContext, version
 
 def identify_country_name(country_code: str) -> str:
     coco = cc.CountryConverter()
-    country_name = list(
-        coco.data.iloc[coco.data["ISO3"][coco.data["ISO3"].isin([country_code])].index][
-            "name_short"
-        ]
-    )[0]
+    data = coco.data
+    country_name = data[data["ISO3"] == country_code]["name_short"].to_list()[0]
     return country_name
 
 

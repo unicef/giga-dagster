@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from dagster import Config
+from src.constants import DataTier
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import deconstruct_filename_components
@@ -41,6 +42,11 @@ class FileConfig(Config):
         or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
         """,
     )
+    tier: DataTier = Field(
+        description="""
+        The tier of the dataset, e.g. raw, bronze, staging, silver, gold
+        """
+    )
 
     @property
     def filepath_object(self) -> Path:
@@ -75,6 +81,7 @@ class OpDestinationMapping(BaseModel):
     source_filepath: str
     destination_filepath: str
     metastore_schema: str
+    tier: DataTier
 
 
 def generate_run_ops(
@@ -90,6 +97,7 @@ def generate_run_ops(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
             metastore_schema=op_mapping.metastore_schema,
+            tier=op_mapping.tier,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,
