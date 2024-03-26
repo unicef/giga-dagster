@@ -41,11 +41,11 @@ def school_master_coverage__raw_file_uploads_sensor(
         ops_destination_mapping = {
             "coverage_raw": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
+                destination_filepath=str(path),
                 metastore_schema=metastore_schema,
             ),
             "coverage_data_quality_results": OpDestinationMapping(
-                source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+                source_filepath=str(path),
                 destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
@@ -69,11 +69,11 @@ def school_master_coverage__raw_file_uploads_sensor(
                 destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
                 metastore_schema=metastore_schema,
             ),
-            "coverage_staging": OpDestinationMapping(
-                source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
-                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
-                metastore_schema=metastore_schema,
-            ),
+            # "coverage_staging": OpDestinationMapping(
+            #     source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+            #     destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+            #     metastore_schema=metastore_schema,
+            # ),
         }
 
         run_ops = generate_run_ops(
