@@ -33,7 +33,7 @@ from src.utils.filename import deconstruct_filename_components, validate_filenam
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -46,12 +46,15 @@ def geolocation_raw(
 ) -> bytes:
     validate_filename(config.filepath)
     raw = adls_file_client.download_raw(config.filepath)
-    emit_metadata_to_datahub(
-        context,
-        df=raw,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
     yield Output(raw, metadata=get_output_metadata(config))
 
 
@@ -85,15 +88,20 @@ def geolocation_bronze(
         pdf = pandas_loader(buffer, config.filepath)
 
     schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
+
     df = s.createDataFrame(pdf)
     df = create_bronze_layer_columns(df, schema_columns)
 
-    emit_metadata_to_datahub(
-        context,
-        df=df,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+    try:
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=df,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     df_pandas = df.toPandas()
     yield Output(
         df_pandas,
@@ -111,6 +119,15 @@ def geolocation_data_quality_results(
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
 ):
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
         geolocation_bronze, "geolocation", country_code, context
@@ -155,6 +172,15 @@ def geolocation_data_quality_results_summary(
     except Exception as error:
         context.log.info(f"Assertion Run ERROR: {error}")
 
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
@@ -163,16 +189,25 @@ def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_passed = dq_split_passed_rows(
         geolocation_data_quality_results, config.dataset_type
     )
-    emit_metadata_to_datahub(
-        context,
-        df_passed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     df_pandas = df_passed.toPandas()
     yield Output(
         df_pandas,
@@ -188,16 +223,25 @@ def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_failed = dq_split_failed_rows(
         geolocation_data_quality_results, config.dataset_type
     )
-    emit_metadata_to_datahub(
-        context,
-        df_failed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     df_pandas = df_failed.toPandas()
     yield Output(
         df_pandas,
