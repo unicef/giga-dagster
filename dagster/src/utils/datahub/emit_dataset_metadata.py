@@ -112,11 +112,6 @@ def define_schema_properties(
 ):
     fields = []
 
-    {
-        "Double": NumberTypeClass(),
-        "Float": NumberTypeClass()["Double", "Float", "Integer", "Long"],
-    }
-
     if isinstance(schema_reference, sql.DataFrame):
         for field in schema_reference.schema.fields:
             for v in constants.TYPE_MAPPINGS.dict().values():
