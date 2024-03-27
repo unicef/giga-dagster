@@ -32,7 +32,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
-from src.utils.filename import deconstruct_filename_components, validate_filename
+from src.utils.filename import deconstruct_filename_components
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
@@ -46,7 +46,6 @@ def coverage_raw(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> bytes:
-    validate_filename(config.filepath)
     df = adls_file_client.download_raw(config.filepath)
 
     # # for testing only START - will be moved to io manager

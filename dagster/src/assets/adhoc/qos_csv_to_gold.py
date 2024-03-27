@@ -9,6 +9,7 @@ from pyspark.sql import (
     functions as f,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.spark import transform_types
@@ -22,10 +23,17 @@ from dagster import (
 
 @asset(io_manager_key="adls_passthrough_io_manager")
 def adhoc__load_qos_csv(
+    context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
+    emit_metadata_to_datahub(
+        context,
+        df=raw,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
     yield Output(raw, metadata=get_output_metadata(config))
 
 
@@ -58,6 +66,12 @@ def adhoc__qos_transforms(
     sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
     context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
 
+    emit_metadata_to_datahub(
+        context,
+        df=sdf,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
     df_pandas = sdf.toPandas()
     yield Output(
         df_pandas,
@@ -76,6 +90,12 @@ def adhoc__publish_qos_to_gold(
 ) -> sql.DataFrame:
     df_transformed = transform_types(
         adhoc__qos_transforms, config.metastore_schema, context
+    )
+    emit_metadata_to_datahub(
+        context,
+        df=df_transformed,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
     )
     yield Output(
         df_transformed,
