@@ -262,17 +262,6 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    step = context.asset_key.to_user_string()
-    if "raw" not in step:
-        upstream_dataset_urn = create_dataset_urn(context, is_upstream=True)
-        lineage_mce = builder.make_lineage_mce(
-            [upstream_dataset_urn],  # Upstream URNs
-            dataset_urn,  # Downstream URN
-        )
-
-        context.log.info("EMITTING LINEAGE METADATA")
-        datahub_emitter.emit_mce(lineage_mce)
-
     return context.log.info(
         f"Metadata of dataset {output_filepath} has been successfully"
         " emitted to Datahub."
