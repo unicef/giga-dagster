@@ -97,7 +97,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        yield RunRequest(
+            run_key=str(path),
+            run_config=RunConfig(ops=run_ops),
+            tags={"country": country_code},
+        )
         count += 1
 
     if count == 0:
@@ -124,6 +128,8 @@ def school_master_geolocation__successful_manual_checks_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
+        filename_components = deconstruct_filename_components(adls_filepath)
+        country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
@@ -138,18 +144,18 @@ def school_master_geolocation__successful_manual_checks_sensor(
             ),
             "silver": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.SILVER,
             ),
             "gold_master": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
                 metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
             "gold_reference": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{stem}",
+                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
                 metastore_schema="school_reference",
                 tier=DataTier.GOLD,
@@ -164,7 +170,11 @@ def school_master_geolocation__successful_manual_checks_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        yield RunRequest(
+            run_key=str(path),
+            run_config=RunConfig(ops=run_ops),
+            tags={"country": country_code},
+        )
         count += 1
 
     if count == 0:
@@ -192,6 +202,8 @@ def school_master_geolocation__failed_manual_checks_sensor(
 
         adls_filepath = file_data.name
         path = Path(adls_filepath)
+        filename_components = deconstruct_filename_components(adls_filepath)
+        country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
@@ -214,7 +226,11 @@ def school_master_geolocation__failed_manual_checks_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        yield RunRequest(
+            run_key=str(path),
+            run_config=RunConfig(ops=run_ops),
+            tags={"country": country_code},
+        )
         count += 1
 
     if count == 0:
