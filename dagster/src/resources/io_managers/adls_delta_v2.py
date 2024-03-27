@@ -4,13 +4,12 @@ from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import execute_query_with_error_handler
+from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
     get_partition_columns,
@@ -125,49 +124,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             primary_key = get_primary_key(spark, schema_name)
 
         update_columns = [c.name for c in columns if c.name != primary_key]
+        master = DeltaTable.forName(spark, full_table_name)
+        query = build_deduped_merge_query(master, data, primary_key, update_columns)
 
-        master = DeltaTable.forName(spark, full_table_name).alias("master")
-        master_df = master.toDF()
-        incoming = data.alias("incoming")
-
-        master_ids = master_df.select(primary_key, "signature")
-        incoming_ids = incoming.select(primary_key, "signature")
-
-        updates_df = incoming_ids.join(master_ids, primary_key, "inner")
-        inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
-
-        # TODO: Might need to specify a predictable order, although by default it's insertion order
-        updates_signature = updates_df.agg(
-            sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
-                "combined_signature"
-            )
-        ).first()["combined_signature"]
-        master_to_update_signature = master_ids.agg(
-            sha2(concat_ws("|", collect_list("signature")), 256).alias(
-                "combined_signature"
-            )
-        ).first()["combined_signature"]
-
-        has_updates = master_to_update_signature != updates_signature
-        has_insertions = inserts_df.count() > 0
-
-        if not (ic(has_updates) or ic(has_insertions)):
-            return
-
-        query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")
-
-        if has_updates:
-            query = query.whenMatchedUpdate(
-                "master.signature <> incoming.signature",
-                dict(
-                    zip(
-                        update_columns,
-                        [f"incoming.{c}" for c in update_columns],
-                        strict=True,
-                    )
-                ),
-            )
-        if has_insertions:
-            query = query.whenNotMatchedInsertAll()
-
-        query.execute()
+        if query is not None:
+            query.execute()

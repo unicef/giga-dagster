@@ -1,4 +1,4 @@
-from enum import StrEnum
+from enum import Enum
 
 from src.utils.adls import ADLSFileClient
 from src.utils.spark import pyspark
@@ -10,7 +10,7 @@ from .io_managers.adls_pandas import ADLSPandasIOManager
 from .io_managers.adls_passthrough import ADLSPassthroughIOManager
 
 
-class ResourceKey(StrEnum):
+class ResourceKey(Enum):
     ADLS_DELTA_IO_MANAGER = "adls_delta_io_manager"
     ADLS_DELTA_V2_IO_MANAGER = "adls_delta_v2_io_manager"
     ADLS_JSON_IO_MANAGER = "adls_json_io_manager"

@@ -1,9 +1,13 @@
 from delta.tables import DeltaTable, DeltaTableBuilder
+from icecream import ic
+from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
+from src.utils.schema import construct_full_table_name
 
 
 def execute_query_with_error_handler(
@@ -45,6 +49,7 @@ def create_delta_table(
     if if_not_exists and replace:
         raise Exception("Only one of `if_not_exists` or `replace` can be set to True.")
 
+    full_table_name = construct_full_table_name(schema_name, table_name)
     create_stmt = DeltaTable.create
 
     if if_not_exists:
@@ -54,7 +59,7 @@ def create_delta_table(
 
     query = (
         create_stmt(spark)
-        .tableName(table_name)
+        .tableName(full_table_name)
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
     )
@@ -63,3 +68,53 @@ def create_delta_table(
 
 def create_schema(spark: SparkSession, schema_name: str):
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
+
+
+def build_deduped_merge_query(
+    master: DeltaTable,
+    updates: sql.DataFrame,
+    primary_key: str,
+    update_columns: list[str],
+):
+    master_df = master.alias("master").toDF()
+    incoming = updates.alias("incoming")
+
+    master_ids = master_df.select(primary_key, "signature")
+    incoming_ids = incoming.select(primary_key, "signature")
+
+    updates_df = incoming_ids.join(master_ids, primary_key, "inner")
+    inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
+
+    # TODO: Might need to specify a predictable order, although by default it's insertion order
+    updates_signature = updates_df.agg(
+        sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
+            "combined_signature"
+        )
+    ).first()["combined_signature"]
+    master_to_update_signature = master_ids.agg(
+        sha2(concat_ws("|", collect_list("signature")), 256).alias("combined_signature")
+    ).first()["combined_signature"]
+
+    has_updates = master_to_update_signature != updates_signature
+    has_insertions = inserts_df.count() > 0
+
+    if not (ic(has_updates) or ic(has_insertions)):
+        return None
+
+    query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")
+
+    if has_updates:
+        query = query.whenMatchedUpdate(
+            "master.signature <> incoming.signature",
+            dict(
+                zip(
+                    update_columns,
+                    [f"incoming.{c}" for c in update_columns],
+                    strict=True,
+                )
+            ),
+        )
+    if has_insertions:
+        query = query.whenNotMatchedInsertAll()
+
+    return query

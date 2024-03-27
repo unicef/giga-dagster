@@ -12,7 +12,10 @@ adls_client = ADLSFileClient()
 class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+        if output is None:
+            return
+
         if context.step_key in ["staging", "silver", "gold"]:
             return
 
