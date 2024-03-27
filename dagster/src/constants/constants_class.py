@@ -24,7 +24,7 @@ class Constants(BaseSettings):
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
-    raw_schema_folder = "raw_schema"
+    raw_schema_folder = "raw/schema"
     bronze_folder = "bronze"
     silver_folder = "silver"
     gold_folder = "gold"
