@@ -13,7 +13,8 @@ from src.utils.adls import ADLSFileClient
 from ..utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
-SCHOOL_DATASET_TYPE = f"school-{DATASET_TYPE}"
+DOMAIN = "school"
+SCHOOL_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
 
 @sensor(
@@ -85,6 +86,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             metadata=metadata,
             file_size_bytes=size,
             dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -149,6 +151,7 @@ def school_master_geolocation__successful_manual_checks_sensor(
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -200,6 +203,7 @@ def school_master_geolocation__failed_manual_checks_sensor(
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")

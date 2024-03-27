@@ -167,20 +167,9 @@ def define_schema_properties(
 
 def set_domain(context: OpExecutionContext):
     config = FileConfig(**context.get_step_execution_context().op_config)
-    domain = config.dataset_type
-
-    if "school" in domain:
-        domain_urn = make_domain_urn("School")
-    elif "geospatial" in domain:
-        domain_urn = make_domain_urn("Geospatial")
-    elif "fin" in domain:
-        domain_urn = make_domain_urn("Finance")
-    elif "infra" in domain:
-        domain_urn = make_domain_urn("Infrastructure")
-    else:
-        context.log.info("UNKNOWN DOMAIN")
-        domain_urn = make_domain_urn("UNKNOWN DOMAIN")
-
+    domain = config.domain
+    context.log.info(f"Domain: {domain}")
+    domain_urn = make_domain_urn(domain=domain.capitalize())
     return domain_urn
 
 
