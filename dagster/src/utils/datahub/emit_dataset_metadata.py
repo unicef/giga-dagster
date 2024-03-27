@@ -19,7 +19,6 @@ from datahub.metadata.schema_classes import (
 from pyspark import sql
 from src.constants import constants
 from src.settings import settings
-from src.utils.adls import get_output_filepath
 from src.utils.datahub.ingest_azure_ad import ingest_azure_ad_to_datahub_pipeline
 from src.utils.datahub.update_policies import update_policies
 from src.utils.op_config import FileConfig
@@ -58,8 +57,8 @@ def create_dataset_urn(
 
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
-    output_filepath = get_output_filepath(context)
     config = FileConfig(**context.get_step_execution_context().op_config)
+    output_filepath = config.destination_filepath
 
     domain = config.dataset_type
     file_size_bytes = config.file_size_bytes
@@ -238,7 +237,6 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING DOMAIN METADATA")
     datahub_graph_client.execute_graphql(query=domain_query)
 
-    output_filepath = get_output_filepath(context)
     country_name = identify_country_name(country_code=country_code)
     tag_query = set_tag_mutation_query(
         country_name=country_name, dataset_urn=dataset_urn
@@ -257,5 +255,5 @@ def emit_metadata_to_datahub(
     context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
 
     return context.log.info(
-        f"Metadata has been successfully emitted to Datahub for dataset {output_filepath}."
+        f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}."
     )
