@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 from src.utils.adls import ADLSFileClient
 from src.utils.spark import pyspark
 
@@ -7,12 +9,23 @@ from .io_managers.adls_json import ADLSJSONIOManager
 from .io_managers.adls_pandas import ADLSPandasIOManager
 from .io_managers.adls_passthrough import ADLSPassthroughIOManager
 
+
+class ResourceKey(StrEnum):
+    ADLS_DELTA_IO_MANAGER = "adls_delta_io_manager"
+    ADLS_DELTA_V2_IO_MANAGER = "adls_delta_v2_io_manager"
+    ADLS_JSON_IO_MANAGER = "adls_json_io_manager"
+    ADLS_PANDAS_IO_MANAGER = "adls_pandas_io_manager"
+    ADLS_PASSTHROUGH_IO_MANAGER = "adls_passthrough_io_manager"
+    ADLS_FILE_CLIENT = "adls_file_client"
+    SPARK = "spark"
+
+
 RESOURCE_DEFINITIONS = {
-    "adls_delta_io_manager": ADLSDeltaIOManager(pyspark=pyspark),
-    "adls_delta_v2_io_manager": ADLSDeltaV2IOManager(pyspark=pyspark),
-    "adls_json_io_manager": ADLSJSONIOManager(),
-    "adls_pandas_io_manager": ADLSPandasIOManager(pyspark=pyspark),
-    "adls_passthrough_io_manager": ADLSPassthroughIOManager(),
-    "adls_file_client": ADLSFileClient(),
-    "spark": pyspark,
+    ResourceKey.ADLS_DELTA_IO_MANAGER.value: ADLSDeltaIOManager(pyspark=pyspark),
+    ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value: ADLSDeltaV2IOManager(pyspark=pyspark),
+    ResourceKey.ADLS_JSON_IO_MANAGER.value: ADLSJSONIOManager(),
+    ResourceKey.ADLS_PANDAS_IO_MANAGER.value: ADLSPandasIOManager(pyspark=pyspark),
+    ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value: ADLSPassthroughIOManager(),
+    ResourceKey.ADLS_FILE_CLIENT.value: ADLSFileClient(),
+    ResourceKey.SPARK.value: pyspark,
 }

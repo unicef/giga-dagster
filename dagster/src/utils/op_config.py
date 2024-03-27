@@ -37,7 +37,11 @@ class FileConfig(Config):
         The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table.
         To get the list of valid schemas, run
         ```sql
+        # Spark
         SHOW TABLES IN `schemas`
+
+        # Trino
+        SHOW TABLES IN delta_lake.schemas
         ```
         or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
         """,

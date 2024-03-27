@@ -15,6 +15,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
+from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
     column_mapping_rename,
@@ -43,7 +44,7 @@ from src.utils.schema import (
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER)
 def geolocation_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -59,7 +60,7 @@ def geolocation_raw(
     yield Output(raw, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER)
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
@@ -106,7 +107,7 @@ def geolocation_bronze(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER)
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
@@ -127,7 +128,7 @@ def geolocation_data_quality_results(
     )
 
 
-@asset(io_manager_key="adls_json_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER)
 def geolocation_data_quality_results_summary(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
@@ -155,7 +156,7 @@ def geolocation_data_quality_results_summary(
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER)
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
@@ -180,7 +181,7 @@ def geolocation_dq_passed_rows(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER)
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
@@ -205,7 +206,7 @@ def geolocation_dq_failed_rows(
     )
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER)
 def geolocation_staging(
     context: OpExecutionContext,
     geolocation_dq_passed_rows: sql.DataFrame,

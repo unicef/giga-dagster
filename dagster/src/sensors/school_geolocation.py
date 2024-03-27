@@ -29,7 +29,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
     source_directory = f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}"
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=False
+        source_directory, recursive=True
     ):
         if file_data.is_directory:
             continue
@@ -116,7 +116,7 @@ def school_master_geolocation__successful_manual_checks_sensor(
     source_directory = f"{constants.dq_passed_folder}/{SCHOOL_DATASET_TYPE}"
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=False
+        source_directory, recursive=True
     ):
         if file_data.is_directory:
             continue
@@ -185,8 +185,7 @@ def school_master_geolocation__failed_manual_checks_sensor(
     )
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory,
-        recursive=False,
+        source_directory, recursive=True
     ):
         if file_data.is_directory:
             continue
