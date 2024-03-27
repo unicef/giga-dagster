@@ -58,13 +58,15 @@ def create_dataset_urn(
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
     config = FileConfig(**context.get_step_execution_context().op_config)
-    output_filepath = config.destination_filepath
 
     domain = config.dataset_type
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
 
-    data_format = os.path.splitext(output_filepath)[1].lstrip(".")
+    output_filepath = config.destination_filepath
+    output_file_extension = os.path.splitext(output_filepath)[1].lstrip(".")
+    data_format = "deltaTable" if output_file_extension == "" else output_file_extension
+
     country_name = identify_country_name(country_code=country_code)
     file_size_MB = file_size_bytes / (2 ** (10 * 2))  # bytes to MB
     run_tags = str.join(", ", [f"{k}={v}" for k, v in context.run_tags.items()])
@@ -257,3 +259,9 @@ def emit_metadata_to_datahub(
     return context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}."
     )
+
+
+if __name__ == "__main__":
+    output_filepath = "gold/BEN"
+    data_format = os.path.splitext(output_filepath)[1].lstrip(".")
+    print(data_format == "")
