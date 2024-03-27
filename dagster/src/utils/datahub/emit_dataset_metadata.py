@@ -119,14 +119,15 @@ def define_schema_properties(
         for field in schema_reference.schema.fields:
             for v in constants.TYPE_MAPPINGS.dict().values():
                 if field.dataType == v["pyspark"]:
-                    type_class = v["datahub"]
+                    datahub_type = v["datahub"]
+                    type_class = datahub_type()
                 else:
-                    type_class = NullTypeClass
+                    type_class = NullTypeClass()
 
                 fields.append(
                     SchemaFieldClass(
                         fieldPath=f"{field.name}",
-                        type=SchemaFieldDataTypeClass(type_class()),
+                        type=SchemaFieldDataTypeClass(type_class),
                         nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
                     )
                 )
