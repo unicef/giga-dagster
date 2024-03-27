@@ -1,3 +1,4 @@
+import sentry_sdk
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
@@ -38,6 +39,7 @@ def manual_review_passed_rows(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
@@ -70,6 +72,7 @@ def manual_review_failed_rows(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
@@ -117,6 +120,7 @@ def silver(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
@@ -245,6 +249,7 @@ def gold(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(
         master,

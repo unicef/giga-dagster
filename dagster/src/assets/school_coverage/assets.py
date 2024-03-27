@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pandas as pd
+import sentry_sdk
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from icecream import ic
@@ -152,6 +153,7 @@ def coverage_data_quality_results_summary(
         emit_assertions()
     except Exception as error:
         context.log.info(f"Assertion Run ERROR: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 

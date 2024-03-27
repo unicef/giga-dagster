@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pandas as pd
+import sentry_sdk
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from models.file_upload import FileUpload
@@ -56,6 +57,7 @@ def geolocation_raw(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
     yield Output(raw, metadata=get_output_metadata(config))
 
 
@@ -98,6 +100,7 @@ def geolocation_bronze(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     df_pandas = df.toPandas()
     yield Output(
@@ -124,6 +127,7 @@ def geolocation_data_quality_results(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
@@ -168,6 +172,7 @@ def geolocation_data_quality_results_summary(
         emit_assertions()
     except Exception as error:
         context.log.info(f"Assertion Run ERROR: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     try:
         emit_metadata_to_datahub(
@@ -177,6 +182,7 @@ def geolocation_data_quality_results_summary(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
@@ -204,6 +210,7 @@ def geolocation_dq_passed_rows(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     df_pandas = df_passed.toPandas()
     yield Output(
@@ -239,6 +246,7 @@ def geolocation_dq_failed_rows(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
 
     df_pandas = df_failed.toPandas()
     yield Output(
@@ -359,3 +367,4 @@ def geolocation_staging(
         )
     except Exception as error:
         context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        sentry_sdk.capture_exception(error=error)
