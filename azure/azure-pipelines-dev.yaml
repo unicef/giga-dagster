@@ -13,6 +13,7 @@ pr:
   branches:
     exclude:
       - main
+      - staging
   paths:
     exclude:
       - docs

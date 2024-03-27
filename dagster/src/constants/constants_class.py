@@ -53,18 +53,6 @@ class Constants(BaseSettings):
         "coverage_staging": "coverage_bronze",
     }
 
-    step_origin_folder_map: dict[str, str] = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
-
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
             # geolocation

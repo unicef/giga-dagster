@@ -30,7 +30,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db import get_db_context
 from src.utils.delta import create_delta_table
-from src.utils.filename import deconstruct_filename_components, validate_filename
+from src.utils.filename import deconstruct_filename_components
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
@@ -49,7 +49,6 @@ def geolocation_raw(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> bytes:
-    validate_filename(config.filepath)
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
