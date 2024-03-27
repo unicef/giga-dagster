@@ -270,26 +270,59 @@ def get_admin1_boundaries(country_code_iso3: str):
     return admin1_boundaries
 
 
-def get_admin1_columns(latitude: float, longitude: float, admin1_boundaries):
-    point = get_point(longitude=longitude, latitude=latitude)
+# def get_admin1_columns(latitude: float, longitude: float, admin1_boundaries):
+#     point = get_point(longitude=longitude, latitude=latitude)
 
-    if point is not None and admin1_boundaries is not None:
-        for index, row in admin1_boundaries.iterrows():  # noqa: B007
-            if row.geometry.contains(point):
-                admin1_en = row["name_en"]
-                admin1_native = row["name"]
-                admin1_id_giga = row["admin1_id_giga"]
-                break
-            else:
-                admin1_en = None
-                admin1_native = None
-                admin1_id_giga = None
-    else:
-        admin1_en = None
-        admin1_native = None
-        admin1_id_giga = None
+#     if point is not None and admin1_boundaries is not None:
+#         for index, row in admin1_boundaries.iterrows():  # noqa: B007
+#             if row.geometry.contains(point):
+#                 admin1_en = row["name_en"]
+#                 admin1_native = row["name"]
+#                 admin1_id_giga = row["admin1_id_giga"]
+#                 break
+#             else:
+#                 admin1_en = None
+#                 admin1_native = None
+#                 admin1_id_giga = None
+#     else:
+#         admin1_en = None
+#         admin1_native = None
+#         admin1_id_giga = None
 
-    return admin1_en, admin1_native, admin1_id_giga
+#     return admin1_en, admin1_native, admin1_id_giga
+
+
+def get_admin1_columns(df: sql.DataFrame, admin1_boundaries):
+    nested_list = df.select(f.collect_list(f.array("latitude", "longitude"))).collect()
+    nested_list = [nested_list[0][0]][0]
+
+    for coordinates in nested_list:
+        latitude = coordinates[0]
+        longitude = coordinates[1]
+
+        point = get_point(longitude=longitude, latitude=latitude)
+
+        if point is not None and admin1_boundaries is not None:
+            for index, row in admin1_boundaries.iterrows():  # noqa: B007
+                if row.geometry.contains(point):
+                    admin1_en = row["name_en"]
+                    admin1_native = row["name"]
+                    admin1_id_giga = row["admin1_id_giga"]
+                    break
+                else:
+                    admin1_en = None
+                    admin1_native = None
+                    admin1_id_giga = None
+
+            coordinates.append(admin1_en)
+            coordinates.append(admin1_native)
+            coordinates.append(admin1_id_giga)
+        # else:
+        #     admin1_en = None
+        #     admin1_native = None
+        #     admin1_id_giga = None
+
+    return nested_list
 
 
 def create_admin1_columns(latitude: float, longitude: float, country_code_iso3: str):
@@ -318,18 +351,20 @@ if __name__ == "__main__":
     # df = create_bronze_layer_columns(df)
     # df.show()
 
-    # df = master.select(
-    #     [
-    #         "school_id_giga",
-    #         "school_id_govt",
-    #         "school_name",
-    #         "education_level",
-    #         "latitude",
-    #         "longitude",
-    #         "admin1",
-    #         "admin2"
-    #     ]
-    # ).limit(20)
+    df = master.select(
+        [
+            "school_id_giga",
+            "school_id_govt",
+            "school_name",
+            "education_level",
+            "latitude",
+            "longitude",
+            "admin1",
+            "admin2",
+        ]
+    )
+
+    df = df.filter(df["admin1"] != "Rondônia").limit(100)
     # df = df.withColumn("school_name", f.trim(f.col("school_name")))
     # df = df.withColumn("latitude", f.lit(17.5066649))
     # df = create_school_id_giga(df)
@@ -338,7 +373,12 @@ if __name__ == "__main__":
 
     # df = df.withColumn("country_code_iso3", f.lit("BRA"))
     # df = df.withColumn("admin1_test", get_admin1(f.col("latitude"), f.col("longitude"), f.col("country_code_iso3")))
-    # df.show()
+    df.show()
+    # df = df.withColumn("latitude", f.lit(1))
+    # df = df.withColumn("longitude", f.lit(1))
+
+    test = get_admin1_columns(df=df, admin1_boundaries=get_admin1_boundaries("BRA"))
+    print(test)
 
     # admin1_boundaries = get_admin1_boundaries(country_code_iso3="BRA")
     # latitude = -8.758459
@@ -346,57 +386,9 @@ if __name__ == "__main__":
     # print(get_admin1_columns(latitude=latitude, longitude=longitude, admin1_boundaries=admin1_boundaries))
 
     # print(get_admin1_columns(-8.758459, -63.85401, get_admin1_boundaries("BRA")))
-    create_admin1_columns(-8.758459, -63.85401, "BRA")
-    create_admin1_columns(8.758459, -63.85401, "BRA")
-    create_admin1_columns(8.758459, -63.85401, "BRI")
-
-    # print(len(df.columns))
-    # list_inventory = [
-    # "school_id_giga",
-    # "school_id_govt",
-    # "school_name",
-    # "school_establishment_year",
-    # "latitude",
-    # "longitude",
-    # "education_level",
-    # "education_level_govt",
-    # "connectivity_govt",
-    # "connectivity_govt_ingestion_timestamp",
-    # "connectivity_govt_collection_year",
-    # "download_speed_govt",
-    # "download_speed_contracted",
-    # "connectivity_type_govt",
-    # "admin1",
-    # "admin2",
-    # "school_area_type",
-    # "school_funding_type",
-    # "num_computers",
-    # "num_computers_desired",
-    # "num_teachers",
-    # "num_adm_personnel",
-    # "num_students",
-    # "num_classroom",
-    # "num_latrines",
-    # "computer_lab",
-    # "electricity_availability",
-    # "electricity_type",
-    # "water_availability",
-    # "school_data_source",
-    # "school_data_collection_year",
-    # "school_data_collection_modality",
-    # "school_id_govt_type",
-    # "school_address",
-    # "is_school_open",
-    # "school_location_ingestion_timestamp",
-    # ]
-
-    # for col in list_inventory:
-    #     if col in df.columns:
-    #         print("ok")
-    #     else:
-    #         print(col)
-    # df.show()
-    # df = df.limit(10)
+    # create_admin1_columns(-8.758459, -63.85401, "BRA")
+    # create_admin1_columns(8.758459, -63.85401, "BRA")
+    # create_admin1_columns(8.758459, -63.85401, "BRI")
 
     # import json
 
