@@ -111,7 +111,9 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
 
 
 def define_schema_properties(
-    schema_reference: list[tuple] | sql.DataFrame, df_failed: None | sql.DataFrame
+    context,
+    schema_reference: list[tuple] | sql.DataFrame,
+    df_failed: None | sql.DataFrame,
 ):
     fields = []
 
@@ -126,13 +128,13 @@ def define_schema_properties(
             if not is_field_type_found:
                 type_class = NullTypeClass()
 
-            fields.append(
-                SchemaFieldClass(
-                    fieldPath=f"{field.name}",
-                    type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
-                )
+            schema_field_class = SchemaFieldClass(
+                fieldPath=f"{field.name}",
+                type=SchemaFieldDataTypeClass(type_class),
+                nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
             )
+            fields.append(schema_field_class)
+            context.log.info(schema_field_class)
 
     else:
         for column, type_class in schema_reference:
@@ -213,7 +215,7 @@ def emit_metadata_to_datahub(
 
     if schema_reference is not None:
         schema_properties = define_schema_properties(
-            schema_reference, df_failed=df_failed
+            context, schema_reference, df_failed=df_failed
         )
         schema_metadata_event = MetadataChangeProposalWrapper(
             entityUrn=dataset_urn,
