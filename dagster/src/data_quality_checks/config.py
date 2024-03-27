@@ -23,6 +23,7 @@ CONFIG_VALUES_DOMAIN = {
     "reference": config.VALUES_DOMAIN_REFERENCE,
     "geolocation": config.VALUES_DOMAIN_GEOLOCATION,
     "coverage": config.VALUES_DOMAIN_COVERAGE,
+    "coverage_itu": config.VALUES_DOMAIN_COVERAGE_ITU,
 }
 CONFIG_VALUES_RANGE = {
     "master": config.VALUES_RANGE_MASTER,

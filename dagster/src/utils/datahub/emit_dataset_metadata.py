@@ -36,9 +36,9 @@ def identify_country_name(country_code: str) -> str:
 
 
 def create_dataset_urn(
-    context: OpExecutionContext, is_upstream: bool, output_name: str = None
+    context: OpExecutionContext, is_upstream: bool, platform_id: str = "adlsGen2"
 ) -> str:
-    platform = builder.make_data_platform_urn("adlsGen2")
+    platform = builder.make_data_platform_urn(platform_id)
     config = FileConfig(**context.get_step_execution_context().op_config)
 
     # TODO: Handle multiple upstreams
@@ -161,7 +161,7 @@ def define_schema_properties(
         ),  # important <- platform must be a urn
         version=0,  # when the source system has a notion of versioning of schemas, insert this in, otherwise leave as 0
         hash="",  # when the source system has a notion of unique schemas identified via hash, include a hash, else leave it as empty string
-        platformSchema=OtherSchemaClass(rawSchema="__insert raw schema here__"),
+        platformSchema=OtherSchemaClass(rawSchema=""),
         fields=fields,
     )
 

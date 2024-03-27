@@ -18,7 +18,7 @@ from src.data_quality_checks.utils import (
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
-from src.utils.spark import transform_types
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -109,4 +109,5 @@ def adhoc__publish_reference_to_gold(
     gold = transform_types(
         adhoc__reference_dq_checks_passed, config.metastore_schema, context
     )
+    gold = compute_row_hash(gold)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})

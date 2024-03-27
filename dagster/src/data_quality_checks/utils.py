@@ -174,7 +174,7 @@ def aggregate_report_json(
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     rows_count = df_bronze.count()
-    columns_count = len(df_bronze.columns)
+    columns_count = len([col for col in df_bronze.columns if not col.startswith("dq_")])
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
 
     # Summary Dictionary
@@ -213,12 +213,18 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 0)
         df = df.select(*columns)
-    else:
+    elif dataset_type == "geolocation":
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-education_level_govt"] == 0)
             & (df["dq_is_null_mandatory-school_id_govt_type"] == 0)
+        )
+        df = df.select(*columns)
+    elif dataset_type.startswith("coverage"):
+        df = df.filter(
+            (df["dq_duplicate-school_id_giga"] == 0)
+            & (df["dq_is_null_mandatory-school_id_giga"] == 0)
         )
         df = df.select(*columns)
     return df
@@ -227,12 +233,17 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
-    else:
+    elif dataset_type == "geolocation":
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 1)
             | (df["dq_is_null_mandatory-school_id_giga"] == 1)
             | (df["dq_is_null_mandatory-education_level_govt"] == 1)
             | (df["dq_is_null_mandatory-school_id_govt_type"] == 1)
+        )
+    elif dataset_type.startswith("coverage"):
+        df = df.filter(
+            (df["dq_duplicate-school_id_giga"] == 1)
+            | (df["dq_is_null_mandatory-school_id_giga"] == 1)
         )
     return df
 

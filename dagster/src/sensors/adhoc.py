@@ -15,6 +15,7 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.filename import deconstruct_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 
@@ -29,6 +30,12 @@ def school_master__gold_csv_to_deltatable_sensor(
     paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/master", recursive=False
     )
+    paths_list.extend(
+        adls_file_client.list_paths(
+            constants.adhoc_master_updates_source_folder, recursive=True
+        )
+    )
+
     run_requests = []
 
     for file_data in paths_list:
@@ -43,6 +50,12 @@ def school_master__gold_csv_to_deltatable_sensor(
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_master"
+
+        filename_components = deconstruct_filename_components(file_data.name)
+        country_code = filename_components.country_code
+
+        if not stem.startswith(filename_components.country_code):
+            stem = f"{filename_components.country_code}_{stem}"
 
         ops_destination_mapping = {
             "adhoc__load_master_csv": OpDestinationMapping(
@@ -82,7 +95,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -96,7 +109,11 @@ def school_master__gold_csv_to_deltatable_sensor(
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
-            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+            RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": filename_components.country_code},
+            )
         )
 
     yield from run_requests
@@ -128,6 +145,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
         size = properties.size
         metastore_schema = "school_reference"
 
+        filename_components = deconstruct_filename_components(file_data.name)
+        country_code = filename_components.country_code
+
+        if not stem.startswith(filename_components.country_code):
+            stem = f"{filename_components.country_code}_{stem}"
+
         ops_destination_mapping = {
             "adhoc__load_reference_csv": OpDestinationMapping(
                 source_filepath=str(path),
@@ -151,7 +174,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_reference_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -215,7 +238,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_qos_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/qos/{country_code}/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }

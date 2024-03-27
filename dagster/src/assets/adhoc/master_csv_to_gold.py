@@ -11,29 +11,40 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType
 from src.data_quality_checks.utils import (
+    aggregate_report_json,
     aggregate_report_spark_df,
     dq_split_failed_rows as extract_dq_failed_rows,
     dq_split_passed_rows as extract_dq_passed_rows,
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.adls import ADLSFileClient
+from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
+from src.utils.datahub.emit_dataset_metadata import (
+    create_dataset_urn,
+    emit_metadata_to_datahub,
+)
 from src.utils.logger import ContextLoggerWithLoguruFallback
+from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
-from src.utils.spark import transform_types
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_passthrough_io_manager")
 def adhoc__load_master_csv(
-    context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
-    config: FileConfig,
+    context: OpExecutionContext, adls_file_client: ADLSFileClient, config: FileConfig
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
-    yield Output(raw, metadata={"filepath": get_output_filepath(context)})
+    emit_metadata_to_datahub(
+        context,
+        df=raw,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
+    yield Output(raw, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -72,13 +83,27 @@ def adhoc__master_data_transforms(
         extract_school_id_govt_duplicates(sdf), "Added row number transforms"
     )
 
-    yield Output(sdf.toPandas(), metadata={"filepath": get_output_filepath(context)})
+    df_pandas = sdf.toPandas()
+    emit_metadata_to_datahub(
+        context,
+        df=df_pandas,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
+    yield Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def adhoc__df_duplicates(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
+    config: FileConfig,
 ) -> pd.DataFrame:
     df_duplicates = adhoc__master_data_transforms.where(
         adhoc__master_data_transforms.row_num != 1
@@ -86,8 +111,20 @@ def adhoc__df_duplicates(
     df_duplicates = df_duplicates.drop("row_num")
 
     context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
+
+    df_pandas = df_duplicates.toPandas()
+    emit_metadata_to_datahub(
+        context,
+        df=df_pandas,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
     yield Output(
-        df_duplicates.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
     )
 
 
@@ -117,8 +154,20 @@ def adhoc__master_data_quality_checks(
     logger.log.info(
         f"Post-DQ checks stats: {len(df_deduplicated.columns)=}\n{df_deduplicated.count()=}"
     )
+
+    df_pandas = dq_checked.toPandas()
+    emit_metadata_to_datahub(
+        context,
+        df=df_pandas,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
     yield Output(
-        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
     )
 
 
@@ -126,6 +175,7 @@ def adhoc__master_data_quality_checks(
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
+    config: FileConfig,
 ) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
@@ -137,8 +187,13 @@ def adhoc__master_dq_checks_passed(
     )
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
 
+    df_pandas = dq_passed.toPandas()
     yield Output(
-        dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
     )
 
 
@@ -146,13 +201,26 @@ def adhoc__master_dq_checks_passed(
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
+    config: FileConfig,
 ) -> sql.DataFrame:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
         f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}"
     )
+
+    df_pandas = dq_failed.toPandas()
+    emit_metadata_to_datahub(
+        context,
+        df=df_pandas,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
     yield Output(
-        dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
     )
 
 
@@ -161,14 +229,23 @@ def adhoc__master_dq_checks_summary(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> dict | list[dict]:
-    df_summary = aggregate_report_spark_df(
-        spark.spark_session, adhoc__master_data_quality_checks
+    df_summary = aggregate_report_json(
+        aggregate_report_spark_df(
+            spark.spark_session, adhoc__master_data_quality_checks
+        ),
+        adhoc__master_data_quality_checks,
     )
-    yield Output(
-        df_summary.toPandas().to_dict(orient="records"),
-        metadata={"filepath": get_output_filepath(context)},
+
+    dataset_urn = create_dataset_urn(context, is_upstream=False)
+    emit_assertions = EmitDatasetAssertionResults(
+        dataset_urn=dataset_urn,
+        dq_summary_statistics=df_summary,
+        context=context,
     )
+    emit_assertions()
+    yield Output(df_summary, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key="adls_delta_v2_io_manager")
@@ -180,4 +257,18 @@ def adhoc__publish_master_to_gold(
     gold = transform_types(
         adhoc__master_dq_checks_passed, config.metastore_schema, context
     )
-    yield Output(gold, metadata={"filepath": get_output_filepath(context)})
+    gold = compute_row_hash(gold)
+
+    emit_metadata_to_datahub(
+        context,
+        df=gold.toPandas(),
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
+    yield Output(
+        gold,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(gold),
+        },
+    )

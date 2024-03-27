@@ -6,7 +6,6 @@ from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
-from src.utils.sentry import capture_op_exceptions
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -257,9 +256,3 @@ def gold(
         metadata={"filepath": get_output_filepath(context, "reference")},
         output_name="reference",
     )
-
-
-@asset
-@capture_op_exceptions
-def might_explode(_context: OpExecutionContext):
-    raise ValueError("oops!")
