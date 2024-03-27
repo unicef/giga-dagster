@@ -12,7 +12,6 @@ pr:
   drafts: true
   branches:
     exclude:
-      - main
       - staging
   paths:
     exclude:
