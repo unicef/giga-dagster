@@ -59,7 +59,7 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
     step = context.asset_key.to_user_string()
     config = FileConfig(**context.get_step_execution_context().op_config)
 
-    domain = config.dataset_type
+    domain = config.domain
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
 
