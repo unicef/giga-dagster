@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from dagster import RunConfig, RunRequest, SensorEvaluationContext, sensor
+from dagster import (
+    RunConfig,
+    RunRequest,
+    SensorEvaluationContext,
+    SkipReason,
+    sensor,
+)
 from src.constants import constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
@@ -9,8 +15,8 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-
-from .base import OpDestinationMapping, generate_run_ops
+from src.utils.filename import deconstruct_filename_components
+from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 
 @sensor(
@@ -21,9 +27,18 @@ def school_master__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/master", recursive=False
-    ):
+    )
+    paths_list.extend(
+        adls_file_client.list_paths(
+            constants.adhoc_master_updates_source_folder, recursive=True
+        )
+    )
+
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -35,6 +50,12 @@ def school_master__gold_csv_to_deltatable_sensor(
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_master"
+
+        filename_components = deconstruct_filename_components(file_data.name)
+        country_code = filename_components.country_code
+
+        if not stem.startswith(filename_components.country_code):
+            stem = f"{filename_components.country_code}_{stem}"
 
         ops_destination_mapping = {
             "adhoc__load_master_csv": OpDestinationMapping(
@@ -74,7 +95,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -87,7 +108,15 @@ def school_master__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": filename_components.country_code},
+            )
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -98,9 +127,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    for file_data in adls_file_client.list_paths_generator(
+    paths_list = adls_file_client.list_paths(
         f"{constants.gold_source_folder}/reference", recursive=False
-    ):
+    )
+    run_requests = []
+
+    for file_data in paths_list:
         if file_data.is_directory:
             context.log.warning(f"Skipping {file_data.name}")
             continue
@@ -112,6 +144,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
         metadata = properties.metadata
         size = properties.size
         metastore_schema = "school_reference"
+
+        filename_components = deconstruct_filename_components(file_data.name)
+        country_code = filename_components.country_code
+
+        if not stem.startswith(filename_components.country_code):
+            stem = f"{filename_components.country_code}_{stem}"
 
         ops_destination_mapping = {
             "adhoc__load_reference_csv": OpDestinationMapping(
@@ -136,7 +174,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_reference_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -149,7 +187,11 @@ def school_reference__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        )
+
+    yield from run_requests
 
 
 @sensor(
@@ -160,6 +202,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
+    run_requests = []
+
     for file_data in adls_file_client.list_paths_generator(
         constants.qos_source_folder, recursive=True
     ):
@@ -194,7 +238,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_qos_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.gold_folder}/qos/{country_code}/{stem}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
             ),
         }
@@ -207,4 +251,15 @@ def school_qos__gold_csv_to_deltatable_sensor(
         )
 
         context.log.info(f"FILE: {path}")
-        yield RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+        run_requests.append(
+            RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            )
+        )
+
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests

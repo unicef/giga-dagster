@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 from dagster import InputContext, OpExecutionContext, OutputContext
 
 
-def run_query_with_error_handler(
+def execute_query_with_error_handler(
     context: InputContext | OutputContext | OpExecutionContext,
     spark: SparkSession,
     query: DeltaTableBuilder,
@@ -27,5 +27,6 @@ def run_query_with_error_handler(
             )
             spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
             query.execute()
+            context.log.info("ok")
         else:
             raise exc

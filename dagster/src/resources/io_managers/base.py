@@ -5,8 +5,8 @@ from pathlib import Path
 from pyspark.sql import DataFrame
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
-from src.sensors.base import FileConfig
 from src.settings import settings
+from src.utils.op_config import FileConfig
 from src.utils.spark import (
     transform_qos_bra_types,
     transform_school_types,

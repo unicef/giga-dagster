@@ -104,10 +104,18 @@ class Settings(BaseSettings):
         return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
 
     @property
+    def DEFAULT_SCHEDULE_CRON(self) -> str:
+        return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
+
+    @property
+    def SPARK_WAREHOUSE_PATH(self) -> str:
+        return (
+            "warehouse-local" if self.PYTHON_ENV == Environment.LOCAL else "warehouse"
+        )
+
+    @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
-        if self.PYTHON_ENV == Environment.LOCAL:
-            return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
-        return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+        return f"{self.AZURE_BLOB_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
 
     @property
     def INGESTION_DB_HOST(self) -> str:

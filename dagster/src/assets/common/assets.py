@@ -1,11 +1,11 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
-from src.utils.sentry import capture_op_exceptions
+from src.utils.op_config import FileConfig
+from src.utils.schema import get_schema_columns_datahub
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -15,6 +15,7 @@ def manual_review_passed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> sql.DataFrame:
     # dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
@@ -24,7 +25,20 @@ def manual_review_passed_rows(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"], spark.spark_session
     )
-    emit_metadata_to_datahub(context, df)
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -33,6 +47,7 @@ def manual_review_failed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
+    config: FileConfig,
 ) -> sql.DataFrame:
     # dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
@@ -42,7 +57,20 @@ def manual_review_failed_rows(
     df = adls_file_client.download_csv_as_pandas_dataframe(
         context.run_tags["dagster/run_key"]
     )
-    emit_metadata_to_datahub(context, df)
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -77,7 +105,19 @@ def silver(
             .execute()
         )
 
-    emit_metadata_to_datahub(context, df=manual_review_passed_rows)
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
 
@@ -193,7 +233,19 @@ def gold(
             "source.school_id_giga = target.school_id_giga",
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
-    emit_metadata_to_datahub(context, df=silver)
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+
     yield Output(
         master,
         metadata={"filepath": get_output_filepath(context, "master")},
@@ -204,9 +256,3 @@ def gold(
         metadata={"filepath": get_output_filepath(context, "reference")},
         output_name="reference",
     )
-
-
-@asset
-@capture_op_exceptions
-def might_explode(_context: OpExecutionContext):
-    raise ValueError("oops!")

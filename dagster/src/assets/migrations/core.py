@@ -4,13 +4,17 @@ from delta import DeltaTable
 from models import VALID_PRIMITIVES, Schema
 from pyspark import sql
 from pyspark.sql.functions import col, when
-from src.utils.delta import run_query_with_error_handler
+from src.utils.delta import execute_query_with_error_handler
 
 from dagster import OpExecutionContext
 
 
+def get_filepath(context: OpExecutionContext) -> str:
+    return context.run_tags["dagster/run_key"].split(":")[0]
+
+
 def validate_raw_schema(context: OpExecutionContext, df: sql.DataFrame):
-    filepath = context.run_tags["dagster/run_key"]
+    filepath = get_filepath(context)
 
     df = df.withColumn(
         "dq_invalid_data_type",
@@ -29,7 +33,7 @@ def validate_raw_schema(context: OpExecutionContext, df: sql.DataFrame):
 
 
 def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
-    filepath = context.run_tags["dagster/run_key"]
+    filepath = get_filepath(context)
     spark = df.sparkSession
 
     filename = os.path.splitext(filepath.split("/")[-1])[0]
@@ -41,7 +45,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     query = (
         DeltaTable.createOrReplace(spark).tableName(full_table_name).addColumns(columns)
     )
-    run_query_with_error_handler(context, spark, query, schema_name, table_name)
+    execute_query_with_error_handler(context, spark, query, schema_name, table_name)
 
     (
         DeltaTable.forName(spark, full_table_name)

@@ -3,24 +3,24 @@ from datetime import datetime
 
 import country_converter as cc
 import datahub.emitter.mce_builder as builder
-import pandas as pd
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     DatasetPropertiesClass,
-    DateTypeClass,
+    NullTypeClass,
     NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
     SchemaFieldDataTypeClass,
     SchemaMetadataClass,
-    StringTypeClass,
 )
-from src.sensors.base import FileConfig
+from pyspark import sql
+from src.constants import constants
 from src.settings import settings
 from src.utils.adls import get_output_filepath
+from src.utils.op_config import FileConfig
 
 from dagster import OpExecutionContext, version
 
@@ -36,9 +36,9 @@ def identify_country_name(country_code: str) -> str:
 
 
 def create_dataset_urn(
-    context: OpExecutionContext, is_upstream: bool, output_name: str = None
+    context: OpExecutionContext, is_upstream: bool, platform_id: str = "adlsGen2"
 ) -> str:
-    platform = builder.make_data_platform_urn("adlsGen2")
+    platform = builder.make_data_platform_urn(platform_id)
     config = FileConfig(**context.get_step_execution_context().op_config)
 
     # TODO: Handle multiple upstreams
@@ -107,33 +107,56 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
     return dataset_properties
 
 
-def define_schema_properties(df: pd.DataFrame):
-    columns = list(df.columns)
-    dtypes = list(df.dtypes)
+def define_schema_properties(
+    schema_reference: list[tuple] | sql.DataFrame, df_failed: None | sql.DataFrame
+):
     fields = []
 
-    for column, dtype in list(zip(columns, dtypes, strict=False)):
-        if dtype == "float64" or dtype == "int64":
-            type_class = NumberTypeClass()
-        elif dtype == "datetime64[ns]":
-            type_class = DateTypeClass()
-        else:
-            type_class = StringTypeClass()
+    if isinstance(schema_reference, sql.DataFrame):
+        for field in schema_reference.schema.fields:
+            for v in constants.TYPE_MAPPINGS.dict().values():
+                if field.dataType == v["pyspark"]:
+                    type_class = v["datahub"]
+                else:
+                    type_class = NullTypeClass
 
-        fields.append(
-            SchemaFieldClass(
-                fieldPath=f"{column}",
-                type=SchemaFieldDataTypeClass(type_class),
-                nativeDataType=f"{dtype}",  # use this to provide the type of the field in the source system's vernacular
+                fields.append(
+                    SchemaFieldClass(
+                        fieldPath=f"{field.name}",
+                        type=SchemaFieldDataTypeClass(type_class()),
+                        nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
+                    )
+                )
+
+    else:
+        for column, type_class in schema_reference:
+            fields.append(
+                SchemaFieldClass(
+                    fieldPath=f"{column}",
+                    type=SchemaFieldDataTypeClass(type_class),
+                    nativeDataType=f"{type_class}",  # use this to provide the type of the field in the source system's vernacular
+                )
             )
-        )
+
+        if df_failed is not None:
+            for column in df_failed.columns:
+                if column.startswith("dq"):
+                    fields.append(
+                        SchemaFieldClass(
+                            fieldPath=f"{column}",
+                            type=SchemaFieldDataTypeClass(NumberTypeClass()),
+                            nativeDataType="int",  # use this to provide the type of the field in the source system's vernacular
+                        )
+                    )
 
     schema_properties = SchemaMetadataClass(
         schemaName="placeholder",  # not used
-        platform=make_data_platform_urn("adls"),  # important <- platform must be an urn
+        platform=make_data_platform_urn(
+            "adlsGen2"
+        ),  # important <- platform must be a urn
         version=0,  # when the source system has a notion of versioning of schemas, insert this in, otherwise leave as 0
         hash="",  # when the source system has a notion of unique schemas identified via hash, include a hash, else leave it as empty string
-        platformSchema=OtherSchemaClass(rawSchema="__insert raw schema here__"),
+        platformSchema=OtherSchemaClass(rawSchema=""),
         fields=fields,
     )
 
@@ -174,9 +197,10 @@ def set_tag_mutation_query(country_name, dataset_urn):
 
 def emit_metadata_to_datahub(
     context: OpExecutionContext,
-    df: pd.DataFrame | bytes,
     country_code: str,
     dataset_urn: str,
+    schema_reference: sql.DataFrame | list[tuple] = None,
+    df_failed: sql.DataFrame = None,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -192,14 +216,17 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING DATASET METADATA")
     datahub_emitter.emit(dataset_metadata_event)
 
-    if isinstance(df, pd.DataFrame):
-        schema_properties = define_schema_properties(df)
+    if schema_reference is not None:
+        schema_properties = define_schema_properties(
+            schema_reference, df_failed=df_failed
+        )
         schema_metadata_event = MetadataChangeProposalWrapper(
             entityUrn=dataset_urn,
             aspect=schema_properties,
         )
 
         context.log.info("EMITTING SCHEMA")
+        context.log.info(schema_metadata_event)
         datahub_emitter.emit(schema_metadata_event)
 
     datahub_graph_client = DataHubGraph(
@@ -229,17 +256,6 @@ def emit_metadata_to_datahub(
 
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
-
-    step = context.asset_key.to_user_string()
-    if "raw" not in step:
-        upstream_dataset_urn = create_dataset_urn(context, is_upstream=True)
-        lineage_mce = builder.make_lineage_mce(
-            [upstream_dataset_urn],  # Upstream URNs
-            dataset_urn,  # Downstream URN
-        )
-
-        context.log.info("EMITTING LINEAGE METADATA")
-        datahub_emitter.emit_mce(lineage_mce)
 
     return context.log.info(
         f"Metadata of dataset {output_filepath} has been successfully"

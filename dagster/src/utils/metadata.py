@@ -4,7 +4,7 @@ import pandas as pd
 from pyspark import sql
 
 from dagster import MetadataValue
-from src.sensors.base import FileConfig
+from src.utils.op_config import FileConfig
 
 
 def get_output_metadata(config: FileConfig, filepath: str = None):

@@ -10,10 +10,7 @@ from src.jobs.school_master import (
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
-from .base import (
-    OpDestinationMapping,
-    generate_run_ops,
-)
+from ..utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 SCHOOL_DATASET_TYPE = f"school-{DATASET_TYPE}"
@@ -87,6 +84,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
+            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
         )
 
         context.log.info(f"FILE: {path}")

@@ -21,6 +21,7 @@ from pyspark.sql.types import (
 
 class Constants(BaseSettings):
     UPLOAD_PATH_PREFIX: str = "raw/uploads"
+    datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = "raw_schema"
@@ -34,6 +35,7 @@ class Constants(BaseSettings):
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
+    adhoc_master_updates_source_folder = "updated_master_schema/master_updates"
     qos_source_folder = "gold/qos"
 
     step_origin_map: dict[str, str] = {

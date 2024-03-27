@@ -1,7 +1,7 @@
 import datahub.emitter.mce_builder as builder
 from datahub.emitter.rest_emitter import DatahubRestEmitter
-from src.sensors.base import FileConfig
 from src.settings import settings
+from src.utils.op_config import FileConfig
 
 from dagster import OutputContext
 

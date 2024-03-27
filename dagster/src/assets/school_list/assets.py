@@ -8,7 +8,6 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.schemas.qos import SchoolListConfig
-from src.sensors.base import FileConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
 from src.utils.adls import (
@@ -19,6 +18,7 @@ from src.utils.adls import (
 from src.utils.apis import query_API_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.db import get_db_context
+from src.utils.op_config import FileConfig
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
