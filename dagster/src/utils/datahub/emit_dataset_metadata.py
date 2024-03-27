@@ -118,9 +118,8 @@ def define_schema_properties(
     if isinstance(schema_reference, sql.DataFrame):
         for field in schema_reference.schema.fields:
             for v in constants.TYPE_MAPPINGS.dict().values():
-                if field.dataType == v["pyspark"]:
-                    datahub_type = v["datahub"]
-                    type_class = datahub_type()
+                if field.dataType == v["pyspark"]():
+                    type_class = v["datahub"]()
                 else:
                     type_class = NullTypeClass()
 
