@@ -8,18 +8,16 @@ from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
-    BooleanTypeClass,
     DatasetPropertiesClass,
-    DateTypeClass,
     NullTypeClass,
     NumberTypeClass,
     OtherSchemaClass,
     SchemaFieldClass,
     SchemaFieldDataTypeClass,
     SchemaMetadataClass,
-    StringTypeClass,
 )
 from pyspark import sql
+from src.constants import constants
 from src.settings import settings
 from src.utils.adls import get_output_filepath
 from src.utils.op_config import FileConfig
@@ -109,31 +107,31 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
     return dataset_properties
 
 
-def define_schema_properties(schema_reference: list[tuple] | sql.DataFrame):
+def define_schema_properties(
+    schema_reference: list[tuple] | sql.DataFrame, df_failed: None | sql.DataFrame
+):
     fields = []
+
+    {
+        "Double": NumberTypeClass(),
+        "Float": NumberTypeClass()["Double", "Float", "Integer", "Long"],
+    }
 
     if isinstance(schema_reference, sql.DataFrame):
         for field in schema_reference.schema.fields:
-            if "Null" in str(field.dataType):
-                type_class = NullTypeClass()
-            elif any(
-                x in str(field.dataType) for x in ["Double", "Float", "Integer", "Long"]
-            ):
-                type_class = NumberTypeClass()
-            elif any(x in str(field.dataType) for x in ["Time", "Date"]):
-                type_class = DateTypeClass()
-            elif "Boolean" in str(field.dataType):
-                type_class = BooleanTypeClass()
-            else:
-                type_class = StringTypeClass()
+            for v in constants.TYPE_MAPPINGS.dict().values():
+                if field.dataType == v["pyspark"]:
+                    type_class = v["datahub"]
+                else:
+                    type_class = NullTypeClass
 
-            fields.append(
-                SchemaFieldClass(
-                    fieldPath=f"{field.name}",
-                    type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
+                fields.append(
+                    SchemaFieldClass(
+                        fieldPath=f"{field.name}",
+                        type=SchemaFieldDataTypeClass(type_class()),
+                        nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
+                    )
                 )
-            )
 
     else:
         for column, type_class in schema_reference:
@@ -144,6 +142,17 @@ def define_schema_properties(schema_reference: list[tuple] | sql.DataFrame):
                     nativeDataType=f"{type_class}",  # use this to provide the type of the field in the source system's vernacular
                 )
             )
+
+        if df_failed is not None:
+            for column in df_failed.columns:
+                if column.startswith("dq"):
+                    fields.append(
+                        SchemaFieldClass(
+                            fieldPath=f"{column}",
+                            type=SchemaFieldDataTypeClass(NumberTypeClass()),
+                            nativeDataType="int",  # use this to provide the type of the field in the source system's vernacular
+                        )
+                    )
 
     schema_properties = SchemaMetadataClass(
         schemaName="placeholder",  # not used
@@ -196,8 +205,7 @@ def emit_metadata_to_datahub(
     country_code: str,
     dataset_urn: str,
     schema_reference: sql.DataFrame | list[tuple] = None,
-    # TO DO: ADD str = 'fixed_metastore' for those with fixed schema
-    # then call get_schema_columns_datahub inside this function instead of inside the pipeline
+    df_failed: sql.DataFrame = None,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -214,7 +222,9 @@ def emit_metadata_to_datahub(
     datahub_emitter.emit(dataset_metadata_event)
 
     if schema_reference is not None:
-        schema_properties = define_schema_properties(schema_reference)
+        schema_properties = define_schema_properties(
+            schema_reference, df_failed=df_failed
+        )
         schema_metadata_event = MetadataChangeProposalWrapper(
             entityUrn=dataset_urn,
             aspect=schema_properties,
