@@ -117,12 +117,14 @@ def define_schema_properties(
 
     if isinstance(schema_reference, sql.DataFrame):
         for field in schema_reference.schema.fields:
+            is_field_type_found = False
             for v in constants.TYPE_MAPPINGS.dict().values():
-                type_class = (
-                    v["datahub"]()
-                    if field.dataType == v["pyspark"]()
-                    else NullTypeClass()
-                )
+                if field.dataType == v["pyspark"]():
+                    type_class = v["datahub"]()
+                    is_field_type_found = True
+                    break
+            if not is_field_type_found:
+                type_class = NullTypeClass()
 
             fields.append(
                 SchemaFieldClass(
