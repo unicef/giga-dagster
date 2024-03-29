@@ -76,7 +76,7 @@ def build_deduped_merge_query(
     primary_key: str,
     update_columns: list[str],
 ):
-    master_df = master.alias("master").toDF()
+    master_df = master.toDF()
     incoming = updates.alias("incoming")
 
     master_ids = master_df.select(primary_key, "signature")
@@ -101,7 +101,9 @@ def build_deduped_merge_query(
     if not (ic(has_updates) or ic(has_insertions)):
         return None
 
-    query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")
+    query = master.alias("master").merge(
+        incoming.alias("incoming"), f"master.{primary_key} = incoming.{primary_key}"
+    )
 
     if has_updates:
         query = query.whenMatchedUpdate(
