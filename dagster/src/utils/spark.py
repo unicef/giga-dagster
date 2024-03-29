@@ -214,7 +214,11 @@ def transform_types(
         columns = [c for c in columns if c.name in df.columns]
 
     df = df.withColumns(
-        {column.name: col(column.name).cast(column.dataType) for column in columns}
+        {
+            column.name: col(column.name).cast(column.dataType)
+            for column in columns
+            if column.name != "signature"
+        }
     )
     logger.info("Transformed column types")
     df.printSchema()
