@@ -25,6 +25,7 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.spark.transform_functions import (
+    add_missing_columns,
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
@@ -37,6 +38,7 @@ from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
+from src.utils.schema import get_schema_columns
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -217,14 +219,18 @@ def coverage_bronze(
 
     if source == "fb":
         df = fb_transforms(coverage_dq_passed_rows)
-    else:  # source == "itu"
+    elif source == "itu":  # source == "itu"
         df = itu_transforms(coverage_dq_passed_rows)
+    else:
+        columns = get_schema_columns(s, config.metastore_schema)
+        df = add_missing_columns(coverage_dq_passed_rows, columns)
+        df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
         silver = DeltaTable.forName(spark.spark_session, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)
-        else:  # source == "itu"
+        elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
     emit_metadata_to_datahub(

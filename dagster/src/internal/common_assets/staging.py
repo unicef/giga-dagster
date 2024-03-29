@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
@@ -19,6 +21,35 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.spark import compute_row_hash, transform_types
+
+
+def get_files_for_review(
+    adls_file_client: ADLSFileClient,
+    config: FileConfig,
+    skip_condition: bool = None,
+    staging_last_modified: datetime = None,
+):
+    files_for_review = []
+    for file_info in adls_file_client.list_paths(
+        str(config.filepath_object.parent), recursive=False
+    ):
+        default_skip_condition = (
+            file_info.name == config.filepath
+            or file_info.last_modified < staging_last_modified
+        )
+
+        if skip_condition is None:
+            skip_condition = default_skip_condition
+        else:
+            skip_condition = skip_condition or default_skip_condition
+
+        if skip_condition:
+            continue
+
+        files_for_review.append(file_info)
+
+    files_for_review = sorted(files_for_review, key=lambda p: p.last_modified)
+    return files_for_review
 
 
 def staging_step(
@@ -69,15 +100,10 @@ def staging_step(
         )
         staging = staging_dt.alias("staging").toDF()
 
-        files_for_review = sorted(
-            [
-                p
-                for p in adls_file_client.list_paths(
-                    str(config.filepath_object.parent), recursive=False
-                )
-                if p.last_modified >= staging_last_modified
-            ],
-            key=lambda p: p.last_modified,
+        files_for_review = get_files_for_review(
+            adls_file_client,
+            config,
+            staging_last_modified=staging_last_modified,
         )
         context.log.info(f"{len(files_for_review)=}")
 
@@ -103,16 +129,7 @@ def staging_step(
     else:
         staging = upstream_df
         staging = transform_types(staging, schema_name, context)
-        files_for_review = sorted(
-            [
-                p
-                for p in adls_file_client.list_paths(
-                    str(config.filepath_object.parent), recursive=False
-                )
-                if p.name != config.filepath
-            ],
-            key=lambda p: p.last_modified,
-        )
+        files_for_review = get_files_for_review(adls_file_client, config)
         context.log.info(f"{len(files_for_review)=}")
 
         create_schema(spark, staging_tier_schema_name)
