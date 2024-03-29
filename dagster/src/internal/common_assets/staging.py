@@ -33,10 +33,13 @@ def get_files_for_review(
     for file_info in adls_file_client.list_paths(
         str(config.filepath_object.parent), recursive=False
     ):
-        default_skip_condition = (
-            file_info.name == config.filepath
-            or file_info.last_modified < staging_last_modified
-        )
+        default_skip_condition = file_info.name == config.filepath
+
+        if staging_last_modified is not None:
+            default_skip_condition = (
+                default_skip_condition
+                or file_info.last_modified < staging_last_modified
+            )
 
         if skip_condition is None:
             skip_condition = default_skip_condition
