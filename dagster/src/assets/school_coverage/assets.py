@@ -16,6 +16,7 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.internal.common_assets.staging import staging_step
+from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
@@ -40,7 +41,7 @@ from src.utils.pandas import pandas_loader
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def coverage_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -68,7 +69,7 @@ def coverage_raw(
     yield Output(df, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_data_quality_results(
     context,
     config: FileConfig,
@@ -123,7 +124,7 @@ def coverage_data_quality_results(
     )
 
 
-@asset(io_manager_key="adls_json_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def coverage_data_quality_results_summary(
     context,
     config: FileConfig,
@@ -156,7 +157,7 @@ def coverage_data_quality_results_summary(
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -179,7 +180,7 @@ def coverage_dq_passed_rows(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -202,7 +203,7 @@ def coverage_dq_failed_rows(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_bronze(
     context: OpExecutionContext,
     coverage_dq_passed_rows: sql.DataFrame,
@@ -242,7 +243,7 @@ def coverage_bronze(
     )
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def coverage_staging(
     context: OpExecutionContext,
     coverage_bronze: sql.DataFrame,

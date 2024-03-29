@@ -18,6 +18,7 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
+from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -33,7 +34,7 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def adhoc__load_master_csv(
     context: OpExecutionContext, adls_file_client: ADLSFileClient, config: FileConfig
 ) -> bytes:
@@ -47,7 +48,7 @@ def adhoc__load_master_csv(
     yield Output(raw, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_data_transforms(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
@@ -99,7 +100,7 @@ def adhoc__master_data_transforms(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__df_duplicates(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
@@ -128,7 +129,7 @@ def adhoc__df_duplicates(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
@@ -171,7 +172,7 @@ def adhoc__master_data_quality_checks(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -197,7 +198,7 @@ def adhoc__master_dq_checks_passed(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -224,7 +225,7 @@ def adhoc__master_dq_checks_failed(
     )
 
 
-@asset(io_manager_key="adls_json_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def adhoc__master_dq_checks_summary(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -248,7 +249,7 @@ def adhoc__master_dq_checks_summary(
     yield Output(df_summary, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_delta_v2_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
 def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
