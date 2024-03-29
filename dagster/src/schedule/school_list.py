@@ -1,4 +1,4 @@
-from models.qos_apis import SchoolList
+from models.qos import SchoolList
 from sqlalchemy import select
 
 from dagster import RunConfig, RunRequest, ScheduleEvaluationContext, schedule
