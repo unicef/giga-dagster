@@ -7,6 +7,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.resources import ResourceKey
 from src.schemas.qos import SchoolListConfig
 from src.settings import settings
 from src.spark.transform_functions import create_bronze_layer_columns
@@ -15,113 +16,104 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
-from src.utils.apis import query_API_data
+from src.utils.apis import query_api_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.db import get_db_context
-from src.utils.op_config import FileConfig
 
-from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
+from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_raw(
-    context: OpExecutionContext, config: SchoolListConfig
-) -> pd.DataFrame:
+    context: OpExecutionContext,
+    config: SchoolListConfig,
+) -> Output[pd.DataFrame]:
     row_data = config
 
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_API_data(context, database_session, row_data)
+            query_api_data(context, database_session, row_data)
         )
     emit_metadata_to_datahub(context, df=df)
-    yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
+    return Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")  # this is wrong
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_bronze(
     context: OpExecutionContext,
     qos_school_list_raw: sql.DataFrame,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     ## @RENZ NEED TO ADD TRANSFORM TO CONVERT COLUMNS TO SCHEMA COLUMNS
     df = create_bronze_layer_columns(qos_school_list_raw)
     emit_metadata_to_datahub(context, df=qos_school_list_raw)
-    yield Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
+    return Output(df.toPandas(), metadata={"filepath": get_output_filepath(context)})
 
 
-@multi_asset(
-    outs={
-        "qos_school_list_dq_results": AssetOut(
-            is_required=True, io_manager_key="adls_pandas_io_manager"
-        ),
-        "qos_school_list_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_json_io_manager"
-        ),
-    }
-)
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_data_quality_results(
     context,
-    config: FileConfig,
+    qos_school_list_bronze: sql.DataFrame,
+) -> Output[pd.DataFrame]:
+    country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
+    dq_results = row_level_checks(qos_school_list_bronze, "geolocation", country_code)
+    return Output(
+        dq_results.toPandas(),
+        metadata={
+            "filepath": get_output_filepath(context, "qos_school_list_dq_results")
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
+def qos_school_list_data_quality_summary(
+    context,
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
-):
+) -> Output[dict]:
     country_code = context.run_tags["dagster/run_key"].split("/")[-1].split("_")[1]
     dq_results = row_level_checks(qos_school_list_bronze, "geolocation", country_code)
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(spark.spark_session, dq_results),
         qos_school_list_bronze,
     )
-
-    yield Output(
-        dq_results.toPandas(),
-        metadata={
-            "filepath": get_output_filepath(context, "qos_school_list_dq_results")
-        },
-        output_name="qos_school_list_dq_results",
-    )
-
-    yield Output(
+    return Output(
         dq_summary_statistics,
-        metadata={
-            "filepath": get_output_filepath(
-                context, "qos_school_list_dq_summary_statistics"
-            )
-        },
-        output_name="qos_school_list_dq_summary_statistics",
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_passed_rows(
     context: OpExecutionContext,
-    qos_school_list_dq_results: sql.DataFrame,
-) -> sql.DataFrame:
-    df_passed = qos_school_list_dq_results
+    qos_school_list_data_quality_results: sql.DataFrame,
+) -> Output[sql.DataFrame]:
+    df_passed = qos_school_list_data_quality_results
     emit_metadata_to_datahub(context, df_passed)
-    yield Output(
+    return Output(
         df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_failed_rows(
     context: OpExecutionContext,
-    qos_school_list_dq_results: sql.DataFrame,
-) -> sql.DataFrame:
-    df_failed = qos_school_list_dq_results
+    qos_school_list_data_quality_results: sql.DataFrame,
+) -> Output[sql.DataFrame]:
+    df_failed = qos_school_list_data_quality_results
     emit_metadata_to_datahub(context, df_failed)
-    yield Output(
+    return Output(
         df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
     )
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def qos_school_list_staging(
     context: OpExecutionContext,
     qos_school_list_dq_passed_rows: sql.DataFrame,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: SchoolListConfig,
-):
+) -> None:
     dataset_type = config["dataset_type"]
     filepath = context.run_tags["dagster/run_key"]
     silver_table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'silver').split('_')[0]}"
@@ -130,7 +122,7 @@ def qos_school_list_staging(
 
     # {filepath: str, date_modified: str}
     files_for_review = []
-    for file_data in adls_file_client.qos_school_list_paths(
+    for file_data in adls_file_client.list_paths(
         f"staging/pending-review/school-{dataset_type}-data"
     ):
         if (
