@@ -41,6 +41,14 @@ def get_schema_columns(spark: SparkSession, schema_name: str):
     ]
 
 
+def get_schema_columns_datahub(spark: SparkSession, schema_name: str):
+    df = get_schema_table(spark, schema_name)
+    return [
+        (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())
+        for row in df.collect()
+    ]
+
+
 def get_primary_key(spark: SparkSession, schema_name: str) -> str:
     df = get_schema_table(spark, schema_name)
     return df.filter(df["primary_key"]).first().name
