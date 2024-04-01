@@ -8,6 +8,7 @@ from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
+from src.utils.sentry import log_op_context
 
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
@@ -40,6 +41,7 @@ def manual_review_passed_rows(
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -73,6 +75,7 @@ def manual_review_failed_rows(
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
@@ -121,6 +124,7 @@ def silver(
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
@@ -254,6 +258,7 @@ def gold(
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
     yield Output(

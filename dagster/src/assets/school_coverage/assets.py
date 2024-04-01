@@ -40,6 +40,7 @@ from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns
+from src.utils.sentry import log_op_context
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -160,6 +161,7 @@ def coverage_data_quality_results_summary(
         emit_assertions()
     except Exception as error:
         context.log.error(f"Assertion Run ERROR: {error}")
+        log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
