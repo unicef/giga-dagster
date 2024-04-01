@@ -32,6 +32,12 @@ class FileConfig(Config):
         For regular assets, simply pass in the destination path as a string.
         """,
     )
+    dq_target_filepath: str = Field(
+        description="""
+        The path of the file inside the ADLS container where we run data quality checks on.
+        """,
+        default=None,
+    )
     metastore_schema: str = Field(
         description="""
         The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table.
@@ -93,6 +99,7 @@ def generate_run_ops(
     dataset_type: str,
     metadata: dict,
     file_size_bytes: int,
+    dq_target_filepath: str,
 ):
     run_ops = {}
 
@@ -105,6 +112,7 @@ def generate_run_ops(
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,
+            dq_target_filepath=dq_target_filepath,
         )
         run_ops[asset_key] = file_config
 

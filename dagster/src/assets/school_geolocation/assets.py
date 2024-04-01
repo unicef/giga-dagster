@@ -23,9 +23,9 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.datahub.builders import build_dataset_urn
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
-    create_dataset_urn,
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
@@ -138,15 +138,19 @@ def geolocation_data_quality_results_summary(
         geolocation_bronze,
     )
 
-    context.log.info("EMITTING ASSERTIONS TO DATAHUB")
-    dataset_urn = create_dataset_urn(context, is_upstream=False)
-    emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn,
-        dq_summary_statistics=dq_summary_statistics,
-        context=context,
-    )
-    emit_assertions()
-    context.log.info("SUCCESS! DATASET VALIDATION TAB CREATED IN DATAHUB")
+    try:
+        config = FileConfig(**context.get_step_execution_context().op_config)
+        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+
+        context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
+        emit_assertions = EmitDatasetAssertionResults(
+            dq_summary_statistics=dq_summary_statistics,
+            context=context,
+            dataset_urn=dq_target_dataset_urn,
+        )
+        emit_assertions()
+    except Exception as error:
+        context.log.info(f"Assertion Run ERROR: {error}")
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
