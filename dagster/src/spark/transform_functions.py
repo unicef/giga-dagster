@@ -4,8 +4,17 @@ import uuid
 import geopandas as gpd
 import h3
 from pyspark import sql
-from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, NullType, StringType, StructField
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
+from pyspark.sql.types import (
+    ArrayType,
+    NullType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 from azure.storage.blob import BlobServiceClient
 from src.settings import settings
@@ -174,7 +183,12 @@ def bronze_prereq_columns(df, schema_columns: list[StructField]):
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
-def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructField]):
+def create_bronze_layer_columns(
+    spark: SparkSession,
+    df: sql.DataFrame,
+    schema_columns: list[StructField],
+    county_code_iso3: str,
+) -> sql.DataFrame:
     # Impute missing cols with null
     df = add_missing_columns(df, schema_columns)
 
@@ -183,6 +197,22 @@ def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructFi
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
+
+    # Admin mapbox columns
+    # drop imputed admin cols
+    df = df.drop("admin1")
+    df = df.drop("admin1_id_giga")
+    df = df.drop("admin2")
+    df = df.drop("admin2_id_giga")
+    df = df.drop("disputed_region")
+
+    df = add_admin_columns(
+        spark=spark, df=df, county_code_iso3=county_code_iso3, admin_level="admin1"
+    )
+    df = add_admin_columns(
+        spark=spark, df=df, county_code_iso3=county_code_iso3, admin_level="admin2"
+    )
+    df = add_disputed_region_column(spark=spark, df=test)
 
     ## Clean up columns -- function shouldnt exist, uploads should be clean
     # df = standardize_internet_speed(df)
@@ -252,85 +282,155 @@ def point_110(column):
 point_110_udf = f.udf(point_110)
 
 
-def get_admin1_boundaries(country_code_iso3: str):
+def get_admin_boundaries(
+    country_code_iso3: str, admin_level: str
+):  # admin level = ["admin1", "admin2"]
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
-        filename = f"{country_code_iso3}_admin1.geojson"
+        filename = f"{country_code_iso3}_{admin_level}.geojson"
         file = f"mapbox_sample_data/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
             download_stream.readinto(file_blob)
             file_blob.seek(0)
-            admin1_boundaries = gpd.read_file(file_blob)
+            admin_boundaries = gpd.read_file(file_blob)
 
     except:  # noqa: E722
         return None
 
-    return admin1_boundaries
+    return admin_boundaries
 
 
-# def get_admin1_columns(latitude: float, longitude: float, admin1_boundaries):
-#     point = get_point(longitude=longitude, latitude=latitude)
-
-#     if point is not None and admin1_boundaries is not None:
-#         for index, row in admin1_boundaries.iterrows():  # noqa: B007
-#             if row.geometry.contains(point):
-#                 admin1_en = row["name_en"]
-#                 admin1_native = row["name"]
-#                 admin1_id_giga = row["admin1_id_giga"]
-#                 break
-#             else:
-#                 admin1_en = None
-#                 admin1_native = None
-#                 admin1_id_giga = None
-#     else:
-#         admin1_en = None
-#         admin1_native = None
-#         admin1_id_giga = None
-
-#     return admin1_en, admin1_native, admin1_id_giga
-
-
-def get_admin1_columns(df: sql.DataFrame, admin1_boundaries):
+def add_admin_columns(
+    spark: SparkSession,
+    df: sql.DataFrame,
+    county_code_iso3: str,
+    admin_level: str,
+) -> sql.DataFrame:
     nested_list = df.select(f.collect_list(f.array("latitude", "longitude"))).collect()
     nested_list = [nested_list[0][0]][0]
 
-    for coordinates in nested_list:
-        latitude = coordinates[0]
-        longitude = coordinates[1]
+    admin_boundaries = get_admin_boundaries(
+        country_code_iso3=county_code_iso3, admin_level=admin_level
+    )
 
-        point = get_point(longitude=longitude, latitude=latitude)
+    if admin_boundaries is None:
+        df = df.withColumn(f"{admin_level}", f.lit(None))
+        df = df.withColumn(f"{admin_level}_id_giga", f.lit(None))
+        return df
+    else:  # iterate through coordinates list to check each's coordinates admin columns, then append
+        for coordinates in nested_list:
+            latitude = coordinates[0]
+            longitude = coordinates[1]
 
-        if point is not None and admin1_boundaries is not None:
-            for index, row in admin1_boundaries.iterrows():  # noqa: B007
+            point = get_point(longitude=longitude, latitude=latitude)
+
+            for index, row in admin_boundaries.iterrows():  # noqa: B007
                 if row.geometry.contains(point):
-                    admin1_en = row["name_en"]
-                    admin1_native = row["name"]
-                    admin1_id_giga = row["admin1_id_giga"]
+                    try:  # admin_id_giga doesnt exist on geojson file KeyError: 'admin2_id_giga'
+                        admin_en = row["name_en"]
+                    except KeyError:
+                        admin_en = None
+
+                    try:
+                        admin_native = row["name"]
+                    except KeyError:
+                        admin_native = None
+
+                    try:
+                        admin_id_giga = row[f"{admin_level}_id_giga"]
+                    except KeyError:
+                        admin_id_giga = None
                     break
                 else:
-                    admin1_en = None
-                    admin1_native = None
-                    admin1_id_giga = None
+                    admin_en = None
+                    admin_native = None
+                    admin_id_giga = None
 
-            coordinates.append(admin1_en)
-            coordinates.append(admin1_native)
-            coordinates.append(admin1_id_giga)
-        # else:
-        #     admin1_en = None
-        #     admin1_native = None
-        #     admin1_id_giga = None
+            coordinates.append(admin_en)
+            coordinates.append(admin_native)
+            coordinates.append(admin_id_giga)
 
-    return nested_list
-
-
-def create_admin1_columns(latitude: float, longitude: float, country_code_iso3: str):
-    boundaries = get_admin1_boundaries(country_code_iso3)
-    admin1_en, admin1_native, admin1_id_giga = get_admin1_columns(
-        latitude, longitude, boundaries
+    # create a dataframe out of the process above
+    admin_df_schema = StructType(
+        [
+            StructField("latitude", StringType(), True),  # doubletype
+            StructField("longitude", StringType(), True),  # doubletype
+            StructField(f"{admin_level}_en", StringType(), True),
+            StructField(f"{admin_level}_native", StringType(), True),
+            StructField(f"{admin_level}_id_giga", StringType(), True),
+        ]
     )
-    return print(admin1_en), print(admin1_native), print(admin1_id_giga)
+
+    admin_df = spark.createDataFrame(nested_list, schema=admin_df_schema)
+    admin_df = admin_df.withColumn(
+        f"{admin_level}",
+        f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
+    )
+    admin_df = admin_df.drop(f"{admin_level}_en")
+    admin_df = admin_df.drop(f"{admin_level}_native")
+
+    # join
+    df = df.join(admin_df, on=["latitude", "longitude"], how="left")
+
+    return df
+
+
+def add_disputed_region_column(
+    spark: SparkSession,
+    df: sql.DataFrame,
+) -> sql.DataFrame:
+    nested_list = df.select(f.collect_list(f.array("latitude", "longitude"))).collect()
+    nested_list = [nested_list[0][0]][0]
+
+    try:
+        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        filename = "disputed_areas_admin0_sample.geojson"
+        file = f"mapbox_sample_data/{filename}"
+        blob_client = service.get_blob_client(container=container_name, blob=file)
+        with io.BytesIO() as file_blob:
+            download_stream = blob_client.download_blob()
+            download_stream.readinto(file_blob)
+            file_blob.seek(0)
+            admin_boundaries = gpd.read_file(file_blob)
+
+    except:  # noqa: E722
+        admin_boundaries = None
+
+    if admin_boundaries is None:
+        df.withColumn("disputed_region", f.lit(None))
+    else:  # iterate through coordinates list to check each's coordinates admin columns, then append
+        for coordinates in nested_list:
+            latitude = coordinates[0]
+            longitude = coordinates[1]
+
+            point = get_point(longitude=longitude, latitude=latitude)
+
+            for index, row in admin_boundaries.iterrows():  # noqa: B007
+                if row.geometry.contains(point):
+                    disputed_region = row["name"]
+                    break
+                else:
+                    disputed_region = None
+
+            coordinates.append(disputed_region)
+
+    # create a dataframe out of the process above
+    disputed_df_schema = StructType(
+        [
+            StructField("latitude", StringType(), True),  # doubletype
+            StructField("longitude", StringType(), True),  # doubletype
+            StructField("disputed_region", StringType(), True),
+        ]
+    )
+
+    disputed_df = spark.createDataFrame(nested_list, schema=disputed_df_schema)
+
+    # join
+    df = df.join(disputed_df, on=["latitude", "longitude"], how="left")
+
+    return df
 
 
 if __name__ == "__main__":
@@ -351,7 +451,8 @@ if __name__ == "__main__":
     # df = create_bronze_layer_columns(df)
     # df.show()
 
-    df = master.select(
+    df = master.filter(master["admin1"] == "Rondônia")
+    df = df.select(
         [
             "school_id_giga",
             "school_id_govt",
@@ -359,12 +460,9 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
-            "admin1",
-            "admin2",
         ]
     )
 
-    df = df.filter(df["admin1"] != "Rondônia").limit(100)
     # df = df.withColumn("school_name", f.trim(f.col("school_name")))
     # df = df.withColumn("latitude", f.lit(17.5066649))
     # df = create_school_id_giga(df)
@@ -373,12 +471,24 @@ if __name__ == "__main__":
 
     # df = df.withColumn("country_code_iso3", f.lit("BRA"))
     # df = df.withColumn("admin1_test", get_admin1(f.col("latitude"), f.col("longitude"), f.col("country_code_iso3")))
-    df.show()
-    # df = df.withColumn("latitude", f.lit(1))
-    # df = df.withColumn("longitude", f.lit(1))
 
-    test = get_admin1_columns(df=df, admin1_boundaries=get_admin1_boundaries("BRA"))
-    print(test)
+    # grouped_df = df.groupBy("admin1").agg(f.count("*").alias("row_count"))
+    # grouped_df.orderBy(grouped_df["row_count"].desc()).show()
+    # df = df.filter(df["admin1"] == "São Paulo")
+    df.show()
+    print(df.count())
+
+    test = add_admin_columns(
+        spark=spark, df=df, county_code_iso3="BRA", admin_level="admin1"
+    )
+    test = add_admin_columns(
+        spark=spark, df=test, county_code_iso3="BRA", admin_level="admin2"
+    )
+    test = add_disputed_region_column(spark=spark, df=test)
+    test.show()
+
+    # test = test.filter(test["admin2"] != test["admin21"])
+    # test.show()
 
     # admin1_boundaries = get_admin1_boundaries(country_code_iso3="BRA")
     # latitude = -8.758459
