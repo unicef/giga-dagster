@@ -61,6 +61,7 @@ class Constants(BaseSettings):
             "geolocation_data_quality_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_summary_statistics": f"data-quality-results/school-{dataset_type}-data/dq-summary",
+            "geolocation_data_quality_results_summary": f"data-quality-results/school-{dataset_type}-data/dq-summary",
             "geolocation_dq_checks": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data/dq-passed-rows",
             "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data/dq-failed-rows",

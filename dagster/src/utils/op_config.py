@@ -57,6 +57,9 @@ class FileConfig(Config):
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
         """
     )
+    domain: str = Field(
+        default=None,
+    )
 
     @property
     def filepath_object(self) -> Path:
@@ -100,6 +103,7 @@ def generate_run_ops(
     metadata: dict,
     file_size_bytes: int,
     dq_target_filepath: str,
+    domain: str,
 ):
     run_ops = {}
 
@@ -113,6 +117,7 @@ def generate_run_ops(
             metadata=metadata,
             file_size_bytes=file_size_bytes,
             dq_target_filepath=dq_target_filepath,
+            domain=domain,
         )
         run_ops[asset_key] = file_config
 
