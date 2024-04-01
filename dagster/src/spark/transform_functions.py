@@ -55,7 +55,7 @@ def create_school_id_giga(df: sql.DataFrame):
     return df.drop("identifier_concat")
 
 
-def create_uzbekistan_school_name(df):
+def create_uzbekistan_school_name(df: sql.DataFrame):
     school_name_col = "school_name"
     district_col = "district"
     city_col = "city"
@@ -91,7 +91,7 @@ def create_uzbekistan_school_name(df):
     return df
 
 
-def standardize_school_name(df):
+def standardize_school_name(df: sql.DataFrame):
     # filter
     df1 = df.filter(df.country_code == "UZB")
     df2 = df.filter(df.country_code != "UZB")
@@ -103,7 +103,7 @@ def standardize_school_name(df):
     return df
 
 
-def standardize_internet_speed(df):
+def standardize_internet_speed(df: sql.DataFrame):
     df = df.withColumn(
         "download_speed_govt",
         f.expr("regexp_replace(download_speed_govt, '[^0-9.]', '')").cast("float"),
@@ -121,7 +121,7 @@ def h3_geo_to_h3(latitude, longitude):
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
-def rename_raw_columns(df):  ## function for renaming raw files. adhoc
+def rename_raw_columns(df: sql.DataFrame):  ## function for renaming raw files. adhoc
     # Iterate over mapping set and perform actions
     for raw_col, delta_col in config.COLUMN_RENAME_GEOLOCATION:
         # Check if the raw column exists in the DataFrame
@@ -139,12 +139,13 @@ def rename_raw_columns(df):  ## function for renaming raw files. adhoc
     return df
 
 
-def column_mapping_rename(df, column_mapping):
-    column_mapping = {
+def column_mapping_rename(
+    df: sql.DataFrame, column_mapping: dict[str | None, str | None]
+) -> tuple[sql.DataFrame, dict[str, str]]:
+    column_mapping_filtered = {
         k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)
     }
-
-    return df.withColumnsRenamed(column_mapping)
+    return df.withColumnsRenamed(column_mapping_filtered), column_mapping_filtered
 
 
 def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
@@ -201,7 +202,7 @@ get_critical_errors_empty_column_udf = f.udf(
 )
 
 
-def has_critical_error(df):
+def has_critical_error(df: sql.DataFrame):
     # Check if there is any critical error flagged for the row
     df = df.withColumn(
         "has_critical_error",

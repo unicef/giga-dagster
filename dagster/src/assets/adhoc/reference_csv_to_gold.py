@@ -15,15 +15,16 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows as extract_dq_passed_rows,
     row_level_checks,
 )
+from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient, get_output_filepath
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns
-from src.utils.spark import transform_types
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def adhoc__load_reference_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -33,7 +34,7 @@ def adhoc__load_reference_csv(
     yield Output(raw, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__reference_data_quality_checks(
     context: OpExecutionContext,
     adhoc__load_reference_csv: bytes,
@@ -70,7 +71,7 @@ def adhoc__reference_data_quality_checks(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__reference_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
@@ -87,7 +88,7 @@ def adhoc__reference_dq_checks_passed(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__reference_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__reference_data_quality_checks: sql.DataFrame,
@@ -100,7 +101,7 @@ def adhoc__reference_dq_checks_failed(
     )
 
 
-@asset(io_manager_key="adls_delta_v2_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
 def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
@@ -109,4 +110,5 @@ def adhoc__publish_reference_to_gold(
     gold = transform_types(
         adhoc__reference_dq_checks_passed, config.metastore_schema, context
     )
+    gold = compute_row_hash(gold)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})

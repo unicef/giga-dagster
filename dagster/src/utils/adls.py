@@ -19,6 +19,10 @@ from azure.storage.filedatalake import (
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
+from src.utils.delta import (
+    create_delta_table,
+    create_schema,
+)
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_primary_key, get_schema_columns
 
@@ -131,38 +135,30 @@ class ADLSFileClient(ConfigurableResource):
                 raise OSError(f"Unsupported format for file {filepath}")
 
     def download_delta_table_as_delta_table(
-        self, table_path: str, spark: SparkSession
+        self, table_name: str, spark: SparkSession
     ) -> DeltaTable:
-        return DeltaTable.forPath(spark, f"{table_path}")
+        return DeltaTable.forName(spark, table_name)
 
     def download_delta_table_as_spark_dataframe(
-        self, table_path: str, spark: SparkSession
+        self, table_name: str, spark: SparkSession
     ) -> sql.DataFrame:
-        df = spark.read.format("delta").load(table_path)
-        df.show()
-        return df
+        return DeltaTable.forName(spark, table_name).toDF()
 
     def upload_spark_dataframe_as_delta_table(
         self,
         data: sql.DataFrame,
-        table_path: str,
         schema_name: str,
+        table_name: str,
         spark: SparkSession,
+        context: OutputContext,
     ):
-        table_name = table_path.split("/")[-1]
         full_table_name = f"{schema_name}.{table_name}"
-        print(f"tablename: {table_name}, table path: {table_path}")
-
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
-
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
-        (
-            DeltaTable.createIfNotExists(spark)
-            .tableName(full_table_name)
-            .addColumns(columns)
-            .property("delta.enableChangeDataFeed", "true")
-            .execute()
+
+        create_schema(spark, schema_name)
+        create_delta_table(
+            spark, schema_name, table_name, columns, context, if_not_exists=True
         )
 
         # TODO: Apply logic for preventing unnecessary updates

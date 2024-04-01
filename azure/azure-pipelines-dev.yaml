@@ -10,6 +10,9 @@ trigger:
 pr:
   autoCancel: true
   drafts: true
+  branches:
+    exclude:
+      - staging
   paths:
     exclude:
       - docs

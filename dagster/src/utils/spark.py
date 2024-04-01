@@ -6,7 +6,7 @@ from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
-from pyspark.sql.functions import col, count, udf
+from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
 from src.settings import settings
@@ -214,7 +214,11 @@ def transform_types(
         columns = [c for c in columns if c.name in df.columns]
 
     df = df.withColumns(
-        {column.name: col(column.name).cast(column.dataType) for column in columns}
+        {
+            column.name: col(column.name).cast(column.dataType)
+            for column in columns
+            if column.name != "signature"
+        }
     )
     logger.info("Transformed column types")
     df.printSchema()
@@ -265,3 +269,7 @@ def transform_qos_bra_types(
 
     df.printSchema()
     return df
+
+
+def compute_row_hash(df: sql.DataFrame):
+    return df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))

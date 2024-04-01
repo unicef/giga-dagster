@@ -180,9 +180,9 @@ class Config(BaseSettings):
         ("percent_2G", "DOUBLE"),
         ("percent_3G", "DOUBLE"),
         ("percent_4G", "DOUBLE"),
-        ("2G_coverage", "INT"),
-        ("3G_coverage", "INT"),
-        ("4G_coverage", "INT"),
+        ("2G", "INT"),
+        ("3G", "INT"),
+        ("4G", "INT"),
         # qos
         ("timestamp", "TIMESTAMP"),
         ("country_id", "STRING"),
@@ -403,9 +403,9 @@ class Config(BaseSettings):
     }
 
     VALUES_DOMAIN_COVERAGE_ITU: dict[str, list[str]] = {
-        "2G_coverage": [1, 0],
-        "3G_coverage": [1, 0],
-        "4G_coverage": [1, 0],
+        "2G": [1, 0],
+        "3G": [1, 0],
+        "4G": [1, 0],
     }
 
     @property

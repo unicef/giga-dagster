@@ -24,7 +24,7 @@ class Constants(BaseSettings):
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
-    raw_schema_folder = "raw_schema"
+    raw_schema_folder = "raw/schema"
     bronze_folder = "bronze"
     silver_folder = "silver"
     gold_folder = "gold"
@@ -35,6 +35,7 @@ class Constants(BaseSettings):
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
+    adhoc_master_updates_source_folder = "updated_master_schema/master_updates"
     qos_source_folder = "gold/qos"
 
     step_origin_map: dict[str, str] = {
@@ -50,18 +51,6 @@ class Constants(BaseSettings):
         "coverage_dq_failed_rows": "coverage_data_quality_results",
         "coverage_bronze": "coverage_dq_passed_rows",
         "coverage_staging": "coverage_bronze",
-    }
-
-    step_origin_folder_map: dict[str, str] = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
     }
 
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:

@@ -9,8 +9,9 @@ from src.utils.op_config import FileConfig
 
 def get_output_metadata(config: FileConfig, filepath: str = None):
     metadata = {
-        **config.dict(exclude={"metadata"}),
+        **config.dict(exclude={"metadata", "tier"}),
         **config.metadata,
+        "tier": config.tier.name,
     }
     if filepath is not None:
         metadata["filepath"] = filepath
