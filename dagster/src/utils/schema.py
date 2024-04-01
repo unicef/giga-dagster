@@ -10,7 +10,7 @@ from dagster import (
     OpExecutionContext,
     OutputContext,
 )
-from src.constants import constants
+from src.constants import DataTier, constants
 
 
 def get_schema_name(
@@ -65,3 +65,11 @@ def get_partition_columns(spark: SparkSession, schema_name: str) -> list[str]:
         .select("name")
         .collect()
     ]
+
+
+def construct_schema_name_for_tier(schema_name: str, tier: DataTier) -> str:
+    return f"{schema_name.lower()}_{tier.value}"
+
+
+def construct_full_table_name(schema_name: str, table_name: str) -> str:
+    return f"{schema_name.lower()}.{table_name.lower()}"

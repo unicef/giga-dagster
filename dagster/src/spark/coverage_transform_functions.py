@@ -68,7 +68,7 @@ def fb_transforms(fb: sql.DataFrame):
     )
 
     # add cov schema
-    cov_columns = get_schema_columns(spark, "coverage_fb")
+    cov_columns = get_schema_columns(spark, "school_coverage")
     columns_to_add = {
         col.name: f.lit(None).cast(NullType())
         for col in cov_columns
@@ -169,7 +169,7 @@ def itu_transforms(itu: sql.DataFrame):
     )
 
     # add cov schema
-    cov_columns = get_schema_columns(itu.sparkSession, "coverage_itu")
+    cov_columns = get_schema_columns(itu.sparkSession, "school_coverage")
     columns_to_add = {
         col.name: f.lit(None).cast(NullType())
         for col in cov_columns

@@ -1,6 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
+from src.resources import ResourceKey
 from src.settings import settings
 from src.utils.adls import ADLSFileClient, get_filepath, get_output_filepath
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
@@ -10,7 +11,7 @@ from src.utils.schema import get_schema_columns_datahub
 from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def manual_review_passed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -42,7 +43,7 @@ def manual_review_passed_rows(
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def manual_review_failed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -74,7 +75,7 @@ def manual_review_failed_rows(
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def silver(
     context: OpExecutionContext,
     manual_review_passed_rows: sql.DataFrame,
@@ -123,8 +124,12 @@ def silver(
 
 @multi_asset(
     outs={
-        "master": AssetOut(is_required=True, io_manager_key="adls_delta_io_manager"),
-        "reference": AssetOut(is_required=True, io_manager_key="adls_delta_io_manager"),
+        "master": AssetOut(
+            is_required=True, io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value
+        ),
+        "reference": AssetOut(
+            is_required=True, io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value
+        ),
     }
 )
 def gold(
