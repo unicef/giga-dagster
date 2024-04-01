@@ -16,6 +16,8 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
+from src.internal.common_assets.staging import staging_step
+from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
@@ -24,6 +26,7 @@ from src.spark.coverage_transform_functions import (
     itu_transforms,
 )
 from src.spark.transform_functions import (
+    add_missing_columns,
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
@@ -33,21 +36,20 @@ from src.utils.datahub.emit_dataset_metadata import (
     emit_metadata_to_datahub,
 )
 from src.utils.db import get_db_context
-from src.utils.filename import deconstruct_filename_components, validate_filename
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
+from src.utils.schema import get_schema_columns
 
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key="adls_passthrough_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def coverage_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> bytes:
-    validate_filename(config.filepath)
     df = adls_file_client.download_raw(config.filepath)
 
     # # for testing only START - will be moved to io manager
@@ -61,11 +63,16 @@ def coverage_raw(
     # )
     # emit_metadata_to_datahub(context, df, country_code, dataset_urn)
     # # for testing only END - will be moved to io manager
-
+    emit_metadata_to_datahub(
+        context,
+        df=df,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_destination_dataset_urn,
+    )
     yield Output(df, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_data_quality_results(
     context,
     config: FileConfig,
@@ -120,7 +127,7 @@ def coverage_data_quality_results(
     )
 
 
-@asset(io_manager_key="adls_json_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def coverage_data_quality_results_summary(
     context,
     config: FileConfig,
@@ -152,13 +159,13 @@ def coverage_data_quality_results_summary(
         )
         emit_assertions()
     except Exception as error:
-        context.log.info(f"Assertion Run ERROR: {error}")
+        context.log.error(f"Assertion Run ERROR: {error}")
         sentry_sdk.capture_exception(error=error)
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -181,7 +188,7 @@ def coverage_dq_passed_rows(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -204,7 +211,7 @@ def coverage_dq_failed_rows(
     )
 
 
-@asset(io_manager_key="adls_pandas_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_bronze(
     context: OpExecutionContext,
     coverage_dq_passed_rows: sql.DataFrame,
@@ -218,14 +225,18 @@ def coverage_bronze(
 
     if source == "fb":
         df = fb_transforms(coverage_dq_passed_rows)
-    else:  # source == "itu"
+    elif source == "itu":  # source == "itu"
         df = itu_transforms(coverage_dq_passed_rows)
+    else:
+        columns = get_schema_columns(s, config.metastore_schema)
+        df = add_missing_columns(coverage_dq_passed_rows, columns)
+        df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
         silver = DeltaTable.forName(spark.spark_session, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)
-        else:  # source == "itu"
+        elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
     emit_metadata_to_datahub(
@@ -244,7 +255,7 @@ def coverage_bronze(
     )
 
 
-@asset(io_manager_key="adls_delta_io_manager")
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def coverage_staging(
     context: OpExecutionContext,
     coverage_bronze: sql.DataFrame,
@@ -252,100 +263,23 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
-    s: SparkSession = spark.spark_session
-
-    dataset_type = config.dataset_type
-    filepath = config.filepath
-    metastore_schema = config.metastore_schema
-    country_code = config.filename_components.country_code
-    silver_table_name = f"{metastore_schema}_silver.{country_code}"
-    staging_table_name = f"{metastore_schema}_staging.{country_code}"
-    country_code = filepath.split("/")[-1].split("_")[1]
-
-    files_for_review = []
-    for file_data in adls_file_client.list_paths_generator(
-        f"staging/pending-review/school-{dataset_type}", recursive=False
-    ):
-        file_data_components = deconstruct_filename_components(file_data.name)
-        if file_data.is_directory or file_data_components.country_code != country_code:
-            continue
-
-        properties = adls_file_client.get_file_metadata(file_data.name)
-        date_modified = properties.metadata.get("Date_Modified")
-        context.log.info(f"filepath: {file_data.name}, date_modified: {date_modified}")
-        files_for_review.append(
-            {"filepath": file_data.name, "date_modified": date_modified}
-        )
-
-    files_for_review = sorted(files_for_review, key=lambda x: x["date_modified"])
-    context.log.info(f"files_for_review: {files_for_review}")
-
-    # If silver table exists and no staging table exists, clone it to staging
-    # If silver table exists and staging table exists, merge files for review to existing staging table
-    # If silver table does not exist, merge files for review into one spark dataframe
-    if s.catalog.tableExists(silver_table_name):
-        if not s.catalog.tableExists(staging_table_name):
-            # Clone silver table to staging folder
-            silver = DeltaTable.forName(s, silver_table_name).toDF()
-            (
-                DeltaTable.createOrReplace(s)
-                .tableName(staging_table_name)
-                .addColumns(silver.schema)
-                .property("delta.enableChangeDataFeed", "true")
-                .execute()
-            )
-            (
-                DeltaTable.forName(s, staging_table_name)
-                .merge(
-                    silver.alias("silver"),
-                    "silver.school_id_giga = staging.school_id_giga",
-                )
-                .whenNotMatchedInsertAll()
-                .execute()
-            )
-
-        staging = DeltaTable.forName(s, staging_table_name)
-
-        # Merge each pending file for the same country
-        for file_info in files_for_review:
-            existing_file = adls_file_client.download_csv_as_pandas_dataframe(
-                file_info["filepath"]
-            )
-            existing_df = s.createDataFrame(existing_file)
-
-            (
-                staging.alias("staging")
-                .merge(
-                    existing_df.alias("updates"),
-                    "staging.school_id_giga = updates.school_id_giga",
-                )
-                .whenMatchedUpdateAll()
-                .whenNotMatchedInsertAll()
-                .execute()
-            )
-
-            adls_file_client.rename_file(
-                file_info["filepath"], f"{file_info['filepath']}/merged-files"
-            )
-            context.log.info(f"Staging: table {staging}")
-
-    else:
-        staging = coverage_bronze
-        # If no existing silver table, just merge the spark dataframes
-        for file_date in files_for_review:
-            existing_file = adls_file_client.download_csv_as_pandas_dataframe(
-                file_date["filepath"]
-            )
-            existing_df = s.createDataFrame(existing_file)
-            staging = staging.union(existing_df)
-
-        (
-            DeltaTable.forName(s, staging_table_name)
-            .alias("staging")
-            .merge(
-                staging.alias("updates"),
-                "staging.school_id_giga = updates.school_id_giga",
-            )
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
+    staging = staging_step(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        upstream_df=coverage_bronze,
+    )
+    emit_metadata_to_datahub(
+        context,
+        df=staging,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_destination_dataset_urn,
+    )
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(staging),
+        },
+    )

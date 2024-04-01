@@ -28,11 +28,8 @@ from dagster import OpExecutionContext, version
 
 def identify_country_name(country_code: str) -> str:
     coco = cc.CountryConverter()
-    country_name = list(
-        coco.data.iloc[coco.data["ISO3"][coco.data["ISO3"].isin([country_code])].index][
-            "name_short"
-        ]
-    )[0]
+    data = coco.data
+    country_name = data[data["ISO3"] == country_code]["name_short"].to_list()[0]
     return country_name
 
 
@@ -111,9 +108,7 @@ def define_dataset_properties(context: OpExecutionContext, country_code: str):
 
 
 def define_schema_properties(
-    context,
-    schema_reference: list[tuple] | sql.DataFrame,
-    df_failed: None | sql.DataFrame,
+    schema_reference: list[tuple] | sql.DataFrame, df_failed: None | sql.DataFrame
 ):
     fields = []
 
@@ -128,13 +123,13 @@ def define_schema_properties(
             if not is_field_type_found:
                 type_class = NullTypeClass()
 
-            schema_field_class = SchemaFieldClass(
-                fieldPath=f"{field.name}",
-                type=SchemaFieldDataTypeClass(type_class),
-                nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
+            fields.append(
+                SchemaFieldClass(
+                    fieldPath=f"{field.name}",
+                    type=SchemaFieldDataTypeClass(type_class),
+                    nativeDataType=f"{field.dataType}",
+                )
             )
-            fields.append(schema_field_class)
-            context.log.info(schema_field_class)
 
     else:
         for column, type_class in schema_reference:
@@ -142,7 +137,7 @@ def define_schema_properties(
                 SchemaFieldClass(
                     fieldPath=f"{column}",
                     type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{type_class}",  # use this to provide the type of the field in the source system's vernacular
+                    nativeDataType=f"{type_class}",
                 )
             )
 
@@ -153,15 +148,13 @@ def define_schema_properties(
                         SchemaFieldClass(
                             fieldPath=f"{column}",
                             type=SchemaFieldDataTypeClass(NumberTypeClass()),
-                            nativeDataType="int",  # use this to provide the type of the field in the source system's vernacular
+                            nativeDataType="int",
                         )
                     )
 
     schema_properties = SchemaMetadataClass(
         schemaName="placeholder",  # not used
-        platform=make_data_platform_urn(
-            "adlsGen2"
-        ),  # important <- platform must be a urn
+        platform=make_data_platform_urn("adlsGen2"),
         version=0,  # when the source system has a notion of versioning of schemas, insert this in, otherwise leave as 0
         hash="",  # when the source system has a notion of unique schemas identified via hash, include a hash, else leave it as empty string
         platformSchema=OtherSchemaClass(rawSchema=""),
@@ -215,7 +208,7 @@ def emit_metadata_to_datahub(
 
     if schema_reference is not None:
         schema_properties = define_schema_properties(
-            context, schema_reference, df_failed=df_failed
+            schema_reference, df_failed=df_failed
         )
         schema_metadata_event = MetadataChangeProposalWrapper(
             entityUrn=dataset_urn,

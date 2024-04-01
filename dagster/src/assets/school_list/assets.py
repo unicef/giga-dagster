@@ -164,8 +164,8 @@ def qos_school_list_staging(
 
             adls_file_client.upload_spark_dataframe_as_delta_table(
                 silver,
-                staging_table_path,
                 context.op_config["dataset_type"],
+                staging_table_path,
                 spark.spark_session,
             )
 
@@ -209,8 +209,8 @@ def qos_school_list_staging(
 
         adls_file_client.upload_spark_dataframe_as_delta_table(
             staging,
-            staging_table_path,
             context.op_config["dataset_type"],
+            staging_table_path,
             spark.spark_session,
         )
 

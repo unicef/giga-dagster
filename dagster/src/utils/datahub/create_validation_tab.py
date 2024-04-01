@@ -71,7 +71,7 @@ class EmitDatasetAssertionResults:
 
     @staticmethod
     def extract_assertion_info_of_column(column_dq_result: dict, dataset_urn: str):
-        if column_dq_result["column"]:
+        if "column" in column_dq_result.keys():
             field_urn = builder.make_schema_field_urn(
                 dataset_urn, field_path=column_dq_result["column"]
             )
@@ -143,7 +143,7 @@ class EmitDatasetAssertionResults:
                 self.emitter.emit_mcp(assertion_run_mcp)
                 self.emitter.emit_mcp(assertion_data_platform_mcp)
             except Exception as error:
-                self.context.log.info(f"ERROR on Assertion Run: {error}")
+                self.context.log.error(f"ERROR on Assertion Run: {error}")
         self.logger.info(f"Dataset URN: {self.dataset_urn}")
 
 

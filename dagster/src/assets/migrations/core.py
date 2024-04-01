@@ -45,7 +45,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     query = (
         DeltaTable.createOrReplace(spark).tableName(full_table_name).addColumns(columns)
     )
-    execute_query_with_error_handler(context, spark, query, schema_name, table_name)
+    execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
     (
         DeltaTable.forName(spark, full_table_name)

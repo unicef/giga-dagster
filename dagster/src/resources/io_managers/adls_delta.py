@@ -12,7 +12,10 @@ adls_client = ADLSFileClient()
 class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+        if output is None:
+            return
+
         if context.step_key in ["staging", "silver", "gold"]:
             return
 
@@ -27,10 +30,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         type_transform_function = self._get_type_transform_function(context)
         output = type_transform_function(output, context)
         adls_client.upload_spark_dataframe_as_delta_table(
-            output,
-            table_path,
-            schema_name,
-            self.pyspark.spark_session,
+            output, schema_name, table_path, self.pyspark.spark_session
         )
 
         context.log.info(

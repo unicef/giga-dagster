@@ -25,7 +25,7 @@ def adhoc__copy_original(
         .property("delta.enableChangeDataFeed", "true")
     )
     execute_query_with_error_handler(
-        context, spark.spark_session, query, *ZCDF_TABLE_NAME.split(".")
+        spark.spark_session, query, "school_master", "zcdf", context
     )
 
     (
