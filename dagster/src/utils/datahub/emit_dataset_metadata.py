@@ -124,7 +124,7 @@ def define_schema_properties(
                 SchemaFieldClass(
                     fieldPath=f"{field.name}",
                     type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{field.dataType}",  # use this to provide the type of the field in the source system's vernacular
+                    nativeDataType=f"{field.dataType}",
                 )
             )
 
@@ -134,7 +134,7 @@ def define_schema_properties(
                 SchemaFieldClass(
                     fieldPath=f"{column}",
                     type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{type_class}",  # use this to provide the type of the field in the source system's vernacular
+                    nativeDataType=f"{type_class}",
                 )
             )
 
@@ -145,15 +145,13 @@ def define_schema_properties(
                         SchemaFieldClass(
                             fieldPath=f"{column}",
                             type=SchemaFieldDataTypeClass(NumberTypeClass()),
-                            nativeDataType="int",  # use this to provide the type of the field in the source system's vernacular
+                            nativeDataType="int",
                         )
                     )
 
     schema_properties = SchemaMetadataClass(
         schemaName="placeholder",  # not used
-        platform=make_data_platform_urn(
-            "adlsGen2"
-        ),  # important <- platform must be a urn
+        platform=make_data_platform_urn("adlsGen2"),
         version=0,  # when the source system has a notion of versioning of schemas, insert this in, otherwise leave as 0
         hash="",  # when the source system has a notion of unique schemas identified via hash, include a hash, else leave it as empty string
         platformSchema=OtherSchemaClass(rawSchema=""),
