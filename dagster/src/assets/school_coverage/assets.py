@@ -39,7 +39,7 @@ from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 from src.utils.sentry import log_op_context
 
 from dagster import OpExecutionContext, Output, asset
@@ -53,23 +53,17 @@ def coverage_raw(
 ) -> bytes:
     df = adls_file_client.download_raw(config.filepath)
 
-    # # for testing only START - will be moved to io manager
-    # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    # country_code = filepath.split("_")[1]
-    # platform = builder.make_data_platform_urn("adlsGen2")
-    # dataset_urn = builder.make_dataset_urn(
-    #     platform=platform,
-    #     env=settings.ADLS_ENVIRONMENT,
-    #     name=filepath.split(".")[0].replace("/", "."),
-    # )
-    # emit_metadata_to_datahub(context, df, country_code, dataset_urn)
-    # # for testing only END - will be moved to io manager
-    emit_metadata_to_datahub(
-        context,
-        df=df,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     yield Output(df, metadata=get_output_metadata(config))
 
 
@@ -113,12 +107,18 @@ def coverage_data_quality_results(
     )
 
     config.metadata.update({"column_mapping": column_mapping})
-    emit_metadata_to_datahub(
-        context,
-        dq_results,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     dq_pandas = dq_results.toPandas()
     yield Output(
         dq_pandas,
@@ -166,6 +166,17 @@ def coverage_data_quality_results_summary(
         log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
+    try:
+        emit_metadata_to_datahub(
+            context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
@@ -174,14 +185,25 @@ def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
-    emit_metadata_to_datahub(
-        context,
-        df_passed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     df_pandas = df_passed.toPandas()
     yield Output(
         df_pandas,
@@ -197,14 +219,26 @@ def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
-    emit_metadata_to_datahub(
-        context,
-        df_failed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            df_failed=df_failed,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     df_pandas = df_failed.toPandas()
     yield Output(
         df_pandas,
@@ -243,12 +277,21 @@ def coverage_bronze(
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
-    emit_metadata_to_datahub(
-        context,
-        df,
-        config.filename_components.country_code,
-        config.datahub_destination_dataset_urn,
-    )
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     df_pandas = df.toPandas()
     yield Output(
         df_pandas,
@@ -274,12 +317,22 @@ def coverage_staging(
         spark.spark_session,
         upstream_df=coverage_bronze,
     )
-    emit_metadata_to_datahub(
-        context,
-        df=staging,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
-    )
+
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     return Output(
         None,
         metadata={
