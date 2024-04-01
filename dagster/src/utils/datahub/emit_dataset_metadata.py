@@ -125,9 +125,9 @@ def define_schema_properties(
 
             fields.append(
                 SchemaFieldClass(
-                    fieldPath=f"{field.name}",
+                    fieldPath=field.name,
                     type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=f"{field.dataType}",
+                    nativeDataType=field.dataType,
                 )
             )
 
@@ -135,7 +135,7 @@ def define_schema_properties(
         for column, type_class in schema_reference:
             fields.append(
                 SchemaFieldClass(
-                    fieldPath=f"{column}",
+                    fieldPath=column,
                     type=SchemaFieldDataTypeClass(type_class),
                     nativeDataType=f"{type_class}",
                 )
@@ -146,7 +146,7 @@ def define_schema_properties(
                 if column.startswith("dq"):
                     fields.append(
                         SchemaFieldClass(
-                            fieldPath=f"{column}",
+                            fieldPath=column,
                             type=SchemaFieldDataTypeClass(NumberTypeClass()),
                             nativeDataType="int",
                         )
