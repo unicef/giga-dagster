@@ -55,7 +55,7 @@ def geolocation_raw(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
     return Output(raw, metadata=get_output_metadata(config))
 
 
@@ -97,7 +97,7 @@ def geolocation_bronze(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     df_pandas = df.toPandas()
     return Output(
@@ -123,7 +123,7 @@ def geolocation_data_quality_results(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
@@ -167,7 +167,7 @@ def geolocation_data_quality_results_summary(
         )
         emit_assertions()
     except Exception as error:
-        context.log.info(f"Assertion Run ERROR: {error}")
+        context.log.error(f"Assertion Run ERROR: {error}")
 
     try:
         emit_metadata_to_datahub(
@@ -176,7 +176,7 @@ def geolocation_data_quality_results_summary(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
@@ -203,7 +203,7 @@ def geolocation_dq_passed_rows(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     df_pandas = df_passed.toPandas()
     return Output(
@@ -238,7 +238,7 @@ def geolocation_dq_failed_rows(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     df_pandas = df_failed.toPandas()
     return Output(
@@ -276,7 +276,7 @@ def geolocation_staging(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     return Output(
         None,

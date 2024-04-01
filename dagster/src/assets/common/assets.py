@@ -38,7 +38,7 @@ def manual_review_passed_rows(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
@@ -70,7 +70,7 @@ def manual_review_failed_rows(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     yield Output(df, metadata={"filepath": get_output_filepath(context)})
 
@@ -117,7 +117,7 @@ def silver(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     yield Output(silver, metadata={"filepath": get_output_filepath(context)})
 
@@ -249,7 +249,7 @@ def gold(
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
-        context.log.info(f"Error on Datahub Emit Metadata: {error}")
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
 
     yield Output(
         master,

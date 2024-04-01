@@ -158,7 +158,7 @@ def coverage_data_quality_results_summary(
         )
         emit_assertions()
     except Exception as error:
-        context.log.info(f"Assertion Run ERROR: {error}")
+        context.log.error(f"Assertion Run ERROR: {error}")
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
