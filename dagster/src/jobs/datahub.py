@@ -29,3 +29,8 @@ datahub__ingest_coverage_notebooks_from_github_job = define_asset_job(
     name="datahub__ingest_coverage_notebooks_from_github_job",
     selection=["github_coverage_workflow_notebooks"],
 )
+
+datahub__add_platform_metadata_job = define_asset_job(
+    name="datahub__add_platform_metadata_job",
+    selection=["datahub_platform_metadata"],
+)
