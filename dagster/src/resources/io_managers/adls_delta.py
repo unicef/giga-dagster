@@ -4,6 +4,7 @@ from pyspark import sql
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_lineage import emit_lineage
 
 adls_client = ADLSFileClient()
 
@@ -11,7 +12,10 @@ adls_client = ADLSFileClient()
 class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+        if output is None:
+            return
+
         if context.step_key in ["staging", "silver", "gold"]:
             return
 
@@ -26,10 +30,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         type_transform_function = self._get_type_transform_function(context)
         output = type_transform_function(output, context)
         adls_client.upload_spark_dataframe_as_delta_table(
-            output,
-            table_path,
-            schema_name,
-            self.pyspark.spark_session,
+            output, schema_name, table_path, self.pyspark.spark_session
         )
 
         context.log.info(
@@ -37,8 +38,13 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
         )
 
+        context.log.info(
+            f"EMIT LINEAGE CALLED FROM IO MANAGER: {self.__class__.__name__}"
+        )
+        emit_lineage(context=context)
+
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        filepath = self._get_filepath(context.upstream_output)
+        filepath = self._get_filepath(context)
         table_path = self._get_table_path(context.upstream_output, filepath)
 
         data = adls_client.download_delta_table_as_spark_dataframe(

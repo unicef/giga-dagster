@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
+    SPARK_DRIVER_CORES: str = "2"
+    SPARK_DRIVER_MEMORY: str = "2g"
 
     # Derived settings
     @property
@@ -102,10 +104,18 @@ class Settings(BaseSettings):
         return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
 
     @property
+    def DEFAULT_SCHEDULE_CRON(self) -> str:
+        return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
+
+    @property
+    def SPARK_WAREHOUSE_PATH(self) -> str:
+        return (
+            "warehouse-local" if self.PYTHON_ENV == Environment.LOCAL else "warehouse"
+        )
+
+    @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
-        if self.PYTHON_ENV == Environment.LOCAL:
-            return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse-local"
-        return f"{self.AZURE_BLOB_CONNECTION_URI}/warehouse"
+        return f"{self.AZURE_BLOB_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
 
     @property
     def INGESTION_DB_HOST(self) -> str:
@@ -118,7 +128,7 @@ class Settings(BaseSettings):
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
         return {
-            "username": self.INGESTION_POSTGRESQL_USERNAME,
+            "user": self.INGESTION_POSTGRESQL_USERNAME,
             "password": self.INGESTION_POSTGRESQL_PASSWORD,
             "host": self.INGESTION_DB_HOST,
             "port": str(self.INGESTION_DB_PORT),

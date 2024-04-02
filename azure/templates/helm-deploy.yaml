@@ -61,7 +61,7 @@ jobs:
                 releaseName: dagster
                 namespace: $(kubernetesNamespace)
                 arguments: >
-                  --version 1.5.0
+                  --version 1.6.8
                   --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
                   --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)

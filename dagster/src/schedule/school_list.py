@@ -3,6 +3,7 @@ from sqlalchemy import select
 
 from dagster import RunConfig, RunRequest, ScheduleEvaluationContext, schedule
 from src.jobs.qos import qos_school_list__automated_data_checks_job
+from src.schemas.qos import SchoolListConfig
 from src.utils.db import get_db_context
 
 
@@ -23,7 +24,7 @@ def qos_school_list__schedule(context: ScheduleEvaluationContext):
     ]
 
     for api in school_list_apis:
-        config = api.__dict__
+        config = SchoolListConfig.from_orm(api)
 
         yield RunRequest(
             run_key=f"{config['name']}_{scheduled_date}",

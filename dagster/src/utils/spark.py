@@ -6,7 +6,7 @@ from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
-from pyspark.sql.functions import col, count, udf
+from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
 from src.settings import settings
@@ -37,10 +37,10 @@ spark_common_config = {
     "spark.sql.warehouse.dir": settings.SPARK_WAREHOUSE_DIR,
     "spark.sql.catalogImplementation": "hive",
     "hive.metastore.uris": settings.HIVE_METASTORE_URI,
-    "spark.driver.cores": "2",
-    "spark.driver.memory": "2g",
-    "spark.executor.cores": "2",
-    "spark.executor.memory": "2g",
+    "spark.driver.cores": settings.SPARK_DRIVER_CORES,
+    "spark.driver.memory": settings.SPARK_DRIVER_MEMORY,
+    "spark.executor.cores": settings.SPARK_DRIVER_CORES,
+    "spark.executor.memory": settings.SPARK_DRIVER_MEMORY,
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -210,8 +210,15 @@ def transform_types(
     logger = get_context_with_fallback_logger(context)
 
     columns = get_schema_columns(df.sparkSession, schema_name)
+    if schema_name == "qos":
+        columns = [c for c in columns if c.name in df.columns]
+
     df = df.withColumns(
-        {column.name: col(column.name).cast(column.dataType) for column in columns}
+        {
+            column.name: col(column.name).cast(column.dataType)
+            for column in columns
+            if column.name != "signature"
+        }
     )
     logger.info("Transformed column types")
     df.printSchema()
@@ -262,3 +269,7 @@ def transform_qos_bra_types(
 
     df.printSchema()
     return df
+
+
+def compute_row_hash(df: sql.DataFrame):
+    return df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))

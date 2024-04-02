@@ -1,5 +1,6 @@
 import json
 import os.path
+from collections.abc import Iterator
 from io import BytesIO
 
 import pandas as pd
@@ -18,6 +19,11 @@ from azure.storage.filedatalake import (
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants import constants
 from src.settings import settings
+from src.utils.delta import (
+    create_delta_table,
+    create_schema,
+)
+from src.utils.op_config import FileConfig
 from src.utils.schema import get_primary_key, get_schema_columns
 
 _client = DataLakeServiceClient(
@@ -56,11 +62,14 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
+            ext = os.path.splitext(filepath)[1]
 
-            if filepath.endswith(".csv"):
+            if ext == ".csv":
                 return pd.read_csv(buffer)
-            elif filepath.endswith(".xls") or filepath.endswith(".xlsx"):
+            elif ext in [".xls", ".xlsx"]:
                 return pd.read_excel(buffer)
+            else:
+                raise ValueError(f"Unsupported format for file: {filepath}")
 
     def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession, schema: StructType = None
@@ -80,19 +89,25 @@ class ADLSFileClient(ConfigurableResource):
     def upload_pandas_dataframe_as_file(
         self, context: OutputContext, data: pd.DataFrame, filepath: str
     ):
-        if len(splits := filepath.split(".")) < 2:
+        name, ext = os.path.splitext(filepath)
+        if not ext:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
         file_client = _adls.get_file_client(filepath)
-        match splits[-1]:
-            case "csv" | "xls" | "xlsx":
-                bytes_data = data.to_csv(mode="w+", index=False).encode("utf-8-sig")
-            case "json":
-                bytes_data = data.to_json(indent=2).encode()
+        match ext:
+            case ".csv" | ".xls" | ".xlsx":
+                bytes_data = data.to_csv(index=False).encode("utf-8-sig")
+            case ".json":
+                bytes_data = data.to_json(index=False, indent=2).encode()
+            case ".parquet":
+                bytes_data = data.to_parquet(index=False)
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
-        metadata = context.step_context.op_config["metadata"]
+        config = FileConfig(**context.step_context.op_config)
+        metadata = config.metadata
+        metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
+
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
@@ -120,38 +135,30 @@ class ADLSFileClient(ConfigurableResource):
                 raise OSError(f"Unsupported format for file {filepath}")
 
     def download_delta_table_as_delta_table(
-        self, table_path: str, spark: SparkSession
+        self, table_name: str, spark: SparkSession
     ) -> DeltaTable:
-        return DeltaTable.forPath(spark, f"{table_path}")
+        return DeltaTable.forName(spark, table_name)
 
     def download_delta_table_as_spark_dataframe(
-        self, table_path: str, spark: SparkSession
+        self, table_name: str, spark: SparkSession
     ) -> sql.DataFrame:
-        df = spark.read.format("delta").load(table_path)
-        df.show()
-        return df
+        return DeltaTable.forName(spark, table_name).toDF()
 
     def upload_spark_dataframe_as_delta_table(
         self,
         data: sql.DataFrame,
-        table_path: str,
         schema_name: str,
+        table_name: str,
         spark: SparkSession,
+        context: OutputContext,
     ):
-        table_name = table_path.split("/")[-1]
         full_table_name = f"{schema_name}.{table_name}"
-        print(f"tablename: {table_name}, table path: {table_path}")
-
-        spark.sql(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
-
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
-        (
-            DeltaTable.createIfNotExists(spark)
-            .tableName(full_table_name)
-            .addColumns(columns)
-            .property("delta.enableChangeDataFeed", "true")
-            .execute()
+
+        create_schema(spark, schema_name)
+        create_delta_table(
+            spark, schema_name, table_name, columns, context, if_not_exists=True
         )
 
         # TODO: Apply logic for preventing unnecessary updates
@@ -186,6 +193,11 @@ class ADLSFileClient(ConfigurableResource):
     def list_paths(self, path: str, recursive=True) -> list[PathProperties]:
         paths = _adls.get_paths(path=path, recursive=recursive)
         return list(paths)
+
+    def list_paths_generator(
+        self, path: str, recursive=True
+    ) -> Iterator[PathProperties]:
+        return _adls.get_paths(path=path, recursive=recursive)
 
     def get_file_metadata(self, filepath: str) -> FileProperties:
         file_client = _adls.get_file_client(filepath)

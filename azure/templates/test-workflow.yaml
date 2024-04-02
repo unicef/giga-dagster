@@ -1,0 +1,21 @@
+stages:
+  - stage: PRChecks
+    displayName: Run PR checks
+    jobs:
+      - job: PreCommit
+        displayName: Run pre-commit
+        strategy:
+          matrix:
+            Python311:
+              python.version: '3.11'
+        steps:
+          - task: UsePythonVersion@0
+            displayName: 'Use Python $(python.version)'
+            inputs:
+              versionSpec: '$(python.version)'
+
+          - script: python -m pip install --upgrade pre-commit
+            displayName: Install pre-commit
+
+          - script: pre-commit run --all-files
+            displayName: Run pre-commit

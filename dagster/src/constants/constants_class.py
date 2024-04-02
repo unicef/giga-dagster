@@ -18,16 +18,24 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from src.settings import settings
-
 
 class Constants(BaseSettings):
-    raw_folder = "raw/uploads" if settings.IN_PRODUCTION else "adls-testing-raw"
-    raw_schema_folder = "raw_schema"
+    UPLOAD_PATH_PREFIX: str = "raw/uploads"
+    datetime_partition_key_format = "%Y-%m-%d-%H:%M"
+
+    raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
+    raw_schema_folder = "raw/schema"
+    bronze_folder = "bronze"
+    silver_folder = "silver"
+    gold_folder = "gold"
+    dq_results_folder = "data-quality-results"
+    staging_folder = "staging"
+
     dq_passed_folder = "staging/pending-review"
     staging_approved_folder = "staging/approved"
     archive_manual_review_rejected_folder = "archive/manual-review-rejected"
     gold_source_folder = "updated_master_schema"
+    adhoc_master_updates_source_folder = "updated_master_schema/master_updates"
     qos_source_folder = "gold/qos"
 
     step_origin_map: dict[str, str] = {
@@ -45,39 +53,28 @@ class Constants(BaseSettings):
         "coverage_staging": "coverage_bronze",
     }
 
-    step_origin_folder_map: dict[str, str] = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
-
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
             # geolocation
             "geolocation_raw": f"{self.raw_folder}/school-{dataset_type}-data",
             "geolocation_bronze": f"bronze/school-{dataset_type}-data",
-            "geolocation_data_quality_results": f"logs-gx/school-{dataset_type}-data",
-            "geolocation_dq_results": f"logs-gx/school-{dataset_type}-data",
-            "geolocation_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
-            "geolocation_dq_checks": f"logs-gx/school-{dataset_type}-data",
-            "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
-            "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
+            "geolocation_data_quality_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
+            "geolocation_dq_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
+            "geolocation_dq_summary_statistics": f"data-quality-results/school-{dataset_type}-data/dq-summary",
+            "geolocation_data_quality_results_summary": f"data-quality-results/school-{dataset_type}-data/dq-summary",
+            "geolocation_dq_checks": f"data-quality-results/school-{dataset_type}-data/dq-overall",
+            "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data/dq-passed-rows",
+            "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data/dq-failed-rows",
             "geolocation_staging": f"staging/pending-review/school-{dataset_type}-data",
             # coverage
             "coverage_raw": f"{self.raw_folder}/school-{dataset_type}-data",
-            "coverage_data_quality_results": f"logs-gx/school-{dataset_type}-data",
-            "coverage_dq_results": f"logs-gx/school-{dataset_type}-data",
-            "coverage_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
-            "coverage_dq_checks": f"logs-gx/school-{dataset_type}-data",
+            "coverage_data_quality_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
+            "coverage_dq_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
+            "coverage_dq_summary_statistics": f"data-quality-results/school-{dataset_type}-data/dq-summary",
+            "coverage_dq_checks": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "coverage_bronze": f"bronze/school-{dataset_type}-data",
-            "coverage_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
-            "coverage_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
+            "coverage_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data/dq-passed-rows",
+            "coverage_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data/dq-failed-rows",
             "coverage_staging": f"staging/pending-review/school-{dataset_type}-data",
             # common
             "manual_review_passed_rows": (
@@ -92,7 +89,7 @@ class Constants(BaseSettings):
             # adhoc
             "adhoc__load_master_csv": f"updated_master_schema/{dataset_type}",
             "adhoc__load_reference_csv": f"updated_master_schema/{dataset_type}",
-            "adhoc__load_qos_bra_csv": "gold/qos/BRA",
+            "adhoc__load_qos_csv": "gold/qos/BRA",
             "adhoc__master_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__reference_data_quality_checks": f"gold/dq-results/school-{dataset_type}/full",
             "adhoc__master_dq_checks_passed": f"gold/dq-results/school-{dataset_type}/passed",
@@ -103,16 +100,16 @@ class Constants(BaseSettings):
             "adhoc__publish_master_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_reference_to_gold": f"gold/delta-tables/school-{dataset_type}",
             "adhoc__publish_qos_bra_to_gold": "gold/delta-tables/qos",
-            "adhoc__qos_bra_transforms": "gold/dq-results/qos/transforms/BRA",
+            "adhoc__qos_transforms": "gold/dq-results/qos/transforms/BRA",
             "adhoc__df_duplicates": f"gold/dq-results/school-{dataset_type}/duplicate",
             "adhoc__master_data_transforms": f"gold/dq-results/school-{dataset_type}/transforms",
             # qos
             "qos_school_list_raw": f"{self.raw_folder}/school-{dataset_type}-data",
             "qos_school_list_bronze": f"bronze/school-{dataset_type}-data",
-            "qos_school_list_data_quality_results": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_list_dq_results": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_list_dq_summary_statistics": f"logs-gx/school-{dataset_type}-data",
-            "qos_school_list_dq_checks": f"logs-gx/school-{dataset_type}-data",
+            "qos_school_list_data_quality_results": f"data-quality-results/school-{dataset_type}-data",
+            "qos_school_list_dq_results": f"data-quality-results/school-{dataset_type}-data",
+            "qos_school_list_dq_summary_statistics": f"data-quality-results/school-{dataset_type}-data",
+            "qos_school_list_dq_checks": f"data-quality-results/school-{dataset_type}-data",
             "qos_school_list_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data",
             "qos_school_list_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data",
             "qos_school_list_staging": f"staging/pending-review/school-{dataset_type}-data",
