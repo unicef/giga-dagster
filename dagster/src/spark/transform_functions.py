@@ -3,13 +3,14 @@ import uuid
 
 import geopandas as gpd
 import h3
+from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
-    SparkSession,
     functions as f,
 )
 from pyspark.sql.types import (
     ArrayType,
+    DoubleType,
     NullType,
     StringType,
     StructField,
@@ -184,10 +185,9 @@ def bronze_prereq_columns(df, schema_columns: list[StructField]):
 
 # Note: Temporary function for transforming raw files to standardized columns.
 def create_bronze_layer_columns(
-    spark: SparkSession,
     df: sql.DataFrame,
     schema_columns: list[StructField],
-    county_code_iso3: str,
+    country_code_iso3: str,
 ) -> sql.DataFrame:
     # Impute missing cols with null
     df = add_missing_columns(df, schema_columns)
@@ -207,12 +207,12 @@ def create_bronze_layer_columns(
     df = df.drop("disputed_region")
 
     df = add_admin_columns(
-        spark=spark, df=df, county_code_iso3=county_code_iso3, admin_level="admin1"
+        df=df, country_code_iso3=country_code_iso3, admin_level="admin1"
     )
     df = add_admin_columns(
-        spark=spark, df=df, county_code_iso3=county_code_iso3, admin_level="admin2"
+        df=df, country_code_iso3=country_code_iso3, admin_level="admin2"
     )
-    df = add_disputed_region_column(spark=spark, df=test)
+    df = add_disputed_region_column(df=df)
 
     ## Clean up columns -- function shouldnt exist, uploads should be clean
     # df = standardize_internet_speed(df)
@@ -296,23 +296,23 @@ def get_admin_boundaries(
             file_blob.seek(0)
             admin_boundaries = gpd.read_file(file_blob)
 
-    except:  # noqa: E722
+    except Exception as exc:
+        logger.error(exc)
         return None
 
     return admin_boundaries
 
 
 def add_admin_columns(
-    spark: SparkSession,
     df: sql.DataFrame,
-    county_code_iso3: str,
+    country_code_iso3: str,
     admin_level: str,
 ) -> sql.DataFrame:
     nested_list = df.select(f.collect_list(f.array("latitude", "longitude"))).collect()
     nested_list = [nested_list[0][0]][0]
 
     admin_boundaries = get_admin_boundaries(
-        country_code_iso3=county_code_iso3, admin_level=admin_level
+        country_code_iso3=country_code_iso3, admin_level=admin_level
     )
 
     if admin_boundaries is None:
@@ -328,20 +328,9 @@ def add_admin_columns(
 
             for index, row in admin_boundaries.iterrows():  # noqa: B007
                 if row.geometry.contains(point):
-                    try:  # admin_id_giga doesnt exist on geojson file KeyError: 'admin2_id_giga'
-                        admin_en = row["name_en"]
-                    except KeyError:
-                        admin_en = None
-
-                    try:
-                        admin_native = row["name"]
-                    except KeyError:
-                        admin_native = None
-
-                    try:
-                        admin_id_giga = row[f"{admin_level}_id_giga"]
-                    except KeyError:
-                        admin_id_giga = None
+                    admin_en = row.get("name_en")
+                    admin_native = row.get("name")
+                    admin_id_giga = row.get(f"{admin_level}_id_giga")
                     break
                 else:
                     admin_en = None
@@ -355,14 +344,15 @@ def add_admin_columns(
     # create a dataframe out of the process above
     admin_df_schema = StructType(
         [
-            StructField("latitude", StringType(), True),  # doubletype
-            StructField("longitude", StringType(), True),  # doubletype
+            StructField("latitude", DoubleType(), True),
+            StructField("longitude", DoubleType(), True),
             StructField(f"{admin_level}_en", StringType(), True),
             StructField(f"{admin_level}_native", StringType(), True),
             StructField(f"{admin_level}_id_giga", StringType(), True),
         ]
     )
 
+    spark = df.sparkSession
     admin_df = spark.createDataFrame(nested_list, schema=admin_df_schema)
     admin_df = admin_df.withColumn(
         f"{admin_level}",
@@ -377,10 +367,7 @@ def add_admin_columns(
     return df
 
 
-def add_disputed_region_column(
-    spark: SparkSession,
-    df: sql.DataFrame,
-) -> sql.DataFrame:
+def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     nested_list = df.select(f.collect_list(f.array("latitude", "longitude"))).collect()
     nested_list = [nested_list[0][0]][0]
 
@@ -395,7 +382,8 @@ def add_disputed_region_column(
             file_blob.seek(0)
             admin_boundaries = gpd.read_file(file_blob)
 
-    except:  # noqa: E722
+    except Exception as exc:
+        logger.error(exc)
         admin_boundaries = None
 
     if admin_boundaries is None:
@@ -407,7 +395,7 @@ def add_disputed_region_column(
 
             point = get_point(longitude=longitude, latitude=latitude)
 
-            for index, row in admin_boundaries.iterrows():  # noqa: B007
+            for _, row in admin_boundaries.iterrows():
                 if row.geometry.contains(point):
                     disputed_region = row["name"]
                     break
@@ -419,12 +407,13 @@ def add_disputed_region_column(
     # create a dataframe out of the process above
     disputed_df_schema = StructType(
         [
-            StructField("latitude", StringType(), True),  # doubletype
-            StructField("longitude", StringType(), True),  # doubletype
+            StructField("latitude", DoubleType(), True),
+            StructField("longitude", DoubleType(), True),
             StructField("disputed_region", StringType(), True),
         ]
     )
 
+    spark = df.sparkSession
     disputed_df = spark.createDataFrame(nested_list, schema=disputed_df_schema)
 
     # join
@@ -462,6 +451,8 @@ if __name__ == "__main__":
             "longitude",
         ]
     )
+    df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
     # df = df.withColumn("school_name", f.trim(f.col("school_name")))
     # df = df.withColumn("latitude", f.lit(17.5066649))
@@ -478,13 +469,11 @@ if __name__ == "__main__":
     df.show()
     print(df.count())
 
-    test = add_admin_columns(
-        spark=spark, df=df, county_code_iso3="BRA", admin_level="admin1"
-    )
-    test = add_admin_columns(
-        spark=spark, df=test, county_code_iso3="BRA", admin_level="admin2"
-    )
-    test = add_disputed_region_column(spark=spark, df=test)
+    test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
+    # test = add_admin_columns(
+    #     spark=spark, df=test, country_code_iso3="BRA", admin_level="admin2"
+    # )
+    # test = add_disputed_region_column(df=df)
     test.show()
 
     # test = test.filter(test["admin2"] != test["admin21"])
