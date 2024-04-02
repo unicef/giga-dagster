@@ -24,7 +24,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             return
 
         filepath = self._get_filepath(context)
-        table_path = self._get_table_path(context, filepath)
+        table_path = self._get_table_path(context, str(filepath))
 
         schema_name = self._get_schema_name(context)
         type_transform_function = self._get_type_transform_function(context)
@@ -34,8 +34,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
         context.log.info(
-            f"Uploaded {filepath.split('/')[-1]} to"
-            f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
+            f"Uploaded {filepath.name} to {'/'.join(str(filepath.parent))} in ADLS."
         )
 
         context.log.info(
@@ -52,8 +51,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
         context.log.info(
-            f"Downloaded {filepath.split('/')[-1]} from"
-            f" {'/'.join(filepath.split('/')[:-1])} in ADLS."
+            f"Downloaded {filepath.name} from {str(filepath.parent)} in ADLS."
         )
 
         return data

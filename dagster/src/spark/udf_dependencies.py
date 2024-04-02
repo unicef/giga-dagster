@@ -1,5 +1,6 @@
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+from loguru import logger
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
@@ -9,7 +10,8 @@ from src.settings import settings
 def get_point(longitude: float, latitude: float):
     try:
         point = Point(longitude, latitude)
-    except:  # noqa: E722
+    except Exception as exc:
+        logger.error(exc)
         point = None
 
     return point
@@ -49,7 +51,7 @@ def is_within_boundary_distance(latitude: float, longitude: float, geometry) -> 
     point = get_point(longitude, latitude)
 
     if point is not None and geometry is not None:
-        p1, p2 = nearest_points(geometry, point)
+        p1, _ = nearest_points(geometry, point)
         point1 = p1.coords[0]
         point2 = (longitude, latitude)
         distance = geodesic(point1, point2).km

@@ -66,7 +66,7 @@ def coverage_raw(
     # # for testing only END - will be moved to io manager
     emit_metadata_to_datahub(
         context,
-        df=df,
+        schema_reference=df,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_destination_dataset_urn,
     )

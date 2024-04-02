@@ -34,7 +34,6 @@ def adhoc__load_qos_csv(
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
-        df=raw,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_source_dataset_urn,
     )
@@ -70,12 +69,6 @@ def adhoc__qos_transforms(
     sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
     context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
 
-    emit_metadata_to_datahub(
-        context,
-        df=sdf,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     df_pandas = sdf.toPandas()
     return Output(
         df_pandas,
@@ -103,7 +96,7 @@ def adhoc__publish_qos_to_gold(
     try:
         emit_metadata_to_datahub(
             context,
-            df=schema_reference,
+            schema_reference=schema_reference,
             country_code=config.filename_components.country_code,
             dataset_urn=config.datahub_source_dataset_urn,
         )

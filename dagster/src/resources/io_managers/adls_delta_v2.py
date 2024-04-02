@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
-from pydantic import AnyUrl  # pylint:disable=no-name-in-module
+from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
 

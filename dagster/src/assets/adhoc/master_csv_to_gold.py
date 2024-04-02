@@ -43,7 +43,6 @@ def adhoc__load_master_csv(
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
-        df=raw,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_source_dataset_urn,
     )
@@ -87,12 +86,6 @@ def adhoc__master_data_transforms(
     )
 
     df_pandas = sdf.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -116,12 +109,6 @@ def adhoc__df_duplicates(
     context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
 
     df_pandas = df_duplicates.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -159,12 +146,6 @@ def adhoc__master_data_quality_checks(
     )
 
     df_pandas = dq_checked.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -212,12 +193,6 @@ def adhoc__master_dq_checks_failed(
     )
 
     df_pandas = dq_failed.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
