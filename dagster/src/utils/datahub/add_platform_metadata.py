@@ -43,10 +43,3 @@ if __name__ == "__main__":
         logo_url="https://delta.io/static/3bd8fea55ff57287371f4714232cd4ef/ac8f8/delta-lake-logo.webp",
         filepath_delimiter="/",
     )
-
-    add_platform_metadata(
-        platform="adlsGen2",
-        display_name="Azure Data Lake (Gen 2)",
-        logo_url="https://miro.medium.com/v2/resize:fit:600/1*xkem5OSBR4oeQbMptKm6sw.png",
-        filepath_delimiter="/",
-    )
