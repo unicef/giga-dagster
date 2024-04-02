@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseSettings, PostgresDsn
 
+from dagster import DefaultScheduleStatus
+
 
 class Environment(StrEnum):
     LOCAL = "local"
@@ -106,6 +108,14 @@ class Settings(BaseSettings):
     @property
     def DEFAULT_SCHEDULE_CRON(self) -> str:
         return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
+
+    @property
+    def DEFAULT_SCHEDULE_STATUS(self) -> str:
+        return (
+            DefaultScheduleStatus.RUNNING
+            if self.IN_PRODUCTION
+            else DefaultScheduleStatus.STOPPED
+        )
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
