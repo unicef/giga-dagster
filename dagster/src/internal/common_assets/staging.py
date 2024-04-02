@@ -6,6 +6,7 @@ from pyspark.sql import SparkSession
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import (
     build_deduped_merge_query,
@@ -115,6 +116,7 @@ def staging_step(
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
                 file_info.name, spark
             )
+            existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
             existing_file = compute_row_hash(existing_file)
             staging_dt = DeltaTable.forName(spark, staging_table_name)
@@ -149,6 +151,7 @@ def staging_step(
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
                 file_info.name, spark
             )
+            existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
             context.log.info(f"{existing_file.count()=}")
             staging = staging.union(existing_file)

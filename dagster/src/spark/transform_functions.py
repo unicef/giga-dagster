@@ -3,7 +3,7 @@ import uuid
 import h3
 from pyspark import sql
 from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, NullType, StringType, StructField
+from pyspark.sql.types import ArrayType, StringType, StructField
 
 from src.settings import settings
 from src.spark.config_expectations import config
@@ -114,29 +114,11 @@ def standardize_internet_speed(df: sql.DataFrame):
 def h3_geo_to_h3(latitude, longitude):
     if latitude is None or longitude is None:
         return "0"
-    else:
-        return h3.geo_to_h3(latitude, longitude, resolution=8)
+
+    return h3.geo_to_h3(latitude, longitude, resolution=8)
 
 
 h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
-
-
-def rename_raw_columns(df: sql.DataFrame):  ## function for renaming raw files. adhoc
-    # Iterate over mapping set and perform actions
-    for raw_col, delta_col in config.COLUMN_RENAME_GEOLOCATION:
-        # Check if the raw column exists in the DataFrame
-        if raw_col in df.columns:
-            # If it exists in raw, rename it to the delta column
-            df = df.withColumnRenamed(raw_col, delta_col)
-        # If it doesn't exist in both, create a null column placeholder with the delta column name
-        elif delta_col in df.columns:
-            pass
-        else:
-            df = df.withColumn(delta_col, f.lit(None))
-
-    df = bronze_prereq_columns(df)
-
-    return df
 
 
 def column_mapping_rename(
@@ -150,7 +132,7 @@ def column_mapping_rename(
 
 def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     columns_to_add = {
-        col.name: f.lit(None).cast(NullType())
+        col.name: f.lit(None).cast(col.dataType)
         for col in schema_columns
         if col.name not in df.columns
     }

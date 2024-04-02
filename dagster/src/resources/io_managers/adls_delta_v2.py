@@ -1,7 +1,7 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
-from pydantic import AnyUrl
+from pydantic import AnyUrl  # pylint:disable=no-name-in-module
 from pyspark import sql
 from pyspark.sql import SparkSession
 
@@ -12,6 +12,8 @@ from src.utils.adls import ADLSFileClient
 from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
+    construct_full_table_name,
+    construct_schema_name_for_tier,
     get_partition_columns,
     get_primary_key,
     get_schema_columns,
@@ -26,7 +28,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
         path = self._get_filepath(context)
-        table_name, _, table_path = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
 
@@ -40,10 +42,14 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         path = self._get_filepath(context)
-        table_name, _, table_path = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context, str(path))
         spark = self._get_spark_session()
-        schema_name = get_schema_name(context)
-        full_table_name = f"{schema_name}.{table_name}"
+        config = FileConfig(**context.upstream_output.step_context.op_config)
+        schema_name = config.metastore_schema
+
+        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
+
         dt = DeltaTable.forName(spark, full_table_name)
 
         context.log.info(
@@ -57,12 +63,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         context: InputContext | OutputContext, filepath: str
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
-
-        if config.dataset_type == "qos":
-            table_name = config.filename_components.country_code
-        else:
-            table_name = config.filepath_object.name.split("_")[0]
-
+        table_name = config.filename_components.country_code
         table_root_path = str(config.filepath_object.parent)
         return (
             ic(table_name),
@@ -87,7 +88,9 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         table_name: str,
     ):
         spark = self._get_spark_session()
-        full_table_name = f"{schema_name}.{table_name}"
+        config = FileConfig(**context.step_context.op_config)
+        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
 
         if schema_name == "qos":
             columns = data.schema.fields

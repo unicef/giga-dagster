@@ -15,26 +15,24 @@ SENTRY_ENABLED = settings.IN_PRODUCTION and settings.SENTRY_DSN
 
 
 def setup_sentry():
-    if not SENTRY_ENABLED:
-        return
+    if SENTRY_ENABLED:
+        ignore_logger("dagster")
 
-    ignore_logger("dagster")
-
-    sentry_sdk.init(
-        dsn=settings.SENTRY_DSN,
-        traces_sample_rate=1.0,
-        environment=settings.DEPLOY_ENV.value,
-        release=settings.COMMIT_SHA,
-        default_integrations=False,
-        integrations=[
-            AtexitIntegration(),
-            DedupeIntegration(),
-            StdlibIntegration(),
-            ModulesIntegration(),
-            ArgvIntegration(),
-            LoggingIntegration(),
-        ],
-    )
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            traces_sample_rate=1.0,
+            environment=settings.DEPLOY_ENV.value,
+            release=settings.COMMIT_SHA,
+            default_integrations=False,
+            integrations=[
+                AtexitIntegration(),
+                DedupeIntegration(),
+                StdlibIntegration(),
+                ModulesIntegration(),
+                ArgvIntegration(),
+                LoggingIntegration(),
+            ],
+        )
 
 
 def log_op_context(context: OpExecutionContext):

@@ -67,8 +67,10 @@ def get_partition_columns(spark: SparkSession, schema_name: str) -> list[str]:
     ]
 
 
-def construct_schema_name_for_tier(schema_name: str, tier: DataTier) -> str:
-    return f"{schema_name.lower()}_{tier.value}"
+def construct_schema_name_for_tier(schema_name: str, tier: DataTier = None) -> str:
+    if tier in [DataTier.SILVER, DataTier.STAGING] and tier is not None:
+        return f"{schema_name.lower()}_{tier.value}"
+    return schema_name.lower()
 
 
 def construct_full_table_name(schema_name: str, table_name: str) -> str:

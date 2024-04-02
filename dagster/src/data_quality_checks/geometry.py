@@ -66,7 +66,7 @@ def similar_name_level_within_110_check(
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(
-            (f.col("dq_has_similar_name") == True)  # noqa: E712
+            f.col("dq_has_similar_name")
             & (f.col("dq_duplicate_similar_name_same_level_within_110m_radius") == 1),
             1,
         ).otherwise(0),
