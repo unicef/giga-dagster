@@ -61,7 +61,7 @@ def github_coverage_workflow_notebooks(context: OpExecutionContext):
     owner = "unicef"
     repo = "coverage_workflow"
     path = "Notebooks/"
-    notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path)
+    notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path, context)
 
     for notebook_metadata in notebook_metadata_list:
         run_notebook_ingestion = NotebookIngestionAction(
