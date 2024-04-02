@@ -18,6 +18,8 @@ from src.utils.adls import ADLSFileClient
 from src.utils.filename import deconstruct_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
+DOMAIN = "school"
+
 
 @sensor(
     job=school_master__convert_gold_csv_to_deltatable_job,
@@ -113,6 +115,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             dataset_type="master",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -197,6 +200,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             dataset_type="reference",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -264,6 +268,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             dataset_type="qos",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
