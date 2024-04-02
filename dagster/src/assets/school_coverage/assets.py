@@ -103,6 +103,8 @@ def coverage_data_quality_results(
     df, column_mapping = column_mapping_rename(
         df_raw, file_upload.column_to_schema_mapping
     )
+    columns = get_schema_columns(s, f"coverage_{source}")
+    df = add_missing_columns(df, columns)
     dq_results = row_level_checks(
         df,
         f"coverage_{source}",
