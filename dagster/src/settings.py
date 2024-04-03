@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     INGESTION_DB_PORT: int = 5432
     SPARK_DRIVER_CORES: str = "2"
     SPARK_DRIVER_MEMORY: str = "2g"
+    LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
 
     # Derived settings
     @property
