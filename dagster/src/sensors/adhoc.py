@@ -7,7 +7,7 @@ from dagster import (
     SkipReason,
     sensor,
 )
-from src.constants import constants
+from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
     school_qos__convert_csv_to_deltatable_job,
@@ -17,6 +17,8 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.filename import deconstruct_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
+
+DOMAIN = "school"
 
 
 @sensor(
@@ -62,41 +64,49 @@ def school_master__gold_csv_to_deltatable_sensor(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=metastore_schema,
+                tier=DataTier.RAW,
             ),
             "adhoc__master_data_transforms": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.TRANSFORMS,
             ),
             "adhoc__df_duplicates": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/duplicates/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__master_data_quality_checks": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__master_dq_checks_summary": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/summary/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__master_dq_checks_passed": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__master_dq_checks_failed": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/failed/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
             ),
         }
 
@@ -105,6 +115,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             dataset_type="master",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -156,26 +167,31 @@ def school_reference__gold_csv_to_deltatable_sensor(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=metastore_schema,
+                tier=DataTier.RAW,
             ),
             "adhoc__reference_data_quality_checks": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__reference_dq_checks_passed": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__reference_dq_checks_failed": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/failed/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__publish_reference_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
             ),
         }
 
@@ -184,6 +200,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             dataset_type="reference",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")
@@ -230,16 +247,19 @@ def school_qos__gold_csv_to_deltatable_sensor(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=metastore_schema,
+                tier=DataTier.RAW,
             ),
             "adhoc__qos_transforms": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
                 metastore_schema=metastore_schema,
+                tier=DataTier.TRANSFORMS,
             ),
             "adhoc__publish_qos_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
             ),
         }
 
@@ -248,6 +268,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             dataset_type="qos",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
         )
 
         context.log.info(f"FILE: {path}")

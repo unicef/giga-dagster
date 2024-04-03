@@ -24,7 +24,7 @@ class Constants(BaseSettings):
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     raw_folder = "raw/uploads"  # if settings.IN_PRODUCTION else "adls-testing-raw"
-    raw_schema_folder = "raw_schema"
+    raw_schema_folder = "raw/schema"
     bronze_folder = "bronze"
     silver_folder = "silver"
     gold_folder = "gold"
@@ -53,18 +53,6 @@ class Constants(BaseSettings):
         "coverage_staging": "coverage_bronze",
     }
 
-    step_origin_folder_map: dict[str, str] = {
-        "bronze": "raw",
-        "data_quality_results": "bronze",
-        "dq_split_rows": "bronze",
-        "dq_passed_rows": "bronze",
-        "dq_failed_rows": "bronze",
-        "manual_review_passed_rows": "bronze",
-        "manual_review_failed_rows": "bronze",
-        "silver": "manual_review_passed",
-        "gold": "silver",
-    }
-
     def step_folder_map(self, dataset_type: str) -> dict[str, str]:
         return {
             # geolocation
@@ -73,6 +61,7 @@ class Constants(BaseSettings):
             "geolocation_data_quality_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_results": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_summary_statistics": f"data-quality-results/school-{dataset_type}-data/dq-summary",
+            "geolocation_data_quality_results_summary": f"data-quality-results/school-{dataset_type}-data/dq-summary",
             "geolocation_dq_checks": f"data-quality-results/school-{dataset_type}-data/dq-overall",
             "geolocation_dq_passed_rows": f"staging/pending-review/school-{dataset_type}-data/dq-passed-rows",
             "geolocation_dq_failed_rows": f"archive/gx-tests-failed/school-{dataset_type}-data/dq-failed-rows",

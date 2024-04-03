@@ -1,7 +1,7 @@
 import subprocess
 from uuid import uuid4
 
-import pyarrow_hotfix  # noqa: F401
+import pyarrow_hotfix  # noqa: F401, pylint: disable=unused-import
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
@@ -15,7 +15,9 @@ from src.utils.schema import get_schema_columns
 
 
 def _get_host_ip():
-    completed_process = subprocess.run(["hostname", "-i"], capture_output=True)
+    completed_process = subprocess.run(
+        ["hostname", "-i"], capture_output=True, check=False
+    )
     ip = completed_process.stdout.strip().decode("utf-8")
     return "127.0.0.1" if ip == "127.0.1.1" else ip
 
@@ -165,7 +167,8 @@ def transform_school_types(
         "school_name",
         "education_level",
         "education_level_govt",
-        "connectivity_govt" "connectivity_type_govt",
+        "connectivity_govt",
+        "connectivity_type_govt",
         "admin1",
         "admin2",
         "school_area_type",
@@ -214,7 +217,11 @@ def transform_types(
         columns = [c for c in columns if c.name in df.columns]
 
     df = df.withColumns(
-        {column.name: col(column.name).cast(column.dataType) for column in columns}
+        {
+            column.name: col(column.name).cast(column.dataType)
+            for column in columns
+            if column.name != "signature"
+        }
     )
     logger.info("Transformed column types")
     df.printSchema()

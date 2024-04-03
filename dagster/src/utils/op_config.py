@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from dagster import Config
+from src.constants import DataTier
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import deconstruct_filename_components
@@ -31,15 +32,33 @@ class FileConfig(Config):
         For regular assets, simply pass in the destination path as a string.
         """,
     )
+    dq_target_filepath: str = Field(
+        description="""
+        The path of the file inside the ADLS container where we run data quality checks on.
+        """,
+        default=None,
+    )
     metastore_schema: str = Field(
         description="""
         The name of the Hive Metastore schema to register this dataset to. Used if the output format is a Delta Table.
         To get the list of valid schemas, run
         ```sql
+        # Spark
         SHOW TABLES IN `schemas`
+
+        # Trino
+        SHOW TABLES IN delta_lake.schemas
         ```
         or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
         """,
+    )
+    tier: DataTier = Field(
+        description="""
+        The tier of the dataset, e.g. raw, bronze, staging, silver, gold
+        """
+    )
+    domain: str = Field(
+        default=None,
     )
 
     @property
@@ -75,6 +94,7 @@ class OpDestinationMapping(BaseModel):
     source_filepath: str
     destination_filepath: str
     metastore_schema: str
+    tier: DataTier
 
 
 def generate_run_ops(
@@ -82,6 +102,8 @@ def generate_run_ops(
     dataset_type: str,
     metadata: dict,
     file_size_bytes: int,
+    domain: str,
+    dq_target_filepath: str = None,
 ):
     run_ops = {}
 
@@ -90,9 +112,12 @@ def generate_run_ops(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
             metastore_schema=op_mapping.metastore_schema,
+            tier=op_mapping.tier,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,
+            dq_target_filepath=dq_target_filepath,
+            domain=domain,
         )
         run_ops[asset_key] = file_config
 

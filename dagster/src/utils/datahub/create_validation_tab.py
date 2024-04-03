@@ -37,12 +37,13 @@ class EmitDatasetAssertionResults:
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
-        self.dataset_urn = dataset_urn
         self.context = context
+        self.dataset_urn = dataset_urn
 
-        dq_summary_statistics.pop("summary")
+        dq_results = dict(dq_summary_statistics)
+        dq_results.pop("summary")
         self.dq_summary_statistics = []
-        for value in dq_summary_statistics.values():
+        for value in dq_results.values():
             self.dq_summary_statistics.extend(value)
         self.logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
@@ -70,18 +71,25 @@ class EmitDatasetAssertionResults:
 
     @staticmethod
     def extract_assertion_info_of_column(column_dq_result: dict, dataset_urn: str):
-        field_urn = builder.make_schema_field_urn(
-            dataset_urn, field_path=column_dq_result["column"]
-        )
+        if "column" in column_dq_result.keys():
+            field_urn = builder.make_schema_field_urn(
+                dataset_urn, field_path=column_dq_result["column"]
+            )
+            dynamic_info = {
+                "scope": DatasetAssertionScope.DATASET_COLUMN,
+                "aggregation": AssertionStdAggregation.IDENTITY,
+                "fields": [field_urn],
+            }
+        else:
+            dynamic_info = {
+                "scope": DatasetAssertionScope.UNKNOWN,
+            }
 
         info = {
-            "scope": DatasetAssertionScope.DATASET_COLUMN,
-            "aggregation": AssertionStdAggregation.IDENTITY,
             "operator": AssertionStdOperator._NATIVE_,
-            "fields": [field_urn],
             "dataset": dataset_urn,
             "nativeType": column_dq_result["assertion"],
-        }
+        } | dynamic_info
 
         assertion_of_column = AssertionInfo(
             type=AssertionType.DATASET,
@@ -96,19 +104,11 @@ class EmitDatasetAssertionResults:
     @_log_progress("validation tab")
     def upsert_validation_tab(self):
         for column_dq_result in self.dq_summary_statistics:
-            if not column_dq_result.get("column"):
-                # TODO: Might need to do something else with checks that aren't specific to a column
-                continue
-
-            self.logger.info(
-                f"Creating assertion info for column: {column_dq_result['column']}..."
-            )
-
             col_assertion_info = self.extract_assertion_info_of_column(
                 column_dq_result=column_dq_result, dataset_urn=self.dataset_urn
             )
             assertion_urn = builder.make_assertion_urn(
-                f"{column_dq_result['assertion']}_col_{column_dq_result['column']}"
+                f"{column_dq_result['assertion']}_desc_{column_dq_result['description']}"
             )
             assertion_data_platform_instance = DataPlatformInstance(
                 platform=builder.make_data_platform_urn("spark")
@@ -138,20 +138,20 @@ class EmitDatasetAssertionResults:
             assertion_data_platform_mcp = MetadataChangeProposalWrapper(
                 entityUrn=assertion_urn, aspect=assertion_data_platform_instance
             )
-            self.emitter.emit_mcp(assertion_mcp)
-            self.emitter.emit_mcp(assertion_run_mcp)
-            self.emitter.emit_mcp(assertion_data_platform_mcp)
-
-            self.logger.info(
-                f"Success! Assertion info for column: {column_dq_result['column']} emitted!"
-            )
+            try:
+                self.emitter.emit_mcp(assertion_mcp)
+                self.emitter.emit_mcp(assertion_run_mcp)
+                self.emitter.emit_mcp(assertion_data_platform_mcp)
+            except Exception as error:
+                self.context.log.error(f"ERROR on Assertion Run: {error}")
+        self.logger.info(f"Dataset URN: {self.dataset_urn}")
 
 
 if __name__ == "__main__":
     adls = ADLSFileClient()
-    dq_results_filepath = "logs-gx/school-coverage-data/randomstring_BIH_school-coverage_itu_20240227.json"
+    dq_results_filepath = "data-quality-results/school-geolocation/dq-summary/l2wkbpxgyts291f0au9pyh6p_BEN_geolocation_20240321-130111.json"
     dq_summary_statistics = adls.download_json(dq_results_filepath)
-    dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:adls,adls-testing-raw.school-coverage-data.BIH_school_coverage_test_pipeline_correct_schema,DEV)"
+    dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:adlsGen2,bronze/school-geolocation/l2wkbpxgyts291f0au9pyh6p_BEN_geolocation_20240321-130111,DEV)"
 
     emit_assertions = EmitDatasetAssertionResults(
         dataset_urn=dataset_urn, dq_summary_statistics=dq_summary_statistics

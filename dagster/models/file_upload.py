@@ -13,7 +13,7 @@ class FileUpload(BaseModel):
 
     created: Mapped[str] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.now(),  # pylint: disable=not-callable
     )
     uploader_id: Mapped[str] = mapped_column(VARCHAR(36), nullable=False, index=True)
     uploader_email: Mapped[str] = mapped_column(String(), nullable=False)

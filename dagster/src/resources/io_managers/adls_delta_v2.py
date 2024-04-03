@@ -4,15 +4,16 @@ from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import collect_list, concat_ws, sha2
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import execute_query_with_error_handler
+from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
+    construct_full_table_name,
+    construct_schema_name_for_tier,
     get_partition_columns,
     get_primary_key,
     get_schema_columns,
@@ -27,7 +28,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
         path = self._get_filepath(context)
-        table_name, _, table_path = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"
 
@@ -41,10 +42,14 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         path = self._get_filepath(context)
-        table_name, _, table_path = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context, str(path))
         spark = self._get_spark_session()
-        schema_name = get_schema_name(context)
-        full_table_name = f"{schema_name}.{table_name}"
+        config = FileConfig(**context.upstream_output.step_context.op_config)
+        schema_name = config.metastore_schema
+
+        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
+
         dt = DeltaTable.forName(spark, full_table_name)
 
         context.log.info(
@@ -58,12 +63,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         context: InputContext | OutputContext, filepath: str
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
-
-        if config.dataset_type == "qos":
-            table_name = config.filename_components.country_code
-        else:
-            table_name = config.filepath_object.name.split("_")[0]
-
+        table_name = config.filename_components.country_code
         table_root_path = str(config.filepath_object.parent)
         return (
             ic(table_name),
@@ -88,7 +88,9 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         table_name: str,
     ):
         spark = self._get_spark_session()
-        full_table_name = f"{schema_name}.{table_name}"
+        config = FileConfig(**context.step_context.op_config)
+        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
 
         if schema_name == "qos":
             columns = data.schema.fields
@@ -107,7 +109,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-        execute_query_with_error_handler(context, spark, query, schema_name, table_name)
+        execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
     def _upsert_data(
         self,
@@ -125,49 +127,8 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
             primary_key = get_primary_key(spark, schema_name)
 
         update_columns = [c.name for c in columns if c.name != primary_key]
+        master = DeltaTable.forName(spark, full_table_name)
+        query = build_deduped_merge_query(master, data, primary_key, update_columns)
 
-        master = DeltaTable.forName(spark, full_table_name).alias("master")
-        master_df = master.toDF()
-        incoming = data.alias("incoming")
-
-        master_ids = master_df.select(primary_key, "signature")
-        incoming_ids = incoming.select(primary_key, "signature")
-
-        updates_df = incoming_ids.join(master_ids, primary_key, "inner")
-        inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
-
-        # TODO: Might need to specify a predictable order, although by default it's insertion order
-        updates_signature = updates_df.agg(
-            sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
-                "combined_signature"
-            )
-        ).first()["combined_signature"]
-        master_to_update_signature = master_ids.agg(
-            sha2(concat_ws("|", collect_list("signature")), 256).alias(
-                "combined_signature"
-            )
-        ).first()["combined_signature"]
-
-        has_updates = master_to_update_signature != updates_signature
-        has_insertions = inserts_df.count() > 0
-
-        if not (ic(has_updates) or ic(has_insertions)):
-            return
-
-        query = master.merge(incoming, f"master.{primary_key} = incoming.{primary_key}")
-
-        if has_updates:
-            query = query.whenMatchedUpdate(
-                "master.signature <> incoming.signature",
-                dict(
-                    zip(
-                        update_columns,
-                        [f"incoming.{c}" for c in update_columns],
-                        strict=True,
-                    )
-                ),
-            )
-        if has_insertions:
-            query = query.whenNotMatchedInsertAll()
-
-        query.execute()
+        if query is not None:
+            query.execute()

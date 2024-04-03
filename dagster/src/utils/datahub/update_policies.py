@@ -70,10 +70,7 @@ def list_datasets_by_tag(tag):
 def is_valid_country_name(country_name):
     coco = cc.CountryConverter()
     country_list = list(coco.data["name_short"])
-    if country_name in country_list:
-        return True
-    else:
-        return False
+    return country_name in country_list
 
 
 def update_policies():

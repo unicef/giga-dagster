@@ -254,3 +254,8 @@ tasks:
     desc: Spawn an IPython shell inside the Dagster container
     cmds:
       - task exec -- -it dagster-webserver poetry run ipython
+
+  beeline:
+    desc: Spawn a Beeline shell
+    cmds:
+      - task exec -- -it hive-metastore beeline -u {{.HMS_DATABASE_URL}} -n {{.HMS_POSTGRESQL_USERNAME}} -p {{.HMS_POSTGRESQL_PASSWORD}}
