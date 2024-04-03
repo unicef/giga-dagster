@@ -174,11 +174,11 @@ def set_domain(context: OpExecutionContext):
     return domain_urn
 
 
-def set_tag_mutation_query(country_name, dataset_urn):
+def addTag_query(tag_key: str, dataset_urn: str):
     query = f"""
         mutation {{
             addTag(input:{{
-                tagUrn: "urn:li:tag:{country_name}",
+                tagUrn: "urn:li:tag:{tag_key}",
                 resourceUrn: "{dataset_urn}"
             }})
         }}
@@ -191,8 +191,8 @@ def emit_metadata_to_datahub(
     context: OpExecutionContext,
     country_code: str,
     dataset_urn: str,
-    schema_reference: sql.DataFrame | list[tuple] = None,
-    df_failed: sql.DataFrame = None,
+    schema_reference: None | sql.DataFrame | list[tuple] = None,
+    df_failed: None | sql.DataFrame = None,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -240,9 +240,7 @@ def emit_metadata_to_datahub(
     datahub_graph_client.execute_graphql(query=domain_query)
 
     country_name = identify_country_name(country_code=country_code)
-    tag_query = set_tag_mutation_query(
-        country_name=country_name, dataset_urn=dataset_urn
-    )
+    tag_query = addTag_query(tag_key=country_name, dataset_urn=dataset_urn)
     context.log.info(tag_query)
 
     context.log.info("EMITTING TAG METADATA")
