@@ -60,3 +60,17 @@ def is_within_boundary_distance(latitude: float, longitude: float, geometry) -> 
         out = False
 
     return out
+
+
+def boundary_distance(latitude: float, longitude: float, geometry) -> bool:
+    point = get_point(longitude, latitude)
+
+    if point is not None and geometry is not None:
+        p1, _ = nearest_points(geometry, point)
+        point1 = p1.coords[0]
+        point2 = (longitude, latitude)
+        distance = geodesic(point1, point2).km
+    else:
+        distance = None
+
+    return distance
