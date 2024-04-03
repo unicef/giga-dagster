@@ -44,30 +44,6 @@ def h3_geo_to_h3_udf(latitude: float, longitude: float):
     return out
 
 
-# def is_not_within_country_check_udf_factory(
-#     country_code_iso2: str, country_code_iso3: str, geometry
-# ):
-#     @udf
-#     def is_not_within_country_check(latitude: float, longitude: float) -> int:
-#         if latitude is None or longitude is None or country_code_iso3 is None:
-#             out = 0
-#         else:
-#             is_valid_gadm = is_within_country_gadm(latitude, longitude, geometry)
-#             is_valid_boundary = is_within_boundary_distance(
-#                 latitude, longitude, geometry
-#             )
-#             is_valid_geopy = is_within_country_geopy(
-#                 latitude, longitude, country_code_iso2
-#             )
-
-#             is_valid = any([is_valid_gadm, is_valid_geopy, is_valid_boundary])
-#             out = int(not is_valid)
-
-#         return out
-
-#     return is_not_within_country_check
-
-
 def is_not_within_country_check_udf_factory(
     country_code_iso2: str, country_code_iso3: str, geometry
 ):
