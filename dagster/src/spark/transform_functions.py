@@ -377,6 +377,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
 
     if admin_boundaries is None:
         df = df.withColumn("disputed_region", f.lit(None))
+    else:
         df = df.withColumn(
             "disputed_region", get_disputed_region_udf(df["latitude"], df["longitude"])
         )
@@ -402,8 +403,8 @@ if __name__ == "__main__":
     # df = create_bronze_layer_columns(df)
     # df.show()
 
-    # df = master.filter(master["admin1"] == "Rondônia")
-    df = master.filter(master["admin1"] == "São Paulo")
+    df = master.filter(master["admin1"] == "Rondônia")
+    # df = master.filter(master["admin1"] == "São Paulo")
     df = df.select(
         [
             "school_id_giga",
@@ -414,8 +415,8 @@ if __name__ == "__main__":
             "longitude",
         ]
     )
-    # df = df.withColumn("latitude", f.lit(32.618))
-    # df = df.withColumn("longitude", f.lit(78.576))
+    df = df.withColumn("latitude", f.lit(32.618))
+    df = df.withColumn("longitude", f.lit(78.576))
     df = df.withColumn("latitude", f.col("latitude").cast("double"))
     df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
@@ -433,9 +434,9 @@ if __name__ == "__main__":
     df.show()
     print(df.count())
 
-    test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
-    test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
-    test = add_disputed_region_column(df=test)
+    # test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
+    # test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
+    test = add_disputed_region_column(df=df)
     test.show()
 
     # test = test.filter(test["admin2"] != test["admin21"])
