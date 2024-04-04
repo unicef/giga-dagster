@@ -3,6 +3,7 @@ from io import BytesIO
 
 import numpy as np
 import pandas as pd
+import sentry_sdk
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
@@ -28,7 +29,8 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -41,7 +43,6 @@ def adhoc__load_master_csv(
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
-        df=raw,
         country_code=config.filename_components.country_code,
         dataset_urn=config.datahub_source_dataset_urn,
     )
@@ -85,12 +86,6 @@ def adhoc__master_data_transforms(
     )
 
     df_pandas = sdf.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -114,12 +109,6 @@ def adhoc__df_duplicates(
     context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
 
     df_pandas = df_duplicates.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -157,12 +146,6 @@ def adhoc__master_data_quality_checks(
     )
 
     df_pandas = dq_checked.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -210,12 +193,6 @@ def adhoc__master_dq_checks_failed(
     )
 
     df_pandas = dq_failed.toPandas()
-    emit_metadata_to_datahub(
-        context,
-        df=df_pandas,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
     yield Output(
         df_pandas,
         metadata={
@@ -254,18 +231,28 @@ def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     gold = transform_types(
         adhoc__master_dq_checks_passed, config.metastore_schema, context
     )
     gold = compute_row_hash(gold)
 
-    emit_metadata_to_datahub(
-        context,
-        df=gold.toPandas(),
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
     )
+    try:
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_source_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
     yield Output(
         gold,
         metadata={

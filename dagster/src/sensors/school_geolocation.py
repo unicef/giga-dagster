@@ -84,7 +84,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             ),
             "geolocation_staging": OpDestinationMapping(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
+                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/school_geolocation_staging.db/{stem}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.STAGING,
             ),
@@ -95,8 +95,8 @@ def school_master_geolocation__raw_file_uploads_sensor(
             dataset_type=DATASET_TYPE,
             metadata=metadata,
             file_size_bytes=size,
-            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
             domain=DOMAIN,
+            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
         )
 
         context.log.info(f"FILE: {path}")

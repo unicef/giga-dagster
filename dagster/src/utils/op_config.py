@@ -102,8 +102,8 @@ def generate_run_ops(
     dataset_type: str,
     metadata: dict,
     file_size_bytes: int,
-    dq_target_filepath: str,
     domain: str,
+    dq_target_filepath: str = None,
 ):
     run_ops = {}
 

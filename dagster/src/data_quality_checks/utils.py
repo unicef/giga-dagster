@@ -210,7 +210,7 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     else:
         columns = [col for col in df.columns if not col.startswith("dq_")]
 
-    if dataset_type in ["master", "geolocation"]:
+    if dataset_type in ["master", "reference", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 0)
         df = df.select(*columns)
     elif dataset_type == "geolocation":
@@ -231,7 +231,7 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
 
 
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
-    if dataset_type in ["master", "geolocation"]:
+    if dataset_type in ["master", "reference", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 1)
     elif dataset_type == "geolocation":
         df = df.filter(
@@ -251,7 +251,7 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
 def row_level_checks(
     df: sql.DataFrame,
     dataset_type: str,
-    country_code_iso3: str,
+    _country_code_iso3: str,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
@@ -263,7 +263,7 @@ def row_level_checks(
             df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
         df = precision_check(df, config.PRECISION, context)
-        # df = is_not_within_country(df, country_code_iso3, context)
+        # df = is_not_within_country(df, _country_code_iso3, context)
         df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
         # df = similar_name_level_within_110_check(df, context)
@@ -272,7 +272,12 @@ def row_level_checks(
         )
         df = column_relation_checks(df, dataset_type, context)
         df = school_density_check(df, context)
-    elif dataset_type in ["coverage", "reference"]:
+    elif dataset_type == "reference":
+        df = standard_checks(df, dataset_type, context)
+        df = critical_error_checks(
+            df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
+        )
+    elif dataset_type == "coverage":
         df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_fb":

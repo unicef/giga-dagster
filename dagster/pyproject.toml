@@ -61,6 +61,7 @@ notebook = "^7.0.6"
 ruff = "^0.3.4"
 ipython = "^8.22.2"
 mypy = "^1.9.0"
+pylint = "^3.1.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -119,3 +120,19 @@ warn_unreachable = true
 warn_unused_configs = true
 allow_redefinition = true
 implicit_reexport = true
+
+[tool.pylint.main]
+jobs = 0
+persistent = true
+disable = [
+    "C0103", "C0201", "C0301", "C0415",
+    "C0114", "C0115", "C0116",
+    "C0411",
+    "R0901", "R0902", "R0903", "R0913", "R0914",
+    "W0212", "W0237", "W0511", "W0602", "W0621", "W0622", "W0718", "W0719",
+    "similarities"
+]
+ignored-modules = ["pydantic"]
+
+[tool.pylint.format]
+max-line-length = 120

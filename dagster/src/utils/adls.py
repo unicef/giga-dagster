@@ -52,7 +52,6 @@ class ADLSFileClient(ConfigurableResource):
                 file_client.upload_data(buffer.read(), metadata=metadata)
             except azure.core.exceptions.ResourceModifiedError:
                 logger.warning("ResourceModifiedError: Skipping write")
-                pass
             except azure.core.exceptions.ResourceNotFoundError as e:
                 logger.error(f"ResourceNotFoundError: {filepath}")
                 raise e
@@ -66,10 +65,11 @@ class ADLSFileClient(ConfigurableResource):
 
             if ext == ".csv":
                 return pd.read_csv(buffer)
-            elif ext in [".xls", ".xlsx"]:
+
+            if ext in [".xls", ".xlsx"]:
                 return pd.read_excel(buffer)
-            else:
-                raise ValueError(f"Unsupported format for file: {filepath}")
+
+        raise ValueError(f"Unsupported format for file: {filepath}")
 
     def download_csv_as_spark_dataframe(
         self, filepath: str, spark: SparkSession, schema: StructType = None
@@ -89,7 +89,7 @@ class ADLSFileClient(ConfigurableResource):
     def upload_pandas_dataframe_as_file(
         self, context: OutputContext, data: pd.DataFrame, filepath: str
     ):
-        name, ext = os.path.splitext(filepath)
+        _, ext = os.path.splitext(filepath)
         if not ext:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
@@ -112,9 +112,7 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
-    def upload_spark_dataframe_as_file(
-        self, data: sql.DataFrame, filepath: str, spark: SparkSession
-    ):
+    def upload_spark_dataframe_as_file(self, data: sql.DataFrame, filepath: str):
         if not (extension := os.path.splitext(filepath)[1]):
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 

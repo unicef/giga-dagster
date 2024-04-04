@@ -19,8 +19,6 @@ from datahub.metadata.schema_classes import (
 from pyspark import sql
 from src.constants import constants
 from src.settings import settings
-from src.utils.datahub.ingest_azure_ad import ingest_azure_ad_to_datahub_pipeline
-from src.utils.datahub.update_policies import update_policies
 from src.utils.op_config import FileConfig
 
 from dagster import OpExecutionContext, version
@@ -46,10 +44,10 @@ def create_dataset_urn(
         return builder.make_dataset_urn(
             platform=platform, name=upstream_urn_name, env=settings.ADLS_ENVIRONMENT
         )
-    else:
-        dataset_urn_name = config.datahub_destination_dataset_urn
-        context.log.info(f"{dataset_urn_name=}")
-        return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
+
+    dataset_urn_name = config.datahub_destination_dataset_urn
+    context.log.info(f"{dataset_urn_name=}")
+    return builder.make_dataset_urn(platform=platform, name=dataset_urn_name)
 
 
 def define_dataset_properties(context: OpExecutionContext, country_code: str):
@@ -118,16 +116,18 @@ def define_schema_properties(
             for v in constants.TYPE_MAPPINGS.dict().values():
                 if field.dataType == v["pyspark"]():
                     type_class = v["datahub"]()
+                    native_type = str(v["native"])
                     is_field_type_found = True
                     break
             if not is_field_type_found:
                 type_class = NullTypeClass()
+                native_type = str(None)
 
             fields.append(
                 SchemaFieldClass(
                     fieldPath=field.name,
                     type=SchemaFieldDataTypeClass(type_class),
-                    nativeDataType=field.dataType,
+                    nativeDataType=native_type,
                 )
             )
 
@@ -246,13 +246,13 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
-    ingest_azure_ad_to_datahub_pipeline()
-    context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
-
-    context.log.info("UPDATING POLICIES IN DATAHUB...")
-    update_policies()
-    context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
+    # context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
+    # ingest_azure_ad_to_datahub_pipeline()
+    # context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
+    #
+    # context.log.info("UPDATING POLICIES IN DATAHUB...")
+    # update_policies()
+    # context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
 
     return context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}."

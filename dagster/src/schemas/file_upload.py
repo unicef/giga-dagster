@@ -22,10 +22,12 @@ class FileUploadConfig(Config):
     class Config:
         orm_mode = True
 
+    @classmethod
     @validator("created", pre=True)
     def parse_created(cls, v: datetime):
         return v.isoformat()
 
+    @classmethod
     @validator("column_to_schema_mapping", pre=True)
     def parse_column_to_schema_mapping(cls, v: str):
         return json.loads(v)

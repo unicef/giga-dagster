@@ -91,13 +91,15 @@ def geolocation_bronze(
 
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
-    df = create_bronze_layer_columns(df, schema_columns)
+    country_code = config.filename_components.country_code
+    df = create_bronze_layer_columns(df, schema_columns, country_code)
+
     config.metadata.update({"column_mapping": column_mapping})
     try:
         emit_metadata_to_datahub(
             context,
             schema_reference=df,
-            country_code=config.filename_components.country_code,
+            country_code=country_code,
             dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:

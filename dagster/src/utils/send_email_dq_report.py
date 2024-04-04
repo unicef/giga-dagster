@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import requests
 from loguru import logger
 from requests import HTTPError, JSONDecodeError
@@ -17,6 +19,7 @@ def send_email_dq_report(json):
             "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
         },
         json=json,
+        timeout=int(timedelta(minutes=2).total_seconds()),
     )
     if not res.ok:
         try:
