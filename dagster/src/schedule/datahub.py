@@ -8,7 +8,7 @@ from src.settings import settings
 
 datahub_materialize_prerequisities_schedule = ScheduleDefinition(
     job=datahub__materialize_prerequisites_job,
-    cron_schedule="*0 0 1 1 *",  # yearly
+    cron_schedule="0 0 1 1 *",  # yearly
     default_status=settings.DEFAULT_SCHEDULE_STATUS,
 )
 
