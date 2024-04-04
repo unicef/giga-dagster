@@ -4,6 +4,7 @@ from h3 import geo_to_h3
 from pyspark.sql.functions import udf
 
 from .udf_dependencies import (
+    boundary_distance,
     is_within_boundary_distance,
     is_within_country_gadm,
     is_within_country_geopy,
@@ -51,17 +52,15 @@ def is_not_within_country_check_udf_factory(
         if latitude is None or longitude is None or country_code_iso3 is None:
             out = 0
         else:
-            is_valid_gadm = is_within_country_gadm(latitude, longitude, geometry)
-            is_valid_geopy = is_within_country_geopy(
-                latitude, longitude, country_code_iso2
-            )
-            is_valid_boundary = is_within_boundary_distance(
-                latitude, longitude, geometry
-            )
-
-            is_valid = any([is_valid_gadm, is_valid_geopy, is_valid_boundary])
-            out = int(not is_valid)
-
+            if is_within_country_gadm(latitude, longitude, geometry):
+                return 0
+            if is_within_boundary_distance(latitude, longitude, geometry):
+                return 0
+            if boundary_distance(latitude, longitude, geometry) <= 150:
+                if is_within_country_geopy(latitude, longitude, country_code_iso2):
+                    return 0
+            else:
+                return 1
         return out
 
     return is_not_within_country_check
