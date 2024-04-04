@@ -19,9 +19,7 @@ def get_column_licenses(config: FileConfig) -> dict[str, str]:
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
-    column_license_dict = file_upload.column_license
-
-    return column_license_dict
+    return file_upload.column_license
 
 
 def add_column_tag_query(tag_key: str, column: str, dataset_urn: str):
@@ -51,8 +49,7 @@ def add_column_description_query(dataset_urn: str, column: str, description: str
 
 
 def add_column_metadata(
-    dataset_urn: str,
-    column_license_dict: dict[str, str],
+    dataset_urn: str, column_licenses: dict[str, str], column_descriptions: list[dict]
 ):
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
@@ -60,9 +57,19 @@ def add_column_metadata(
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
-    for column, license in column_license_dict.items():
+    # COLUMN LICENSES
+    for column, license in column_licenses.items():
         query = add_column_tag_query(
             tag_key=license, column=column, dataset_urn=dataset_urn
+        )
+        datahub_graph_client.execute_graphql(query=query)
+
+    # COLUMN DESCRIPTIONS
+    for item in column_descriptions:
+        column = item["column"]
+        description = item["description"]
+        query = add_column_description_query(
+            column=column, dataset_urn=dataset_urn, description=description
         )
         datahub_graph_client.execute_graphql(query=query)
 
