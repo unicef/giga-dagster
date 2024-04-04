@@ -1,5 +1,27 @@
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
+from models.file_upload import FileUpload
+from sqlalchemy import select
+from src.schemas.file_upload import FileUploadConfig
 from src.settings import settings
+from src.utils.db import get_db_context
+from src.utils.op_config import FileConfig
+
+
+def get_column_licenses(config: FileConfig) -> dict[str, str]:
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id)
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found"
+            )
+
+        file_upload = FileUploadConfig.from_orm(file_upload)
+
+    column_license_dict = file_upload.column_license
+
+    return column_license_dict
 
 
 def add_column_tag_query(tag_key: str, column: str, dataset_urn: str):
