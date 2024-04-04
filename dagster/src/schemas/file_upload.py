@@ -16,7 +16,8 @@ class FileUploadConfig(Config):
     dataset: str
     source: str = Field(None)
     original_filename: str
-    column_to_schema_mapping: dict[str, str | None]
+    column_to_schema_mapping: dict[str, str]
+    column_license: dict[str, str]
     upload_path: str
 
     class Config:
@@ -30,4 +31,9 @@ class FileUploadConfig(Config):
     @classmethod
     @validator("column_to_schema_mapping", pre=True)
     def parse_column_to_schema_mapping(cls, v: str):
+        return json.loads(v)
+
+    @classmethod
+    @validator("column_license", pre=True)
+    def parse_column_license(cls, v: str):
         return json.loads(v)
