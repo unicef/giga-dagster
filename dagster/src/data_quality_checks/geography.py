@@ -8,7 +8,9 @@ from pyspark.sql import functions as f
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.settings import settings
-from src.spark.user_defined_functions import is_not_within_country_check_udf_factory
+from src.spark.user_defined_functions import (
+    is_not_within_country_check_udf_factory,
+)
 from src.utils.logger import get_context_with_fallback_logger
 
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -54,6 +56,10 @@ def is_not_within_country(
     # boundary constants
     geometry = get_country_geometry(country_code_iso3)
 
+    # # broadcast to workers -- > not working yet
+    # spark = df.sparkSession
+    # broadcasted_geometry = spark.sparkContext.broadcast(geometry)
+
     # geopy constants
     country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
@@ -65,3 +71,37 @@ def is_not_within_country(
         "dq_is_not_within_country",
         is_not_within_country_check(f.col("latitude"), f.col("longitude")),
     )
+
+
+if __name__ == "__main__":
+    from src.utils.spark import get_spark_session
+
+    #
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+
+    spark = get_spark_session()
+    master = spark.read.csv(file_url_master, header=True)
+    # df = master.filter(master["admin1"] == "São Paulo")
+    # df = master.limit(1)
+    df = master.select(
+        [
+            "school_id_giga",
+            "school_id_govt",
+            "school_name",
+            "education_level",
+            "latitude",
+            "longitude",
+        ]
+    )
+    df.show()
+    # df = df.withColumn("latitude", f.lit(6.1671))  # outside boundary <= 150km
+    # df = df.withColumn("longitude", f.lit(60.7832)) # outside boundary <= 150km
+    df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+
+    dq_test = is_not_within_country(df, "BRA")
+    dq_test.show()
+    print(dq_test.count())

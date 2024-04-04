@@ -1,12 +1,28 @@
+import io
 import uuid
 
+import geopandas as gpd
 import h3
+from loguru import logger
 from pyspark import sql
-from pyspark.sql import functions as f
-from pyspark.sql.types import ArrayType, StringType, StructField
+from pyspark.sql import (
+    functions as f,
+)
+from pyspark.sql.types import (
+    ArrayType,
+    StringType,
+    StructField,
+)
 
+from azure.storage.blob import BlobServiceClient
 from src.settings import settings
 from src.spark.config_expectations import config
+from src.spark.udf_dependencies import get_point
+
+ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
+azure_sas_token = settings.AZURE_SAS_TOKEN
+azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
+container_name = azure_blob_container_name
 
 
 # STANDARDIZATION FUNCTIONS
@@ -147,7 +163,11 @@ def bronze_prereq_columns(df, schema_columns: list[StructField]):
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
-def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructField]):
+def create_bronze_layer_columns(
+    df: sql.DataFrame,
+    schema_columns: list[StructField],
+    country_code_iso3: str,
+) -> sql.DataFrame:
     # Impute missing cols with null
     df = add_missing_columns(df, schema_columns)
 
@@ -156,6 +176,22 @@ def create_bronze_layer_columns(df: sql.DataFrame, schema_columns: list[StructFi
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
+
+    # Admin mapbox columns
+    # drop imputed admin cols
+    df = df.drop("admin1")
+    df = df.drop("admin1_id_giga")
+    df = df.drop("admin2")
+    df = df.drop("admin2_id_giga")
+    df = df.drop("disputed_region")
+
+    df = add_admin_columns(
+        df=df, country_code_iso3=country_code_iso3, admin_level="admin1"
+    )
+    df = add_admin_columns(
+        df=df, country_code_iso3=country_code_iso3, admin_level="admin2"
+    )
+    df = add_disputed_region_column(df=df)
 
     ## Clean up columns -- function shouldnt exist, uploads should be clean
     # df = standardize_internet_speed(df)
@@ -225,36 +261,150 @@ def point_110(column):
 point_110_udf = f.udf(point_110)
 
 
+def get_admin_boundaries(
+    country_code_iso3: str, admin_level: str
+):  # admin level = ["admin1", "admin2"]
+    try:
+        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        filename = f"{country_code_iso3}_{admin_level}.geojson"
+        file = f"mapbox_sample_data/{filename}"
+        blob_client = service.get_blob_client(container=container_name, blob=file)
+        with io.BytesIO() as file_blob:
+            download_stream = blob_client.download_blob()
+            download_stream.readinto(file_blob)
+            file_blob.seek(0)
+            admin_boundaries = gpd.read_file(file_blob)
+
+    except Exception as exc:
+        logger.error(exc)
+        return None
+
+    return admin_boundaries
+
+
+def add_admin_columns(  # noqa: C901
+    df: sql.DataFrame,
+    country_code_iso3: str,
+    admin_level: str,
+) -> sql.DataFrame:
+    admin_boundaries = get_admin_boundaries(
+        country_code_iso3=country_code_iso3, admin_level=admin_level
+    )
+
+    spark = df.sparkSession
+    broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
+
+    def get_admin_en(latitude, longitude):
+        point = get_point(longitude=longitude, latitude=latitude)
+        for _, row in broadcasted_admin_boundaries.value.iterrows():
+            if row.geometry.contains(point):
+                return row.get("name_en")
+        return None
+
+    get_admin_en_udf = f.udf(get_admin_en, StringType())
+
+    def get_admin_native(latitude, longitude):
+        point = get_point(longitude=longitude, latitude=latitude)
+        for _, row in broadcasted_admin_boundaries.value.iterrows():
+            if row.geometry.contains(point):
+                return row.get("name")
+        return None
+
+    get_admin_native_udf = f.udf(get_admin_native, StringType())
+
+    def get_admin_id_giga(latitude, longitude):
+        point = get_point(longitude=longitude, latitude=latitude)
+        for _, row in broadcasted_admin_boundaries.value.iterrows():
+            if row.geometry.contains(point):
+                return row.get(f"{admin_level}_id_giga")
+        return None
+
+    get_admin_id_giga_udf = f.udf(get_admin_id_giga, StringType())
+
+    if admin_boundaries is None:
+        df = df.withColumn(f"{admin_level}", f.lit(None))
+        df = df.withColumn(f"{admin_level}_id_giga", f.lit(None))
+        return df
+    else:
+        df = df.withColumn(
+            f"{admin_level}_en", get_admin_en_udf(df["latitude"], df["longitude"])
+        )
+        df = df.withColumn(
+            f"{admin_level}_native",
+            get_admin_native_udf(df["latitude"], df["longitude"]),
+        )
+        df = df.withColumn(
+            f"{admin_level}_id_giga",
+            get_admin_id_giga_udf(df["latitude"], df["longitude"]),
+        )
+        df = df.withColumn(
+            f"{admin_level}",
+            f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
+        )
+        df = df.drop(f"{admin_level}_en")
+        df = df.drop(f"{admin_level}_native")
+
+    return df
+
+
+def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
+    try:
+        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        filename = "disputed_areas_admin0_sample.geojson"
+        file = f"mapbox_sample_data/{filename}"
+        blob_client = service.get_blob_client(container=container_name, blob=file)
+        with io.BytesIO() as file_blob:
+            download_stream = blob_client.download_blob()
+            download_stream.readinto(file_blob)
+            file_blob.seek(0)
+            admin_boundaries = gpd.read_file(file_blob)
+
+    except Exception as exc:
+        logger.error(exc)
+        admin_boundaries = None
+
+    spark = df.sparkSession
+    broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
+
+    def get_disputed_region(latitude, longitude):
+        point = get_point(longitude=longitude, latitude=latitude)
+        for _, row in broadcasted_admin_boundaries.value.iterrows():
+            if row.geometry.contains(point):
+                return row.get("name")
+        return None
+
+    get_disputed_region_udf = f.udf(get_disputed_region, StringType())
+
+    if admin_boundaries is None:
+        df = df.withColumn("disputed_region", f.lit(None))
+        df = df.withColumn(
+            "disputed_region", get_disputed_region_udf(df["latitude"], df["longitude"])
+        )
+
+    return df
+
+
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
-    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
     spark = get_spark_session()
     master = spark.read.csv(file_url_master, header=True)
-    reference = spark.read.csv(file_url_reference, header=True)
-    df_bronze = master.join(reference, how="left", on="school_id_giga")
+    # reference = spark.read.csv(file_url_reference, header=True)
+    # df_bronze = master.join(reference, how="left", on="school_id_giga")
 
     # df = spark.read.csv(file_url, header=True)
     # df = create_bronze_layer_columns(df)
     # df.show()
 
-    # Create DataFrame
-    # data = [(i, 1) for i in range(10)]
-    # df = spark.createDataFrame(data, ["id", "code"])
-    # df.show()
-    columnMapping = {
-        "school_id_govt": "id",
-        "school_name": "code",
-    }
-    # df = column_mapping_rename(df, columnMapping)
-    # df = impute_geolocation_columns(df)
-    df_bronze = df_bronze.sort("school_name").limit(30)
-    df = df_bronze.select(
+    # df = master.filter(master["admin1"] == "Rondônia")
+    df = master.filter(master["admin1"] == "São Paulo")
+    df = df.select(
         [
             "school_id_giga",
             "school_id_govt",
@@ -264,59 +414,42 @@ if __name__ == "__main__":
             "longitude",
         ]
     )
-    df = df.withColumn("school_name", f.trim(f.col("school_name")))
-    df = df.filter(f.col("school_id_govt") == "P12001")
-    df = df.withColumn("latitude", f.lit(17.5066649))
-    df = create_school_id_giga(df)
+    # df = df.withColumn("latitude", f.lit(32.618))
+    # df = df.withColumn("longitude", f.lit(78.576))
+    df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+
+    # df = df.withColumn("school_name", f.trim(f.col("school_name")))
+    # df = df.withColumn("latitude", f.lit(17.5066649))
+    # df = create_school_id_giga(df)
+    # df = df.filter(f.col("school_id_giga") == f.col("school_id_giga_test"))
+    # df = is_not_within_country(df=df, country_code_iso3="GIN")
+
+    # df = df.withColumn("country_code_iso3", f.lit("BRA"))
+    # df = df.withColumn("admin1_test", get_admin1(f.col("latitude"), f.col("longitude"), f.col("country_code_iso3")))
+
+    # grouped_df = df.groupBy("admin1").agg(f.count("*").alias("row_count"))
+    # grouped_df.orderBy(grouped_df["row_count"].desc()).show()
     df.show()
+    print(df.count())
 
-    # print(len(df.columns))
-    # list_inventory = [
-    # "school_id_giga",
-    # "school_id_govt",
-    # "school_name",
-    # "school_establishment_year",
-    # "latitude",
-    # "longitude",
-    # "education_level",
-    # "education_level_govt",
-    # "connectivity_govt",
-    # "connectivity_govt_ingestion_timestamp",
-    # "connectivity_govt_collection_year",
-    # "download_speed_govt",
-    # "download_speed_contracted",
-    # "connectivity_type_govt",
-    # "admin1",
-    # "admin2",
-    # "school_area_type",
-    # "school_funding_type",
-    # "num_computers",
-    # "num_computers_desired",
-    # "num_teachers",
-    # "num_adm_personnel",
-    # "num_students",
-    # "num_classroom",
-    # "num_latrines",
-    # "computer_lab",
-    # "electricity_availability",
-    # "electricity_type",
-    # "water_availability",
-    # "school_data_source",
-    # "school_data_collection_year",
-    # "school_data_collection_modality",
-    # "school_id_govt_type",
-    # "school_address",
-    # "is_school_open",
-    # "school_location_ingestion_timestamp",
-    # ]
+    test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
+    test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
+    test = add_disputed_region_column(df=test)
+    test.show()
 
-    # for col in list_inventory:
-    #     if col in df.columns:
-    #         print("ok")
-    #     else:
-    #         print(col)
-    # df.show()
-    # df = df.limit(10)
+    # test = test.filter(test["admin2"] != test["admin21"])
+    # test.show()
+
+    # admin1_boundaries = get_admin1_boundaries(country_code_iso3="BRA")
+    # latitude = -8.758459
+    # longitude = -63.85401
+    # print(get_admin1_columns(latitude=latitude, longitude=longitude, admin1_boundaries=admin1_boundaries))
+
+    # print(get_admin1_columns(-8.758459, -63.85401, get_admin1_boundaries("BRA")))
+    # create_admin1_columns(-8.758459, -63.85401, "BRA")
+    # create_admin1_columns(8.758459, -63.85401, "BRA")
+    # create_admin1_columns(8.758459, -63.85401, "BRI")
 
     # import json
 
