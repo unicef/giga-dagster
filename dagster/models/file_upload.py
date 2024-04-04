@@ -25,6 +25,9 @@ class FileUpload(BaseModel):
     column_to_schema_mapping: Mapped[dict] = mapped_column(
         JSON, nullable=False, server_default="{}"
     )
+    column_license: Mapped[dict] = mapped_column(
+        JSON, nullable=False, server_default="{}"
+    )
 
     @hybrid_property
     def upload_path(self) -> str:
