@@ -20,6 +20,6 @@ datahub_update_access_schedule = ScheduleDefinition(
 
 datahub_ingest_coverage_notebooks_schedule = ScheduleDefinition(
     job=datahub__ingest_coverage_notebooks_from_github_job,
-    cron_schedule="*0 0 1 * *",  # monthly
+    cron_schedule="0 0 1 * *",  # monthly
     default_status=settings.DEFAULT_SCHEDULE_STATUS,
 )
