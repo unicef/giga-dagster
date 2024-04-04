@@ -157,6 +157,7 @@ def staging_step(
             staging = staging.union(existing_file)
             context.log.info(f"{staging.count()=}")
 
+        staging = transform_types(staging, schema_name, context)
         staging = compute_row_hash(staging)
         context.log.info(f"Full {staging.count()=}")
         staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
