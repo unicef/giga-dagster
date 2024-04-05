@@ -22,6 +22,7 @@ from pyspark import sql
 from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
+from src.utils.datahub.emit_lineage import emit_lineage
 from src.utils.datahub.ingest_azure_ad import ingest_azure_ad_to_datahub_pipeline
 from src.utils.datahub.update_policies import update_policies
 from src.utils.op_config import FileConfig
@@ -279,6 +280,7 @@ def datahub_emit_metadata_with_exception_catcher(
             schema_reference=schema_reference,
             df_failed=df_failed,
         )
+        emit_lineage(context=context)
         if schema_reference is not None:
             context.log.info("EMITTING COLUMN METADATA...")
             column_descriptions = get_schema_column_descriptions(
