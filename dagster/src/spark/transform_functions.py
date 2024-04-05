@@ -138,7 +138,7 @@ h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
 def column_mapping_rename(
-    df: sql.DataFrame, column_mapping: dict[str | None, str | None]
+    df: sql.DataFrame, column_mapping: dict[str, str]
 ) -> tuple[sql.DataFrame, dict[str, str]]:
     column_mapping_filtered = {
         k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)

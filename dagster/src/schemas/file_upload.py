@@ -16,18 +16,21 @@ class FileUploadConfig(Config):
     dataset: str
     source: str = Field(None)
     original_filename: str
-    column_to_schema_mapping: dict[str, str | None]
+    column_to_schema_mapping: dict[str, str]
+    column_license: dict[str, str]
     upload_path: str
 
     class Config:
         orm_mode = True
 
-    @classmethod
     @validator("created", pre=True)
     def parse_created(cls, v: datetime):
         return v.isoformat()
 
-    @classmethod
     @validator("column_to_schema_mapping", pre=True)
     def parse_column_to_schema_mapping(cls, v: str):
+        return json.loads(v)
+
+    @validator("column_license", pre=True)
+    def parse_column_license(cls, v: str):
         return json.loads(v)
