@@ -226,7 +226,7 @@ def adhoc__master_dq_checks_summary(
     yield Output(df_summary, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
     config: FileConfig,

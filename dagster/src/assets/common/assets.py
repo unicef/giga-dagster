@@ -30,7 +30,7 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def manual_review_failed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -79,7 +79,7 @@ def manual_review_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def silver(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -151,7 +151,7 @@ def silver(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def master(
     context: OpExecutionContext,
     silver: sql.DataFrame,
@@ -211,7 +211,7 @@ def master(
     )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def reference(
     context: OpExecutionContext,
     silver: sql.DataFrame,

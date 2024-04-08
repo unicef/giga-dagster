@@ -79,7 +79,7 @@ def adhoc__qos_transforms(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def adhoc__publish_qos_to_gold(
     context: OpExecutionContext,
     adhoc__qos_transforms: sql.DataFrame,
