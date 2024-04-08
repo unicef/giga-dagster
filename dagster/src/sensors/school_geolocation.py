@@ -120,10 +120,12 @@ def school_master_geolocation__successful_manual_checks_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.dq_passed_folder}/{SCHOOL_DATASET_TYPE}"
+    source_directory = (
+        f"{constants.staging_folder}/passing-row-ids/{SCHOOL_DATASET_TYPE}"
+    )
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
+        source_directory, recursive=False
     ):
         if file_data.is_directory:
             continue
@@ -139,25 +141,19 @@ def school_master_geolocation__successful_manual_checks_sensor(
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
-            "manual_review_passed_rows": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=str(path),
-                metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
-            ),
             "silver": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.SILVER,
             ),
-            "gold_master": OpDestinationMapping(
+            "master": OpDestinationMapping(
                 source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
                 metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
-            "gold_reference": OpDestinationMapping(
+            "reference": OpDestinationMapping(
                 source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
                 destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
                 metastore_schema="school_reference",
