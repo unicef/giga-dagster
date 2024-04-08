@@ -1,7 +1,10 @@
 from decimal import Decimal
+from difflib import SequenceMatcher
 
 from h3 import geo_to_h3
 from pyspark.sql.functions import udf
+
+from src.spark.config_expectations import config
 
 from .udf_dependencies import (
     boundary_distance,
@@ -64,3 +67,14 @@ def is_not_within_country_check_udf_factory(
         return out
 
     return is_not_within_country_check
+
+
+@udf
+def has_similar_name_check_udf(school_name, school_name_2):
+    if (
+        school_name != school_name_2
+        and SequenceMatcher(None, school_name, school_name_2).ratio()
+        > config.SIMILARITY_RATIO_CUTOFF
+    ):
+        return 1
+    return 0
