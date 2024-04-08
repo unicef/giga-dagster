@@ -55,20 +55,20 @@ def manual_review_failed_rows(
         ~staging[primary_key].isin(passing_row_ids["approved_rows"])
     )
 
-    # try:
-    #     schema_reference = get_schema_columns_datahub(
-    #         spark.spark_session, config.metastore_schema
-    #     )
-    #     emit_metadata_to_datahub(
-    #         context,
-    #         schema_reference=schema_reference,
-    #         country_code=config.filename_components.country_code,
-    #         dataset_urn=config.datahub_destination_dataset_urn,
-    #     )
-    # except Exception as error:
-    #     context.log.error(f"Error on Datahub Emit Metadata: {error}")
-    #     log_op_context(context)
-    #     sentry_sdk.capture_exception(error=error)
+    try:
+        schema_reference = get_schema_columns_datahub(
+            spark.spark_session, config.metastore_schema
+        )
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
 
     yield Output(
         df_failed,
