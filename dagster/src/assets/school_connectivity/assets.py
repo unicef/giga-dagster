@@ -214,3 +214,9 @@ def qos_school_connectivity_gold(
 
     emit_metadata_to_datahub(context, df=qos_school_connectivity_dq_passed_rows)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})
+
+
+# Get date key, date send in, date format
+# Send date request in send_in, following date_format
+# How will you know the increment value for the date? e.g. hourly, daily, etc (DAY LEVEL PARTITION)
+# How will you keep track of backfill status without a separate partitioned ingestion pipeline? (JUST TODAY'S DATE)
