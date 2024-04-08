@@ -41,6 +41,18 @@ def get_schema_columns(spark: SparkSession, schema_name: str):
     ]
 
 
+def get_schema_columns_master(spark: SparkSession, schema_name: str):
+    df = get_schema_table(spark, schema_name)
+    df = df.filter(df["master_reference"] == "master")
+    return [row.name for row in df.collect()]
+
+
+def get_schema_columns_reference(spark: SparkSession, schema_name: str):
+    df = get_schema_table(spark, schema_name)
+    df = df.filter(df["master_reference"] == "reference")
+    return [row.name for row in df.collect()]
+
+
 def get_schema_columns_datahub(spark: SparkSession, schema_name: str):
     df = get_schema_table(spark, schema_name)
     return [
