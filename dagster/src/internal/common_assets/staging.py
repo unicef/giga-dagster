@@ -100,10 +100,13 @@ def staging_step(
         staging_dt = DeltaTable.forName(spark, staging_table_name)
         staging_detail = staging_dt.detail().toDF()
         staging_last_modified = (
-            staging_detail.select("lastModified").first().lastModified
+            staging_detail.select("lastModified")
+            .first()
+            .lastModified  ## @QUESTION: ASK KENNETH ABOUT THIS
         )
         staging = staging_dt.alias("staging").toDF()
 
+        ## @QUESTION: This will not write if get_files_for_review is empty. review code
         files_for_review = get_files_for_review(
             adls_file_client,
             config,
@@ -129,7 +132,6 @@ def staging_step(
                 execute_query_with_error_handler(
                     spark, query, staging_tier_schema_name, country_code, context
                 )
-
             staging = staging_dt.toDF()
     else:
         staging = upstream_df
