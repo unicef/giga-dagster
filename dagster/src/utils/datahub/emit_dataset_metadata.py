@@ -19,6 +19,8 @@ from datahub.metadata.schema_classes import (
 from pyspark import sql
 from src.constants import constants
 from src.settings import settings
+from src.utils.datahub.ingest_azure_ad import ingest_azure_ad_to_datahub_pipeline
+from src.utils.datahub.update_policies import update_policies
 from src.utils.op_config import FileConfig
 
 from dagster import OpExecutionContext, version
@@ -246,13 +248,13 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    # context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
-    # ingest_azure_ad_to_datahub_pipeline()
-    # context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
-    #
-    # context.log.info("UPDATING POLICIES IN DATAHUB...")
-    # update_policies()
-    # context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
+    context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
+    ingest_azure_ad_to_datahub_pipeline()
+    context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
+
+    context.log.info("UPDATING POLICIES IN DATAHUB...")
+    update_policies()
+    context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
 
     return context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}."
