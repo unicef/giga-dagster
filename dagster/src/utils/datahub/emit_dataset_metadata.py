@@ -3,6 +3,8 @@ from datetime import datetime
 
 import country_converter as cc
 import datahub.emitter.mce_builder as builder
+import sentry_sdk
+from dagster_pyspark import PySparkResource
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -19,9 +21,13 @@ from datahub.metadata.schema_classes import (
 from pyspark import sql
 from src.constants import constants
 from src.settings import settings
+from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
+from src.utils.datahub.emit_lineage import emit_lineage
 from src.utils.datahub.ingest_azure_ad import ingest_azure_ad_to_datahub_pipeline
 from src.utils.datahub.update_policies import update_policies
 from src.utils.op_config import FileConfig
+from src.utils.schema import get_schema_column_descriptions
+from src.utils.sentry import log_op_context
 
 from dagster import OpExecutionContext, version
 
@@ -174,11 +180,11 @@ def set_domain(context: OpExecutionContext):
     return domain_urn
 
 
-def set_tag_mutation_query(country_name, dataset_urn):
+def addTag_query(tag_key: str, dataset_urn: str):
     query = f"""
         mutation {{
             addTag(input:{{
-                tagUrn: "urn:li:tag:{country_name}",
+                tagUrn: "urn:li:tag:{tag_key}",
                 resourceUrn: "{dataset_urn}"
             }})
         }}
@@ -191,8 +197,8 @@ def emit_metadata_to_datahub(
     context: OpExecutionContext,
     country_code: str,
     dataset_urn: str,
-    schema_reference: sql.DataFrame | list[tuple] = None,
-    df_failed: sql.DataFrame = None,
+    schema_reference: None | sql.DataFrame | list[tuple] = None,
+    df_failed: None | sql.DataFrame = None,
 ):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -240,9 +246,7 @@ def emit_metadata_to_datahub(
     datahub_graph_client.execute_graphql(query=domain_query)
 
     country_name = identify_country_name(country_code=country_code)
-    tag_query = set_tag_mutation_query(
-        country_name=country_name, dataset_urn=dataset_urn
-    )
+    tag_query = addTag_query(tag_key=country_name, dataset_urn=dataset_urn)
     context.log.info(tag_query)
 
     context.log.info("EMITTING TAG METADATA")
@@ -259,6 +263,42 @@ def emit_metadata_to_datahub(
     return context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}."
     )
+
+
+def datahub_emit_metadata_with_exception_catcher(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    schema_reference: None | sql.DataFrame | list[tuple] = None,
+    df_failed: None | sql.DataFrame = None,
+):
+    try:
+        emit_metadata_to_datahub(
+            context=context,
+            country_code=config.filename_components.country_code,
+            dataset_urn=config.datahub_destination_dataset_urn,
+            schema_reference=schema_reference,
+            df_failed=df_failed,
+        )
+        emit_lineage(context=context)
+        if schema_reference is not None:
+            context.log.info("EMITTING COLUMN METADATA...")
+            column_descriptions = get_schema_column_descriptions(
+                spark.spark_session, config.metastore_schema
+            )
+            column_licenses = get_column_licenses(config=config)
+            context.log.info(column_licenses)
+            add_column_metadata(
+                dataset_urn=config.datahub_destination_dataset_urn,
+                column_licenses=column_licenses,
+                column_descriptions=column_descriptions,
+            )
+        else:
+            context.log.info("NO SCHEMA TO EMIT for this step.")
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
 
 
 if __name__ == "__main__":

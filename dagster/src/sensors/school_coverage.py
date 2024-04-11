@@ -92,7 +92,7 @@ def school_master_coverage__raw_file_uploads_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
-            dq_target_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{stem}{path.suffix}",
+            dq_target_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}{path.suffix}",
         )
 
         context.log.info(f"FILE: {path}")

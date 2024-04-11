@@ -36,7 +36,7 @@ def datahub_domains(context: OpExecutionContext):
 @asset
 def datahub_tags(context: OpExecutionContext):
     context.log.info("CREATING TAGS IN DATAHUB")
-    create_tags()
+    create_tags(context)
     yield Output(None)
 
 
