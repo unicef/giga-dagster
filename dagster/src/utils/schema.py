@@ -53,7 +53,14 @@ def get_schema_columns_reference(spark: SparkSession, schema_name: str):
     return [row.name for row in df.collect()]
 
 
-def get_schema_columns_datahub(spark: SparkSession, schema_name: str):
+def get_schema_column_descriptions(spark: SparkSession, schema_name: str) -> list[dict]:
+    df = get_schema_table(spark, schema_name)
+    return [
+        {"column": row.name, "description": row.description} for row in df.collect()
+    ]
+
+
+def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:
     df = get_schema_table(spark, schema_name)
     return [
         (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())

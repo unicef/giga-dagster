@@ -1,4 +1,3 @@
-import sentry_sdk
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
@@ -8,7 +7,9 @@ from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.datahub.emit_dataset_metadata import (
+    datahub_emit_metadata_with_exception_catcher,
+)
 from src.utils.delta import (
     build_deduped_merge_query,
     execute_query_with_error_handler,
@@ -24,7 +25,6 @@ from src.utils.schema import (
     get_schema_columns_master,
     get_schema_columns_reference,
 )
-from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -51,32 +51,22 @@ def manual_review_failed_rows(
     )
 
     staging = DeltaTable.forName(spark, staging_table_name).alias("staging").toDF()
+
     df_failed = staging.filter(
         ~staging[primary_key].isin(passing_row_ids["approved_rows"])
     )
 
-    try:
-        schema_reference = get_schema_columns_datahub(
-            spark.spark_session, config.metastore_schema
-        )
-        emit_metadata_to_datahub(
-            context,
-            schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
-            dataset_urn=config.datahub_destination_dataset_urn,
-        )
-    except Exception as error:
-        context.log.error(f"Error on Datahub Emit Metadata: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
-
-    yield Output(
-        df_failed,
-        metadata={
-            **get_output_metadata(config),
-            "preview": get_table_preview(df_failed),
-        },
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
     )
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+    yield Output(df_failed, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
@@ -127,20 +117,16 @@ def silver(
     else:
         df_passed.write.format("delta").mode("append").saveAsTable(silver_table_name)
 
-    try:
-        schema_reference = get_schema_columns_datahub(
-            spark.spark_session, config.metastore_schema
-        )
-        emit_metadata_to_datahub(
-            context,
-            schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
-            dataset_urn=config.datahub_destination_dataset_urn,
-        )
-    except Exception as error:
-        context.log.error(f"Error on Datahub Emit Metadata: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
+    )
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
 
     yield Output(
         None,
@@ -190,21 +176,15 @@ def master(
     else:
         silver.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
-    try:
-        schema_reference = get_schema_columns_datahub(
-            spark.spark_session, config.metastore_schema
-        )
-        emit_metadata_to_datahub(
-            context,
-            schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
-            dataset_urn=config.datahub_destination_dataset_urn,
-        )
-    except Exception as error:
-        context.log.error(f"Error on Datahub Emit Metadata: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
-
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
     yield Output(
         None,
         metadata={**get_output_metadata(config), "preview": get_table_preview(silver)},
@@ -250,20 +230,15 @@ def reference(
     else:
         silver.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
-    try:
-        schema_reference = get_schema_columns_datahub(
-            spark.spark_session, config.metastore_schema
-        )
-        emit_metadata_to_datahub(
-            context,
-            schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
-            dataset_urn=config.datahub_destination_dataset_urn,
-        )
-    except Exception as error:
-        context.log.error(f"Error on Datahub Emit Metadata: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context,
+        schema_reference=schema_reference,
+        country_code=config.filename_components.country_code,
+        dataset_urn=config.datahub_destination_dataset_urn,
+    )
 
     yield Output(
         None,

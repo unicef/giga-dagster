@@ -1,10 +1,14 @@
 import requests
 from loguru import logger
 
+from dagster import OpExecutionContext
 from src.settings import settings
+from src.utils.logger import get_context_with_fallback_logger
 
 
-def list_ipynb_from_github_repo(owner: str, repo: str, path: str):
+def list_ipynb_from_github_repo(
+    owner: str, repo: str, path: str, context: OpExecutionContext = None
+):
     token = settings.GITHUB_ACCESS_TOKEN
 
     api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
@@ -32,9 +36,12 @@ def list_ipynb_from_github_repo(owner: str, repo: str, path: str):
                         "file_size": f"{round(content['size']/1024,1)} KiB",
                     }
                 )
+        get_context_with_fallback_logger(context).info(ipynb_file_list)
         return ipynb_file_list
     else:
-        logger.error(f"Failed to retrieve contents: {response.status_code}")
+        get_context_with_fallback_logger(context).error(
+            f"Failed to retrieve contents: Error {response.status_code}"
+        )
 
 
 if __name__ == "__main__":

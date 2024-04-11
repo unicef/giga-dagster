@@ -2,6 +2,7 @@ import json
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from src.settings import settings
+from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
@@ -35,7 +36,7 @@ def datahub_domains(context: OpExecutionContext):
 @asset
 def datahub_tags(context: OpExecutionContext):
     context.log.info("CREATING TAGS IN DATAHUB")
-    create_tags()
+    create_tags(context)
     yield Output(None)
 
 
@@ -60,11 +61,25 @@ def github_coverage_workflow_notebooks(context: OpExecutionContext):
     owner = "unicef"
     repo = "coverage_workflow"
     path = "Notebooks/"
-    notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path)
+    notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path, context)
 
     for notebook_metadata in notebook_metadata_list:
         run_notebook_ingestion = NotebookIngestionAction(
             notebook_metadata=notebook_metadata
         )
         run_notebook_ingestion()
+    yield Output(None)
+
+
+@asset
+def datahub_platform_metadata(context: OpExecutionContext):
+    context.log.info("ADDING PLATFORM METADATA IN DATAHUB...")
+    context.log.info("Delta Lake")
+    add_platform_metadata(
+        platform="deltaLake",
+        display_name="Delta Lake",
+        logo_url="https://delta.io/static/3bd8fea55ff57287371f4714232cd4ef/ac8f8/delta-lake-logo.webp",
+        filepath_delimiter="/",
+    )
+    context.log.info("PLATFORM METADATA ADDED TO DATAHUB")
     yield Output(None)

@@ -96,7 +96,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
-            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{stem}.csv",
+            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
         )
 
         context.log.info(f"FILE: {path}")
