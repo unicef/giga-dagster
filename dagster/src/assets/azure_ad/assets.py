@@ -5,7 +5,7 @@ from itertools import product
 import requests
 from country_converter import CountryConverter
 from src.internal.graph_client import graph_credentials, graph_endpoint, graph_scopes
-from text_unidecode import unidecode
+from unidecode import unidecode
 
 from dagster import OpExecutionContext, asset
 
