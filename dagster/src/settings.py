@@ -5,6 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseSettings, PostgresDsn
 
+from dagster import DefaultScheduleStatus
+
 
 class Environment(StrEnum):
     LOCAL = "local"
@@ -60,6 +62,8 @@ class Settings(BaseSettings):
     INGESTION_DB_PORT: int = 5432
     SPARK_DRIVER_CORES: str = "2"
     SPARK_DRIVER_MEMORY: str = "2g"
+    LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
+    WAREHOUSE_USERNAME: str = ""
 
     # Derived settings
     @property
@@ -111,10 +115,20 @@ class Settings(BaseSettings):
         return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
 
     @property
-    def SPARK_WAREHOUSE_PATH(self) -> str:
+    def DEFAULT_SCHEDULE_STATUS(self) -> str:
         return (
-            "warehouse-local" if self.PYTHON_ENV == Environment.LOCAL else "warehouse"
+            DefaultScheduleStatus.RUNNING
+            if self.IN_PRODUCTION
+            else DefaultScheduleStatus.STOPPED
         )
+
+    @property
+    def SPARK_WAREHOUSE_PATH(self) -> str:
+        if self.PYTHON_ENV == Environment.LOCAL:
+            if self.WAREHOUSE_USERNAME:
+                return f"warehouse-local-{self.WAREHOUSE_USERNAME}"
+            return "warehouse-local"
+        return "warehouse"
 
     @property
     def SPARK_WAREHOUSE_DIR(self) -> str:

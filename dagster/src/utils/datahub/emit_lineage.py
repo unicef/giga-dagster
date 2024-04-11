@@ -3,10 +3,10 @@ from datahub.emitter.rest_emitter import DatahubRestEmitter
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
-from dagster import OutputContext
+from dagster import OpExecutionContext
 
 
-def emit_lineage(context: OutputContext):
+def emit_lineage(context: OpExecutionContext):
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
@@ -16,7 +16,7 @@ def emit_lineage(context: OutputContext):
     context.log.info(f"step: {step}")
 
     if "raw" not in step:
-        config = FileConfig(**context.step_context.op_config)
+        config = FileConfig(**context.get_step_execution_context().op_config)
 
         upstream_dataset_urn = config.datahub_source_dataset_urn
         context.log.info(f"upstream_dataset_urn: {upstream_dataset_urn}")
@@ -35,4 +35,4 @@ def emit_lineage(context: OutputContext):
         context.log.info("SUCCESS. LINEAGE EMITTED")
 
     else:
-        context.log.info("NO LINEAGE SINCE RAW STEP. NO UPSTREAM DATASETS.")
+        context.log.info("NO LINEAGE SINCE RAW STEP HAS NO UPSTREAM DATASETS.")

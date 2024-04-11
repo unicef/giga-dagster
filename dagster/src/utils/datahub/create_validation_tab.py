@@ -4,6 +4,7 @@ from datetime import datetime
 from functools import wraps
 
 import loguru
+import sentry_sdk
 from datahub.emitter import mce_builder as builder
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -22,6 +23,9 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
 from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.builders import build_dataset_urn
+from src.utils.op_config import FileConfig
+from src.utils.sentry import log_op_context
 
 from dagster import OpExecutionContext
 
@@ -71,7 +75,7 @@ class EmitDatasetAssertionResults:
 
     @staticmethod
     def extract_assertion_info_of_column(column_dq_result: dict, dataset_urn: str):
-        if "column" in column_dq_result.keys():
+        if column_dq_result["column"] != "":
             field_urn = builder.make_schema_field_urn(
                 dataset_urn, field_path=column_dq_result["column"]
             )
@@ -145,6 +149,28 @@ class EmitDatasetAssertionResults:
             except Exception as error:
                 self.context.log.error(f"ERROR on Assertion Run: {error}")
         self.logger.info(f"Dataset URN: {self.dataset_urn}")
+
+
+def datahub_emit_assertions_with_exception_catcher(
+    context: OpExecutionContext,
+    config: FileConfig,
+    dq_summary_statistics: dict,
+):
+    try:
+        config = FileConfig(**context.get_step_execution_context().op_config)
+        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+
+        context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
+        emit_assertions = EmitDatasetAssertionResults(
+            dq_summary_statistics=dq_summary_statistics,
+            context=context,
+            dataset_urn=dq_target_dataset_urn,
+        )
+        emit_assertions()
+    except Exception as error:
+        context.log.error(f"Assertion Run ERROR: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
 
 
 if __name__ == "__main__":
