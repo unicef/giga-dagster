@@ -58,14 +58,14 @@ def tag_mutation_with_exception(
         )
         datahub_graph_client.execute_graphql(query=query)
     except Exception as error:
-        get_context_with_fallback_logger().error(error)
+        get_context_with_fallback_logger(context).error(error)
         try:
             query = createTag_query(
                 tag_key=tag_key, display_name=display_name, description=description
             )
             datahub_graph_client.execute_graphql(query=query)
         except Exception:
-            get_context_with_fallback_logger().error(error)
+            get_context_with_fallback_logger(context).error(error)
 
 
 def create_tags(context: OpExecutionContext = None):
