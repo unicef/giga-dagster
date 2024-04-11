@@ -74,10 +74,10 @@ class EmitDatasetAssertionResults:
         return self.context.log
 
     @staticmethod
-    def extract_assertion_info_of_column(column_dq_result: dict, dataset_urn: str):
-        if column_dq_result["column"] != "":
+    def extract_assertion_info_of_column(dq_check_result: dict, dataset_urn: str):
+        if dq_check_result["column"] != "":
             field_urn = builder.make_schema_field_urn(
-                dataset_urn, field_path=column_dq_result["column"]
+                dataset_urn, field_path=dq_check_result["column"]
             )
             dynamic_info = {
                 "scope": DatasetAssertionScope.DATASET_COLUMN,
@@ -92,7 +92,7 @@ class EmitDatasetAssertionResults:
         info = {
             "operator": AssertionStdOperator._NATIVE_,
             "dataset": dataset_urn,
-            "nativeType": column_dq_result["assertion"],
+            "nativeType": dq_check_result["assertion"],
         } | dynamic_info
 
         assertion_of_column = AssertionInfo(
@@ -107,19 +107,19 @@ class EmitDatasetAssertionResults:
 
     @_log_progress("validation tab")
     def upsert_validation_tab(self):
-        for column_dq_result in self.dq_summary_statistics:
+        for dq_check_result in self.dq_summary_statistics:
             col_assertion_info = self.extract_assertion_info_of_column(
-                column_dq_result=column_dq_result, dataset_urn=self.dataset_urn
+                dq_check_result=dq_check_result, dataset_urn=self.dataset_urn
             )
             assertion_urn = builder.make_assertion_urn(
-                f"{column_dq_result['assertion']}_desc_{column_dq_result['description']}"
+                f"{dq_check_result['assertion']}_desc_{dq_check_result['description']}"
             )
             assertion_data_platform_instance = DataPlatformInstance(
                 platform=builder.make_data_platform_urn("spark")
             )
             assertion_result = (
                 AssertionResultType.SUCCESS
-                if float(column_dq_result["percent_failed"]) == 0
+                if float(dq_check_result["percent_failed"]) == 0
                 else AssertionResultType.FAILURE
             )
             assertion_run = AssertionRunEvent(
@@ -132,7 +132,7 @@ class EmitDatasetAssertionResults:
                     type=assertion_result,
                     externalUrl=settings.DATAHUB_METADATA_SERVER_URL,
                     nativeResults={
-                        str(k): str(v) for (k, v) in column_dq_result.items()
+                        str(k): str(v) for (k, v) in dq_check_result.items()
                     },
                 ),
             )
