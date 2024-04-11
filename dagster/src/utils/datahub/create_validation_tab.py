@@ -117,6 +117,11 @@ class EmitDatasetAssertionResults:
             assertion_data_platform_instance = DataPlatformInstance(
                 platform=builder.make_data_platform_urn("spark")
             )
+            assertion_result = (
+                AssertionResultType.SUCCESS
+                if float(column_dq_result["percent_failed"]) == 0
+                else AssertionResultType.FAILURE
+            )
             assertion_run = AssertionRunEvent(
                 timestampMillis=int(datetime.now().timestamp() * 1000),
                 assertionUrn=assertion_urn,
@@ -124,7 +129,7 @@ class EmitDatasetAssertionResults:
                 runId=str(uuid.uuid4()),
                 status=AssertionRunStatus.COMPLETE,
                 result=AssertionResult(
-                    type=AssertionResultType.SUCCESS,
+                    type=assertion_result,
                     externalUrl=settings.DATAHUB_METADATA_SERVER_URL,
                     nativeResults={
                         str(k): str(v) for (k, v) in column_dq_result.items()
