@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     SPARK_DRIVER_CORES: str = "2"
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
+    WAREHOUSE_USERNAME: str = ""
 
     # Derived settings
     @property
@@ -120,9 +121,11 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
-        return (
-            "warehouse-local" if self.PYTHON_ENV == Environment.LOCAL else "warehouse"
-        )
+        if self.PYTHON_ENV == Environment.LOCAL:
+            if self.WAREHOUSE_USERNAME:
+                return f"warehouse-local-{self.WAREHOUSE_USERNAME}"
+            return "warehouse-local"
+        return "warehouse"
 
     @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
