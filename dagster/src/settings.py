@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
+    AAD_B2C_CLIENT_ID: str = ""
+    AAD_B2C_CLIENT_SECRET: str = ""
+    AAD_B2C_TENANT_ID: str = ""
 
     # Derived settings
     @property
