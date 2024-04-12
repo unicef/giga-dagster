@@ -22,12 +22,12 @@ jobs:
                 arguments: add bitnami https://charts.bitnami.com/bitnami
                 namespace: $(kubernetesNamespace)
 
-            - task: Kubernetes@1
-              displayName: Force restart Spark statefulset
+            - task: HelmDeploy@0
+              displayName: Helm uninstall Spark
               inputs:
                 namespace: $(kubernetesNamespace)
-                command: rollout
-                arguments: restart statefulset spark-master
+                command: uninstall
+                arguments: spark
 
             - task: HelmDeploy@0
               displayName: Helm deploy Spark
