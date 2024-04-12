@@ -119,7 +119,7 @@ class EmitDatasetAssertionResults:
             )
             assertion_result = (
                 AssertionResultType.SUCCESS
-                if float(dq_check_result["percent_failed"]) == 0
+                if dq_check_result["dq_remarks"] == "pass"
                 else AssertionResultType.FAILURE
             )
             assertion_run = AssertionRunEvent(
