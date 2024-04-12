@@ -17,6 +17,7 @@ variables:
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
   azureEmailConnectionString: $(AZURE_EMAIL_CONNECTION_STRING)
   azureEmailSender: $(AZURE_EMAIL_SENDER)
+  azureAdTenantId: $(AZURE_TENANT_ID)
   emailRendererBearerToken: $(EMAIL_RENDERER_BEARER_TOKEN)
   emailTestRecipients: $(EMAIL_TEST_RECIPIENTS)
   emailRendererServiceUrl: $(EMAIL_RENDERER_SERVICE_URL)
