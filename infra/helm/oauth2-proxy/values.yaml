@@ -15,6 +15,7 @@ config:
   clientID: ""
   # OAuth client secret
   clientSecret: ""
+  tenantId: ""
 
   clientIdRef:
     secretRef: ""
@@ -22,7 +23,9 @@ config:
   clientSecretRef:
     secretRef: ""
     secretKey: AZURE_CLIENT_SECRET
-  tenantId: ""
+  tenantIdRef:
+    secretRef: ""
+    secretKey: AZURE_TENANT_ID
 
   # Create a new secret with the following command
   # openssl rand -base64 32 | head -c 32 | base64
@@ -432,7 +435,7 @@ extraObjects: [ ]
   # - apiVersion: secrets-store.csi.x-k8s.io/v1
   #   kind: SecretProviderClass
   #   metadata:
-  #     name: oauth2-proxy-secrets-store
+#     name: oauth2-proxy-secrets-store
 #   spec:
 #     provider: aws
 #     parameters:

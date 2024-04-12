@@ -39,13 +39,10 @@ jobs:
                     AZURE_SAS_TOKEN: "$(azureSasToken)"
                     AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                     AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-                    AUTH_OIDC_REDIRECT_URL: "$(datahubAzureAdRedirectUrl)"
-                    AUTH_OIDC_CLIENT_ID: "$(azureAdClientId)"
-                    AUTH_OIDC_TENANT_ID: "$(azureAdTenantId)"
-                    AUTH_OIDC_CLIENT_SECRET: "$(datahubAzureAdClientSecret)"
-                    AAD_B2C_CLIENT_ID: "$(aadB2cClientId)"
-                    AAD_B2C_CLIENT_SECRET: "$(aadB2cClientSecret)"
-                    AAD_B2C_TENANT_ID: "$(aadB2cTenantId)"
+                    DATAHUB_OIDC_REDIRECT_URL: "$(datahubOidcRedirectUrl)"
+                    DATAHUB_OIDC_CLIENT_ID: "$(datahubOidcClientId)"
+                    DATAHUB_OIDC_CLIENT_SECRET: "$(datahubOidcClientSecret)"
+                    DATAHUB_OIDC_TENANT_ID: "$(datahubOidcTenantId)"
                     DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                     DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
@@ -126,14 +123,10 @@ jobs:
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
                   stringData:
-                    AZURE_TENANT_ID: "$(azureAdTenantId)"
                     AZURE_CLIENT_ID: "$(azureAdClientId)"
                     AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-                    AZURE_REDIRECT_URI: "https://$(appDomain)/auth/callback"
+                    AZURE_TENANT_ID: "$(azureAdTenantId)"
                     cookie-secret: "$(cookieSecret)"
-                    client-id: "$(azureAdClientId)"
-                    client-secret: "$(azureAdClientSecret)"
-                    OAUTH2_PROXY_AZURE_TENANT: "$(azureAdTenantId)"
                     OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
                     OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 

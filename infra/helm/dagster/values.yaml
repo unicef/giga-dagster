@@ -73,7 +73,7 @@ dagsterWebserver:
     externalConfigmap: ~
 
   # Deploy a separate instance of the webserver in --read-only mode (can't launch runs, disable schedules, etc.)
-  enableReadOnly: true
+  enableReadOnly: false
 
   # The timeout in milliseconds to set on database statements sent to the Dagster instance.
   dbStatementTimeout: ~
@@ -164,7 +164,13 @@ dagsterWebserver:
   tolerations: [ ]
   podSecurityContext: { }
   securityContext: { }
-  resources: { }
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
 
   # Override the default K8s scheduler
   # schedulerName: ~

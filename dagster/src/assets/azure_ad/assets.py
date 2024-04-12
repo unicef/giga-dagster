@@ -17,7 +17,13 @@ def create_country_dataset_roles(context: OpExecutionContext):
     datasets = ["School Geolocation", "School Coverage", "School QoS"]
 
     roles = [
-        f"{country}-{dataset}" for country, dataset in product(country_names, datasets)
+        "Admin",
+        "Super",
+        "Regular",
+        *[
+            f"{country}-{dataset}"
+            for country, dataset in product(country_names, datasets)
+        ],
     ]
     role_requests = [
         {

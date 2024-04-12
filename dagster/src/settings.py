@@ -32,10 +32,10 @@ class Settings(BaseSettings):
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
-    AUTH_OIDC_REDIRECT_URL: str
-    AUTH_OIDC_CLIENT_ID: str
-    AUTH_OIDC_TENANT_ID: str
-    AUTH_OIDC_CLIENT_SECRET: str
+    DATAHUB_OIDC_REDIRECT_URL: str
+    DATAHUB_OIDC_CLIENT_ID: str
+    DATAHUB_OIDC_TENANT_ID: str
+    DATAHUB_OIDC_CLIENT_SECRET: str
     HIVE_METASTORE_URI: str
     AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
@@ -61,9 +61,6 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
-    AAD_B2C_CLIENT_ID: str = ""
-    AAD_B2C_CLIENT_SECRET: str = ""
-    AAD_B2C_TENANT_ID: str = ""
 
     # Derived settings
     @property
