@@ -298,15 +298,12 @@ def row_level_checks(
             CONFIG_NONEMPTY_COLUMNS[dataset_type],
             context,
         )
-    elif dataset_type == "coverage":
+    elif dataset_type in ["coverage", "coverage_itu"]:
         df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_fb":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)
         df = fb_percent_sum_to_100_check(df, context)
-        df = column_relation_checks(df, dataset_type, context)
-    elif dataset_type == "coverage_itu":
-        df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "qos":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)

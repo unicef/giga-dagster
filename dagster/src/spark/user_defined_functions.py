@@ -1,6 +1,8 @@
 from decimal import Decimal
 from difflib import SequenceMatcher
 
+import numpy as np
+import pandas as pd
 from h3 import geo_to_h3
 from pyspark.sql.functions import udf
 
@@ -16,7 +18,7 @@ from .udf_dependencies import (
 
 def get_decimal_places_udf_factory(precision: int) -> callable:
     @udf
-    def get_decimal_places(value) -> int:
+    def get_decimal_places(value) -> int | None:
         if value is None:
             return None
 
@@ -48,7 +50,7 @@ BOUNDARY_DISTANCE_THRESHOLD = 150
 def is_not_within_country_check_udf_factory(
     country_code_iso2: str,
     country_code_iso3: str,
-    geometry,
+    geometry: pd.Series | np.ndarray | pd.DataFrame,
 ) -> callable:
     @udf
     def is_not_within_country_check(latitude: float, longitude: float) -> int:
