@@ -26,9 +26,11 @@ from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
     duplicate_set_checks,
 )
+from src.data_quality_checks.geography import is_not_within_country
 from src.data_quality_checks.geometry import (
     duplicate_name_level_110_check,
     school_density_check,
+    similar_name_level_within_110_check,
 )
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
@@ -66,6 +68,9 @@ def aggregate_report_spark_df(
     )
     agg_df = agg_df.withColumn(
         "percent_passed", (f.col("count_passed") / f.col("count_overall")) * 100
+    )
+    agg_df = agg_df.withColumn(
+        "dq_remarks", f.when(f.col("count_failed") == 0, "pass").otherwise("fail")
     )
 
     # Processing for Human Readable Report
@@ -163,6 +168,7 @@ def aggregate_report_spark_df(
         "count_overall",
         "percent_failed",
         "percent_passed",
+        "dq_remarks",
     )
     report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
 
@@ -263,10 +269,10 @@ def row_level_checks(
             df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
         )
         df = precision_check(df, config.PRECISION, context)
-        # df = is_not_within_country(df, _country_code_iso3, context)
+        df = is_not_within_country(df, _country_code_iso3, context)
         df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
-        # df = similar_name_level_within_110_check(df, context)
+        df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(
             df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
         )
@@ -310,15 +316,15 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
     # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
-    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
-    file_url_qos = (
-        f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
-    )
+    # file_url_qos = (
+    #     f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
+    # )
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    # master = spark.read.csv(file_url_master, header=True)
+    master = spark.read.csv(file_url_master, header=True)
     # reference = spark.read.csv(file_url_reference, header=True)
-    qos = spark.read.csv(file_url_qos, header=True)
+    # qos = spark.read.csv(file_url_qos, header=True)
     # df_bronze = master.join(reference, how="left", on="school_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
@@ -329,8 +335,8 @@ if __name__ == "__main__":
     # df_bronze.show()
     # df = create_giga_school_id(df_bronze)
     # df.show()
-    qos.show()
-    df = row_level_checks(qos, "qos", "BRA")
+    # qos.show()
+    df = row_level_checks(master, "master", "BLZ")
     df.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
@@ -379,5 +385,5 @@ if __name__ == "__main__":
     df = aggregate_report_spark_df(spark=spark, df=df)
     df.show()
 
-    _json = aggregate_report_json(df, qos)
+    _json = aggregate_report_json(df, master)
     print(_json)
