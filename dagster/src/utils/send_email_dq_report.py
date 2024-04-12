@@ -1,4 +1,5 @@
 from datetime import timedelta
+from typing import Any
 
 import requests
 from loguru import logger
@@ -9,7 +10,7 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
 
-def send_email_dq_report(json):
+def send_email_dq_report(json: dict[str, Any]) -> None:
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
 
     res = requests.post(
@@ -34,7 +35,7 @@ def send_email_dq_report(json):
         "recipients": {
             "to": [
                 {"address": recipient} for recipient in settings.EMAIL_TEST_RECIPIENTS
-            ]
+            ],
         },
         "content": {
             "subject": "Giga Test Email",

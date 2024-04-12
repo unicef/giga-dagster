@@ -3,13 +3,14 @@ from urllib import parse
 
 import country_converter as cc
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
+
 from src.settings import settings
 
 
-def policy_mutation_query(country_name, group_urn):
+def policy_mutation_query(country_name: str, group_urn: str) -> str:
     datasets_urns_list = list_datasets_by_tag(tag=country_name)
 
-    query = f"""
+    return f"""
     mutation {{
         updatePolicy(
             urn: "urn:li:dataHubPolicy:{country_name}-viewer",
@@ -33,15 +34,13 @@ def policy_mutation_query(country_name, group_urn):
     }}
     """
 
-    return query
 
-
-def list_datasets_by_tag(tag):
+def list_datasets_by_tag(tag: str) -> str:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
-        )
+        ),
     )
 
     search_query = f"""query {{
@@ -60,25 +59,22 @@ def list_datasets_by_tag(tag):
     search_results = datahub_graph_client.execute_graphql(query=search_query)
     results = search_results["search"]["searchResults"]
 
-    urn_list = []
-    for result in results:
-        urn_list.append(f"{result['entity']['urn']}")
-
+    urn_list = [f"{result['entity']['urn']}" for result in results]
     return json.dumps(urn_list)
 
 
-def is_valid_country_name(country_name):
+def is_valid_country_name(country_name: str) -> bool:
     coco = cc.CountryConverter()
     country_list = list(coco.data["name_short"])
     return country_name in country_list
 
 
-def update_policies():
+def update_policies() -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
-        )
+        ),
     )
 
     list_allgroups_query = """
@@ -100,6 +96,7 @@ def update_policies():
 
         if is_valid_country_name(country_name):
             query = policy_mutation_query(
-                country_name=country_name, group_urn=group_urn
+                country_name=country_name,
+                group_urn=group_urn,
             )
             datahub_graph_client.execute_graphql(query=query)

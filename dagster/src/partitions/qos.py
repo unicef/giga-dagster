@@ -17,7 +17,7 @@ adhoc_qos_partitions_def = MultiPartitionsDefinition(
             fmt=constants.datetime_partition_key_format,
             cron_schedule="*/15 * * * *",
         ),
-    }
+    },
 )
 
 adhoc_qos_country_partitions_def = DynamicPartitionsDefinition(name="country")
@@ -27,5 +27,5 @@ adhoc_qos_dynamic_partitions_def = MultiPartitionsDefinition(
     {
         "country": adhoc_qos_country_partitions_def,
         "datetime": adhoc_qos_datetime_partitions_def,
-    }
+    },
 )

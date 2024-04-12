@@ -26,10 +26,12 @@ def manual_review_passed_rows(
     # table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'manual_review_passed_rows').split('/')[:-1]}/{table_name}",
 
     df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"], spark.spark_session
+        context.run_tags["dagster/run_key"],
+        spark.spark_session,
     )
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -53,10 +55,11 @@ def manual_review_failed_rows(
     # table_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{get_filepath(filepath, dataset_type, 'manual_review_failed_rows').split('/')[:-1]}/{table_name}",
 
     df = adls_file_client.download_csv_as_pandas_dataframe(
-        context.run_tags["dagster/run_key"]
+        context.run_tags["dagster/run_key"],
     )
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -84,7 +87,8 @@ def silver(
 
     if DeltaTable.isDeltaTable(spark.spark_session, silver_table_path):
         silver = adls_file_client.download_delta_table_as_delta_table(
-            silver_table_path, spark.spark_session
+            silver_table_path,
+            spark.spark_session,
         )
 
         silver = (
@@ -98,7 +102,8 @@ def silver(
             .execute()
         )
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -112,12 +117,14 @@ def silver(
 @multi_asset(
     outs={
         "master": AssetOut(
-            is_required=True, io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value
+            is_required=True,
+            io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
         ),
         "reference": AssetOut(
-            is_required=True, io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value
+            is_required=True,
+            io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
         ),
-    }
+    },
 )
 def gold(
     context: OpExecutionContext,
@@ -207,7 +214,8 @@ def gold(
 
     if DeltaTable.isDeltaTable(spark.spark_session, gold_master_table_path):
         master = adls_file_client.download_delta_table_as_delta_table(
-            gold_master_table_path, spark.spark_session
+            gold_master_table_path,
+            spark.spark_session,
         )
 
         master.alias("source").merge(
@@ -217,7 +225,8 @@ def gold(
 
     if DeltaTable.isDeltaTable(spark.spark_session, gold_reference_table_path):
         reference = adls_file_client.download_delta_table_as_delta_table(
-            gold_reference_table_path, spark.spark_session
+            gold_reference_table_path,
+            spark.spark_session,
         )
 
         reference.alias("source").merge(
@@ -226,7 +235,8 @@ def gold(
         ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,

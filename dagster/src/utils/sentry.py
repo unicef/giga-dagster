@@ -1,5 +1,6 @@
 import functools
 import socket
+from inspect import signature
 
 import sentry_sdk
 from sentry_sdk.integrations.argv import ArgvIntegration
@@ -15,7 +16,7 @@ from src.settings import settings
 SENTRY_ENABLED = settings.IN_PRODUCTION and settings.SENTRY_DSN
 
 
-def setup_sentry():
+def setup_sentry() -> None:
     if SENTRY_ENABLED:
         ignore_logger("dagster")
 
@@ -40,7 +41,7 @@ def setup_sentry():
         )
 
 
-def log_op_context(context: OpExecutionContext):
+def log_op_context(context: OpExecutionContext) -> None:
     sentry_sdk.add_breadcrumb(
         category="dagster",
         message=f"{context.job_name} - {context.op_def.name}",
@@ -60,9 +61,9 @@ def log_op_context(context: OpExecutionContext):
     sentry_sdk.set_tag("run_id", context.run_id)
 
 
-def capture_op_exceptions(func: callable):
+def capture_op_exceptions(func: callable) -> callable:
     @functools.wraps(func)
-    def wrapped_fn(*args, **kwargs):
+    def wrapped_fn(*args, **kwargs) -> signature(func).return_annotation:
         if not SENTRY_ENABLED:
             return func(*args, **kwargs)
 

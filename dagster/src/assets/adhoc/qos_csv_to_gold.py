@@ -87,11 +87,14 @@ def adhoc__publish_qos_to_gold(
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
     df_transformed = transform_types(
-        adhoc__qos_transforms, config.metastore_schema, context
+        adhoc__qos_transforms,
+        config.metastore_schema,
+        context,
     )
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     try:
         emit_metadata_to_datahub(

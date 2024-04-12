@@ -10,7 +10,9 @@ adls_client = ADLSFileClient()
 
 
 def upload_spark_dataframe_as_delta_table(
-    data: sql.DataFrame, filepath: str, spark: SparkSession
+    data: sql.DataFrame,
+    filepath: str,
+    spark: SparkSession,
 ):
     filename = filepath.split("/")[-1]
     country_code = filename.split("_")[0]
@@ -31,16 +33,19 @@ def upload_spark_dataframe_as_delta_table(
     spark.sql(create_schema_sql)
     spark.sql(create_table_sql)
     data.write.format("delta").mode("overwrite").saveAsTable(
-        f"{schema_name}.{country_code}"
+        f"{schema_name}.{country_code}",
     )
 
 
 def clone_table(spark: SparkSession, filepath, cloned_filepath):
     df = adls_client.download_delta_table_as_spark_dataframe(
-        filepath=filepath, spark=spark
+        filepath=filepath,
+        spark=spark,
     )
     upload_spark_dataframe_as_delta_table(
-        data=df, filepath=cloned_filepath, spark=spark
+        data=df,
+        filepath=cloned_filepath,
+        spark=spark,
     )
 
 
@@ -52,7 +57,8 @@ def download_delta_table_as_delta_table(filepath: str, spark: SparkSession):
 
 def update_values_u1(adls_path, spark: SparkSession):
     delta_table = download_delta_table_as_delta_table(
-        filepath=f"{adls_path}", spark=spark
+        filepath=f"{adls_path}",
+        spark=spark,
     )
 
     delta_table.update(
@@ -67,7 +73,8 @@ def update_values_u1(adls_path, spark: SparkSession):
 
 def update_values_u2(adls_path, spark: SparkSession):
     delta_table = download_delta_table_as_delta_table(
-        filepath=f"{adls_path}", spark=spark
+        filepath=f"{adls_path}",
+        spark=spark,
     )
 
     delta_table.update(

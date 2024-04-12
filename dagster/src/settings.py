@@ -155,7 +155,7 @@ class Settings(BaseSettings):
             PostgresDsn.build(
                 scheme="postgresql+psycopg2",
                 **self.INGESTION_DATABASE_CONNECTION_DICT,
-            )
+            ),
         )
 
 

@@ -65,7 +65,7 @@ def github_coverage_workflow_notebooks(context: OpExecutionContext):
 
     for notebook_metadata in notebook_metadata_list:
         run_notebook_ingestion = NotebookIngestionAction(
-            notebook_metadata=notebook_metadata
+            notebook_metadata=notebook_metadata,
         )
         run_notebook_ingestion()
     yield Output(None)

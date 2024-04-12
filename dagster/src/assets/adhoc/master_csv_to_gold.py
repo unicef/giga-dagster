@@ -38,7 +38,9 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def adhoc__load_master_csv(
-    context: OpExecutionContext, adls_file_client: ADLSFileClient, config: FileConfig
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    config: FileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
@@ -78,11 +80,13 @@ def adhoc__master_data_transforms(
     }
 
     sdf = logger.passthrough(
-        sdf.withColumns(columns_to_add), f"Added {len(columns_to_add)} missing columns"
+        sdf.withColumns(columns_to_add),
+        f"Added {len(columns_to_add)} missing columns",
     )
 
     sdf = logger.passthrough(
-        extract_school_id_govt_duplicates(sdf), "Added row number transforms"
+        extract_school_id_govt_duplicates(sdf),
+        "Added row number transforms",
     )
 
     df_pandas = sdf.toPandas()
@@ -102,7 +106,7 @@ def adhoc__df_duplicates(
     config: FileConfig,
 ) -> pd.DataFrame:
     df_duplicates = adhoc__master_data_transforms.where(
-        adhoc__master_data_transforms.row_num != 1
+        adhoc__master_data_transforms.row_num != 1,
     )
     df_duplicates = df_duplicates.drop("row_num")
 
@@ -132,7 +136,7 @@ def adhoc__master_data_quality_checks(
     country_iso3 = file_stem.split("_")[0]
 
     df_deduplicated = adhoc__master_data_transforms.where(
-        adhoc__master_data_transforms.row_num == 1
+        adhoc__master_data_transforms.row_num == 1,
     )
     df_deduplicated = df_deduplicated.drop("row_num")
 
@@ -142,7 +146,7 @@ def adhoc__master_data_quality_checks(
     )
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
     logger.log.info(
-        f"Post-DQ checks stats: {len(df_deduplicated.columns)=}\n{df_deduplicated.count()=}"
+        f"Post-DQ checks stats: {len(df_deduplicated.columns)=}\n{df_deduplicated.count()=}",
     )
 
     df_pandas = dq_checked.toPandas()
@@ -163,11 +167,12 @@ def adhoc__master_dq_checks_passed(
 ) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
-        f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}"
+        f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}",
     )
 
     dq_passed = dq_passed.withColumn(
-        "signature", f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256)
+        "signature",
+        f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256),
     )
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
 
@@ -189,7 +194,7 @@ def adhoc__master_dq_checks_failed(
 ) -> sql.DataFrame:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
-        f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}"
+        f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}",
     )
 
     df_pandas = dq_failed.toPandas()
@@ -211,7 +216,8 @@ def adhoc__master_dq_checks_summary(
 ) -> dict | list[dict]:
     df_summary = aggregate_report_json(
         aggregate_report_spark_df(
-            spark.spark_session, adhoc__master_data_quality_checks
+            spark.spark_session,
+            adhoc__master_data_quality_checks,
         ),
         adhoc__master_data_quality_checks,
     )
@@ -234,12 +240,15 @@ def adhoc__publish_master_to_gold(
     spark: PySparkResource,
 ) -> sql.DataFrame:
     gold = transform_types(
-        adhoc__master_dq_checks_passed, config.metastore_schema, context
+        adhoc__master_dq_checks_passed,
+        config.metastore_schema,
+        context,
     )
     gold = compute_row_hash(gold)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     try:
         emit_metadata_to_datahub(

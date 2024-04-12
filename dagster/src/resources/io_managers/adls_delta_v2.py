@@ -37,7 +37,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(
-            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
@@ -53,14 +53,15 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         dt = DeltaTable.forName(spark, full_table_name)
 
         context.log.info(
-            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
         )
 
         return dt.toDF()
 
     @staticmethod
     def _get_table_path(
-        context: InputContext | OutputContext, filepath: str
+        context: InputContext | OutputContext,
+        filepath: str,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
         table_name = config.filename_components.country_code

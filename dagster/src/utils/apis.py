@@ -1,5 +1,6 @@
 from base64 import b64encode
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 from models.qos_apis import SchoolConnectivity, SchoolList
@@ -7,9 +8,10 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from dagster import OpExecutionContext
+from src.exceptions import ExternalApiException
 
 
-def query_API_data(
+def query_api_data(
     context: OpExecutionContext,
     database_session: Session,
     row_data: SchoolList | SchoolConnectivity,
@@ -25,14 +27,19 @@ def query_API_data(
 
     if row_data["pagination_type"] is None:
         try:
-            data = _make_API_request(context, session, row_data)
+            data = _make_api_request(context, session, row_data)
         except Exception as e:
             # @TODO: update database date_last_ingested
             # @TODO: update database error_message to actual error message - make str error
             update_statement = (
                 update(SchoolList)
                 .where(SchoolList.id == row_data["id"])
-                .values({"date_last_ingested": datetime.now(), "error_message": e})
+                .values(
+                    {
+                        "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                        "error_message": e,
+                    }
+                )
             )
             database_session.execute(update_statement)
             raise e
@@ -45,10 +52,10 @@ def query_API_data(
             .where(SchoolList.id == row_data["id"])
             .values(
                 {
-                    "date_last_ingested": datetime.now(),
-                    "date_last_succesfully_ingested": datetime.now(),
+                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "date_last_succesfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
                     "error_message": None,
-                }
+                },
             )
         )
         database_session.execute(update_statement)
@@ -67,18 +74,18 @@ def query_API_data(
 
         try:
             run_response = data.extend(
-                _make_API_request(context, session, row_data, pagination_parameters)
+                _make_api_request(context, session, row_data, pagination_parameters),
             )
             total_response_count = len(run_response) + offset
 
             if len(run_response):
                 data.extend(run_response)
                 context.log.info(
-                    f"{row_data['name']} run # {page}, offset # {total_response_count} was a success"
+                    f"{row_data['name']} run # {page}, offset # {total_response_count} was a success",
                 )
             else:
                 raise ValueError(
-                    f"{row_data['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response)})"
+                    f"{row_data['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response)})",
                 )
 
         except ValueError as e:
@@ -93,15 +100,20 @@ def query_API_data(
             update_statement = (
                 update(SchoolList)
                 .where(SchoolList.id == row_data["id"])
-                .values({"date_last_ingested": datetime.now(), "error_message": e})
+                .values(
+                    {
+                        "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                        "error_message": e,
+                    }
+                )
             )
             database_session.execute(update_statement)
-            raise Exception(error_message) from e
+            raise ExternalApiException(error_message) from e
         else:
             offset += len(run_response)
             page += 1
             context.log.info(
-                f"Next run: {row_data['name']} run # {page}, offset # {offset}"
+                f"Next run: {row_data['name']} run # {page}, offset # {offset}",
             )
 
         # @TODO: update database date_last_succesfully_ingested
@@ -112,17 +124,17 @@ def query_API_data(
             .where(SchoolList.id == row_data["id"])
             .values(
                 {
-                    "date_last_ingested": datetime.now(),
-                    "date_last_succesfully_ingested": datetime.now(),
+                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "date_last_succesfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
                     "error_message": None,
-                }
+                },
             )
         )
         database_session.execute(update_statement)
         return data
 
 
-def _make_API_request(
+def _make_api_request(
     context: OpExecutionContext,
     session: requests.Session,
     row_data: SchoolList | SchoolConnectivity,
@@ -152,11 +164,11 @@ def _make_API_request(
     except requests.HTTPError as e:
         error_message = f"Error in {row_data['api_endpoint']} endpoint: HTTP request returned status code {response.status_code}"
         context.log.info(error_message)
-        raise Exception(error_message) from e
+        raise ExternalApiException(error_message) from e
     except Exception as e:
         error_message = f"Error in {row_data['api_endpoint']} endpoint: {e}"
         context.log.info(error_message)
-        raise Exception(error_message) from e
+        raise ExternalApiException(error_message) from e
 
     return (
         response.json()
@@ -167,10 +179,10 @@ def _make_API_request(
 
 def _generate_auth(
     row_data: SchoolList | SchoolConnectivity,
-):
+) -> dict[str, str] | None:
     if row_data["authorization_type"] == "BASIC_AUTH":
         token = b64encode(
-            f"{row_data['basic_auth_username']}:{row_data['basic_auth_password']}".encode()
+            f"{row_data['basic_auth_username']}:{row_data['basic_auth_password']}".encode(),
         ).decode("ascii")
         return {"Authorization": f"Basic {token}"}
 
@@ -184,8 +196,10 @@ def _generate_auth(
 
 
 def _generate_pagination_parameters(
-    row_data: SchoolList | SchoolConnectivity, page: int, offset: int
-):
+    row_data: SchoolList | SchoolConnectivity,
+    page: int,
+    offset: int,
+) -> dict:
     pagination_params = {}
     if row_data.pagination_type == "PAGE_NUMBER":
         pagination_params[row_data["page_number_key"]] = page

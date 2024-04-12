@@ -29,11 +29,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         type_transform_function = self._get_type_transform_function(context)
         output = type_transform_function(output, context)
         adls_client.upload_spark_dataframe_as_delta_table(
-            output, schema_name, table_path, self.pyspark.spark_session
+            output,
+            schema_name,
+            table_path,
+            self.pyspark.spark_session,
+            context,
         )
 
         context.log.info(
-            f"Uploaded {filepath.name} to {'/'.join(str(filepath.parent))} in ADLS."
+            f"Uploaded {filepath.name} to {'/'.join(str(filepath.parent))} in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
@@ -41,11 +45,12 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         table_path = self._get_table_path(context.upstream_output, filepath)
 
         data = adls_client.download_delta_table_as_spark_dataframe(
-            table_path, self.pyspark.spark_session
+            table_path,
+            self.pyspark.spark_session,
         )
 
         context.log.info(
-            f"Downloaded {filepath.name} from {str(filepath.parent)} in ADLS."
+            f"Downloaded {filepath.name} from {filepath.parent!s} in ADLS.",
         )
 
         return data

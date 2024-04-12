@@ -3,6 +3,7 @@ import uuid
 
 import geopandas as gpd
 import h3
+import pandas as pd
 from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
@@ -10,6 +11,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import (
     ArrayType,
+    FloatType,
     StringType,
     StructField,
 )
@@ -26,14 +28,14 @@ container_name = azure_blob_container_name
 
 
 # STANDARDIZATION FUNCTIONS
-def generate_uuid(identifier_concat: str):
+def generate_uuid(identifier_concat: str) -> str:
     return str(uuid.uuid3(uuid.NAMESPACE_DNS, str(identifier_concat)))
 
 
 generate_uuid_udf = f.udf(generate_uuid)
 
 
-def create_school_id_giga(df: sql.DataFrame):
+def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     school_id_giga_prereqs = [
         "school_id_govt",
         "school_name",
@@ -43,8 +45,7 @@ def create_school_id_giga(df: sql.DataFrame):
     ]
     for column in school_id_giga_prereqs:
         if column not in df.columns:
-            df = df.withColumn("school_id_giga", f.lit(None))
-            return df
+            return df.withColumn("school_id_giga", f.lit(None))
 
     df = df.withColumn(
         "identifier_concat",
@@ -71,7 +72,7 @@ def create_school_id_giga(df: sql.DataFrame):
     return df.drop("identifier_concat")
 
 
-def create_uzbekistan_school_name(df: sql.DataFrame):
+def create_uzbekistan_school_name(df: sql.DataFrame) -> sql.DataFrame:
     school_name_col = "school_name"
     district_col = "district"
     city_col = "city"
@@ -86,11 +87,9 @@ def create_uzbekistan_school_name(df: sql.DataFrame):
         df = df.withColumn(city_col, f.lit(None).cast("string"))
     elif region_col not in df.columns:
         df = df.withColumn(region_col, f.lit(None).cast("string"))
-    else:
-        pass
 
     # case when expr for concats
-    df = df.withColumn(
+    return df.withColumn(
         "school_name",
         f.expr(
             "CASE "
@@ -100,34 +99,29 @@ def create_uzbekistan_school_name(df: sql.DataFrame):
             "CONCAT(school_name, ',', city, ',', district) "
             "WHEN city IS NOT NULL AND region IS NOT NULL THEN "
             "CONCAT(school_name, ',', city, ',', region) "
-            " ELSE CONCAT(COALESCE(school_name, ''), ',', COALESCE(region, ''), ',', COALESCE(region, '')) END"
+            " ELSE CONCAT(COALESCE(school_name, ''), ',', COALESCE(region, ''), ',', COALESCE(region, '')) END",
         ),
     )
 
-    return df
 
-
-def standardize_school_name(df: sql.DataFrame):
+def standardize_school_name(df: sql.DataFrame) -> sql.DataFrame:
     # filter
     df1 = df.filter(df.country_code == "UZB")
     df2 = df.filter(df.country_code != "UZB")
 
     # uzb transform
     df1 = create_uzbekistan_school_name(df1)
-    df = df2.union(df1)
-
-    return df
+    return df2.union(df1)
 
 
-def standardize_internet_speed(df: sql.DataFrame):
-    df = df.withColumn(
+def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
+    return df.withColumn(
         "download_speed_govt",
-        f.expr("regexp_replace(download_speed_govt, '[^0-9.]', '')").cast("float"),
+        f.regexp_replace(f.col("download_speed_govt"), "[^0-9.]", "").cast(FloatType()),
     )
-    return df
 
 
-def h3_geo_to_h3(latitude, longitude):
+def h3_geo_to_h3(latitude, longitude) -> str:
     if latitude is None or longitude is None:
         return "0"
 
@@ -138,7 +132,8 @@ h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
 def column_mapping_rename(
-    df: sql.DataFrame, column_mapping: dict[str, str]
+    df: sql.DataFrame,
+    column_mapping: dict[str, str],
 ) -> tuple[sql.DataFrame, dict[str, str]]:
     column_mapping_filtered = {
         k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)
@@ -146,7 +141,9 @@ def column_mapping_rename(
     return df.withColumnsRenamed(column_mapping_filtered), column_mapping_filtered
 
 
-def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
+def add_missing_columns(
+    df: sql.DataFrame, schema_columns: list[StructField]
+) -> sql.DataFrame:
     columns_to_add = {
         col.name: f.lit(None).cast(col.dataType)
         for col in schema_columns
@@ -155,11 +152,9 @@ def add_missing_columns(df: sql.DataFrame, schema_columns: list[StructField]):
     return df.withColumns(columns_to_add)
 
 
-def bronze_prereq_columns(df, schema_columns: list[StructField]):
+def bronze_prereq_columns(df, schema_columns: list[StructField]) -> sql.DataFrame:
     column_names = [col.name for col in schema_columns]
-    df = df.select(*column_names)
-
-    return df
+    return df.select(*column_names)
 
 
 # Note: Temporary function for transforming raw files to standardized columns.
@@ -186,10 +181,14 @@ def create_bronze_layer_columns(
     df = df.drop("disputed_region")
 
     df = add_admin_columns(
-        df=df, country_code_iso3=country_code_iso3, admin_level="admin1"
+        df=df,
+        country_code_iso3=country_code_iso3,
+        admin_level="admin1",
     )
     df = add_admin_columns(
-        df=df, country_code_iso3=country_code_iso3, admin_level="admin2"
+        df=df,
+        country_code_iso3=country_code_iso3,
+        admin_level="admin2",
     )
     df = add_disputed_region_column(df=df)
 
@@ -200,11 +199,10 @@ def create_bronze_layer_columns(
     # df = standardize_school_name(df)
 
     # Timestamp of ingestion
-    df = df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
-    return df
+    return df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
 
 
-def get_critical_errors_empty_column(*args):
+def get_critical_errors_empty_column(*args) -> list[str]:
     empty_errors = []
 
     # Only critical null errors
@@ -216,13 +214,14 @@ def get_critical_errors_empty_column(*args):
 
 
 get_critical_errors_empty_column_udf = f.udf(
-    get_critical_errors_empty_column, ArrayType(StringType())
+    get_critical_errors_empty_column,
+    ArrayType(StringType()),
 )
 
 
-def has_critical_error(df: sql.DataFrame):
+def has_critical_error(df: sql.DataFrame) -> sql.DataFrame:
     # Check if there is any critical error flagged for the row
-    df = df.withColumn(
+    return df.withColumn(
         "has_critical_error",
         f.expr(
             "CASE "
@@ -232,14 +231,12 @@ def has_critical_error(df: sql.DataFrame):
             "   OR is_valid_location_values = false "
             "   OR is_within_country != true "
             "   THEN true "
-            "ELSE false END"  # schoolname, lat, long, educ level
+            "ELSE false END",  # schoolname, lat, long, educ level
         ),
     )
 
-    return df
 
-
-def coordinates_comp(coordinates_list, row_coords):
+def coordinates_comp(coordinates_list: list[list], row_coords: list) -> list[list]:
     # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
     for sublist in coordinates_list:
         if sublist == row_coords:
@@ -251,19 +248,19 @@ def coordinates_comp(coordinates_list, row_coords):
 coordinates_comp_udf = f.udf(coordinates_comp)
 
 
-def point_110(column):
+def point_110(column) -> float | None:
     if column is None:
         return None
-    point = int(1000 * float(column)) / 1000
-    return point
+    return int(1000 * float(column)) / 1000
 
 
 point_110_udf = f.udf(point_110)
 
 
 def get_admin_boundaries(
-    country_code_iso3: str, admin_level: str
-):  # admin level = ["admin1", "admin2"]
+    country_code_iso3: str,
+    admin_level: str,
+) -> pd.DataFrame | gpd.GeoDataFrame | None:  # admin level = ["admin1", "admin2"]
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
         filename = f"{country_code_iso3}_{admin_level}.geojson"
@@ -273,13 +270,10 @@ def get_admin_boundaries(
             download_stream = blob_client.download_blob()
             download_stream.readinto(file_blob)
             file_blob.seek(0)
-            admin_boundaries = gpd.read_file(file_blob)
-
+            return gpd.read_file(file_blob)
     except Exception as exc:
         logger.error(exc)
         return None
-
-    return admin_boundaries
 
 
 def add_admin_columns(  # noqa: C901
@@ -288,13 +282,14 @@ def add_admin_columns(  # noqa: C901
     admin_level: str,
 ) -> sql.DataFrame:
     admin_boundaries = get_admin_boundaries(
-        country_code_iso3=country_code_iso3, admin_level=admin_level
+        country_code_iso3=country_code_iso3,
+        admin_level=admin_level,
     )
 
     spark = df.sparkSession
     broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
 
-    def get_admin_en(latitude, longitude):
+    def get_admin_en(latitude, longitude) -> str | None:
         point = get_point(longitude=longitude, latitude=latitude)
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
@@ -303,7 +298,7 @@ def add_admin_columns(  # noqa: C901
 
     get_admin_en_udf = f.udf(get_admin_en, StringType())
 
-    def get_admin_native(latitude, longitude):
+    def get_admin_native(latitude, longitude) -> str | None:
         point = get_point(longitude=longitude, latitude=latitude)
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
@@ -312,7 +307,7 @@ def add_admin_columns(  # noqa: C901
 
     get_admin_native_udf = f.udf(get_admin_native, StringType())
 
-    def get_admin_id_giga(latitude, longitude):
+    def get_admin_id_giga(latitude, longitude) -> str | None:
         point = get_point(longitude=longitude, latitude=latitude)
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
@@ -323,28 +318,26 @@ def add_admin_columns(  # noqa: C901
 
     if admin_boundaries is None:
         df = df.withColumn(f"{admin_level}", f.lit(None))
-        df = df.withColumn(f"{admin_level}_id_giga", f.lit(None))
-        return df
-    else:
-        df = df.withColumn(
-            f"{admin_level}_en", get_admin_en_udf(df["latitude"], df["longitude"])
-        )
-        df = df.withColumn(
-            f"{admin_level}_native",
-            get_admin_native_udf(df["latitude"], df["longitude"]),
-        )
-        df = df.withColumn(
-            f"{admin_level}_id_giga",
-            get_admin_id_giga_udf(df["latitude"], df["longitude"]),
-        )
-        df = df.withColumn(
-            f"{admin_level}",
-            f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
-        )
-        df = df.drop(f"{admin_level}_en")
-        df = df.drop(f"{admin_level}_native")
+        return df.withColumn(f"{admin_level}_id_giga", f.lit(None))
 
-    return df
+    df = df.withColumn(
+        f"{admin_level}_en",
+        get_admin_en_udf(df["latitude"], df["longitude"]),
+    )
+    df = df.withColumn(
+        f"{admin_level}_native",
+        get_admin_native_udf(df["latitude"], df["longitude"]),
+    )
+    df = df.withColumn(
+        f"{admin_level}_id_giga",
+        get_admin_id_giga_udf(df["latitude"], df["longitude"]),
+    )
+    df = df.withColumn(
+        f"{admin_level}",
+        f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
+    )
+    df = df.drop(f"{admin_level}_en")
+    return df.drop(f"{admin_level}_native")
 
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
@@ -366,7 +359,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     spark = df.sparkSession
     broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
 
-    def get_disputed_region(latitude, longitude):
+    def get_disputed_region(latitude, longitude) -> str | None:
         point = get_point(longitude=longitude, latitude=latitude)
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
@@ -379,7 +372,8 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
         df = df.withColumn("disputed_region", f.lit(None))
     else:
         df = df.withColumn(
-            "disputed_region", get_disputed_region_udf(df["latitude"], df["longitude"])
+            "disputed_region",
+            get_disputed_region_udf(df["latitude"], df["longitude"]),
         )
 
     return df
@@ -413,7 +407,7 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
-        ]
+        ],
     )
     df = df.withColumn("latitude", f.lit(32.618))
     df = df.withColumn("longitude", f.lit(78.576))

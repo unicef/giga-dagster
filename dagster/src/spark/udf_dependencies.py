@@ -4,17 +4,13 @@ from loguru import logger
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-# from src.settings import settings
 
-
-def get_point(longitude: float, latitude: float):
+def get_point(longitude: float, latitude: float) -> Point | None:
     try:
-        point = Point(longitude, latitude)
+        return Point(longitude, latitude)
     except Exception as exc:
         logger.error(exc)
-        point = None
-
-    return point
+        return None
 
 
 # Inside based on GADM admin boundaries data
@@ -29,7 +25,9 @@ def is_within_country_gadm(latitude: float, longitude: float, geometry) -> bool:
 
 # Inside based on geopy
 def is_within_country_geopy(
-    latitude: float, longitude: float, country_code_iso2: str
+    latitude: float,
+    longitude: float,
+    country_code_iso2: str,
 ) -> bool:
     geolocator = Nominatim(user_agent="unicef_giga")
     coords = f"{latitude},{longitude}"
@@ -39,11 +37,15 @@ def is_within_country_geopy(
     else:
         location = geolocator.reverse(coords, timeout=10)
         geopy_country_code_iso2 = location.raw.get("address", {}).get(
-            "country_code", ""
+            "country_code",
+            "",
         )
         out = geopy_country_code_iso2.lower() == country_code_iso2.lower()
 
     return out
+
+
+BOUNDARY_DISTANCE_THRESHOLD_KM = 1.5
 
 
 # Inside based on boundary distance
@@ -55,11 +57,9 @@ def is_within_boundary_distance(latitude: float, longitude: float, geometry) -> 
         point1 = p1.coords[0]
         point2 = (longitude, latitude)
         distance = geodesic(point1, point2).km
-        out = distance <= 1.5  # km
-    else:
-        out = False
+        return distance <= BOUNDARY_DISTANCE_THRESHOLD_KM
 
-    return out
+    return False
 
 
 def boundary_distance(latitude: float, longitude: float, geometry) -> bool:

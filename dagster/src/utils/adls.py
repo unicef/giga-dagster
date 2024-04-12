@@ -1,7 +1,7 @@
 import json
-import os.path
 from collections.abc import Iterator
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -12,6 +12,7 @@ from pyspark.sql.types import StructType
 
 import azure.core.exceptions
 from azure.storage.filedatalake import (
+    DataLakeFileClient,
     DataLakeServiceClient,
     FileProperties,
     PathProperties,
@@ -43,7 +44,7 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext, data: bytes, filepath: str):
+    def upload_raw(context: OutputContext, data: bytes, filepath: str) -> None:
         file_client = _adls.get_file_client(filepath)
         metadata = context.step_context.op_config["metadata"]
         with BytesIO(data) as buffer:
@@ -61,7 +62,7 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO() as buffer:
             file_client.download_file().readinto(buffer)
             buffer.seek(0)
-            ext = os.path.splitext(filepath)[1]
+            ext = Path(filepath).suffix
 
             if ext == ".csv":
                 return pd.read_csv(buffer)
@@ -72,7 +73,10 @@ class ADLSFileClient(ConfigurableResource):
         raise ValueError(f"Unsupported format for file: {filepath}")
 
     def download_csv_as_spark_dataframe(
-        self, filepath: str, spark: SparkSession, schema: StructType = None
+        self,
+        filepath: str,
+        spark: SparkSession,
+        schema: StructType = None,
     ) -> sql.DataFrame:
         adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
         reader_params = {
@@ -87,9 +91,12 @@ class ADLSFileClient(ConfigurableResource):
         return spark.read.csv(**reader_params, schema=schema)
 
     def upload_pandas_dataframe_as_file(
-        self, context: OutputContext, data: pd.DataFrame, filepath: str
-    ):
-        _, ext = os.path.splitext(filepath)
+        self,
+        context: OutputContext,
+        data: pd.DataFrame,
+        filepath: str,
+    ) -> None:
+        ext = Path(filepath).suffix
         if not ext:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
@@ -112,8 +119,10 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
-    def upload_spark_dataframe_as_file(self, data: sql.DataFrame, filepath: str):
-        if not (extension := os.path.splitext(filepath)[1]):
+    def upload_spark_dataframe_as_file(
+        self, data: sql.DataFrame, filepath: str
+    ) -> None:
+        if not (extension := Path(filepath).suffix):
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
         full_remote_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
@@ -133,12 +142,16 @@ class ADLSFileClient(ConfigurableResource):
                 raise OSError(f"Unsupported format for file {filepath}")
 
     def download_delta_table_as_delta_table(
-        self, table_name: str, spark: SparkSession
+        self,
+        table_name: str,
+        spark: SparkSession,
     ) -> DeltaTable:
         return DeltaTable.forName(spark, table_name)
 
     def download_delta_table_as_spark_dataframe(
-        self, table_name: str, spark: SparkSession
+        self,
+        table_name: str,
+        spark: SparkSession,
     ) -> sql.DataFrame:
         return DeltaTable.forName(spark, table_name).toDF()
 
@@ -149,14 +162,19 @@ class ADLSFileClient(ConfigurableResource):
         table_name: str,
         spark: SparkSession,
         context: OutputContext,
-    ):
+    ) -> None:
         full_table_name = f"{schema_name}.{table_name}"
         columns = get_schema_columns(spark, schema_name)
         primary_key = get_primary_key(spark, schema_name)
 
         create_schema(spark, schema_name)
         create_delta_table(
-            spark, schema_name, table_name, columns, context, if_not_exists=True
+            spark,
+            schema_name,
+            table_name,
+            columns,
+            context,
+            if_not_exists=True,
         )
 
         # TODO: Apply logic for preventing unnecessary updates
@@ -165,14 +183,15 @@ class ADLSFileClient(ConfigurableResource):
             DeltaTable.forName(spark, full_table_name)
             .alias("master")
             .merge(
-                data.alias("updates"), f"master.{primary_key} = updates.{primary_key}"
+                data.alias("updates"),
+                f"master.{primary_key} = updates.{primary_key}",
             )
             .whenMatchedUpdateAll()
             .whenNotMatchedInsertAll()
             .execute()
         )
 
-    def download_json(self, filepath: str):
+    def download_json(self, filepath: str) -> dict:
         file_client = _adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
@@ -180,7 +199,7 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             return json.load(buffer)
 
-    def upload_json(self, data: dict | list[dict], filepath: str):
+    def upload_json(self, data: dict | list[dict], filepath: str) -> None:
         file_client = _adls.get_file_client(filepath)
         json_data = json.dumps(data, indent=2).encode()
 
@@ -188,21 +207,23 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True)
 
-    def list_paths(self, path: str, recursive=True) -> list[PathProperties]:
+    def list_paths(self, path: str, *, recursive=True) -> list[PathProperties]:
         paths = _adls.get_paths(path=path, recursive=recursive)
         return list(paths)
 
     def list_paths_generator(
-        self, path: str, recursive=True
+        self,
+        path: str,
+        *,
+        recursive=True,
     ) -> Iterator[PathProperties]:
         return _adls.get_paths(path=path, recursive=recursive)
 
     def get_file_metadata(self, filepath: str) -> FileProperties:
         file_client = _adls.get_file_client(filepath)
-        properties = file_client.get_file_properties()
-        return properties
+        return file_client.get_file_properties()
 
-    def rename_file(self, old_filepath: str, new_filepath: str):
+    def rename_file(self, old_filepath: str, new_filepath: str) -> DataLakeFileClient:
         file_client = _adls.get_file_client(file_path=old_filepath)
         new_path = file_client.file_system_name + "/" + new_filepath
         renamed_file_client = file_client.rename_file(new_name=new_path)
@@ -210,7 +231,7 @@ class ADLSFileClient(ConfigurableResource):
         return renamed_file_client
 
 
-def get_filepath(source_path: str, dataset_type: str, step: str):
+def get_filepath(source_path: str, dataset_type: str, step: str) -> str:
     if "dq_summary" in step:
         filename = source_path.split("/")[-1].replace(".csv", ".json")
     elif step in [
@@ -234,23 +255,16 @@ def get_filepath(source_path: str, dataset_type: str, step: str):
     if not destination_folder:
         raise ValueError(f"Unknown filepath: {source_path}")
 
-    destination_filepath = f"{destination_folder}/{filename}"
-
-    return destination_filepath
+    return f"{destination_folder}/{filename}"
 
 
-def get_output_filepath(context: OpExecutionContext, output_name: str = None):
-    if output_name:
-        step = output_name
-    else:
-        step = context.asset_key.to_user_string()
+def get_output_filepath(context: OpExecutionContext, output_name: str = None) -> str:
+    step = output_name if output_name else context.asset_key.to_user_string()
 
     dataset_type = context.get_step_execution_context().op_config["dataset_type"]
     source_path = context.get_step_execution_context().op_config["filepath"]
 
-    destination_filepath = get_filepath(source_path, dataset_type, step)
-
-    return destination_filepath
+    return get_filepath(source_path, dataset_type, step)
 
 
 def get_input_filepath(context: OpExecutionContext) -> str:
@@ -259,6 +273,4 @@ def get_input_filepath(context: OpExecutionContext) -> str:
     step = context.asset_key.to_user_string()
     origin_step = constants.step_origin_map[step]
 
-    source_filepath = get_filepath(source_path, dataset_type, origin_step)
-
-    return source_filepath
+    return get_filepath(source_path, dataset_type, origin_step)
