@@ -4,7 +4,7 @@ from loguru import logger
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-from src.settings import settings
+# from src.settings import settings
 
 
 def get_point(longitude: float, latitude: float):
@@ -31,7 +31,7 @@ def is_within_country_gadm(latitude: float, longitude: float, geometry) -> bool:
 def is_within_country_geopy(
     latitude: float, longitude: float, country_code_iso2: str
 ) -> bool:
-    geolocator = Nominatim(user_agent=f"GigaSyncDagster/{settings.COMMIT_SHA[:7]}")
+    geolocator = Nominatim(user_agent="unicef_giga")
     coords = f"{latitude},{longitude}"
 
     if latitude is None or longitude is None:
