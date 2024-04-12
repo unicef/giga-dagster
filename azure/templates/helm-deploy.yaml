@@ -87,4 +87,4 @@ jobs:
                   --set ingress.hosts[0]="io-dagster-$(deployEnv).unitst.org"
                   --set config.clientIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.clientSecretRef.secretRef="oi-dagster-secrets-$(deployEnv)"
-                  --set config.tenantIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
+                  --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
