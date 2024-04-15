@@ -9,7 +9,7 @@ from src.jobs.school_master import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import deconstruct_school_master_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "coverage"
@@ -34,7 +34,9 @@ def school_master_coverage__raw_file_uploads_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
-        filename_components = deconstruct_filename_components(adls_filepath)
+        filename_components = deconstruct_school_master_filename_components(
+            adls_filepath
+        )
         country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
@@ -93,6 +95,7 @@ def school_master_coverage__raw_file_uploads_sensor(
             file_size_bytes=size,
             domain=DOMAIN,
             dq_target_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}{path.suffix}",
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -120,7 +123,9 @@ def school_master_coverage__successful_manual_checks_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
-        filename_components = deconstruct_filename_components(adls_filepath)
+        filename_components = deconstruct_school_master_filename_components(
+            adls_filepath
+        )
         country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
@@ -161,6 +166,7 @@ def school_master_coverage__successful_manual_checks_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -189,7 +195,9 @@ def school_master_coverage__failed_manual_checks_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
-        filename_components = deconstruct_filename_components(adls_filepath)
+        filename_components = deconstruct_school_master_filename_components(
+            adls_filepath
+        )
         country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
@@ -211,6 +219,7 @@ def school_master_coverage__failed_manual_checks_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
