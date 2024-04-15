@@ -100,9 +100,7 @@ def staging_step(
         staging_dt = DeltaTable.forName(spark, staging_table_name)
         staging_detail = staging_dt.detail().toDF()
         staging_last_modified = (
-            staging_detail.select("lastModified")
-            .first()
-            .lastModified  ## @QUESTION: ASK KENNETH ABOUT THIS
+            staging_detail.select("lastModified").first().lastModified
         )
         staging = staging_dt.alias("staging").toDF()
 
