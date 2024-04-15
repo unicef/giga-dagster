@@ -40,6 +40,7 @@ from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -147,6 +148,12 @@ def coverage_data_quality_results_summary(
         context=context,
         config=config,
         spark=spark,
+    )
+
+    send_email_dq_report_with_config(
+        dq_results=dq_summary_statistics,
+        config=config,
+        context=context,
     )
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
