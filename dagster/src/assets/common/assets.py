@@ -92,20 +92,14 @@ def silver(
         schema_name, DataTier.STAGING
     )
 
-    context.log.info(
-        f"SHEMA NAMES: {silver_tier_schema_name}, {staging_tier_schema_name}"
-    )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
 
-    context.log.info(f"TBL NAMES: {silver_table_name}, {staging_table_name}")
     staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
-    context.log.info(f"stgprkey: {staging[primary_key]}")
     df_passed = staging.filter(staging[primary_key].isin(passing_row_ids))
 
-    context.log.info(f"df: {df_passed.toPandas()}")
     if spark.spark_session.catalog.tableExists(silver_table_name):
         silver_dt = DeltaTable.forName(s, silver_table_name)
 
