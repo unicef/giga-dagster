@@ -22,11 +22,9 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_datahub_schema_columns,
-    get_master_schema_columns,
     get_primary_key,
-    get_reference_schema_columns,
     get_schema_columns,
+    get_schema_columns_datahub,
 )
 from src.utils.spark import compute_row_hash, transform_types
 
@@ -45,7 +43,7 @@ def manual_review_failed_rows(
 
     schema_name = config.metastore_schema
     country_code = config.country_code
-    primary_key = get_primary_key(spark, schema_name)
+    primary_key = get_primary_key(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
@@ -54,13 +52,13 @@ def manual_review_failed_rows(
         staging_tier_schema_name, country_code
     )
 
-    staging = DeltaTable.forName(spark, staging_table_name).alias("staging").toDF()
+    staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
 
     df_failed = staging.filter(
         ~staging[primary_key].isin(passing_row_ids["approved_rows"])
     )
 
-    schema_reference = get_datahub_schema_columns(s, config.metastore_schema)
+    schema_reference = get_schema_columns_datahub(s, schema_name)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -98,10 +96,13 @@ def silver(
     )
 
     staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
+    context.log.info(f"STG!: {staging.toPandas()}")
     df_passed = staging.filter(staging[primary_key].isin(passing_row_ids))
 
-    if spark.spark_session.catalog.tableExists(silver_table_name):
+    if s.catalog.tableExists(silver_table_name):
         silver_dt = DeltaTable.forName(s, silver_table_name)
+        context.log.info("Silver table exists")
+        context.log.info(f"SILVER!: {silver_dt.toDF().toPandas()}")
 
         df_passed = add_missing_columns(df_passed, schema_columns)
         df_passed = transform_types(df_passed, schema_name, context)
@@ -127,7 +128,7 @@ def silver(
         )
         df_passed.write.format("delta").mode("append").saveAsTable(silver_table_name)
 
-    schema_reference = get_datahub_schema_columns(s, config.metastore_schema)
+    schema_reference = get_schema_columns_datahub(s, schema_name)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -168,17 +169,20 @@ def master(
     gold_table_name = construct_full_table_name(gold_tier_schema_name, country_code)
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver_df").toDF()
 
     if s.catalog.tableExists(gold_table_name):
         gold_dt = DeltaTable.forName(s, gold_table_name)
 
-        silver = add_missing_columns(silver, schema_columns)
-        silver = transform_types(silver, schema_name, context)
-        silver = compute_row_hash(silver)
-        silver = silver.select(get_master_schema_columns(s, schema_name))
+        silver_df = add_missing_columns(silver_df, schema_columns)
+        silver_df = transform_types(silver_df, schema_name, context)
+        silver_df = compute_row_hash(silver_df)
+
+        silver_df = silver_df.select([c.name for c in schema_columns])
         update_columns = [c.name for c in schema_columns if c.name != primary_key]
-        query = build_deduped_merge_query(gold_dt, silver, primary_key, update_columns)
+        query = build_deduped_merge_query(
+            gold_dt, silver_df, primary_key, update_columns
+        )
 
         if query is not None:
             execute_query_with_error_handler(
@@ -194,9 +198,9 @@ def master(
             context,
             if_not_exists=True,
         )
-        silver.write.format("delta").mode("append").saveAsTable(gold_table_name)
+        silver_df.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
-    schema_reference = get_datahub_schema_columns(s, config.metastore_schema)
+    schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -205,7 +209,10 @@ def master(
     )
     yield Output(
         None,
-        metadata={**get_output_metadata(config), "preview": get_table_preview(silver)},
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(silver_df),
+        },
     )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
 
 
@@ -226,23 +233,25 @@ def reference(
     primary_key = get_primary_key(s, schema_name)
     gold_tier_schema_name = construct_schema_name_for_tier(schema_name, DataTier.GOLD)
     silver_tier_schema_name = construct_schema_name_for_tier(
-        "school_{config.dataset_type}", DataTier.SILVER
+        f"school_{config.dataset_type}", DataTier.SILVER
     )
 
     gold_table_name = construct_full_table_name(gold_tier_schema_name, country_code)
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver_df").toDF()
 
     if s.catalog.tableExists(gold_table_name):
         gold_dt = DeltaTable.forName(s, gold_table_name)
 
-        silver = add_missing_columns(silver, schema_columns)
-        silver = transform_types(silver, schema_name, context)
-        silver = compute_row_hash(silver)
-        silver = silver.select(get_reference_schema_columns(s, schema_name))
+        silver_df = add_missing_columns(silver_df, schema_columns)
+        silver_df = transform_types(silver_df, schema_name, context)
+        silver_df = compute_row_hash(silver_df)
+        silver_df = silver_df.select([c.name for c in schema_columns])
         update_columns = [c.name for c in schema_columns if c.name != primary_key]
-        query = build_deduped_merge_query(gold_dt, silver, primary_key, update_columns)
+        query = build_deduped_merge_query(
+            gold_dt, silver_df, primary_key, update_columns
+        )
 
         if query is not None:
             execute_query_with_error_handler(
@@ -258,9 +267,9 @@ def reference(
             context,
             if_not_exists=True,
         )
-        silver.write.format("delta").mode("append").saveAsTable(gold_table_name)
+        silver_df.write.format("delta").mode("append").saveAsTable(gold_table_name)
 
-    schema_reference = get_datahub_schema_columns(s, config.metastore_schema)
+    schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
         context,
         schema_reference=schema_reference,
@@ -270,5 +279,8 @@ def reference(
 
     yield Output(
         None,
-        metadata={**get_output_metadata(config), "preview": get_table_preview(silver)},
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(silver_df),
+        },
     )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
