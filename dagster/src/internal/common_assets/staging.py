@@ -107,7 +107,6 @@ def staging_step(
         )
         staging = staging_dt.alias("staging").toDF()
 
-        ## @QUESTION: This will not write if get_files_for_review is empty. review code
         files_for_review = (
             get_files_for_review(  ## @QUESTION: Why do we skip the current file?
                 adls_file_client,
@@ -145,7 +144,7 @@ def staging_step(
                 )
             staging = staging_dt.toDF()
     else:
-        staging = upstream_df  ## @QUESTION: this file should be merged to the staging table above if it exists?
+        staging = upstream_df
         staging = transform_types(staging, schema_name, context)
         files_for_review = get_files_for_review(adls_file_client, config)
         context.log.info(f"{len(files_for_review)=}")

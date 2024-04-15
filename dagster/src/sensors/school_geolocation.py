@@ -139,9 +139,6 @@ def school_master_geolocation__successful_manual_checks_sensor(
             adls_filepath
         )
         country_code = filename_components.country_code
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata  ## @QUESTION: not sure about these fields -- where will they be used? This file is the passing row IDs file so it doesn't make sense
-        size = properties.size  ## @QUESTION: see above
 
         ops_destination_mapping = {
             "silver": OpDestinationMapping(
@@ -167,8 +164,8 @@ def school_master_geolocation__successful_manual_checks_sensor(
         run_ops = generate_run_ops(
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata={},
+            file_size_bytes=0,
             domain=DOMAIN,
             country_code=country_code,
         )
@@ -210,9 +207,6 @@ def school_master_geolocation__failed_manual_checks_sensor(
             adls_filepath
         )
         country_code = filename_components.country_code
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
@@ -227,8 +221,8 @@ def school_master_geolocation__failed_manual_checks_sensor(
         run_ops = generate_run_ops(
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata={},
+            file_size_bytes=0,
             domain=DOMAIN,
             country_code=country_code,
         )
