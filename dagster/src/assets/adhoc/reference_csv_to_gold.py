@@ -67,7 +67,8 @@ def adhoc__reference_data_quality_checks(
     dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
     yield Output(
-        dq_checked.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        dq_checked.toPandas(),
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
@@ -77,14 +78,17 @@ def adhoc__reference_dq_checks_passed(
     adhoc__reference_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(
-        adhoc__reference_data_quality_checks, "reference"
+        adhoc__reference_data_quality_checks,
+        "reference",
     )
     dq_passed = dq_passed.withColumn(
-        "signature", f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256)
+        "signature",
+        f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256),
     )
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
     yield Output(
-        dq_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        dq_passed.toPandas(),
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
@@ -94,10 +98,12 @@ def adhoc__reference_dq_checks_failed(
     adhoc__reference_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
     dq_failed = extract_dq_failed_rows(
-        adhoc__reference_data_quality_checks, "reference"
+        adhoc__reference_data_quality_checks,
+        "reference",
     )
     yield Output(
-        dq_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        dq_failed.toPandas(),
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
@@ -108,7 +114,9 @@ def adhoc__publish_reference_to_gold(
     adhoc__reference_dq_checks_passed: sql.DataFrame,
 ) -> sql.DataFrame:
     gold = transform_types(
-        adhoc__reference_dq_checks_passed, config.metastore_schema, context
+        adhoc__reference_dq_checks_passed,
+        config.metastore_schema,
+        context,
     )
     gold = compute_row_hash(gold)
     yield Output(gold, metadata={"filepath": get_output_filepath(context)})

@@ -1,12 +1,12 @@
 import datahub.emitter.mce_builder as builder
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+
+from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
-from dagster import OpExecutionContext
 
-
-def emit_lineage(context: OpExecutionContext):
+def emit_lineage(context: OpExecutionContext) -> None:
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,

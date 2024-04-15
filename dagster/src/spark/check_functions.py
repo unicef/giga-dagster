@@ -54,7 +54,7 @@ def get_country_geometry(country_code_iso3):
         ][0]
     except ValueError as e:
         if str(e) == "Must be a coordinate pair or Point":
-            country_geometry is None  # noqa: B015
+            country_geometry = None
         else:
             raise e
 
@@ -93,10 +93,9 @@ def is_within_country_geopy(latitude, longitude, country_code_iso3):
 
     if location is None:
         return False
-    else:
-        geopy_country_code_iso2 = location.raw["address"].get("country_code")
 
-        return geopy_country_code_iso2.lower() == country_code_iso2.lower()
+    geopy_country_code_iso2 = location.raw["address"].get("country_code")
+    return geopy_country_code_iso2.lower() == country_code_iso2.lower()
 
 
 # Inside based on boundary distance
@@ -105,7 +104,7 @@ def is_within_boundary_distance(latitude, longitude, country_code_iso3):
     geometry = get_country_geometry(country_code_iso3)
 
     if point is not None and geometry is not None:
-        p1, p2 = nearest_points(geometry, point)
+        p1, _ = nearest_points(geometry, point)
         point1 = p1.coords[0]
         point2 = (longitude, latitude)
         distance = geodesic(point1, point2).km
@@ -125,7 +124,9 @@ def is_within_country(latitude, longitude, country_code_iso3):
     is_valid_gadm = is_within_country_gadm(latitude, longitude, country_code_iso3)
     is_valid_geopy = is_within_country_geopy(latitude, longitude, country_code_iso3)
     is_valid_boundary = is_within_boundary_distance(
-        latitude, longitude, country_code_iso3
+        latitude,
+        longitude,
+        country_code_iso3,
     )
 
     # Note: Check if valid lat/long values
@@ -175,7 +176,7 @@ def are_pair_points_beyond_minimum_distance(
 
 
 are_pair_points_beyond_minimum_distance_udf = f.udf(
-    are_pair_points_beyond_minimum_distance
+    are_pair_points_beyond_minimum_distance,
 )
 
 # def are_all_points_beyond_minimum_distance(coordinates_list):
@@ -287,7 +288,8 @@ def is_same_name_level_within_radius(row1, row2):
         school_name1 == school_name2
         and education_level1 == education_level2
         and not are_pair_points_beyond_minimum_distance(
-            (longitude1, latitude1), (longitude2, latitude2)
+            (longitude1, latitude1),
+            (longitude2, latitude2),
         )
     )
 
@@ -308,7 +310,8 @@ def is_similar_name_level_within_radius(row1, row2):
         >= config.SIMILARITY_RATIO_CUTOFF
         and education_level1 == education_level2
         and not are_pair_points_beyond_minimum_distance(
-            (longitude1, latitude1), (longitude2, latitude2)
+            (longitude1, latitude1),
+            (longitude2, latitude2),
         )
     )
 

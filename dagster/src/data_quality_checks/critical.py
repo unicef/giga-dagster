@@ -29,7 +29,7 @@ def critical_error_checks(
                 f.col("dq_is_invalid_range-latitude"),
                 f.col("dq_is_invalid_range-longitude"),
                 # f.col("dq_is_not_within_country"),
-            ]
+            ],
         )
 
     df = df.withColumn(

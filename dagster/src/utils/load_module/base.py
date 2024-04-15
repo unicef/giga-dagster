@@ -6,7 +6,8 @@ T = TypeVar("T")
 
 
 def _find_definition_in_module(
-    module: ModuleType, definition: T | tuple[T]
+    module: ModuleType,
+    definition: T | tuple[T],
 ) -> Generator[T, None, None]:
     for attr in dir(module):
         value = getattr(module, attr)

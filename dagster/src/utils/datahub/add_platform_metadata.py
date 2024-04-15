@@ -6,6 +6,7 @@ from datahub.metadata.schema_classes import (
     PlatformTypeClass,
 )
 from pydantic import AnyUrl
+
 from src.settings import settings
 
 
@@ -14,7 +15,7 @@ def add_platform_metadata(
     display_name: str,
     logo_url: AnyUrl = None,
     filepath_delimiter: str = "/",
-):
+) -> None:
     emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,

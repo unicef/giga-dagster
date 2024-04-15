@@ -507,7 +507,7 @@ class Config(BaseSettings):
     FIVE_DECIMAL_PLACES: list[str] = ["latitude", "longitude"]
 
     COLUMN_SUM: list[list[str]] = [
-        ["student_count_girls", "student_count_boys", "student_count_others"]
+        ["student_count_girls", "student_count_boys", "student_count_others"],
     ]
 
     VALUES_RANGE_PRIO: dict[str, dict[str, int]] = {

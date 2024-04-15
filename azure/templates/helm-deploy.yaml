@@ -29,10 +29,11 @@ jobs:
                 install: true
                 chartType: Name
                 chartName: bitnami/spark
+                chartVersion: 8.1.6
                 releaseName: spark
                 namespace: $(kubernetesNamespace)
                 arguments: >
-                  --version 8.1.6
+                  --timeout 30m
                   --values $(Build.SourcesDirectory)/infra/helm/spark/values.yaml
                   --set image.registry="$(containerRegistryName).azurecr.io"
                   --set image.repository="giga-dagster-spark"
@@ -58,10 +59,10 @@ jobs:
                 install: true
                 chartType: Name
                 chartName: dagster/dagster
+                chartVersion: 1.6.8
                 releaseName: dagster
                 namespace: $(kubernetesNamespace)
                 arguments: >
-                  --version 1.6.8
                   --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
                   --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
@@ -86,4 +87,4 @@ jobs:
                   --set ingress.hosts[0]="io-dagster-$(deployEnv).unitst.org"
                   --set config.clientIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.clientSecretRef.secretRef="oi-dagster-secrets-$(deployEnv)"
-                  --set config.tenantIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
+                  --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets

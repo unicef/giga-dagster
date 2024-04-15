@@ -44,41 +44,48 @@ class CustomDatahubValidationAction:
         )
         self.data_platform_urn = builder.make_data_platform_urn(platform="deltaLake")
         self.dataset_urn = builder.make_dataset_urn(
-            platform="deltaLake", name="test", env="DEV"
+            platform="deltaLake",
+            name="test",
+            env="DEV",
         )
         self.id_field_urn = builder.make_schema_field_urn(
-            self.dataset_urn, field_path="id"
+            self.dataset_urn,
+            field_path="id",
         )
         self.school_id_giga_field_urn = builder.make_schema_field_urn(
-            self.dataset_urn, field_path="school_id_giga"
+            self.dataset_urn,
+            field_path="school_id_giga",
         )
         self.school_id_gov_field_urn = builder.make_schema_field_urn(
-            self.dataset_urn, field_path="school_id_gov"
+            self.dataset_urn,
+            field_path="school_id_gov",
         )
         self.latitude_field_urn = builder.make_schema_field_urn(
-            self.dataset_urn, field_path="latitude"
+            self.dataset_urn,
+            field_path="latitude",
         )
         self.longitude_field_urn = builder.make_schema_field_urn(
-            self.dataset_urn, field_path="longitude"
+            self.dataset_urn,
+            field_path="longitude",
         )
         self.assertion_urns = [
             builder.make_assertion_urn(
-                builder.make_assertion_urn("f0338dc2-985d-490c-9a95-6bf6530d024c")
+                builder.make_assertion_urn("f0338dc2-985d-490c-9a95-6bf6530d024c"),
             ),
             builder.make_assertion_urn(
-                builder.make_assertion_urn("b2c99733-c100-4dd7-89f8-ffc9393f9cdd")
+                builder.make_assertion_urn("b2c99733-c100-4dd7-89f8-ffc9393f9cdd"),
             ),
             builder.make_assertion_urn(
-                builder.make_assertion_urn("42bb89e4-4dfa-4975-b35e-f30060bc908b")
+                builder.make_assertion_urn("42bb89e4-4dfa-4975-b35e-f30060bc908b"),
             ),
             builder.make_assertion_urn(
-                builder.make_assertion_urn("646dd84c-3eeb-48e4-91bb-a5846df2bb7b")
+                builder.make_assertion_urn("646dd84c-3eeb-48e4-91bb-a5846df2bb7b"),
             ),
             builder.make_assertion_urn(
-                builder.make_assertion_urn("6f1a7c23-56de-45bb-834b-4a8250eed8c9")
+                builder.make_assertion_urn("6f1a7c23-56de-45bb-834b-4a8250eed8c9"),
             ),
             builder.make_assertion_urn(
-                builder.make_assertion_urn("0ad9d1f0-eb0c-450f-a18d-d0751af3883c")
+                builder.make_assertion_urn("0ad9d1f0-eb0c-450f-a18d-d0751af3883c"),
             ),
         ]
         self.assertion_run_ids = [
@@ -140,7 +147,8 @@ class CustomDatahubValidationAction:
     def upsert_dataset(self):
         dataset_properties = DatasetProperties(name="test")
         dataset_mcp = MetadataChangeProposalWrapper(
-            entityUrn=self.dataset_urn, aspect=dataset_properties
+            entityUrn=self.dataset_urn,
+            aspect=dataset_properties,
         )
         self.emitter.emit_mcp(dataset_mcp)
 
@@ -202,7 +210,7 @@ class CustomDatahubValidationAction:
         dataset_properties = DatasetPropertiesClass(
             customProperties={
                 "slug": "gold/school-master/test",
-            }
+            },
         )
         dataset_properties_mcp = MetadataChangeProposalWrapper(
             entityUrn=self.dataset_urn,
@@ -225,7 +233,7 @@ class CustomDatahubValidationAction:
                     value=AssertionStdParameter(
                         type=AssertionStdParameterType.NUMBER,
                         value="1",
-                    )
+                    ),
                 ),
             },
             {
@@ -242,7 +250,7 @@ class CustomDatahubValidationAction:
                     value=AssertionStdParameter(
                         type=AssertionStdParameterType.NUMBER,
                         value="1",
-                    )
+                    ),
                 ),
             },
             {
@@ -257,7 +265,7 @@ class CustomDatahubValidationAction:
                     value=AssertionStdParameter(
                         type=AssertionStdParameterType.NUMBER,
                         value="1",
-                    )
+                    ),
                 ),
             },
             {
@@ -327,7 +335,7 @@ class CustomDatahubValidationAction:
     @_log_progress("assertion data platform")
     def upsert_assertion_data_platform(self):
         assertion_data_platform_instance = DataPlatformInstance(
-            platform=builder.make_data_platform_urn("spark")
+            platform=builder.make_data_platform_urn("spark"),
         )
         assertion_data_platform_instance_mcps = [
             MetadataChangeProposalWrapper(
@@ -364,7 +372,9 @@ class CustomDatahubValidationAction:
         assertion_unique_ids_run_mcps = [
             MetadataChangeProposalWrapper(entityUrn=urn, aspect=run)
             for urn, run in zip(
-                self.assertion_urns, assertion_unique_ids_runs, strict=True
+                self.assertion_urns,
+                assertion_unique_ids_runs,
+                strict=True,
             )
         ]
         for mcp in assertion_unique_ids_run_mcps:

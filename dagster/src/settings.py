@@ -30,10 +30,10 @@ class Settings(BaseSettings):
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
-    AUTH_OIDC_REDIRECT_URL: str
-    AUTH_OIDC_CLIENT_ID: str
-    AUTH_OIDC_TENANT_ID: str
-    AUTH_OIDC_CLIENT_SECRET: str
+    DATAHUB_OIDC_REDIRECT_URL: str
+    DATAHUB_OIDC_CLIENT_ID: str
+    DATAHUB_OIDC_TENANT_ID: str
+    DATAHUB_OIDC_CLIENT_SECRET: str
     HIVE_METASTORE_URI: str
     AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
@@ -123,11 +123,14 @@ class Settings(BaseSettings):
 
     @property
     def INGESTION_DB_HOST(self) -> str:
-        return (
-            f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
-            if self.IN_PRODUCTION
-            else "db"
-        )
+        if self.DEPLOY_ENV in [
+            DeploymentEnvironment.STAGING,
+            DeploymentEnvironment.PRODUCTION,
+        ]:
+            return f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        elif self.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
+            return f"postgres-postgresql.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        return "db"
 
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
@@ -145,7 +148,7 @@ class Settings(BaseSettings):
             PostgresDsn.build(
                 scheme="postgresql+psycopg2",
                 **self.INGESTION_DATABASE_CONNECTION_DICT,
-            )
+            ),
         )
 
 

@@ -39,11 +39,13 @@ for folder in silver_subfolders:
 
             if "_school_geolocation_" in filepath:
                 new_filepath = filepath.replace(
-                    "_school_geolocation_", "_school-geolocation_"
+                    "_school_geolocation_",
+                    "_school-geolocation_",
                 )
             elif "_school-geolocation_coverage_" in filepath:
                 new_filepath = filepath.replace(
-                    "_school-geolocation_coverage_", "_school-coverage_"
+                    "_school-geolocation_coverage_",
+                    "_school-coverage_",
                 )
             else:
                 continue

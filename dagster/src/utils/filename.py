@@ -7,7 +7,6 @@ from src.schemas.filename_components import FilenameComponents
 
 def deconstruct_school_master_filename_components(filepath: str):
     """Deconstruct and validate filename components for files uploaded through the Ingestion Portal"""
-
     path = Path(filepath)
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
@@ -52,7 +51,7 @@ def deconstruct_qos_filename_components(filepath: str):
     if "qos" in path.stem:
         if len(path.parent.name) != 3:
             raise FilenameValidationException(
-                f"Expected 3-letter ISO country code for QoS directory; got `{path.parent.name}`"
+                f"Expected 3-letter ISO country code for QoS directory; got `{path.parent.name}`",
             )
 
         return FilenameComponents(

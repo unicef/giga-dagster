@@ -18,7 +18,8 @@ from src.utils.logger import (
 
 
 def duplicate_name_level_110_check(
-    df: sql.DataFrame, context: OpExecutionContext = None
+    df: sql.DataFrame,
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate level within 110m checks...")
@@ -28,7 +29,10 @@ def duplicate_name_level_110_check(
     df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
     df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
     window_spec1 = Window.partitionBy(
-        "school_name", "education_level", "lat_110", "long_110"
+        "school_name",
+        "education_level",
+        "lat_110",
+        "long_110",
     )
     df = df.withColumn(
         "dq_duplicate_name_level_within_110m_radius",
@@ -42,7 +46,8 @@ def duplicate_name_level_110_check(
 
 
 def similar_name_level_within_110_check(
-    df: sql.DataFrame, context: OpExecutionContext = None
+    df: sql.DataFrame,
+    context: OpExecutionContext = None,
 ):
     __test_name__ = "similar name level within 110m"
     logger = get_context_with_fallback_logger(context)
@@ -78,7 +83,9 @@ def similar_name_level_within_110_check(
     # Left join to self to compare similarity across duplicate groups
     school_names_2 = school_names_1.withColumnRenamed("school_name", "school_name_join")
     df_l = school_names_1.join(
-        school_names_2, on=["education_level", "lat_110", "long_110"], how="left"
+        school_names_2,
+        on=["education_level", "lat_110", "long_110"],
+        how="left",
     )
 
     df_l = df_l.withColumn(
@@ -170,7 +177,7 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
-        ]
+        ],
     )
     df.show()
     print(df.count())

@@ -1,11 +1,13 @@
-import os.path
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 
+from src.exceptions import UnsupportedFiletypeException
+
 
 def pandas_loader(data: BytesIO, filepath: str) -> pd.DataFrame:
-    _, ext = os.path.splitext(filepath)
+    ext = Path(filepath).suffix
 
     if ext == ".csv":
         return pd.read_csv(data)
@@ -16,4 +18,4 @@ def pandas_loader(data: BytesIO, filepath: str) -> pd.DataFrame:
     if ext == ".parquet":
         return pd.read_parquet(data)
 
-    raise Exception(f"Unsupported file type `{ext}`")
+    raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
