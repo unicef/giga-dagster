@@ -48,7 +48,9 @@ def get_country_geometry(country_code_iso3: str):
 
 
 def is_not_within_country(
-    df: sql.DataFrame, country_code_iso3: str, context: OpExecutionContext = None
+    df: sql.DataFrame,
+    country_code_iso3: str,
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Checking if not within country...")
@@ -64,7 +66,9 @@ def is_not_within_country(
     country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
     is_not_within_country_check = is_not_within_country_check_udf_factory(
-        country_code_iso2, country_code_iso3, geometry
+        country_code_iso2,
+        country_code_iso3,
+        geometry,
     )
 
     return df.withColumn(
@@ -94,7 +98,7 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
-        ]
+        ],
     )
     df.show()
     # df = df.withColumn("latitude", f.lit(6.1671))  # outside boundary <= 150km

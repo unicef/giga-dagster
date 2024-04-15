@@ -14,9 +14,11 @@ from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
 
 
-def _get_host_ip():
+def _get_host_ip() -> str:
     completed_process = subprocess.run(
-        ["hostname", "-i"], capture_output=True, check=False
+        ["hostname", "-i"],
+        capture_output=True,
+        check=False,
     )
     ip = completed_process.stdout.strip().decode("utf-8")
     return "127.0.0.1" if ip == "127.0.1.1" else ip
@@ -60,7 +62,7 @@ if settings.IN_PRODUCTION:
         {
             "spark.driver.host": _get_host_ip(),
             "spark.driver.port": "4040",
-        }
+        },
     )
 
 spark_app_name = (
@@ -72,7 +74,7 @@ pyspark = PySparkResource(
         "spark.app.name": spark_app_name,
         "spark.master": f"spark://{settings.SPARK_MASTER_HOST}:7077",
         **spark_common_config,
-    }
+    },
 )
 
 
@@ -91,9 +93,9 @@ def get_spark_session() -> SparkSession:
     return spark.getOrCreate()
 
 
-def count_nulls_for_column(df, column_name):
+def count_nulls_for_column(df: sql.DataFrame, column_name: str) -> sql.DataFrame:
     return df.select(
-        count(col(column_name).isNull()).alias(f"{column_name}_null_count")
+        count(col(column_name).isNull()).alias(f"{column_name}_null_count"),
     ).first()[0]
 
 
@@ -116,14 +118,15 @@ def transform_columns(
 
         if nulls_before != nulls_after:
             raise ValueError(
-                f"Error: NULL count mismatch for column {col_name} after the cast."
+                f"Error: NULL count mismatch for column {col_name} after the cast.",
             )
 
     return df
 
 
 def transform_school_types(
-    df: sql.DataFrame, context: OpExecutionContext | OutputContext = None
+    df: sql.DataFrame,
+    context: OpExecutionContext | OutputContext = None,
 ) -> sql.DataFrame:
     columns_convert_to_double = [
         "latitude",
@@ -198,7 +201,10 @@ def transform_school_types(
     df = transform_columns(df, columns_convert_to_long, types.LongType(), context)
     df = transform_columns(df, columns_convert_to_string, types.StringType(), context)
     df = transform_columns(
-        df, columns_convert_to_timestamp, types.TimestampType(), context
+        df,
+        columns_convert_to_timestamp,
+        types.TimestampType(),
+        context,
     )
 
     df.printSchema()
@@ -221,7 +227,7 @@ def transform_types(
             column.name: col(column.name).cast(column.dataType)
             for column in columns
             if column.name != "signature"
-        }
+        },
     )
     logger.info("Transformed column types")
     df.printSchema()
@@ -229,7 +235,8 @@ def transform_types(
 
 
 def transform_qos_bra_types(
-    df: sql.DataFrame, context: OutputContext = None
+    df: sql.DataFrame,
+    context: OutputContext = None,
 ) -> sql.DataFrame:
     log_func = print if context is None else context.log.info
 
@@ -264,7 +271,7 @@ def transform_qos_bra_types(
         log_func(">> TRANSFORMED TIMESTAMP")
 
     @udf(returnType=types.StringType())
-    def generate_uuid():
+    def generate_uuid() -> str:
         return str(uuid4())
 
     df = df.withColumn("id", generate_uuid())
@@ -274,5 +281,5 @@ def transform_qos_bra_types(
     return df
 
 
-def compute_row_hash(df: sql.DataFrame):
+def compute_row_hash(df: sql.DataFrame) -> sql.DataFrame:
     return df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))

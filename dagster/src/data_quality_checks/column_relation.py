@@ -86,7 +86,7 @@ def column_relation_checks(
                 (f.lower(f.col("cellular_coverage_availability")) == "yes")
                 & (
                     f.lower(f.col("cellular_coverage_type")).isin(
-                        ["2g", "3g", "4g", "5g"]
+                        ["2g", "3g", "4g", "5g"],
                     )
                 ),
                 0,
@@ -160,29 +160,7 @@ def column_relation_checks(
             .otherwise(1)
         )
 
-    elif dataset_type == "coverage":
-        # nearest_XX_distance -- nearest_XX_id
-        column_pairs = {
-            ("nearest_NR_id", "nearest_NR_distance"),
-            ("nearest_LTE_id", "nearest_LTE_distance"),
-            ("nearest_UMTS_id", "nearest_UMTS_distance"),
-            ("nearest_GSM_id", "nearest_GSM_distance"),
-        }
-
-        for id, distance in column_pairs:
-            transforms[f"dq_column_relation_checks-{id}_{distance}"] = (
-                f.when(
-                    (f.col(f"{id}").isNull()) & (f.col(f"{distance}").isNull()),
-                    0,
-                )
-                .when(
-                    (f.col(f"{id}").isNotNull()) & (f.col(f"{distance}").isNotNull()),
-                    0,
-                )
-                .otherwise(1)
-            )
-
-    elif dataset_type == "coverage_itu":
+    elif dataset_type == "coverage" or dataset_type == "coverage_itu":
         # nearest_XX_distance -- nearest_XX_id
         column_pairs = {
             ("nearest_NR_id", "nearest_NR_distance"),

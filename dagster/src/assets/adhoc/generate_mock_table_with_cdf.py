@@ -25,7 +25,11 @@ def adhoc__copy_original(
         .property("delta.enableChangeDataFeed", "true")
     )
     execute_query_with_error_handler(
-        spark.spark_session, query, "school_master", "zcdf", context
+        spark.spark_session,
+        query,
+        "school_master",
+        "zcdf",
+        context,
     )
 
     (
@@ -50,7 +54,8 @@ def adhoc__generate_v2(spark: PySparkResource):
         DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
         .alias("master")
         .merge(
-            updates.alias("updates"), "master.school_id_giga = updates.school_id_giga"
+            updates.alias("updates"),
+            "master.school_id_giga = updates.school_id_giga",
         )
         .whenMatchedUpdateAll()
         .whenNotMatchedBySourceDelete()
@@ -71,7 +76,8 @@ def adhoc__generate_v3(spark: PySparkResource):
         DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
         .alias("master")
         .merge(
-            updates.alias("updates"), "master.school_id_giga = updates.school_id_giga"
+            updates.alias("updates"),
+            "master.school_id_giga = updates.school_id_giga",
         )
         .whenMatchedUpdateAll()
         .whenNotMatchedBySourceDelete()

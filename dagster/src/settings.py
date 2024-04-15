@@ -136,11 +136,14 @@ class Settings(BaseSettings):
 
     @property
     def INGESTION_DB_HOST(self) -> str:
-        return (
-            f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
-            if self.IN_PRODUCTION
-            else "db"
-        )
+        if self.DEPLOY_ENV in [
+            DeploymentEnvironment.STAGING,
+            DeploymentEnvironment.PRODUCTION,
+        ]:
+            return f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        elif self.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
+            return f"postgres-postgresql.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        return "db"
 
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
@@ -158,7 +161,7 @@ class Settings(BaseSettings):
             PostgresDsn.build(
                 scheme="postgresql+psycopg2",
                 **self.INGESTION_DATABASE_CONNECTION_DICT,
-            )
+            ),
         )
 
 

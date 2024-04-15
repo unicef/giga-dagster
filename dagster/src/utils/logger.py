@@ -2,10 +2,12 @@ from typing import TypeVar
 
 import loguru
 
-from dagster import OpExecutionContext
+from dagster import DagsterLogManager, OpExecutionContext
 
 
-def get_context_with_fallback_logger(context: OpExecutionContext = None):
+def get_context_with_fallback_logger(
+    context: OpExecutionContext = None,
+) -> DagsterLogManager | type(loguru.logger):
     if context is None:
         return loguru.logger
     return context.log
@@ -15,12 +17,12 @@ T = TypeVar("T")
 
 
 class ContextLoggerWithLoguruFallback:
-    def __init__(self, context: OpExecutionContext = None, group: str = None):
+    def __init__(self, context: OpExecutionContext = None, group: str = None) -> None:
         self.context = context
         self.group = group
 
     @property
-    def log(self):
+    def log(self) -> DagsterLogManager | type(loguru.logger):
         return get_context_with_fallback_logger(self.context)
 
     def passthrough(self, expr: T, message: str) -> T:

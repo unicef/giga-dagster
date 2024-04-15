@@ -37,7 +37,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(
-            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
@@ -53,14 +53,15 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         dt = DeltaTable.forName(spark, full_table_name)
 
         context.log.info(
-            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS."
+            f"Downloaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
         )
 
         return dt.toDF()
 
     @staticmethod
     def _get_table_path(
-        context: InputContext | OutputContext, filepath: str
+        context: InputContext | OutputContext,
+        filepath: str,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
         table_name = config.filename_components.country_code
@@ -120,7 +121,19 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         spark = self._get_spark_session()
 
         if schema_name == "qos":
-            columns = data.schema.fields
+            gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
+            incoming_schema = data.schema
+            gold_columns = {col.name for col in gold_schema.fields}
+            gold_columns.discard("signature")
+            incoming_columns = {col.name for col in incoming_schema.fields}
+
+            if len(gold_columns.symmetric_difference(incoming_columns)) > 0:
+                dummy_df = spark.createDataFrame([], schema=incoming_schema)
+                dummy_df.write.format("delta").option("mergeSchema", "true").mode(
+                    "append"
+                ).saveAsTable(full_table_name)
+
+            columns = incoming_schema.fields
             primary_key = "gigasync_id"
         else:
             columns = get_schema_columns(spark, schema_name)

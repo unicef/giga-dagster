@@ -53,7 +53,7 @@ def aggregate_report_spark_df(
     # Unpivot Row Level Checks
     stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
     unpivoted_df = df.selectExpr(
-        f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)"
+        f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)",
     )
     # unpivoted_df.show()
 
@@ -64,19 +64,23 @@ def aggregate_report_spark_df(
     )
 
     agg_df = agg_df.withColumn(
-        "percent_failed", (f.col("count_failed") / f.col("count_overall")) * 100
+        "percent_failed",
+        (f.col("count_failed") / f.col("count_overall")) * 100,
     )
     agg_df = agg_df.withColumn(
-        "percent_passed", (f.col("count_passed") / f.col("count_overall")) * 100
+        "percent_passed",
+        (f.col("count_passed") / f.col("count_overall")) * 100,
     )
     agg_df = agg_df.withColumn(
-        "dq_remarks", f.when(f.col("count_failed") == 0, "pass").otherwise("fail")
+        "dq_remarks",
+        f.when(f.col("count_failed") == 0, "pass").otherwise("fail"),
     )
 
     # Processing for Human Readable Report
     agg_df = agg_df.withColumn("column", (f.split(f.col("assertion"), "-").getItem(1)))
     agg_df = agg_df.withColumn(
-        "assertion", (f.split(f.col("assertion"), "-").getItem(0))
+        "assertion",
+        (f.split(f.col("assertion"), "-").getItem(0)),
     )
     # agg_df.show()
 
@@ -94,7 +98,7 @@ def aggregate_report_spark_df(
             StructField("column", StringType(), True),
             StructField("min", IntegerType(), True),
             StructField("max", IntegerType(), True),
-        ]
+        ],
     )
     range_df = spark.createDataFrame(r_rows, schema=range_schema)
     # range_df.show(truncate=False)
@@ -105,7 +109,7 @@ def aggregate_report_spark_df(
         [
             StructField("column", StringType(), True),
             StructField("set", ArrayType(StringType(), True), True),
-        ]
+        ],
     )
     domain_df = spark.createDataFrame(d_rows, schema=domain_schema)
     # domain_df.show(truncate=False)
@@ -116,7 +120,7 @@ def aggregate_report_spark_df(
         [
             StructField("column", StringType(), True),
             StructField("precision", IntegerType(), True),
-        ]
+        ],
     )
     precision_df = spark.createDataFrame(p_rows, schema=precision_schema)
     # precision_df.show()
@@ -129,33 +133,35 @@ def aggregate_report_spark_df(
     report = report.withColumn(
         "description",
         f.when(f.col("column").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{\\}", f.col("column"))
+            f.regexp_replace("description", "\\{\\}", f.col("column")),
         ),
     )
     report = report.withColumn(
         "description",
         f.when(f.col("min").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{min\\}", f.col("min"))
+            f.regexp_replace("description", "\\{min\\}", f.col("min")),
         ),
     )
     report = report.withColumn(
         "description",
         f.when(f.col("max").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{max\\}", f.col("max"))
+            f.regexp_replace("description", "\\{max\\}", f.col("max")),
         ),
     )
     report = report.withColumn(
         "description",
         f.when(f.col("set").isNull(), f.col("description")).otherwise(
             f.regexp_replace(
-                "description", "\\{set\\}", f.array_join(f.col("set"), ", ")
-            )
+                "description",
+                "\\{set\\}",
+                f.array_join(f.col("set"), ", "),
+            ),
         ),
     )
     report = report.withColumn(
         "description",
         f.when(f.col("precision").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{precision\\}", f.col("precision"))
+            f.regexp_replace("description", "\\{precision\\}", f.col("precision")),
         ),
     )
     report = report.select(
@@ -176,7 +182,8 @@ def aggregate_report_spark_df(
 
 
 def aggregate_report_json(
-    df_aggregated: sql.DataFrame, df_bronze: sql.DataFrame
+    df_aggregated: sql.DataFrame,
+    df_bronze: sql.DataFrame,
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     rows_count = df_bronze.count()
@@ -200,7 +207,7 @@ def aggregate_report_json(
         key = agg.pop("type")
 
         # Append the rest of the dictionary to the list associated with the 'type' key
-        if key not in transformed_data.keys():
+        if key not in transformed_data:
             transformed_data[key] = [agg]
         else:
             transformed_data[key].append(agg)
@@ -224,13 +231,13 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
             (df["dq_duplicate-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-education_level_govt"] == 0)
-            & (df["dq_is_null_mandatory-school_id_govt_type"] == 0)
+            & (df["dq_is_null_mandatory-school_id_govt_type"] == 0),
         )
         df = df.select(*columns)
     elif dataset_type.startswith("coverage"):
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 0)
-            & (df["dq_is_null_mandatory-school_id_giga"] == 0)
+            & (df["dq_is_null_mandatory-school_id_giga"] == 0),
         )
         df = df.select(*columns)
     return df
@@ -244,12 +251,12 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
             (df["dq_duplicate-school_id_giga"] == 1)
             | (df["dq_is_null_mandatory-school_id_giga"] == 1)
             | (df["dq_is_null_mandatory-education_level_govt"] == 1)
-            | (df["dq_is_null_mandatory-school_id_govt_type"] == 1)
+            | (df["dq_is_null_mandatory-school_id_govt_type"] == 1),
         )
     elif dataset_type.startswith("coverage"):
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 1)
-            | (df["dq_is_null_mandatory-school_id_giga"] == 1)
+            | (df["dq_is_null_mandatory-school_id_giga"] == 1),
         )
     return df
 
@@ -266,7 +273,9 @@ def row_level_checks(
     if dataset_type in ["master", "geolocation"]:
         df = standard_checks(df, dataset_type, context)
         df = duplicate_all_except_checks(
-            df, CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type], context
+            df,
+            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type],
+            context,
         )
         df = precision_check(df, config.PRECISION, context)
         df = is_not_within_country(df, _country_code_iso3, context)
@@ -274,24 +283,27 @@ def row_level_checks(
         df = duplicate_name_level_110_check(df, context)
         df = similar_name_level_within_110_check(df, context)
         df = critical_error_checks(
-            df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
         )
         df = column_relation_checks(df, dataset_type, context)
         df = school_density_check(df, context)
     elif dataset_type == "reference":
         df = standard_checks(df, dataset_type, context)
         df = critical_error_checks(
-            df, dataset_type, CONFIG_NONEMPTY_COLUMNS[dataset_type], context
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
         )
-    elif dataset_type == "coverage":
+    elif dataset_type in ["coverage", "coverage_itu"]:
         df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "coverage_fb":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)
         df = fb_percent_sum_to_100_check(df, context)
-        df = column_relation_checks(df, dataset_type, context)
-    elif dataset_type == "coverage_itu":
-        df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "qos":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)

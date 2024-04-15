@@ -35,7 +35,7 @@ def school_master__gold_csv_to_deltatable_sensor(
     paths_list.extend(
         adls_file_client.list_paths(
             constants.adhoc_master_updates_source_folder, recursive=True
-        )
+        ),
     )
 
     run_requests = []
@@ -130,7 +130,7 @@ def school_master__gold_csv_to_deltatable_sensor(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": filename_components.country_code},
-            )
+            ),
         )
 
     yield from run_requests
@@ -211,7 +211,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
-            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops)),
         )
 
     yield from run_requests
@@ -283,7 +283,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
-            )
+            ),
         )
 
     if len(run_requests) == 0:

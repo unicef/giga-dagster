@@ -68,14 +68,17 @@ def staging_step(
     schema_columns = get_schema_columns(spark, schema_name)
     primary_key = get_primary_key(spark, schema_name)
     silver_tier_schema_name = construct_schema_name_for_tier(
-        schema_name, DataTier.SILVER
+        schema_name,
+        DataTier.SILVER,
     )
     staging_tier_schema_name = construct_schema_name_for_tier(
-        schema_name, DataTier.STAGING
+        schema_name,
+        DataTier.STAGING,
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
     staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
+        staging_tier_schema_name,
+        country_code,
     )
 
     # If silver table exists and no staging table exists, clone it to staging
@@ -114,7 +117,8 @@ def staging_step(
         # Merge each pending file for the same country
         for file_info in files_for_review:
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name, spark
+                file_info.name,
+                spark,
             )
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
@@ -122,12 +126,19 @@ def staging_step(
             staging_dt = DeltaTable.forName(spark, staging_table_name)
             update_columns = [c.name for c in schema_columns if c.name != primary_key]
             query = build_deduped_merge_query(
-                staging_dt, existing_file, primary_key, update_columns
+                staging_dt,
+                existing_file,
+                primary_key,
+                update_columns,
             )
 
             if query is not None:
                 execute_query_with_error_handler(
-                    spark, query, staging_tier_schema_name, country_code, context
+                    spark,
+                    query,
+                    staging_tier_schema_name,
+                    country_code,
+                    context,
                 )
 
             staging = staging_dt.toDF()
@@ -149,7 +160,8 @@ def staging_step(
         # If no existing silver table, just merge the spark dataframes
         for file_info in files_for_review:
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name, spark
+                file_info.name,
+                spark,
             )
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
