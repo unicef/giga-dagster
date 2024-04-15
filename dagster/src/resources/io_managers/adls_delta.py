@@ -27,6 +27,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
+        if context.step_key in ["silver", "master", "reference"]:
+            return
+
         path = self._get_filepath(context)
         table_name, _, _ = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
@@ -41,6 +44,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
+        context.log.info(f"Loading input from {context.upstream_output}")
+        if context.upstream_output.step_key in ["silver"]:
+            return None
+
         path = self._get_filepath(context)
         table_name, _, _ = self._get_table_path(context, str(path))
         spark = self._get_spark_session()
