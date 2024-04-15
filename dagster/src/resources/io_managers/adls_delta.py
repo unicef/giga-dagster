@@ -27,13 +27,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        if context.step_key in ["silver", "master", "reference"]:
-            context.log.warning("No output required for this step.")
-            return
-
         table_name, _, _ = self._get_table_path(context)
         schema_name = get_schema_name(context)
-        context.log.info(f"schema: {schema_name}, tbl: {table_name}")
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
@@ -45,12 +40,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
-        if context.upstream_output.step_key in ["silver"]:
-            context.log.warning("No input required for this step.")
-            return
-
-        path = self._get_filepath(context)
-        table_name, _, _ = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context)
         spark = self._get_spark_session()
         config = FileConfig(**context.upstream_output.step_context.op_config)
         schema_name = config.metastore_schema
@@ -71,8 +61,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context: InputContext | OutputContext,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
-        table_name = config.filename_components.country_code
-        table_root_path = str(config.filepath_object.parent)
+        table_name = config.country_code
+        table_root_path = f"{settings.SPARK_WAREHOUSE_DIR}/{config.metastore_schema}.db"
         return (
             ic(table_name),
             ic(table_root_path),

@@ -105,33 +105,21 @@ def silver(
 
 @asset(
     io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-    deps=["silver"],
 )
 def master(
     context: OpExecutionContext,
+    silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ):
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     schema_columns = get_schema_columns(s, schema_name)
-    country_code = config.country_code
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.SILVER
-    )
 
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
-    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver_df").toDF()
-    context.log.info(f"Silver table cols: {silver_df.toPandas().columns}")
-    context.log.info(
-        f"schema_name cols: {schema_name}, {[c.name for c in schema_columns]}"
-    )
-
-    silver_df = add_missing_columns(silver_df, schema_columns)
-    silver_df = transform_types(silver_df, schema_name, context)
-    silver_df = compute_row_hash(silver_df)
-    silver_df = silver_df.select([c.name for c in schema_columns])
+    silver = add_missing_columns(silver, schema_columns)
+    silver = transform_types(silver, schema_name, context)
+    silver = compute_row_hash(silver)
+    silver = silver.select([c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -141,43 +129,31 @@ def master(
         schema_reference=schema_reference,
     )
     yield Output(
-        silver_df,
+        silver,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(silver_df),
+            "preview": get_table_preview(silver),
         },
     )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
 
 
 @asset(
     io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-    deps=["silver"],
 )
 def reference(
     context: OpExecutionContext,
+    silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ):
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     schema_columns = get_schema_columns(s, schema_name)
-    country_code = config.country_code
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.SILVER
-    )
 
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
-    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver_df").toDF()
-    context.log.info(f"Silver table cols: {silver_df.toPandas().columns}")
-    context.log.info(
-        f"schema_name cols: {schema_name}, {[c.name for c in schema_columns]}"
-    )
-
-    silver_df = add_missing_columns(silver_df, schema_columns)
-    silver_df = transform_types(silver_df, schema_name, context)
-    silver_df = compute_row_hash(silver_df)
-    silver_df = silver_df.select([c.name for c in schema_columns])
+    silver = add_missing_columns(silver, schema_columns)
+    silver = transform_types(silver, schema_name, context)
+    silver = compute_row_hash(silver)
+    silver = silver.select([c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -188,9 +164,9 @@ def reference(
     )
 
     yield Output(
-        silver_df,
+        silver,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(silver_df),
+            "preview": get_table_preview(silver),
         },
     )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
