@@ -121,7 +121,19 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
         spark = self._get_spark_session()
 
         if schema_name == "qos":
-            columns = data.schema.fields
+            gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
+            incoming_schema = data.schema
+            gold_columns = {col.name for col in gold_schema.fields}
+            gold_columns.discard("signature")
+            incoming_columns = {col.name for col in incoming_schema.fields}
+
+            if len(gold_columns.symmetric_difference(incoming_columns)) > 0:
+                dummy_df = spark.createDataFrame([], schema=incoming_schema)
+                dummy_df.write.format("delta").option("mergeSchema", "true").mode(
+                    "append"
+                ).saveAsTable(full_table_name)
+
+            columns = incoming_schema.fields
             primary_key = "gigasync_id"
         else:
             columns = get_schema_columns(spark, schema_name)
