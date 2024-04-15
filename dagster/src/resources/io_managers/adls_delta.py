@@ -27,9 +27,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        if output.isEmpty():
-            context.log.warning("Output DataFrame is empty. Skipping write operation.")
+        if context.step_key in ["silver", "master", "reference"]:
+            context.log.warning("No output required for this step.")
             return
+
         path = self._get_filepath(context)
         table_name, _, _ = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
@@ -44,6 +45,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
+        if context.upstream_output.step_key in ["silver"]:
+            context.log.warning("No input required for this step.")
+            return
+
         path = self._get_filepath(context)
         table_name, _, _ = self._get_table_path(context, str(path))
         spark = self._get_spark_session()

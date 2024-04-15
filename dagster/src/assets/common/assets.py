@@ -54,9 +54,7 @@ def manual_review_failed_rows(
 
     staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
 
-    df_failed = staging.filter(
-        ~staging[primary_key].isin(passing_row_ids["approved_rows"])
-    )
+    df_failed = staging.filter(~staging[primary_key].isin(passing_row_ids))
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 
