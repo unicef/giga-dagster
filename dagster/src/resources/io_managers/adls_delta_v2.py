@@ -27,9 +27,6 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
-        if output.isEmpty():
-            context.log.warning("Output DataFrame is empty. Skipping write operation.")
-            return
         path = self._get_filepath(context)
         table_name, _, _ = self._get_table_path(context, str(path))
         schema_name = get_schema_name(context)
@@ -64,6 +61,7 @@ class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
     @staticmethod
     def _get_table_path(
         context: InputContext | OutputContext,
+        filepath: str,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
         table_name = config.filename_components.country_code
