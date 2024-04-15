@@ -3,6 +3,7 @@ from datetime import timedelta
 from typing import Any
 
 import requests
+import sentry_sdk
 from models.file_upload import FileUpload
 from requests import HTTPError, JSONDecodeError
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.db import get_db_context
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
+from src.utils.sentry import log_op_context
 
 
 def send_email_dq_report(
@@ -31,6 +33,9 @@ def send_email_dq_report(
         "uploadId": upload_id,
         "dataQualityCheck": dq_results,
     }
+
+    get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
+    get_context_with_fallback_logger(context).info(metadata)
 
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
 
@@ -72,33 +77,40 @@ def send_email_dq_report_with_config(
     config: FileConfig,
     context: OpExecutionContext = None,
 ) -> None:
-    with get_db_context() as db:
-        file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id),
-        )
-        if file_upload is None:
-            raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+    try:
+        with get_db_context() as db:
+            file_upload = db.scalar(
+                select(FileUpload).where(
+                    FileUpload.id == config.filename_components.id
+                ),
             )
+            if file_upload is None:
+                raise FileNotFoundError(
+                    f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+                )
 
-        file_upload = FileUploadConfig.from_orm(file_upload)
+            file_upload = FileUploadConfig.from_orm(file_upload)
 
-    domain = config.domain
-    type = file_upload.dataset
+        domain = config.domain
+        type = file_upload.dataset
 
-    dataset_type = f"{domain} {type}".title()
-    upload_date = file_upload.created
-    upload_id = file_upload.id
-    uploader_email = file_upload.uploader_email
+        dataset_type = f"{domain} {type}".title()
+        upload_date = file_upload.created
+        upload_id = file_upload.id
+        uploader_email = file_upload.uploader_email
 
-    send_email_dq_report(
-        dq_results=dq_results,
-        dataset_type=dataset_type,
-        upload_date=upload_date,
-        upload_id=upload_id,
-        uploader_email=uploader_email,
-        context=context,
-    )
+        send_email_dq_report(
+            dq_results=dq_results,
+            dataset_type=dataset_type,
+            upload_date=upload_date,
+            upload_id=upload_id,
+            uploader_email=uploader_email,
+            context=context,
+        )
+    except Exception as error:
+        get_context_with_fallback_logger(context).error(error)
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
 
 
 if __name__ == "__main__":
