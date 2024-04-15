@@ -31,9 +31,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             context.log.warning("No output required for this step.")
             return
 
-        path = self._get_filepath(context)
-        table_name, _, _ = self._get_table_path(context, str(path))
+        table_name, _, _ = self._get_table_path(context)
         schema_name = get_schema_name(context)
+        context.log.info(f"schema: {schema_name}, tbl: {table_name}")
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
@@ -105,6 +105,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             partition_columns = ["date"]
         else:
             columns = get_schema_columns(spark, schema_name)
+            context.log.info(f"columns: {columns}")
             partition_columns = get_partition_columns(spark, schema_name)
 
         query = (

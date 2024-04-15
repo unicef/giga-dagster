@@ -18,7 +18,7 @@ school_master_coverage__automated_data_checks_job = define_asset_job(
 
 school_master_geolocation__successful_manual_checks_job = define_asset_job(
     name="school_master_geolocation__successful_manual_checks_job",
-    selection=["silver", "master", "reference"],
+    selection=["silver*"],
 )
 
 
@@ -30,7 +30,7 @@ school_master_geolocation__failed_manual_checks_job = define_asset_job(
 
 school_master_coverage__successful_manual_checks_job = define_asset_job(
     name="school_master_coverage__successful_manual_checks_job",
-    selection=["silver", "master", "reference"],
+    selection=["silver*"],
 )
 
 
