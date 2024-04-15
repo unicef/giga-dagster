@@ -142,13 +142,12 @@ def school_master_geolocation__successful_manual_checks_sensor(
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata  ## @QUESTION: not sure about these fields -- where will they be used? This file is the passing row IDs file so it doesn't make sense
         size = properties.size  ## @QUESTION: see above
-        metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
             "silver": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath="",
-                metastore_schema=metastore_schema,
+                metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
             "master": OpDestinationMapping(

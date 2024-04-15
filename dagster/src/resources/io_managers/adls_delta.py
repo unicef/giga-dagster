@@ -23,7 +23,7 @@ from src.utils.schema import (
 adls_client = ADLSFileClient()
 
 
-class ADLSDeltaV2IOManager(BaseConfigurableIOManager):
+class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame):
