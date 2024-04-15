@@ -39,7 +39,7 @@ from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_datahub_schema_columns, get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -154,7 +154,7 @@ def coverage_dq_passed_rows(
 ) -> sql.DataFrame:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -183,7 +183,7 @@ def coverage_dq_failed_rows(
 ) -> sql.DataFrame:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -232,7 +232,7 @@ def coverage_bronze(
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -268,7 +268,7 @@ def coverage_staging(
         upstream_df=coverage_bronze,
     )
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(

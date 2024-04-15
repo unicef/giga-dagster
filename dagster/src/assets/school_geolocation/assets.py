@@ -34,8 +34,8 @@ from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
-    get_datahub_schema_columns,
     get_schema_columns,
+    get_schema_columns_datahub,
 )
 
 from dagster import OpExecutionContext, Output, asset
@@ -168,7 +168,7 @@ def geolocation_dq_passed_rows(
         geolocation_data_quality_results, config.dataset_type
     )
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -199,7 +199,7 @@ def geolocation_dq_failed_rows(
         geolocation_data_quality_results, config.dataset_type
     )
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -235,7 +235,7 @@ def geolocation_staging(
         spark.spark_session,
         upstream_df=geolocation_dq_passed_rows,
     )
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     datahub_emit_metadata_with_exception_catcher(

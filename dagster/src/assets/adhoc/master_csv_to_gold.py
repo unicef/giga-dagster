@@ -29,7 +29,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_datahub_schema_columns, get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
@@ -238,7 +238,7 @@ def adhoc__publish_master_to_gold(
     )
     gold = compute_row_hash(gold)
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     try:

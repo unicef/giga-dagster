@@ -31,7 +31,6 @@ def get_schema_table(spark: SparkSession, schema_name: str):
 
 def get_schema_columns(spark: SparkSession, schema_name: str):
     df = get_schema_table(spark, schema_name)
-    print(f"all columns: {df}")
     return [
         StructField(
             row.name,
@@ -42,20 +41,6 @@ def get_schema_columns(spark: SparkSession, schema_name: str):
     ]
 
 
-def get_master_schema_columns(spark: SparkSession, schema_name: str):
-    df = get_schema_table(spark, schema_name)
-    print(f"all columns master: {df}")
-    df = df.filter(df["is_master_or_reference"] == "master")
-    return [row.name for row in df.collect()]
-
-
-def get_reference_schema_columns(spark: SparkSession, schema_name: str):
-    df = get_schema_table(spark, schema_name)
-    print(f"all columns reference: {df}")
-    df = df.filter(df["is_master_or_reference"] == "reference")
-    return [row.name for row in df.collect()]
-
-
 def get_schema_column_descriptions(spark: SparkSession, schema_name: str) -> list[dict]:
     df = get_schema_table(spark, schema_name)
     return [
@@ -63,7 +48,7 @@ def get_schema_column_descriptions(spark: SparkSession, schema_name: str) -> lis
     ]
 
 
-def get_datahub_schema_columns(spark: SparkSession, schema_name: str) -> list[tuple]:
+def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:
     df = get_schema_table(spark, schema_name)
     return [
         (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())

@@ -14,7 +14,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_datahub_schema_columns
+from src.utils.schema import get_schema_columns_datahub
 from src.utils.sentry import log_op_context
 from src.utils.spark import transform_types
 
@@ -90,7 +90,7 @@ def adhoc__publish_qos_to_gold(
         adhoc__qos_transforms, config.metastore_schema, context
     )
 
-    schema_reference = get_datahub_schema_columns(
+    schema_reference = get_schema_columns_datahub(
         spark.spark_session, config.metastore_schema
     )
     try:
