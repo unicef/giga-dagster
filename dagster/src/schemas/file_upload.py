@@ -28,9 +28,13 @@ class FileUploadConfig(Config):
         return v.isoformat()
 
     @validator("column_to_schema_mapping", pre=True)
-    def parse_column_to_schema_mapping(cls, v: str):
-        return json.loads(v)
+    def parse_column_to_schema_mapping(cls, v: str | dict):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
 
     @validator("column_license", pre=True)
-    def parse_column_license(cls, v: str):
-        return json.loads(v)
+    def parse_column_license(cls, v: str | dict):
+        if isinstance(v, str):
+            return json.loads(v)
+        return v
