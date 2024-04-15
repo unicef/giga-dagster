@@ -14,9 +14,9 @@ from src.settings import settings
 
 graph_scopes = ["https://graph.microsoft.com/.default"]
 graph_credentials = ClientSecretCredential(
-    tenant_id=settings.AZURE_TENANT_ID,
-    client_id=settings.AZURE_CLIENT_ID,
-    client_secret=settings.AZURE_CLIENT_SECRET,
+    tenant_id=settings.AAD_AZURE_TENANT_ID,
+    client_id=settings.AAD_AZURE_CLIENT_ID,
+    client_secret=settings.AAD_AZURE_CLIENT_SECRET,
 )
 graph_client = GraphServiceClient(credentials=graph_credentials, scopes=graph_scopes)
 
