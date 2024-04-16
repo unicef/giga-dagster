@@ -15,7 +15,7 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import deconstruct_school_master_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DOMAIN = "school"
@@ -53,7 +53,9 @@ def school_master__gold_csv_to_deltatable_sensor(
         size = properties.size
         metastore_schema = "school_master"
 
-        filename_components = deconstruct_filename_components(file_data.name)
+        filename_components = deconstruct_school_master_filename_components(
+            file_data.name
+        )
         country_code = filename_components.country_code
 
         if not stem.startswith(filename_components.country_code):
@@ -122,6 +124,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -162,7 +165,9 @@ def school_reference__gold_csv_to_deltatable_sensor(
         size = properties.size
         metastore_schema = "school_reference"
 
-        filename_components = deconstruct_filename_components(file_data.name)
+        filename_components = deconstruct_school_master_filename_components(
+            file_data.name
+        )
         country_code = filename_components.country_code
 
         if not stem.startswith(filename_components.country_code):
@@ -207,6 +212,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -275,6 +281,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
