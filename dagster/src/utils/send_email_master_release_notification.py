@@ -20,7 +20,7 @@ async def send_email_master_release_notification(
     props: EmailProps, recipients: list[EmailStr]
 ):
     if len(recipients) == 0:
-        logger.info("No recipients found, skipping email.")
+        logger.warning("No recipients found, skipping email.")
         return
 
     send_email_base(

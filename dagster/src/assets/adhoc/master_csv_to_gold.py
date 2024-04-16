@@ -280,7 +280,7 @@ def adhoc__publish_master_to_gold(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
-async def adhoc__send_email(
+async def adhoc__broadcast_master_release_notes(
     context: OpExecutionContext,
     config: FileConfig,
     spark: PySparkResource,
@@ -288,7 +288,7 @@ async def adhoc__send_email(
 ) -> Output[None]:
     rows = adhoc__publish_master_to_gold.count()
     if rows == 0:
-        context.log.info("No data in master, skipping email.")
+        context.log.warning("No data in master, skipping email.")
         return Output(None)
 
     s: SparkSession = spark.spark_session
@@ -302,7 +302,7 @@ async def adhoc__send_email(
     )
 
     if cdf.count() == 0:
-        context.log.info("No changes to master, skipping email.")
+        context.log.warning("No changes to master, skipping email.")
         return Output(None)
 
     added = cdf.filter(f.col("_change_type") == "insert").count()
@@ -333,11 +333,14 @@ async def adhoc__send_email(
 
     members = await GroupsApi.list_country_members(country_code=country_code)
     recipients = [item.mail for item in members.values() if item.mail is not None]
+
     if settings.ADMIN_EMAIL:
         recipients.append(settings.ADMIN_EMAIL)
 
     if len(recipients) == 0:
-        context.log.info(f"No recipients for country {country_code}, skipping email.")
+        context.log.warning(
+            f"No recipients for country {country_code}, skipping email."
+        )
         return Output(None)
 
     await send_email_master_release_notification(props=props, recipients=recipients)
