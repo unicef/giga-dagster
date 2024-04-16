@@ -22,14 +22,14 @@ from src.utils.sentry import log_op_context
 def send_email_dq_report(
     dq_results: dict[str, Any],
     dataset_type: str,
-    upload_date: datetime,
+    upload_date: str,
     upload_id: str,
     uploader_email: str,
     context: OpExecutionContext = None,
 ) -> None:
     metadata = {
         "dataset": dataset_type,
-        "uploadDate": upload_date.isoformat(),
+        "uploadDate": upload_date,
         "uploadId": upload_id,
         "dataQualityCheck": dq_results,
     }
