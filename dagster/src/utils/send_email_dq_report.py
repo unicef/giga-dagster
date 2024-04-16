@@ -62,7 +62,7 @@ def send_email_dq_report(
             "to": [{"address": uploader_email}],
         },
         "content": {
-            "subject": "Giga Test Email",
+            "subject": "Giga Data Quality Report",
             "html": data.get("html"),
             "plainText": data.get("text"),
         },
