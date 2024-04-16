@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
+    ADMIN_EMAIL: str = ""
 
     # Derived settings
     @property

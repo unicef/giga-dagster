@@ -7,7 +7,7 @@ from dagster import Config
 from src.constants import DataTier
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.filename import deconstruct_school_master_filename_components
+from src.utils.filename import deconstruct_filename_components
 
 
 class FileConfig(Config):
@@ -17,11 +17,6 @@ class FileConfig(Config):
     dataset_type: str = Field(
         description="The type of the dataset, e.g. geolocation, coverage, qos",
     )
-
-    country_code: str = Field(
-        description="The ISO country code of the dataset, e.g. PHL, BRA, SWE"
-    )
-
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="""
@@ -76,11 +71,15 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.filepath)
+        return deconstruct_filename_components(self.filepath)
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.destination_filepath)
+        return deconstruct_filename_components(self.destination_filepath)
+
+    @property
+    def country_code(self) -> str:
+        return self.filename_components.country_code
 
     @property
     def datahub_source_dataset_urn(self) -> str:
@@ -108,7 +107,6 @@ def generate_run_ops(
     metadata: dict,
     file_size_bytes: int,
     domain: str,
-    country_code: str,
     dq_target_filepath: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
@@ -124,7 +122,6 @@ def generate_run_ops(
             file_size_bytes=file_size_bytes,
             dq_target_filepath=dq_target_filepath,
             domain=domain,
-            country_code=country_code,
         )
         run_ops[asset_key] = file_config
 

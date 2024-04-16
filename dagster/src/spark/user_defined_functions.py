@@ -76,7 +76,7 @@ def is_not_within_country_check_udf_factory(
 def has_similar_name_check_udf(school_name, school_name_2) -> int:
     if (
         school_name != school_name_2
-        and SequenceMatcher(None, school_name, school_name_2).ratio()
+        and SequenceMatcher(a=school_name, b=school_name_2).ratio()
         > config.SIMILARITY_RATIO_CUTOFF
     ):
         return 1
