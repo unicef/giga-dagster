@@ -5,7 +5,8 @@ from pydantic import BaseSettings
 
 class Config(BaseSettings):
     SIMILARITY_RATIO_CUTOFF: float = 0.7
-    SIMILARITY_CUTOFF: int = 70
+    date_today: date = date.today()
+    current_year: int = date_today.year
 
     DATA_QUALITY_CHECKS_DESCRIPTIONS: list[dict[str, str]] = [
         {
@@ -197,9 +198,6 @@ class Config(BaseSettings):
         ("report_id", "STRING"),
         ("agent_id", "STRING"),
     }
-
-    date_today: date = date.today()
-    current_year: int = date_today.year
 
     UNIQUE_COLUMNS_MASTER: list[str] = ["school_id_govt", "school_id_giga"]
 
@@ -701,6 +699,7 @@ class Config(BaseSettings):
     ]
 
 
+config = Config()
 # notes
 # admin 1 admin 2 connectivity_RT nonnullable
 # admin 1 admin 2 connectivity_RT required
@@ -745,5 +744,3 @@ class Config(BaseSettings):
 # transforms for school type
 # public_labels = ['Estadual','Municipal','Federal', 'Government', 'Public', 'Pubic', 'public']
 # private_labels = ['Private', 'Private ']
-
-config = Config()
