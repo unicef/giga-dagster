@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import sentry_sdk
 from dagster_pyspark import PySparkResource
-from icecream import ic
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -22,7 +21,9 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
+from src.internal.groups import GroupsApi
 from src.resources import ResourceKey
+from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -34,6 +35,7 @@ from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 from src.utils.send_email_master_release_notification import (
+    EmailProps,
     send_email_master_release_notification,
 )
 from src.utils.sentry import log_op_context
@@ -279,12 +281,18 @@ def adhoc__publish_master_to_gold(
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 async def adhoc__send_email(
+    context: OpExecutionContext,
     config: FileConfig,
     spark: PySparkResource,
     adhoc__publish_master_to_gold: sql.DataFrame,
 ) -> Output[None]:
+    rows = adhoc__publish_master_to_gold.count()
+    if rows == 0:
+        context.log.info("No data in master, skipping email.")
+        return Output(None)
+
     s: SparkSession = spark.spark_session
-    country_code = ic(config.filename_components.country_code)
+    country_code = config.filename_components.country_code
 
     cdf = (
         s.read.format("delta")
@@ -292,6 +300,10 @@ async def adhoc__send_email(
         .option("startingVersion", 0)
         .table(f"school_master.{country_code}")
     )
+
+    if cdf.count() == 0:
+        context.log.info("No changes to master, skipping email.")
+        return Output(None)
 
     added = cdf.filter(f.col("_change_type") == "insert").count()
     modified = cdf.filter(f.col("_change_type") == "update_preimage").count()
@@ -310,21 +322,30 @@ async def adhoc__send_email(
     else:
         version = version["version"]
 
-    rows = adhoc__publish_master_to_gold.count()
-
-    country_code_upper = country_code.upper()
-
-    props = {
-        "added": added,
-        "country": country,
-        "modified": modified,
-        "updateDate": update_date.strftime("%Y-%m-%d %H:%M:%S"),
-        "version": version,
-        "rows": rows,
-    }
-
-    await send_email_master_release_notification(
-        country_code=country_code_upper, props=props
+    props = EmailProps(
+        added=added,
+        country=country,
+        modified=modified,
+        updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
+        version=version,
+        rows=rows,
     )
 
-    return Output(None)
+    members = await GroupsApi.list_country_members(country_code=country_code)
+    recipients = [item.mail for item in members.values() if item.mail is not None]
+    if settings.ADMIN_EMAIL:
+        recipients.append(settings.ADMIN_EMAIL)
+
+    if len(recipients) == 0:
+        context.log.info(f"No recipients for country {country_code}, skipping email.")
+        return Output(None)
+
+    await send_email_master_release_notification(props=props, recipients=recipients)
+
+    return Output(
+        None,
+        metadata={
+            **props,
+            "recipients": recipients,
+        },
+    )
