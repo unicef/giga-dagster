@@ -108,6 +108,12 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
             ),
+            "adhoc__send_email": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
+            ),
         }
 
         run_ops = generate_run_ops(
