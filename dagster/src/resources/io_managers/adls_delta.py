@@ -26,7 +26,10 @@ adls_client = ADLSFileClient()
 class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame):
+    def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+        if output is None:
+            return
+
         table_name, _, _ = self._get_table_path(context)
         schema_name = get_schema_name(context)
         full_table_name = f"{schema_name}.{table_name}"

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sentry_sdk
 from dagster_pyspark import PySparkResource
+from icecream import ic
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -281,9 +282,9 @@ async def adhoc__send_email(
     config: FileConfig,
     spark: PySparkResource,
     adhoc__publish_master_to_gold: sql.DataFrame,
-):
+) -> Output[None]:
     s: SparkSession = spark.spark_session
-    country_code = config.filename_components.country_code
+    country_code = ic(config.filename_components.country_code)
 
     cdf = (
         s.read.format("delta")
@@ -325,3 +326,5 @@ async def adhoc__send_email(
     await send_email_master_release_notification(
         country_code=country_code_upper, props=props
     )
+
+    return Output(None)
