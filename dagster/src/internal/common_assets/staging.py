@@ -6,6 +6,7 @@ from dagster import OpExecutionContext
 from src.constants import DataTier
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.delta import (
     build_deduped_merge_query,
     create_delta_table,
@@ -152,5 +153,12 @@ def staging_step(
         staging = compute_row_hash(staging)
         context.log.info(f"Full {staging.count()=}")
         staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
+
+    upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
+    emit_lineage_base(
+        upstream_filepaths=upstream_filepaths,
+        dataset_urn=config.datahub_destination_dataset_urn,
+        context=context,
+    )
 
     return staging
