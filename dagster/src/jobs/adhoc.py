@@ -11,6 +11,7 @@ school_master__convert_gold_csv_to_deltatable_job = define_asset_job(
         "adhoc__publish_master_to_gold",
         "adhoc__df_duplicates",
         "adhoc__master_data_transforms",
+        "adhoc__send_email",
     ],
 )
 

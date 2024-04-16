@@ -1,6 +1,7 @@
 import os
 from io import BytesIO
 
+import country_converter as coco
 import numpy as np
 import pandas as pd
 import sentry_sdk
@@ -30,6 +31,9 @@ from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.send_email_master_release_notification import (
+    send_email_master_release_notification,
+)
 from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
@@ -268,4 +272,50 @@ def adhoc__publish_master_to_gold(
             **get_output_metadata(config),
             "preview": get_table_preview(gold),
         },
+    )
+
+
+@asset
+async def adhoc__send_email(
+    config: FileConfig,
+    spark: PySparkResource,
+    adhoc__publish_master_to_gold: sql.DataFrame,
+):
+    s: SparkSession = spark.spark_session
+    country_code = config.filename_components.country_code
+
+    cdf = (
+        s.read.format("delta")
+        .option("readChangeFeed", "true")
+        .option("startingVersion", 0)
+        .table(f"school_master.{country_code}")
+    )
+
+    added = cdf.filter(cdf._change_type == "insert").count()
+    country = coco.convert(country_code, to="name_short")
+    modified = cdf.filter(cdf._change_type == "update_preimage").count()
+    updateDate = s.sql(f"DESCRIBE DETAIL school_master.{country_code}").collect()[0][
+        "lastModified"
+    ]
+    version = (
+        cdf.select("_commit_version")
+        .orderBy("_commit_version", ascending=False)
+        .collect()
+    )[0]["_commit_version"]
+
+    rows = adhoc__publish_master_to_gold.count()
+
+    country_code_upper = country_code.upper()
+
+    props = {
+        "added": added,
+        "country": country,
+        "modified": modified,
+        "updateDate": updateDate.strftime("%Y-%m-%d %H:%M:%S"),
+        "version": version,
+        "rows": rows,
+    }
+
+    await send_email_master_release_notification(
+        country_code=country_code_upper, props=props
     )
