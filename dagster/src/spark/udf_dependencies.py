@@ -9,7 +9,7 @@ from shapely.ops import nearest_points
 
 def get_point(longitude: float, latitude: float) -> None | Point:
     try:
-        return Point(latitude, longitude)
+        return Point(longitude, latitude)
     except Exception as exc:
         logger.error(exc)
     return None
