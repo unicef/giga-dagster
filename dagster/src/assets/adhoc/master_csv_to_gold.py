@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from io import BytesIO
 
 import country_converter as coco
@@ -275,7 +276,7 @@ def adhoc__publish_master_to_gold(
     )
 
 
-@asset
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 async def adhoc__send_email(
     config: FileConfig,
     spark: PySparkResource,
@@ -291,17 +292,22 @@ async def adhoc__send_email(
         .table(f"school_master.{country_code}")
     )
 
-    added = cdf.filter(cdf._change_type == "insert").count()
+    added = cdf.filter(f.col("_change_type") == "insert").count()
+    modified = cdf.filter(f.col("_change_type") == "update_preimage").count()
     country = coco.convert(country_code, to="name_short")
-    modified = cdf.filter(cdf._change_type == "update_preimage").count()
-    updateDate = s.sql(f"DESCRIBE DETAIL school_master.{country_code}").collect()[0][
-        "lastModified"
-    ]
-    version = (
-        cdf.select("_commit_version")
-        .orderBy("_commit_version", ascending=False)
-        .collect()
-    )[0]["_commit_version"]
+
+    detail = s.sql(f"DESCRIBE DETAIL `school_master`.`{country_code}`").first()
+    if detail is None:
+        update_date = datetime.now()
+    else:
+        update_date = detail["lastModified"]
+
+    history = s.sql(f"DESCRIBE HISTORY `school_master`.`{country_code}`")
+    version = history.select(f.max("version").alias("version")).first()
+    if version is None:
+        version = 0
+    else:
+        version = version["version"]
 
     rows = adhoc__publish_master_to_gold.count()
 
@@ -311,7 +317,7 @@ async def adhoc__send_email(
         "added": added,
         "country": country,
         "modified": modified,
-        "updateDate": updateDate.strftime("%Y-%m-%d %H:%M:%S"),
+        "updateDate": update_date.strftime("%Y-%m-%d %H:%M:%S"),
         "version": version,
         "rows": rows,
     }
