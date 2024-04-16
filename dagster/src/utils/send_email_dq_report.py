@@ -1,19 +1,15 @@
 import datetime
-from datetime import timedelta
 from typing import Any
 
-import requests
 import sentry_sdk
 from models.file_upload import FileUpload
-from requests import HTTPError, JSONDecodeError
 from sqlalchemy import select
 
-from azure.communication.email import EmailClient
 from dagster import OpExecutionContext
 from src.schemas.file_upload import FileUploadConfig
-from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.db import get_db_context
+from src.utils.email.send_email_base import send_email_base
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
@@ -37,39 +33,12 @@ def send_email_dq_report(
     get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
     get_context_with_fallback_logger(context).info(metadata)
 
-    client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
-
-    res = requests.post(
-        f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report",
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
-        },
-        json=metadata,
-        timeout=int(timedelta(minutes=2).total_seconds()),
+    send_email_base(
+        endpoint="email/dq-report",
+        props=metadata,
+        subject="Giga Data Quality Report",
+        recipients=[uploader_email],
     )
-    if not res.ok:
-        try:
-            raise HTTPError(res.json())
-        except JSONDecodeError:
-            raise HTTPError(res.text) from None
-
-    data = res.json()
-
-    message = {
-        "senderAddress": settings.AZURE_EMAIL_SENDER,
-        "recipients": {
-            "to": [{"address": uploader_email}],
-        },
-        "content": {
-            "subject": "Giga Data Quality Report",
-            "html": data.get("html"),
-            "plainText": data.get("text"),
-        },
-    }
-    poller = client.begin_send(message)
-    result = poller.result()
-    get_context_with_fallback_logger(context).info(result)
 
 
 def send_email_dq_report_with_config(

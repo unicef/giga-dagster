@@ -2,15 +2,20 @@ from datetime import timedelta
 from typing import Any
 
 import requests
-from loguru import logger
 from requests import HTTPError, JSONDecodeError
 
 from azure.communication.email import EmailClient
+from dagster import OpExecutionContext
 from src.settings import settings
+from src.utils.logger import get_context_with_fallback_logger
 
 
 def send_email_base(
-    endpoint: str, props: dict[str, Any], subject: str, recipients: list[str]
+    endpoint: str,
+    props: dict[str, Any],
+    subject: str,
+    recipients: list[str],
+    context: OpExecutionContext = None,
 ):
     client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
     res = requests.post(
@@ -41,4 +46,4 @@ def send_email_base(
     }
     poller = client.begin_send(message)
     result = poller.result()
-    logger.info(result)
+    get_context_with_fallback_logger(context).info(result)
