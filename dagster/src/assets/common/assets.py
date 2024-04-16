@@ -31,7 +31,7 @@ def manual_review_failed_rows(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     passing_row_ids = adls_file_client.download_json(config.filepath)
 
@@ -58,7 +58,7 @@ def manual_review_failed_rows(
         spark=spark,
         schema_reference=schema_reference,
     )
-    yield Output(df_failed, metadata=get_output_metadata(config))
+    return Output(df_failed, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
@@ -67,7 +67,7 @@ def silver(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-):
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     passing_row_ids = adls_file_client.download_json(config.filepath)
 
@@ -94,7 +94,7 @@ def silver(
         schema_reference=schema_reference,
     )
 
-    yield Output(
+    return Output(
         df_passed,
         metadata={
             **get_output_metadata(config),
@@ -103,15 +103,13 @@ def silver(
     )
 
 
-@asset(
-    io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def master(
     context: OpExecutionContext,
     silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-):
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     schema_columns = get_schema_columns(s, schema_name)
@@ -125,27 +123,25 @@ def master(
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
-        spark=s,
+        spark=spark,
         schema_reference=schema_reference,
     )
-    yield Output(
+    return Output(
         silver,
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(silver),
         },
-    )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
+    )
 
 
-@asset(
-    io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def reference(
     context: OpExecutionContext,
     silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-):
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     schema_columns = get_schema_columns(s, schema_name)
@@ -158,15 +154,15 @@ def reference(
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
         context,
+        config=config,
         schema_reference=schema_reference,
-        country_code=config.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
+        spark=spark,
     )
 
-    yield Output(
+    return Output(
         silver,
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(silver),
         },
-    )  ## @QUESTION: Not sure what to put here if it's inplace write in delta
+    )
