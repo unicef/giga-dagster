@@ -48,7 +48,9 @@ def get_country_geometry(country_code_iso3: str):
 
 
 def is_not_within_country(
-    df: sql.DataFrame, country_code_iso3: str, context: OpExecutionContext = None
+    df: sql.DataFrame,
+    country_code_iso3: str,
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Checking if not within country...")
@@ -64,7 +66,9 @@ def is_not_within_country(
     country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
     is_not_within_country_check = is_not_within_country_check_udf_factory(
-        country_code_iso2, country_code_iso3, geometry
+        country_code_iso2,
+        country_code_iso3,
+        geometry,
     )
 
     return df.withColumn(
@@ -78,7 +82,8 @@ if __name__ == "__main__":
 
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master_updates/PHL/PHL_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
@@ -94,14 +99,14 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
-        ]
+        ],
     )
     df.show()
     # df = df.withColumn("latitude", f.lit(6.1671))  # outside boundary <= 150km
     # df = df.withColumn("longitude", f.lit(60.7832)) # outside boundary <= 150km
-    df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
-    dq_test = is_not_within_country(df, "BRA")
+    dq_test = is_not_within_country(df, "PHL")
     dq_test.show()
     print(dq_test.count())

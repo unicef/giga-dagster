@@ -28,6 +28,6 @@ def qos_school_list__schedule(context: ScheduleEvaluationContext):
                         "qos_school_list_dq_passed_rows": config,
                         "qos_school_list_dq_failed_rows": config,
                         "qos_school_list_staging": config,
-                    }
+                    },
                 ),
             )

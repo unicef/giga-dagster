@@ -79,7 +79,7 @@ def adhoc__qos_transforms(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def adhoc__publish_qos_to_gold(
     context: OpExecutionContext,
     adhoc__qos_transforms: sql.DataFrame,
@@ -87,11 +87,14 @@ def adhoc__publish_qos_to_gold(
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
     df_transformed = transform_types(
-        adhoc__qos_transforms, config.metastore_schema, context
+        adhoc__qos_transforms,
+        config.metastore_schema,
+        context,
     )
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     try:
         emit_metadata_to_datahub(

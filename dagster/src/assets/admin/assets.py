@@ -12,8 +12,8 @@ def admin__terminate_all_runs(context: OpExecutionContext):
                     DagsterRunStatus.STARTING,
                     DagsterRunStatus.QUEUED,
                     DagsterRunStatus.NOT_STARTED,
-                ]
-            )
+                ],
+            ),
         )
         if r.run_id != context.run_id or not r.job_name.startswith("admin__")
     ]

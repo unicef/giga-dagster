@@ -18,7 +18,9 @@ from src.utils.logger import get_context_with_fallback_logger
 
 
 def duplicate_checks(
-    df: sql.DataFrame, config_column_list: list[str], context: OpExecutionContext = None
+    df: sql.DataFrame,
+    config_column_list: list[str],
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate checks...")
@@ -34,7 +36,9 @@ def duplicate_checks(
 
 
 def completeness_checks(
-    df: sql.DataFrame, config_column_list: list[str], context: OpExecutionContext = None
+    df: sql.DataFrame,
+    config_column_list: list[str],
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running completeness checks...")

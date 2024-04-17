@@ -1,4 +1,6 @@
+from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import create_engine
@@ -21,7 +23,7 @@ session_maker = sessionmaker(
 )
 
 
-def get_db():
+def get_db() -> Generator[Session, Any, Any]:
     session = session_maker()
     try:
         yield session

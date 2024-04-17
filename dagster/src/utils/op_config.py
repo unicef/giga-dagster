@@ -12,10 +12,10 @@ from src.utils.filename import deconstruct_filename_components
 
 class FileConfig(Config):
     filepath: str = Field(
-        description="The path of the file inside the ADLS container relative to the root."
+        description="The path of the file inside the ADLS container relative to the root.",
     )
     dataset_type: str = Field(
-        description="The type of the dataset, e.g. geolocation, coverage, qos"
+        description="The type of the dataset, e.g. geolocation, coverage, qos",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -55,7 +55,7 @@ class FileConfig(Config):
     tier: DataTier = Field(
         description="""
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
-        """
+        """,
     )
     domain: str = Field(
         default=None,
@@ -76,6 +76,10 @@ class FileConfig(Config):
     @property
     def destination_filename_components(self) -> FilenameComponents:
         return deconstruct_filename_components(self.destination_filepath)
+
+    @property
+    def country_code(self) -> str:
+        return self.filename_components.country_code
 
     @property
     def datahub_source_dataset_urn(self) -> str:
@@ -104,7 +108,7 @@ def generate_run_ops(
     file_size_bytes: int,
     domain: str,
     dq_target_filepath: str = None,
-):
+) -> dict[str, FileConfig]:
     run_ops = {}
 
     for asset_key, op_mapping in ops_destination_mapping.items():

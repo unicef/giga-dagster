@@ -14,6 +14,6 @@ class ADLSPassthroughIOManager(BaseConfigurableIOManager):
         path = self._get_filepath(context)
         context.log.info(f"Downloading {path}...")
         data = adls_client.download_raw(str(path))
-        context.log.info(f"Downloaded {str(path)} from ADLS.")
+        context.log.info(f"Downloaded {path!s} from ADLS.")
 
         return data

@@ -3,6 +3,7 @@ from urllib import parse
 
 import country_converter as cc
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
+
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
@@ -15,7 +16,7 @@ def policy_mutation_query(group_urn):
         tag=country_name, dataset_type=dataset_type
     )
 
-    query = f"""
+    return f"""
     mutation {{
         updatePolicy(
             urn: "urn:li:dataHubPolicy:{group_name}-viewer",
@@ -38,8 +39,6 @@ def policy_mutation_query(group_urn):
         }})
     }}
     """
-
-    return query
 
 
 def create_policy_query(group_urn):
@@ -80,7 +79,7 @@ def list_datasets_by_filter(tag: str, dataset_type: str):
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
-        )
+        ),
     )
     query = f"tag:{tag}"
     dataset_urns_iterator = datahub_graph_client.get_urns_by_filter(
@@ -104,13 +103,13 @@ def group_urns_iterator():
     return datahub_graph_client.get_urns_by_filter(entity_types=["corpGroup"])
 
 
-def is_valid_country_name(country_name):
+def is_valid_country_name(country_name: str) -> bool:
     coco = cc.CountryConverter()
     country_list = list(coco.data["name_short"])
     return country_name in country_list
 
 
-def update_policies(context=None):
+def update_policies(context=None) -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,

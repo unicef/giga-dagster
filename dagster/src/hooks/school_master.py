@@ -9,7 +9,6 @@ from src.utils.op_config import FileConfig
 @success_hook
 def school_dq_checks_location_db_update_hook(context: HookContext):
     """Updates the Ingestion Portal database entry with the ADLS location of the DQ checks results."""
-
     if context.step_key not in [
         "geolocation_data_quality_results_summary",
         "coverage_data_quality_results_summary",
@@ -26,8 +25,8 @@ def school_dq_checks_location_db_update_hook(context: HookContext):
             .values(
                 {
                     FileUpload.dq_report_path: str(config.destination_filepath_object),
-                }
-            )
+                },
+            ),
         )
         db.commit()
 

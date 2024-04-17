@@ -12,6 +12,8 @@ RUN poetry export --without-hashes --with pipelines,spark -f requirements.txt > 
 
 FROM bitnami/spark:3.5.0-debian-11-r18
 
+ENV PYTHONPATH /opt/bitnami/spark/app
+
 USER root
 
 WORKDIR /tmp
@@ -36,4 +38,6 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
 
 USER 1001
 
-WORKDIR /opt/bitnami/spark
+WORKDIR /opt/bitnami/spark/app
+
+COPY ../dagster /opt/bitnami/spark/app

@@ -9,7 +9,9 @@ from src.utils.logger import get_context_with_fallback_logger
 
 
 def duplicate_set_checks(
-    df: sql.DataFrame, config_column_list: set[str], context: OpExecutionContext = None
+    df: sql.DataFrame,
+    config_column_list: set[str],
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate set checks...")
@@ -36,7 +38,9 @@ def duplicate_set_checks(
 
 
 def duplicate_all_except_checks(
-    df: sql.DataFrame, config_column_list: list[str], context: OpExecutionContext = None
+    df: sql.DataFrame,
+    config_column_list: list[str],
+    context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate all except checks...")
@@ -44,7 +48,8 @@ def duplicate_all_except_checks(
     df = df.withColumn(
         "dq_duplicate_all_except_school_code",
         f.when(
-            f.count("*").over(Window.partitionBy(config_column_list)) > 1, 1
+            f.count("*").over(Window.partitionBy(config_column_list)) > 1,
+            1,
         ).otherwise(0),
     )
 

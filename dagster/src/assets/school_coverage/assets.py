@@ -40,6 +40,7 @@ from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -54,7 +55,9 @@ def coverage_raw(
     df = adls_file_client.download_raw(config.filepath)
 
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
     )
     yield Output(df, metadata=get_output_metadata(config))
 
@@ -70,11 +73,11 @@ def coverage_data_quality_results(
 
     with get_db_context() as db:
         file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id)
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
         )
         if file_upload is None:
             raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found"
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
         file_upload = FileUploadConfig.from_orm(file_upload)
@@ -87,7 +90,8 @@ def coverage_data_quality_results(
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
-        df_raw, file_upload.column_to_schema_mapping
+        df_raw,
+        file_upload.column_to_schema_mapping,
     )
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
@@ -101,7 +105,9 @@ def coverage_data_quality_results(
     config.metadata.update({"column_mapping": column_mapping})
 
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
     )
 
     dq_pandas = dq_results.toPandas()
@@ -136,10 +142,18 @@ def coverage_data_quality_results_summary(
     )
 
     datahub_emit_assertions_with_exception_catcher(
-        context=context, config=config, dq_summary_statistics=dq_summary_statistics
+        context=context, dq_summary_statistics=dq_summary_statistics
     )
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
+    )
+
+    send_email_dq_report_with_config(
+        dq_results=dq_summary_statistics,
+        config=config,
+        context=context,
     )
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
@@ -155,7 +169,8 @@ def coverage_dq_passed_rows(
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -184,7 +199,8 @@ def coverage_dq_failed_rows(
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -233,7 +249,8 @@ def coverage_bronze(
             df = itu_coverage_merge(df, silver)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -269,7 +286,8 @@ def coverage_staging(
     )
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,

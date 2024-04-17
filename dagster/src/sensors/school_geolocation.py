@@ -9,9 +9,8 @@ from src.jobs.school_master import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-
-from ..utils.filename import deconstruct_filename_components
-from ..utils.op_config import OpDestinationMapping, generate_run_ops
+from src.utils.filename import deconstruct_filename_components
+from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 DOMAIN = "school"
@@ -84,7 +83,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             ),
             "geolocation_staging": OpDestinationMapping(
                 source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/school_geolocation_staging.db/{stem}",
+                destination_filepath="",
                 metastore_schema=metastore_schema,
                 tier=DataTier.STAGING,
             ),
@@ -120,46 +119,37 @@ def school_master_geolocation__successful_manual_checks_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.dq_passed_folder}/{SCHOOL_DATASET_TYPE}"
+    source_directory = (
+        f"{constants.staging_folder}/approved-row-ids/{SCHOOL_DATASET_TYPE}"
+    )
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
+        source_directory, recursive=False
     ):
         if file_data.is_directory:
             continue
 
         adls_filepath = file_data.name
         path = Path(adls_filepath)
-        stem = path.stem
         filename_components = deconstruct_filename_components(adls_filepath)
         country_code = filename_components.country_code
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
-        metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
-            "manual_review_passed_rows": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=str(path),
-                metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
-            ),
             "silver": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                metastore_schema=metastore_schema,
+                destination_filepath="",
+                metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
-            "gold_master": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+            "master": OpDestinationMapping(
+                source_filepath="",
+                destination_filepath="",
                 metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
-            "gold_reference": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+            "reference": OpDestinationMapping(
+                source_filepath="",
+                destination_filepath="",
                 metastore_schema="school_reference",
                 tier=DataTier.GOLD,
             ),
@@ -168,8 +158,8 @@ def school_master_geolocation__successful_manual_checks_sensor(
         run_ops = generate_run_ops(
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata={},
+            file_size_bytes=0,
             domain=DOMAIN,
         )
 
@@ -195,11 +185,11 @@ def school_master_geolocation__failed_manual_checks_sensor(
 ):
     count = 0
     source_directory = (
-        f"{constants.archive_manual_review_rejected_folder}/{SCHOOL_DATASET_TYPE}"
+        f"{constants.staging_folder}/approved-row-ids/{SCHOOL_DATASET_TYPE}"
     )
 
     for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
+        source_directory, recursive=False
     ):
         if file_data.is_directory:
             continue
@@ -208,15 +198,12 @@ def school_master_geolocation__failed_manual_checks_sensor(
         path = Path(adls_filepath)
         filename_components = deconstruct_filename_components(adls_filepath)
         country_code = filename_components.country_code
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
         metastore_schema = "school_geolocation"
 
         ops_destination_mapping = {
             "manual_review_failed_rows": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=str(path),
+                destination_filepath="",
                 metastore_schema=metastore_schema,
                 tier=DataTier.RAW,
             ),
@@ -225,8 +212,8 @@ def school_master_geolocation__failed_manual_checks_sensor(
         run_ops = generate_run_ops(
             ops_destination_mapping,
             dataset_type=DATASET_TYPE,
-            metadata=metadata,
-            file_size_bytes=size,
+            metadata={},
+            file_size_bytes=0,
             domain=DOMAIN,
         )
 

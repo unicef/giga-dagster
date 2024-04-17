@@ -37,6 +37,7 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -50,7 +51,9 @@ def geolocation_raw(
 ) -> Output[bytes]:
     raw = adls_file_client.download_raw(config.filepath)
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
     )
     return Output(raw, metadata=get_output_metadata(config))
 
@@ -66,11 +69,11 @@ def geolocation_bronze(
 
     with get_db_context() as db:
         file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id)
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
         )
         if file_upload is None:
             raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found"
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
         file_upload = FileUploadConfig.from_orm(file_upload)
@@ -114,12 +117,17 @@ def geolocation_data_quality_results(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
     )
 
     country_code = config.filename_components.country_code
     dq_results = row_level_checks(
-        geolocation_bronze, "geolocation", country_code, context
+        geolocation_bronze,
+        "geolocation",
+        country_code,
+        context,
     )
 
     dq_pandas = dq_results.toPandas()
@@ -142,16 +150,25 @@ def geolocation_data_quality_results_summary(
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
         aggregate_report_spark_df(
-            spark.spark_session, geolocation_data_quality_results
+            spark.spark_session,
+            geolocation_data_quality_results,
         ),
         geolocation_bronze,
     )
 
     datahub_emit_assertions_with_exception_catcher(
-        context=context, config=config, dq_summary_statistics=dq_summary_statistics
+        context=context, dq_summary_statistics=dq_summary_statistics
     )
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark
+        context=context,
+        config=config,
+        spark=spark,
+    )
+
+    send_email_dq_report_with_config(
+        dq_results=dq_summary_statistics,
+        config=config,
+        context=context,
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
@@ -165,11 +182,13 @@ def geolocation_dq_passed_rows(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
-        geolocation_data_quality_results, config.dataset_type
+        geolocation_data_quality_results,
+        config.dataset_type,
     )
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -196,11 +215,13 @@ def geolocation_dq_failed_rows(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
-        geolocation_data_quality_results, config.dataset_type
+        geolocation_data_quality_results,
+        config.dataset_type,
     )
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -236,7 +257,8 @@ def geolocation_staging(
         upstream_df=geolocation_dq_passed_rows,
     )
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session, config.metastore_schema
+        spark.spark_session,
+        config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,

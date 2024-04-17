@@ -1,9 +1,10 @@
 from datahub.ingestion.run.pipeline import Pipeline
+
 from src.internal.graph_client import graph_endpoint
 from src.settings import settings
 
 
-def ingest_azure_ad_to_datahub_pipeline():
+def ingest_azure_ad_to_datahub_pipeline() -> None:
     # The pipeline configuration is similar to the recipe YAML files provided to the CLI tool.
     pipeline = Pipeline.create(
         {
@@ -29,7 +30,7 @@ def ingest_azure_ad_to_datahub_pipeline():
                     "token": f"{settings.DATAHUB_ACCESS_TOKEN}",
                 },
             },
-        }
+        },
     )
 
     # Run the pipeline and report the results.

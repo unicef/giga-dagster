@@ -20,7 +20,9 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
             context.log.warning("Output DataFrame is empty.")
 
         adls_client.upload_pandas_dataframe_as_file(
-            context=context, data=output, filepath=str(path)
+            context=context,
+            data=output,
+            filepath=str(path),
         )
 
         context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")
@@ -29,7 +31,8 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
         path = self._get_filepath(context)
 
         data = adls_client.download_csv_as_spark_dataframe(
-            str(path), self.pyspark.spark_session
+            str(path),
+            self.pyspark.spark_session,
         )
 
         context.log.info(f"Downloaded {path.name} from {path.parent} in ADLS.")

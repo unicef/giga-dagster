@@ -5,8 +5,6 @@ from pathlib import Path
 
 from pydantic import BaseSettings, PostgresDsn
 
-from dagster import DefaultScheduleStatus
-
 
 class Environment(StrEnum):
     LOCAL = "local"
@@ -31,6 +29,9 @@ class Settings(BaseSettings):
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
+    AAD_AZURE_TENANT_ID: str
+    AAD_AZURE_CLIENT_ID: str
+    AAD_AZURE_CLIENT_SECRET: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
     DATAHUB_OIDC_REDIRECT_URL: str
     DATAHUB_OIDC_CLIENT_ID: str
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
+    ADMIN_EMAIL: str = ""
 
     # Derived settings
     @property
@@ -112,14 +114,6 @@ class Settings(BaseSettings):
         return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
 
     @property
-    def DEFAULT_SCHEDULE_STATUS(self) -> str:
-        return (
-            DefaultScheduleStatus.RUNNING
-            if self.IN_PRODUCTION
-            else DefaultScheduleStatus.STOPPED
-        )
-
-    @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
         if self.PYTHON_ENV == Environment.LOCAL:
             if self.WAREHOUSE_USERNAME:
@@ -133,11 +127,14 @@ class Settings(BaseSettings):
 
     @property
     def INGESTION_DB_HOST(self) -> str:
-        return (
-            f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
-            if self.IN_PRODUCTION
-            else "db"
-        )
+        if self.DEPLOY_ENV in [
+            DeploymentEnvironment.STAGING,
+            DeploymentEnvironment.PRODUCTION,
+        ]:
+            return f"postgres-postgresql-primary.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        elif self.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
+            return f"postgres-postgresql.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local"
+        return "db"
 
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
@@ -155,7 +152,7 @@ class Settings(BaseSettings):
             PostgresDsn.build(
                 scheme="postgresql+psycopg2",
                 **self.INGESTION_DATABASE_CONNECTION_DICT,
-            )
+            ),
         )
 
 

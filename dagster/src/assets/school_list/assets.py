@@ -15,7 +15,7 @@ from src.utils.adls import (
     get_filepath,
     get_output_filepath,
 )
-from src.utils.apis import query_API_data
+from src.utils.apis import query_api_data
 from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
 from src.utils.db import get_db_context
 from src.utils.op_config import FileConfig
@@ -25,13 +25,14 @@ from dagster import AssetOut, OpExecutionContext, Output, asset, multi_asset
 
 @asset(io_manager_key="adls_pandas_io_manager")
 def qos_school_list_raw(
-    context: OpExecutionContext, config: SchoolListConfig
+    context: OpExecutionContext,
+    config: SchoolListConfig,
 ) -> pd.DataFrame:
     row_data = config
 
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_API_data(context, database_session, row_data)
+            query_api_data(context, database_session, row_data),
         )
     emit_metadata_to_datahub(context, df=df)
     yield Output(df, metadata={"filepath": context.run_tags["dagster/run_key"]})
@@ -51,12 +52,14 @@ def qos_school_list_bronze(
 @multi_asset(
     outs={
         "qos_school_list_dq_results": AssetOut(
-            is_required=True, io_manager_key="adls_pandas_io_manager"
+            is_required=True,
+            io_manager_key="adls_pandas_io_manager",
         ),
         "qos_school_list_dq_summary_statistics": AssetOut(
-            is_required=True, io_manager_key="adls_json_io_manager"
+            is_required=True,
+            io_manager_key="adls_json_io_manager",
         ),
-    }
+    },
 )
 def qos_school_list_data_quality_results(
     context,
@@ -74,7 +77,7 @@ def qos_school_list_data_quality_results(
     yield Output(
         dq_results.toPandas(),
         metadata={
-            "filepath": get_output_filepath(context, "qos_school_list_dq_results")
+            "filepath": get_output_filepath(context, "qos_school_list_dq_results"),
         },
         output_name="qos_school_list_dq_results",
     )
@@ -83,8 +86,9 @@ def qos_school_list_data_quality_results(
         dq_summary_statistics,
         metadata={
             "filepath": get_output_filepath(
-                context, "qos_school_list_dq_summary_statistics"
-            )
+                context,
+                "qos_school_list_dq_summary_statistics",
+            ),
         },
         output_name="qos_school_list_dq_summary_statistics",
     )
@@ -98,7 +102,8 @@ def qos_school_list_dq_passed_rows(
     df_passed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_passed)
     yield Output(
-        df_passed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_passed.toPandas(),
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
@@ -110,7 +115,8 @@ def qos_school_list_dq_failed_rows(
     df_failed = qos_school_list_dq_results
     emit_metadata_to_datahub(context, df_failed)
     yield Output(
-        df_failed.toPandas(), metadata={"filepath": get_output_filepath(context)}
+        df_failed.toPandas(),
+        metadata={"filepath": get_output_filepath(context)},
     )
 
 
@@ -131,7 +137,7 @@ def qos_school_list_staging(
     # {filepath: str, date_modified: str}
     files_for_review = []
     for file_data in adls_file_client.qos_school_list_paths(
-        f"staging/pending-review/school-{dataset_type}-data"
+        f"staging/pending-review/school-{dataset_type}-data",
     ):
         if (
             file_data["is_directory"]
@@ -142,10 +148,10 @@ def qos_school_list_staging(
             properties = adls_file_client.get_file_metadata(file_data["name"])
             date_modified = properties["metadata"]["Date_Modified"]
             context.log.info(
-                f"filepath: {file_data['name']}, date_modified: {date_modified}"
+                f"filepath: {file_data['name']}, date_modified: {date_modified}",
             )
             files_for_review.append(
-                {"filepath": file_data["name"], "date_modified": date_modified}
+                {"filepath": file_data["name"], "date_modified": date_modified},
             )
 
     files_for_review.sort(key=lambda x: x["date_modified"])
@@ -159,7 +165,8 @@ def qos_school_list_staging(
         if not DeltaTable.isDeltaTable(spark.spark_session, staging_table_path):
             # Clone silver table to staging folder
             silver = adls_file_client.download_delta_table_as_spark_dataframe(
-                silver_table_path, spark.spark_session
+                silver_table_path,
+                spark.spark_session,
             )
 
             adls_file_client.upload_spark_dataframe_as_delta_table(
@@ -171,13 +178,15 @@ def qos_school_list_staging(
 
         # Load new table (silver clone in staging) as a deltatable
         staging = adls_file_client.download_delta_table_as_delta_table(
-            staging_table_path, spark.spark_session
+            staging_table_path,
+            spark.spark_session,
         )
 
         # Merge each pending file for the same country
         for file_info in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
-                file_info["filepath"], spark.spark_session
+                file_info["filepath"],
+                spark.spark_session,
             )
 
             staging = (
@@ -191,7 +200,8 @@ def qos_school_list_staging(
             )
 
             adls_file_client.rename_file(
-                file_info["filepath"], f"{file_info['filepath']}/merged-files"
+                file_info["filepath"],
+                f"{file_info['filepath']}/merged-files",
             )
 
             context.log.info(f"Staging: table {staging}")
@@ -203,7 +213,8 @@ def qos_school_list_staging(
         # If no existing silver table, just merge the spark dataframes
         for file_date in files_for_review:
             existing_file = adls_file_client.download_delta_table_as_spark_dataframe(
-                file_date["filepath"], spark.spark_session
+                file_date["filepath"],
+                spark.spark_session,
             )
             staging = staging.union(existing_file)
 
