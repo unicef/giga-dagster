@@ -11,6 +11,8 @@ from src.utils.op_config import FileConfig
 def emit_lineage_base(
     upstream_filepaths: list[str], dataset_urn: str, context: OpExecutionContext = None
 ) -> None:
+    logger = get_context_with_fallback_logger(context)
+
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
@@ -20,23 +22,19 @@ def emit_lineage_base(
         upstream_urn = build_dataset_urn(filepath=filepath)
         upstream_urn_list.append(upstream_urn)
 
-    get_context_with_fallback_logger(context).info(
-        f"upstream_urn_list: {upstream_urn_list}"
-    )
-    get_context_with_fallback_logger(context).info(f"dataset_urn: {dataset_urn}")
+    logger.info(f"upstream_urn_list: {upstream_urn_list}")
+    logger.info(f"dataset_urn: {dataset_urn}")
 
     lineage_mce = builder.make_lineage_mce(
         upstream_urn_list,  # Upstream URNs
         dataset_urn,  # Downstream URN
     )
-    get_context_with_fallback_logger(context).info(f"lineage_mce: {lineage_mce}")
-    get_context_with_fallback_logger(context).info("EMITTING LINEAGE...")
+    logger.info(f"lineage_mce: {lineage_mce}")
+    logger.info("EMITTING LINEAGE...")
 
     datahub_emitter.emit_mce(lineage_mce)
 
-    get_context_with_fallback_logger(context).info(
-        "SUCCESS. LINEAGE EMITTED TO DATAHUB."
-    )
+    logger.info("SUCCESS. LINEAGE EMITTED TO DATAHUB.")
 
 
 def emit_lineage(context: OpExecutionContext) -> None:
