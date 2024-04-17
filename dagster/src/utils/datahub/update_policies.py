@@ -4,11 +4,12 @@ from urllib import parse
 import country_converter as cc
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
+from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
 
-def policy_mutation_query(group_urn):
+def policy_mutation_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
     country_name = group_name.split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
@@ -41,7 +42,7 @@ def policy_mutation_query(group_urn):
     """
 
 
-def create_policy_query(group_urn):
+def create_policy_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
     country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
@@ -49,7 +50,7 @@ def create_policy_query(group_urn):
         tag=country_name, dataset_type=dataset_type
     )
 
-    query = f"""
+    return f"""
         mutation {{
             createPolicy(
                 input: {{
@@ -71,10 +72,9 @@ def create_policy_query(group_urn):
             }})
         }}
         """
-    return query
 
 
-def list_datasets_by_filter(tag: str, dataset_type: str):
+def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -90,7 +90,9 @@ def list_datasets_by_filter(tag: str, dataset_type: str):
         ],
     )
     urn_list = list(dataset_urns_iterator)
-    return json.dumps(urn_list)
+    return json.dumps(
+        urn_list
+    )  # Puts list items in double quotes # GraphQL does not allow single quotes
 
 
 def group_urns_iterator():
@@ -109,63 +111,59 @@ def is_valid_country_name(country_name: str) -> bool:
     return country_name in country_list
 
 
-def update_policies(context=None) -> None:
+def update_policies(context: OpExecutionContext = None) -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
+    logger = get_context_with_fallback_logger(context)
 
     for group_urn in group_urns_iterator():
         country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
         if is_valid_country_name(country_name):
             try:
                 query = policy_mutation_query(group_urn=group_urn)
-                get_context_with_fallback_logger(context).info(
-                    "UPDATING DATAHUB POLICY..."
-                )
-                get_context_with_fallback_logger(context).info(query)
+                logger.info("UPDATING DATAHUB POLICY...")
+                logger.info(query)
                 datahub_graph_client.execute_graphql(query=query)
             except Exception as error:
-                get_context_with_fallback_logger(context).error(error)
+                logger.error(error)
                 try:
                     query = create_policy_query(group_urn=group_urn)
-                    get_context_with_fallback_logger(context).info(
-                        "CREATING DATAHUB POLICY..."
-                    )
-                    get_context_with_fallback_logger(context).info(query)
+                    logger.info("CREATING DATAHUB POLICY...")
+                    logger.info(query)
                     datahub_graph_client.execute_graphql(query=query)
                 except Exception:
-                    get_context_with_fallback_logger(context).error(error)
+                    logger.error(error)
 
 
-def update_specific_policy(group_urn: str, context=None):
+def update_specific_policy(group_urn: str, context: OpExecutionContext = None) -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
+    logger = get_context_with_fallback_logger(context)
 
     country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
-            get_context_with_fallback_logger(context).info("UPDATING DATAHUB POLICY...")
-            get_context_with_fallback_logger(context).info(query)
+            logger.info("UPDATING DATAHUB POLICY...")
+            logger.info(query)
             datahub_graph_client.execute_graphql(query=query)
         except Exception as error:
-            get_context_with_fallback_logger(context).error(error)
+            logger.error(error)
             try:
                 query = create_policy_query(group_urn=group_urn)
-                get_context_with_fallback_logger(context).info(
-                    "CREATING DATAHUB POLICY..."
-                )
-                get_context_with_fallback_logger(context).info(query)
+                logger.info("CREATING DATAHUB POLICY...")
+                logger.info(query)
                 datahub_graph_client.execute_graphql(query=query)
             except Exception:
-                get_context_with_fallback_logger(context).error(error)
+                logger.error(error)
 
 
 if __name__ == "__main__":
