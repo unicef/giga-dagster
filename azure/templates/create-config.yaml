@@ -44,7 +44,7 @@ jobs:
                     POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                     POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
                     AAD_AZURE_TENANT_ID: "$(aadAzureTenantId)"
-                    AAD_AZURE_CLIENT_ID: "$(aadAzureTenantId)"
+                    AAD_AZURE_CLIENT_ID: "$(aadAzureClientId)"
                     AAD_AZURE_CLIENT_SECRET: "$(aadAzureClientSecret)"
                     AZURE_SAS_TOKEN: "$(azureSasToken)"
                     AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
