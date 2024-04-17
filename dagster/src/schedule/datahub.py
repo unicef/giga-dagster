@@ -16,7 +16,7 @@ datahub_materialize_prerequisities_schedule = ScheduleDefinition(
 
 datahub_update_access_schedule = ScheduleDefinition(
     job=datahub__update_access_job,
-    cron_schedule=settings.DEFAULT_SCHEDULE_CRON,
+    cron_schedule="30 * * * *",
     default_status=DefaultScheduleStatus.RUNNING
     if settings.IN_PRODUCTION
     else DefaultScheduleStatus.STOPPED,
