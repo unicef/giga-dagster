@@ -26,7 +26,7 @@ from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
-from src.utils.datahub.update_policies import update_policies
+from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_column_descriptions
 from src.utils.sentry import log_op_context
@@ -254,14 +254,6 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    # context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
-    # ingest_azure_ad_to_datahub_pipeline()
-    # context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
-
-    context.log.info("UPDATING POLICIES IN DATAHUB...")
-    update_policies()
-    context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-
     context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}.",
     )
@@ -298,6 +290,8 @@ def datahub_emit_metadata_with_exception_catcher(
             )
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
+
+        update_policy_for_group(config=config, context=context)
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
         log_op_context(context)

@@ -6,7 +6,10 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
 from src.settings import settings
+from src.utils.datahub.builders import build_group_urn
+from src.utils.datahub.emit_dataset_metadata import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.op_config import FileConfig
 
 
 def policy_mutation_query(group_urn: str) -> str:
@@ -126,16 +129,32 @@ def update_policies(context: OpExecutionContext = None) -> None:
         )
 
 
-def update_specific_policy(group_urn: str, context: OpExecutionContext = None) -> None:
+def update_policy_for_group(
+    config: FileConfig, context: OpExecutionContext = None
+) -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
+    country_code = config.filename_components.country_code
+    country_name = identify_country_name(country_code=country_code)
+    domain = config.domain
+    dataset_type = config.dataset_type
+    group_urn = build_group_urn(
+        country_name=country_name, dataset_type=dataset_type, domain=domain
+    )
+
+    logger = get_context_with_fallback_logger(context)
+    logger.info(
+        f"UPDATING POLICY IN DATAHUB: Adding the dataset to the policy {group_urn}..."
+    )
+
     update_policy_base(
         group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
     )
+    logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
 
 
 def update_policy_base(
