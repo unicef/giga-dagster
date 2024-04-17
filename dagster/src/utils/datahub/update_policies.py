@@ -118,25 +118,12 @@ def update_policies(context: OpExecutionContext = None) -> None:
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
-    logger = get_context_with_fallback_logger(context)
-
     for group_urn in group_urns_iterator():
-        country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
-        if is_valid_country_name(country_name):
-            try:
-                query = policy_mutation_query(group_urn=group_urn)
-                logger.info("UPDATING DATAHUB POLICY...")
-                logger.info(query)
-                datahub_graph_client.execute_graphql(query=query)
-            except Exception as error:
-                logger.error(error)
-                try:
-                    query = create_policy_query(group_urn=group_urn)
-                    logger.info("CREATING DATAHUB POLICY...")
-                    logger.info(query)
-                    datahub_graph_client.execute_graphql(query=query)
-                except Exception:
-                    logger.error(error)
+        update_policy_base(
+            group_urn=group_urn,
+            datahub_graph_client=datahub_graph_client,
+            context=context,
+        )
 
 
 def update_specific_policy(group_urn: str, context: OpExecutionContext = None) -> None:
@@ -146,6 +133,16 @@ def update_specific_policy(group_urn: str, context: OpExecutionContext = None) -
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
+    update_policy_base(
+        group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
+    )
+
+
+def update_policy_base(
+    group_urn: str,
+    datahub_graph_client: DataHubGraph[DatahubClientConfig],
+    context: OpExecutionContext = None,
+) -> None:
     logger = get_context_with_fallback_logger(context)
 
     country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
@@ -168,5 +165,4 @@ def update_specific_policy(group_urn: str, context: OpExecutionContext = None) -
 
 if __name__ == "__main__":
     print(list_datasets_by_filter(tag="Benin", dataset_type="geolocation"))
-    # print(list_all_groups())
     pass
