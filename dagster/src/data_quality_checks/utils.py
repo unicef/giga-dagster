@@ -301,12 +301,30 @@ def row_level_checks(
     elif dataset_type in ["coverage", "coverage_itu"]:
         df = standard_checks(df, dataset_type, context)
         df = column_relation_checks(df, dataset_type, context)
+        df = critical_error_checks(
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
+        )
     elif dataset_type == "coverage_fb":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)
         df = fb_percent_sum_to_100_check(df, context)
         df = column_relation_checks(df, dataset_type, context)
+        df = critical_error_checks(
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
+        )
     elif dataset_type == "qos":
         df = standard_checks(df, dataset_type, context, domain=False, range_=False)
+        df = critical_error_checks(
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
+        )
     return df
 
 
@@ -329,14 +347,14 @@ if __name__ == "__main__":
     # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
     file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BLZ_school_geolocation_coverage_master.csv"
-    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
-    # file_url_qos = (
-    #     f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
-    # )
+    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
+    file_url_qos = (
+        f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
+    )
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
     master = spark.read.csv(file_url_master, header=True)
-    # reference = spark.read.csv(file_url_reference, header=True)
-    # qos = spark.read.csv(file_url_qos, header=True)
+    reference = spark.read.csv(file_url_reference, header=True)
+    qos = spark.read.csv(file_url_qos, header=True)
     # df_bronze = master.join(reference, how="left", on="school_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
@@ -350,6 +368,32 @@ if __name__ == "__main__":
     # qos.show()
     df = row_level_checks(master, "master", "BLZ")
     df.show()
+
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    df.show()
+
+    _json = aggregate_report_json(df, master)
+    print(_json)
+
+    # ref
+    df = row_level_checks(reference, "reference", "BLZ")
+    df.show()
+
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    df.show()
+
+    _json = aggregate_report_json(df, reference)
+    print(_json)
+
+    # qos
+    df = row_level_checks(qos, "qos", "BRA")
+    df.show()
+
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    df.show()
+
+    _json = aggregate_report_json(df, qos)
+    print(_json)
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
@@ -393,9 +437,3 @@ if __name__ == "__main__":
     # # df = dq_passed_rows(df, "coverage")
     # # df = dq_passed_rows(df, "coverage")
     # df.orderBy("column").show()
-
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
-
-    _json = aggregate_report_json(df, master)
-    print(_json)
