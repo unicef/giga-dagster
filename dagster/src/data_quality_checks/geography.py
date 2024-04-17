@@ -82,7 +82,8 @@ if __name__ == "__main__":
 
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master_updates/PHL/PHL_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
@@ -103,9 +104,9 @@ if __name__ == "__main__":
     df.show()
     # df = df.withColumn("latitude", f.lit(6.1671))  # outside boundary <= 150km
     # df = df.withColumn("longitude", f.lit(60.7832)) # outside boundary <= 150km
-    df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
-    dq_test = is_not_within_country(df, "BRA")
+    dq_test = is_not_within_country(df, "PHL")
     dq_test.show()
     print(dq_test.count())
