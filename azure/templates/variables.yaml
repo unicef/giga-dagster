@@ -33,4 +33,5 @@ variables:
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
+  ingressHost: $(INGRESS_HOST)
   system.debug: true
