@@ -7,7 +7,7 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.datahub.builders import build_group_urn
-from src.utils.datahub.emit_dataset_metadata import identify_country_name
+from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 

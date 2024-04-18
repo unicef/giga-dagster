@@ -2,7 +2,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import country_converter as cc
 import datahub.emitter.mce_builder as builder
 import sentry_sdk
 from dagster_pyspark import PySparkResource
@@ -24,18 +23,13 @@ from pyspark import sql
 from dagster import OpExecutionContext, version
 from src.constants import constants
 from src.settings import settings
+from src.utils.datahub import identify_country_name
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
 from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_column_descriptions
 from src.utils.sentry import log_op_context
-
-
-def identify_country_name(country_code: str) -> str:
-    coco = cc.CountryConverter()
-    data = coco.data
-    return data[data["ISO3"] == country_code]["name_short"].to_list()[0]
 
 
 def create_dataset_urn(
