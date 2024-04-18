@@ -15,7 +15,9 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import (
+    deconstruct_filename_components,
+)
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DOMAIN = "school"
@@ -103,6 +105,12 @@ def school_master__gold_csv_to_deltatable_sensor(
                 tier=DataTier.DATA_QUALITY_CHECKS,
             ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
+            ),
+            "adhoc__broadcast_master_release_notes": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,

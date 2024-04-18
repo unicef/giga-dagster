@@ -20,6 +20,7 @@ def create_country_dataset_roles(context: OpExecutionContext):
         "Admin",
         "Super",
         "Regular",
+        "Developer",
         *[
             f"{country}-{dataset}"
             for country, dataset in product(country_names, datasets)

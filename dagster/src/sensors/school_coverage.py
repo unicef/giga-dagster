@@ -119,37 +119,28 @@ def school_master_coverage__successful_manual_checks_sensor(
 
         adls_filepath = file_data.name
         path = Path(adls_filepath)
-        stem = path.stem
         filename_components = deconstruct_filename_components(adls_filepath)
         country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
-        metastore_schema = "school_coverage"
 
         ops_destination_mapping = {
-            "manual_review_passed_rows": OpDestinationMapping(
-                source_filepath=str(path),
-                # TODO: Finalize format
-                destination_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{country_code}/{stem}.csv",
-                metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
-            ),
             "silver": OpDestinationMapping(
-                source_filepath=f"{constants.staging_folder}/{SCHOOL_DATASET_TYPE}/approved-rows/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                metastore_schema=metastore_schema,
+                source_filepath=str(path),
+                destination_filepath="",
+                metastore_schema="school_coverage",
                 tier=DataTier.SILVER,
             ),
-            "gold_master": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                destination_filepath=f"{constants.gold_folder}/school-master/{stem}",
+            "master": OpDestinationMapping(
+                source_filepath="",
+                destination_filepath="",
                 metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
-            "gold_reference": OpDestinationMapping(
-                source_filepath=f"{constants.silver_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}",
-                destination_filepath=f"{constants.gold_folder}/school-reference/{stem}",
+            "reference": OpDestinationMapping(
+                source_filepath="",
+                destination_filepath="",
                 metastore_schema="school_reference",
                 tier=DataTier.GOLD,
             ),

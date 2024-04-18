@@ -5,8 +5,6 @@ from pathlib import Path
 
 from pydantic import BaseSettings, PostgresDsn
 
-from dagster import DefaultScheduleStatus
-
 
 class Environment(StrEnum):
     LOCAL = "local"
@@ -31,6 +29,9 @@ class Settings(BaseSettings):
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
+    AAD_AZURE_TENANT_ID: str
+    AAD_AZURE_CLIENT_ID: str
+    AAD_AZURE_CLIENT_SECRET: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
     DATAHUB_OIDC_REDIRECT_URL: str
     DATAHUB_OIDC_CLIENT_ID: str
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY: str = "2g"
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
+    ADMIN_EMAIL: str = ""
 
     # Derived settings
     @property
@@ -110,14 +112,6 @@ class Settings(BaseSettings):
     @property
     def DEFAULT_SCHEDULE_CRON(self) -> str:
         return "*/5 * * * *" if self.IN_PRODUCTION else "*/1 * * * *"
-
-    @property
-    def DEFAULT_SCHEDULE_STATUS(self) -> str:
-        return (
-            DefaultScheduleStatus.RUNNING
-            if self.IN_PRODUCTION
-            else DefaultScheduleStatus.STOPPED
-        )
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:

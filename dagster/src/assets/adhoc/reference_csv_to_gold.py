@@ -107,7 +107,7 @@ def adhoc__reference_dq_checks_failed(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_V2_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
     config: FileConfig,

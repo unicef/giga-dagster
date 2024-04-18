@@ -9,7 +9,7 @@ from shapely.ops import nearest_points
 
 def get_point(longitude: float, latitude: float) -> None | Point:
     try:
-        return Point(latitude, longitude)
+        return Point(longitude, latitude)
     except Exception as exc:
         logger.error(exc)
     return None
@@ -63,9 +63,13 @@ def is_within_boundary_distance(
 
     if point is not None and geometry is not None:
         p1, _ = nearest_points(geometry, point)
+
+        # geodesic distance format is in lat-long, we need to switch these over!
         point1 = p1.coords[0]
+        point1 = (point1[1], point1[0])
         point2 = (latitude, longitude)
         distance = geodesic(point1, point2).km
+
         return distance <= BOUNDARY_DISTANCE_THRESHOLD_KM
 
     return False
@@ -80,10 +84,35 @@ def boundary_distance(
 
     if point is not None and geometry is not None:
         p1, _ = nearest_points(geometry, point)
+
+        # geodesic distance format is in lat-long, we need to switch these over!
         point1 = p1.coords[0]
+        point1 = (point1[1], point1[0])
         point2 = (latitude, longitude)
         distance = geodesic(point1, point2).km
+
     else:
         distance = None
 
     return distance
+
+
+if __name__ == "__main__":
+    latitude = 19.045252
+    longitude = 124.408070
+
+    from src.data_quality_checks.geography import get_country_geometry
+
+    geometry = get_country_geometry("PHL")
+    point = get_point(longitude, latitude)  # this is outside the country
+    p1, _ = nearest_points(geometry, point)
+
+    # geodesic distance format is in lat-long, we need to switch these over!
+    point1 = p1.coords[0]
+    point1 = (point1[1], point1[0])
+    point2 = (latitude, longitude)
+    distance = geodesic(point1, point2).km
+
+    print(point1)
+    print(point2)
+    print(distance)

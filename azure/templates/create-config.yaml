@@ -43,6 +43,9 @@ jobs:
                   stringData:
                     POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                     POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
+                    AAD_AZURE_TENANT_ID: "$(aadAzureTenantId)"
+                    AAD_AZURE_CLIENT_ID: "$(aadAzureClientId)"
+                    AAD_AZURE_CLIENT_SECRET: "$(aadAzureClientSecret)"
                     AZURE_SAS_TOKEN: "$(azureSasToken)"
                     AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                     AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
@@ -109,7 +112,7 @@ jobs:
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     rpc-authentication-secret: "$(sparkRpcAuthSecret)"
                     SPARK_SSL_NEED_CLIENT_AUTH: "yes"
-                    SPARK_PUBLIC_DNS: "io-dagster-$(deployEnv).unitst.org"
+                    SPARK_PUBLIC_DNS: "$(ingressHost)"
                     SPARK_UI_PROXYBASE: "/spark"
 
             - task: Kubernetes@1

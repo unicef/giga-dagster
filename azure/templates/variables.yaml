@@ -18,6 +18,9 @@ variables:
   azureEmailConnectionString: $(AZURE_EMAIL_CONNECTION_STRING)
   azureEmailSender: $(AZURE_EMAIL_SENDER)
   azureAdTenantId: $(AZURE_TENANT_ID)
+  aadAzureTenantId: $(AAD_AZURE_TENANT_ID)
+  aadAzureClientId: $(AAD_AZURE_CLIENT_ID)
+  aadAzureClientSecret: $(AAD_AZURE_CLIENT_SECRET)
   emailRendererBearerToken: $(EMAIL_RENDERER_BEARER_TOKEN)
   emailTestRecipients: $(EMAIL_TEST_RECIPIENTS)
   emailRendererServiceUrl: $(EMAIL_RENDERER_SERVICE_URL)
@@ -30,4 +33,5 @@ variables:
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
+  ingressHost: $(INGRESS_HOST)
   system.debug: true
