@@ -145,16 +145,9 @@ def update_policy_for_group(
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
-
-    logger = get_context_with_fallback_logger(context)
-    logger.info(
-        f"UPDATING POLICY IN DATAHUB: Adding the dataset to the policy {group_urn}..."
-    )
-
     update_policy_base(
         group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
     )
-    logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
 
 
 def update_policy_base(
@@ -168,20 +161,39 @@ def update_policy_base(
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
-            logger.info("UPDATING DATAHUB POLICY...")
+            logger.info(f"UPDATING DATAHUB POLICY: {group_urn}...")
             logger.info(query)
             datahub_graph_client.execute_graphql(query=query)
+            logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
         except Exception as error:
             logger.error(error)
             try:
                 query = create_policy_query(group_urn=group_urn)
-                logger.info("CREATING DATAHUB POLICY...")
+                logger.info(f"CREATING DATAHUB POLICY: {group_urn}...")
                 logger.info(query)
                 datahub_graph_client.execute_graphql(query=query)
+                logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
             except Exception:
                 logger.error(error)
 
 
 if __name__ == "__main__":
-    print(list_datasets_by_filter(tag="Benin", dataset_type="geolocation"))
-    pass
+    datahub_graph_client = DataHubGraph(
+        DatahubClientConfig(
+            server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
+        )
+    )
+    logger = get_context_with_fallback_logger()
+    country_code = "ASM"
+    country_name = identify_country_name(country_code=country_code)
+    logger.info(country_name)
+    domain = "school"
+    dataset_type = "geolocation"
+    group_urn = build_group_urn(
+        country_name=country_name, dataset_type=dataset_type, domain=domain
+    )
+    update_policy_base(
+        group_urn=group_urn,
+        datahub_graph_client=datahub_graph_client,
+    )
