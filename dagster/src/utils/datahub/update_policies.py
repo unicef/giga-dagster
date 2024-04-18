@@ -28,10 +28,10 @@ def policy_mutation_query(group_urn: str) -> str:
                 type: METADATA,
                 name: "{group_name} - VIEWER",
                 state: ACTIVE,
-                description: "Members can view datasets with country name: {group_name}.",
+                description: "Members can view {dataset_type} datasets with country name: {country_name}.",
                 resources: {{
                     resources: {datasets_urns_list},
-                    allResources: true,
+                    allResources: false,
                 }},
                 privileges: ["VIEW_ENTITY_PAGE", "VIEW_DATASET_USAGE", "VIEW_DATASET_PROFILE"],
                 actors: {{
@@ -60,10 +60,10 @@ def create_policy_query(group_urn: str) -> str:
                     type: METADATA,
                     name: "{group_name} - VIEWER",
                     state: ACTIVE,
-                    description: "Members can view datasets in {group_name}.",
+                    description: "Members can view {dataset_type} datasets with country name: {country_name}.",
                     resources: {{
                         resources: {datasets_urns_list},
-                        allResources: true,
+                        allResources: false,
                     }},
                     privileges: ["VIEW_ENTITY_PAGE", "VIEW_DATASET_USAGE", "VIEW_DATASET_PROFILE"],
                     actors: {{
@@ -185,7 +185,7 @@ if __name__ == "__main__":
         )
     )
     logger = get_context_with_fallback_logger()
-    country_code = "ASM"
+    country_code = "ATA"
     country_name = identify_country_name(country_code=country_code)
     logger.info(country_name)
     domain = "school"
