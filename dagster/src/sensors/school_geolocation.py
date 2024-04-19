@@ -44,74 +44,75 @@ def school_master_geolocation__raw_file_uploads_sensor(
         except Exception as e:
             context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
             continue
-        country_code = filename_components.country_code
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
-        metastore_schema = "school_geolocation"
+        else:
+            country_code = filename_components.country_code
+            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+            metadata = properties.metadata
+            size = properties.size
+            metastore_schema = "school_geolocation"
 
-        ops_destination_mapping = {
-            "geolocation_raw": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=str(path),
-                metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
-            ),
-            "geolocation_bronze": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
-                metastore_schema=metastore_schema,
-                tier=DataTier.BRONZE,
-            ),
-            "geolocation_data_quality_results": OpDestinationMapping(
-                source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                metastore_schema=metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
-            ),
-            "geolocation_data_quality_results_summary": OpDestinationMapping(
-                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
-                metastore_schema=metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
-            ),
-            "geolocation_dq_passed_rows": OpDestinationMapping(
-                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                metastore_schema=metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
-            ),
-            "geolocation_dq_failed_rows": OpDestinationMapping(
-                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.csv",
-                metastore_schema=metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
-            ),
-            "geolocation_staging": OpDestinationMapping(
-                source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                destination_filepath="",
-                metastore_schema=metastore_schema,
-                tier=DataTier.STAGING,
-            ),
-        }
+            ops_destination_mapping = {
+                "geolocation_raw": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath=str(path),
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.RAW,
+                ),
+                "geolocation_bronze": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.BRONZE,
+                ),
+                "geolocation_data_quality_results": OpDestinationMapping(
+                    source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_data_quality_results_summary": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_passed_rows": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_failed_rows": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.csv",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_staging": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    destination_filepath="",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.STAGING,
+                ),
+            }
 
-        run_ops = generate_run_ops(
-            ops_destination_mapping,
-            dataset_type=DATASET_TYPE,
-            metadata=metadata,
-            file_size_bytes=size,
-            domain=DOMAIN,
-            dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
-            country_code=country_code,
-        )
+            run_ops = generate_run_ops(
+                ops_destination_mapping,
+                dataset_type=DATASET_TYPE,
+                metadata=metadata,
+                file_size_bytes=size,
+                domain=DOMAIN,
+                dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+                country_code=country_code,
+            )
 
-        context.log.info(f"FILE: {path}")
-        yield RunRequest(
-            run_key=str(path),
-            run_config=RunConfig(ops=run_ops),
-            tags={"country": country_code},
-        )
-        count += 1
+            context.log.info(f"FILE: {path}")
+            yield RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            )
+            count += 1
 
     if count == 0:
         yield SkipReason(f"No uploads detected in {source_directory}")
@@ -145,46 +146,46 @@ def school_master_geolocation__successful_manual_checks_sensor(
         except Exception as e:
             context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
             continue
+        else:
+            country_code = filename_components.country_code
 
-        country_code = filename_components.country_code
+            ops_destination_mapping = {
+                "silver": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath="",
+                    metastore_schema="school_geolocation",
+                    tier=DataTier.SILVER,
+                ),
+                "master": OpDestinationMapping(
+                    source_filepath="",
+                    destination_filepath="",
+                    metastore_schema="school_master",
+                    tier=DataTier.GOLD,
+                ),
+                "reference": OpDestinationMapping(
+                    source_filepath="",
+                    destination_filepath="",
+                    metastore_schema="school_reference",
+                    tier=DataTier.GOLD,
+                ),
+            }
 
-        ops_destination_mapping = {
-            "silver": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath="",
-                metastore_schema="school_geolocation",
-                tier=DataTier.SILVER,
-            ),
-            "master": OpDestinationMapping(
-                source_filepath="",
-                destination_filepath="",
-                metastore_schema="school_master",
-                tier=DataTier.GOLD,
-            ),
-            "reference": OpDestinationMapping(
-                source_filepath="",
-                destination_filepath="",
-                metastore_schema="school_reference",
-                tier=DataTier.GOLD,
-            ),
-        }
+            run_ops = generate_run_ops(
+                ops_destination_mapping,
+                dataset_type=DATASET_TYPE,
+                metadata={},
+                file_size_bytes=0,
+                domain=DOMAIN,
+                country_code=country_code,
+            )
 
-        run_ops = generate_run_ops(
-            ops_destination_mapping,
-            dataset_type=DATASET_TYPE,
-            metadata={},
-            file_size_bytes=0,
-            domain=DOMAIN,
-            country_code=country_code,
-        )
-
-        context.log.info(f"FILE: {path}")
-        yield RunRequest(
-            run_key=str(path),
-            run_config=RunConfig(ops=run_ops),
-            tags={"country": country_code},
-        )
-        count += 1
+            context.log.info(f"FILE: {path}")
+            yield RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            )
+            count += 1
 
     if count == 0:
         yield SkipReason(f"No files detected in {source_directory}")
@@ -218,34 +219,35 @@ def school_master_geolocation__failed_manual_checks_sensor(
         except Exception as e:
             context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
             continue
-        country_code = filename_components.country_code
-        metastore_schema = "school_geolocation"
+        else:
+            country_code = filename_components.country_code
+            metastore_schema = "school_geolocation"
 
-        ops_destination_mapping = {
-            "manual_review_failed_rows": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath="",
-                metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
-            ),
-        }
+            ops_destination_mapping = {
+                "manual_review_failed_rows": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath="",
+                    metastore_schema=metastore_schema,
+                    tier=DataTier.RAW,
+                ),
+            }
 
-        run_ops = generate_run_ops(
-            ops_destination_mapping,
-            dataset_type=DATASET_TYPE,
-            metadata={},
-            file_size_bytes=0,
-            domain=DOMAIN,
-            country_code=country_code,
-        )
+            run_ops = generate_run_ops(
+                ops_destination_mapping,
+                dataset_type=DATASET_TYPE,
+                metadata={},
+                file_size_bytes=0,
+                domain=DOMAIN,
+                country_code=country_code,
+            )
 
-        context.log.info(f"FILE: {path}")
-        yield RunRequest(
-            run_key=str(path),
-            run_config=RunConfig(ops=run_ops),
-            tags={"country": country_code},
-        )
-        count += 1
+            context.log.info(f"FILE: {path}")
+            yield RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            )
+            count += 1
 
     if count == 0:
         yield SkipReason(f"No files detected in {source_directory}")
