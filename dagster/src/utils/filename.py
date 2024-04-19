@@ -10,9 +10,11 @@ def deconstruct_school_master_filename_components(filepath: str):
     path = Path(filepath)
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
-    valid_number_of_splits = 4 if "geolocation" in path.stem else 5
 
-    if len(splits) == valid_number_of_splits:
+    EXPECTED_UPLOAD_FILENAME_COMPONENTS = 4 if "geolocation" in path.stem else 5
+    EXPECTED_APPROVAL_FILENAME_COMPONENTS = 3
+
+    if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
         source = splits[3] if "coverage" in path.stem else None
@@ -24,7 +26,9 @@ def deconstruct_school_master_filename_components(filepath: str):
             source=source,
             country_code=country_code,
         )
-    elif len(splits) == valid_number_of_splits - 1 and path.parts[-1].endswith("json"):
+    elif len(splits) == EXPECTED_APPROVAL_FILENAME_COMPONENTS and path.parts[
+        -1
+    ].endswith("json"):
         country_code, dataset_type, timestamp = splits
         timestamp = datetime.fromtimestamp(int(timestamp))
         return FilenameComponents(
@@ -33,14 +37,16 @@ def deconstruct_school_master_filename_components(filepath: str):
             timestamp=timestamp,
             country_code=country_code,
         )
-    elif len(splits) == valid_number_of_splits - 1 and not path.stem.endswith(".json"):
+    elif len(
+        splits
+    ) == EXPECTED_APPROVAL_FILENAME_COMPONENTS and not path.stem.endswith(".json"):
         raise FileExtensionValidationException(
-            f"Expected {valid_number_of_splits - 1} components for filename `{path.name}`; got {valid_number_of_splits - 1} and missing `.json` extension"
+            f"Expected {EXPECTED_APPROVAL_FILENAME_COMPONENTS} components for filename `{path.name}`; got {EXPECTED_APPROVAL_FILENAME_COMPONENTS} and missing `.json` extension"
         )
 
     else:
         raise ValueError(
-            f"Expected {valid_number_of_splits} components for filename `{path.name}`; got {len(splits)}"
+            f"Expected {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
         )
 
 

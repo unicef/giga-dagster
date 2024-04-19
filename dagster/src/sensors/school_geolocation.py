@@ -90,7 +90,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_staging": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                    destination_filepath="",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
                     metastore_schema=metastore_schema,
                     tier=DataTier.STAGING,
                 ),

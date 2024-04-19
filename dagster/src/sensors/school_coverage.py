@@ -90,7 +90,7 @@ def school_master_coverage__raw_file_uploads_sensor(
                 ),
                 "coverage_staging": OpDestinationMapping(
                     source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
-                    destination_filepath="",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
                     metastore_schema=metastore_schema,
                     tier=DataTier.STAGING,
                 ),
@@ -138,6 +138,7 @@ def school_master_coverage__successful_manual_checks_sensor(
             continue
 
         adls_filepath = file_data.name
+        context.log.info(f"filenam: {adls_filepath}")
         path = Path(adls_filepath)
         try:
             filename_components = deconstruct_school_master_filename_components(

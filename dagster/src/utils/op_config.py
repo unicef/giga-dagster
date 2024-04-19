@@ -7,7 +7,10 @@ from dagster import Config
 from src.constants import DataTier
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.filename import deconstruct_school_master_filename_components
+from src.utils.filename import (
+    deconstruct_adhoc_filename_components,
+    deconstruct_school_master_filename_components,
+)
 
 
 class FileConfig(Config):
@@ -74,7 +77,10 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.filepath)
+        if "gold/delta-tables" in self.filepath:
+            return deconstruct_adhoc_filename_components(self.filepath)
+        else:
+            return deconstruct_school_master_filename_components(self.filepath)
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
