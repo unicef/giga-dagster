@@ -138,7 +138,6 @@ def school_master_coverage__successful_manual_checks_sensor(
             continue
 
         adls_filepath = file_data.name
-        context.log.info(f"filenam: {adls_filepath}")
         path = Path(adls_filepath)
         try:
             filename_components = deconstruct_school_master_filename_components(
