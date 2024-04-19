@@ -4,27 +4,33 @@ from pathlib import Path
 from src.exceptions import FileExtensionValidationException, FilenameValidationException
 from src.schemas.filename_components import FilenameComponents
 
+EXPECTED_GEOLOCATION_COMPONENTS = 4
+EXPECTED_COVERAGE_COMPONENTS = 5
+EXPECTED_APPROVED_IDS_COMPONENTS = 3
+
 
 def deconstruct_school_master_filename_components(filepath: str):
     """Deconstruct and validate filename components for files uploaded through the Ingestion Portal"""
     path = Path(filepath)
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
-    valid_number_of_splits = 4 if "geolocation" in path.stem else 5
+    valid_number_of_splits = (
+        EXPECTED_GEOLOCATION_COMPONENTS
+        if "geolocation" in path.stem
+        else EXPECTED_COVERAGE_COMPONENTS
+    )
 
     if len(splits) == valid_number_of_splits:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
-        source = splits[3] if "coverage" in path.stem else None
 
         return FilenameComponents(
             id=id,
             dataset_type=dataset_type,
             timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            source=source,
             country_code=country_code,
         )
-    elif len(splits) == valid_number_of_splits - 1 and path.parts[-1].endswith("json"):
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix == ".json":
         country_code, dataset_type, timestamp = splits
         timestamp = datetime.fromtimestamp(int(timestamp))
         return FilenameComponents(
@@ -33,9 +39,9 @@ def deconstruct_school_master_filename_components(filepath: str):
             timestamp=timestamp,
             country_code=country_code,
         )
-    elif len(splits) == valid_number_of_splits - 1 and not path.stem.endswith(".json"):
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix != ".json":
         raise FileExtensionValidationException(
-            f"Expected {valid_number_of_splits - 1} components for filename `{path.name}`; got {valid_number_of_splits - 1} and missing `.json` extension"
+            f"Expected {EXPECTED_APPROVED_IDS_COMPONENTS} components for filename `{path.name}`; got {len(splits)} and missing `.json` extension"
         )
 
     else:
