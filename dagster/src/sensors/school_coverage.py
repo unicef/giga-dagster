@@ -151,20 +151,20 @@ def school_master_coverage__successful_manual_checks_sensor(
 
             ops_destination_mapping = {
                 "silver": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath="",
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
                     metastore_schema="school_coverage",
                     tier=DataTier.SILVER,
                 ),
                 "master": OpDestinationMapping(
-                    source_filepath="",
-                    destination_filepath="",
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
                 "reference": OpDestinationMapping(
-                    source_filepath="",
-                    destination_filepath="",
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_reference.db/{country_code.lower()}",
                     metastore_schema="school_reference",
                     tier=DataTier.GOLD,
                 ),
@@ -226,7 +226,7 @@ def school_master_coverage__failed_manual_checks_sensor(
             ops_destination_mapping = {
                 "manual_review_failed_rows": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath="",
+                    destination_filepath=str(path),
                     metastore_schema=metastore_schema,
                     tier=DataTier.RAW,
                 ),
