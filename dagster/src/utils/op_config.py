@@ -81,10 +81,6 @@ class FileConfig(Config):
         return deconstruct_school_master_filename_components(self.destination_filepath)
 
     @property
-    def country_code(self) -> str:
-        return self.filename_components.country_code
-
-    @property
     def datahub_source_dataset_urn(self) -> str:
         if not self.filepath_object.suffix:
             return build_dataset_urn(self.filepath, platform="deltaLake")
