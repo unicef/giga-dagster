@@ -87,7 +87,14 @@ class FileConfig(Config):
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.destination_filepath)
+        if self.filepath.startswith("gold/qos"):
+            return deconstruct_qos_filename_components(self.destination_filepath)
+        elif self.filepath.startswith("gold"):
+            return deconstruct_adhoc_filename_components(self.destination_filepath)
+        else:
+            return deconstruct_school_master_filename_components(
+                self.destination_filepath
+            )
 
     @property
     def datahub_source_dataset_urn(self) -> str:
