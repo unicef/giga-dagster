@@ -7,7 +7,7 @@ from dagster import Config
 from src.constants import DataTier
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import deconstruct_school_master_filename_components
 
 
 class FileConfig(Config):
@@ -71,11 +71,11 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        return deconstruct_filename_components(self.filepath)
+        return deconstruct_school_master_filename_components(self.filepath)
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        return deconstruct_filename_components(self.destination_filepath)
+        return deconstruct_school_master_filename_components(self.destination_filepath)
 
     @property
     def country_code(self) -> str:
