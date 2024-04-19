@@ -124,6 +124,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -209,6 +210,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -277,6 +279,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")

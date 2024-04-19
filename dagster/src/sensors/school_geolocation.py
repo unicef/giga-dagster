@@ -37,9 +37,13 @@ def school_master_geolocation__raw_file_uploads_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
-        filename_components = deconstruct_school_master_filename_components(
-            adls_filepath
-        )
+        try:
+            filename_components = deconstruct_school_master_filename_components(
+                adls_filepath
+            )
+        except Exception as e:
+            context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
+            continue
         country_code = filename_components.country_code
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
@@ -98,6 +102,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             file_size_bytes=size,
             domain=DOMAIN,
             dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -133,9 +138,14 @@ def school_master_geolocation__successful_manual_checks_sensor(
 
         adls_filepath = file_data.name
         path = Path(adls_filepath)
-        filename_components = deconstruct_school_master_filename_components(
-            adls_filepath
-        )
+        try:
+            filename_components = deconstruct_school_master_filename_components(
+                adls_filepath
+            )
+        except Exception as e:
+            context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
+            continue
+
         country_code = filename_components.country_code
 
         ops_destination_mapping = {
@@ -165,6 +175,7 @@ def school_master_geolocation__successful_manual_checks_sensor(
             metadata={},
             file_size_bytes=0,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -200,9 +211,13 @@ def school_master_geolocation__failed_manual_checks_sensor(
 
         adls_filepath = file_data.name
         path = Path(adls_filepath)
-        filename_components = deconstruct_school_master_filename_components(
-            adls_filepath
-        )
+        try:
+            filename_components = deconstruct_school_master_filename_components(
+                adls_filepath
+            )
+        except Exception as e:
+            context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
+            continue
         country_code = filename_components.country_code
         metastore_schema = "school_geolocation"
 
@@ -221,6 +236,7 @@ def school_master_geolocation__failed_manual_checks_sensor(
             metadata={},
             file_size_bytes=0,
             domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
