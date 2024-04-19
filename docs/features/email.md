@@ -13,7 +13,7 @@ def send_master_release_email(
     spark: PySparkResource,
 ):
     s: SparkSession = spark.spark_session
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
 
     cdf = (
         s.read.format("delta")
