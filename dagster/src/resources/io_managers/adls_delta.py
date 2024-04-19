@@ -17,7 +17,6 @@ from src.utils.schema import (
     get_partition_columns,
     get_primary_key,
     get_schema_columns,
-    get_schema_name,
 )
 
 adls_client = ADLSFileClient()
@@ -30,8 +29,11 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         if output is None:
             return
 
+        config = FileConfig(**context.step_context.op_config)
         table_name, _, _ = self._get_table_path(context)
-        schema_name = get_schema_name(context)
+        schema_name = construct_schema_name_for_tier(
+            config.metastore_schema, config.tier
+        )
         full_table_name = f"{schema_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_name)
