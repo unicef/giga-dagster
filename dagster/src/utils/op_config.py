@@ -9,6 +9,7 @@ from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
+    deconstruct_qos_filename_components,
     deconstruct_school_master_filename_components,
 )
 
@@ -77,7 +78,9 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        if "gold" in self.filepath.split("/")[0]:
+        if self.filepath.startswith("gold/qos"):
+            return deconstruct_qos_filename_components(self.filepath)
+        elif self.filepath.startswith("gold"):
             return deconstruct_adhoc_filename_components(self.filepath)
         else:
             return deconstruct_school_master_filename_components(self.filepath)
