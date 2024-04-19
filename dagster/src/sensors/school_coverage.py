@@ -151,7 +151,7 @@ def school_master_coverage__successful_manual_checks_sensor(
 
             ops_destination_mapping = {
                 "silver": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                    source_filepath=str(path),
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
                     metastore_schema="school_coverage",
                     tier=DataTier.SILVER,
