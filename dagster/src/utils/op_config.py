@@ -78,7 +78,7 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        if self.filepath.startswith("gold/qos"):
+        if "qos" in self.filepath:
             return deconstruct_qos_filename_components(self.filepath)
         elif self.filepath.startswith("gold"):
             return deconstruct_adhoc_filename_components(self.filepath)
@@ -87,7 +87,7 @@ class FileConfig(Config):
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        if self.filepath.startswith("gold/qos"):
+        if "qos" in self.filepath:
             return deconstruct_qos_filename_components(self.destination_filepath)
         elif self.filepath.startswith("gold"):
             return deconstruct_adhoc_filename_components(self.destination_filepath)
