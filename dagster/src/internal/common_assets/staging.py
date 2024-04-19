@@ -48,7 +48,7 @@ def staging_step(
     upstream_df: sql.DataFrame,
 ):
     schema_name = config.metastore_schema
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
     schema_columns = get_schema_columns(spark, schema_name)
     primary_key = get_primary_key(spark, schema_name)
     silver_tier_schema_name = construct_schema_name_for_tier(

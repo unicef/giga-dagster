@@ -98,7 +98,7 @@ def coverage_data_quality_results(
     dq_results = row_level_checks(
         df,
         f"coverage_{source}",
-        config.filename_components.country_code,
+        config.country_code,
         context,
     )
 
@@ -229,7 +229,7 @@ def coverage_bronze(
 ) -> sql.DataFrame:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.filename_components.country_code.lower()
+    silver_table_name = config.country_code.lower()
     full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
 
     if source == "fb":
