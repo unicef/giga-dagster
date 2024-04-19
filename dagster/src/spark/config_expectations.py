@@ -213,8 +213,6 @@ class Config(BaseSettings):
 
     UNIQUE_COLUMNS_QOS: list[str] = ["school_id_govt", "school_id_giga"]
 
-    UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
-
     NONEMPTY_COLUMNS_MASTER: list[str] = [
         "school_id_giga",
         "school_id_govt",
@@ -292,12 +290,6 @@ class Config(BaseSettings):
         "speed_upload",
         "speed_download",
         "provider",
-    ]
-
-    NONEMPTY_COLUMNS_CRITICAL: list[str] = [
-        "school_name",
-        "longitude",
-        "latitude",
     ]
 
     @property
@@ -496,8 +488,6 @@ class Config(BaseSettings):
         ["school_id_govt", "school_name", "education_level", "location_id"],
         ["school_name", "education_level", "location_id"],
         ["education_level", "location_id"],
-        # school name educ lat 110 lon 110
-        # similar school name educ lat 110 lon 110
     ]
 
     PRECISION: dict[str, dict[str, int]] = {
@@ -548,56 +538,6 @@ class Config(BaseSettings):
         "pop_within_3km",
         "pop_within_10km",
     ]
-
-    COV_COLUMNS: list[str] = [
-        "school_id_giga",
-        "cellular_coverage_availability",
-        "cellular_coverage_type",
-        "fiber_node_distance",
-        "microwave_node_distance",
-        "nearest_school_distance",
-        "schools_within_1km",
-        "schools_within_2km",
-        "schools_within_3km",
-        "schools_within_10km",
-        "nearest_NR_id",
-        "nearest_NR_distance",
-        "nearest_LTE_id",
-        "nearest_LTE_distance",
-        "nearest_UMTS_id",
-        "nearest_UMTS_distance",
-        "nearest_GSM_id",
-        "nearest_GSM_distance",
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "pop_within_10km",
-    ]
-
-    COV_COLUMN_RENAME: set[tuple[str, str]] = {
-        ("giga_id_school", "school_id_giga"),
-        ("coverage_availability", "cellular_coverage_availability"),
-        ("coverage_type", "cellular_coverage_type"),
-        ("fiber_node_distance", "fiber_node_distance"),
-        ("microwave_node_distance", "microwave_node_distance"),
-        ("nearest_school_distance", "nearest_school_distance"),
-        ("schools_within_1km", "schools_within_1km"),
-        ("schools_within_2km", "schools_within_2km"),
-        ("schools_within_3km", "schools_within_3km"),
-        ("schools_within_10km", "schools_within_10km"),
-        ("nearest_NR_id", "nearest_NR_id"),
-        ("nearest_NR_distance", "nearest_NR_distance"),
-        ("nearest_LTE_id", "nearest_LTE_id"),
-        ("nearest_LTE_distance", "nearest_LTE_distance"),
-        ("nearest_UMTS_id", "nearest_UMTS_id"),
-        ("nearest_UMTS_distance", "nearest_UMTS_distance"),
-        ("nearest_GSM_id", "nearest_GSM_id"),
-        ("nearest_GSM_distance", "nearest_GSM_distance"),
-        ("pop_within_1km", "pop_within_1km"),
-        ("pop_within_2km", "pop_within_2km"),
-        ("pop_within_3km", "pop_within_3km"),
-        ("pop_within_10km", "pop_within_10km"),
-    }
 
     COV_COLUMN_MERGE_LOGIC: list[str] = [
         "cellular_coverage_availability",
@@ -670,9 +610,9 @@ class Config(BaseSettings):
         "download_speed_contracted",
         "connectivity_type_govt",
         "admin1",
-        # "admin1_id_giga",
+        "admin1_id_giga",
         "admin2",
-        # "admin2_id_giga",
+        "admin2_id_giga",
         "school_area_type",
         "school_funding_type",
         "num_computers",

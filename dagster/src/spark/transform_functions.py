@@ -10,7 +10,6 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import (
-    ArrayType,
     FloatType,
     StringType,
     StructField,
@@ -18,7 +17,6 @@ from pyspark.sql.types import (
 
 from azure.storage.blob import BlobServiceClient
 from src.settings import settings
-from src.spark.config_expectations import config
 from src.spark.udf_dependencies import get_point
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
@@ -200,23 +198,6 @@ def create_bronze_layer_columns(
 
     # Timestamp of ingestion
     return df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
-
-
-def get_critical_errors_empty_column(*args) -> list[str]:
-    empty_errors = []
-
-    # Only critical null errors
-    for column, value in zip(config.NONEMPTY_COLUMNS_CRITICAL, args, strict=False):
-        if value is None:  # If empty (None in PySpark)
-            empty_errors.append(column)
-
-    return empty_errors
-
-
-get_critical_errors_empty_column_udf = f.udf(
-    get_critical_errors_empty_column,
-    ArrayType(StringType()),
-)
 
 
 def has_critical_error(df: sql.DataFrame) -> sql.DataFrame:
@@ -407,12 +388,18 @@ if __name__ == "__main__":
             "education_level",
             "latitude",
             "longitude",
+            "admin1",
+            "admin1_id_giga",
+            "admin2",
+            "admin2_id_giga",
+            "disputed_region",
         ],
     )
-    df = df.withColumn("latitude", f.lit(32.618))
-    df = df.withColumn("longitude", f.lit(78.576))
-    df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    df = df.withColumn("admin1", f.lit("ngek"))
+    # df = df.withColumn("latitude", f.lit(32.618))
+    # df = df.withColumn("longitude", f.lit(78.576))
+    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
     # df = df.withColumn("school_name", f.trim(f.col("school_name")))
     # df = df.withColumn("latitude", f.lit(17.5066649))
@@ -428,9 +415,9 @@ if __name__ == "__main__":
     df.show()
     print(df.count())
 
-    # test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
-    # test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
-    test = add_disputed_region_column(df=df)
+    test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
+    test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
+    test = add_disputed_region_column(df=test)
     test.show()
 
     # test = test.filter(test["admin2"] != test["admin21"])
