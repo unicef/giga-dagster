@@ -277,7 +277,7 @@ def datahub_emit_metadata_with_exception_catcher(
     try:
         emit_metadata_to_datahub(
             context=context,
-            country_code=config.filename_components.country_code,
+            country_code=config.country_code,
             dataset_urn=config.datahub_destination_dataset_urn,
             schema_reference=schema_reference,
             df_failed=df_failed,
