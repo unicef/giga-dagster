@@ -77,7 +77,7 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        if "gold/delta-tables" in self.filepath:
+        if "gold" in self.filepath.split("/")[0]:
             return deconstruct_adhoc_filename_components(self.filepath)
         else:
             return deconstruct_school_master_filename_components(self.filepath)
