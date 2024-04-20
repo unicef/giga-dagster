@@ -14,7 +14,7 @@ from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 DOMAIN = "school"
-SCHOOL_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
+DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
 
 @sensor(
@@ -26,7 +26,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}"
+    source_directory = f"{constants.raw_folder}/{DOMAIN_DATASET_TYPE}"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
@@ -60,36 +60,36 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_bronze": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
                     metastore_schema=metastore_schema,
                     tier=DataTier.BRONZE,
                 ),
                 "geolocation_data_quality_results": OpDestinationMapping(
-                    source_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
                     metastore_schema=metastore_schema,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_data_quality_results_summary": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
                     metastore_schema=metastore_schema,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_passed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
                     metastore_schema=metastore_schema,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_failed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.csv",
                     metastore_schema=metastore_schema,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_staging": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{SCHOOL_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
                     destination_filepath="",
                     metastore_schema=metastore_schema,
                     tier=DataTier.STAGING,
@@ -102,7 +102,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 metadata=metadata,
                 file_size_bytes=size,
                 domain=DOMAIN,
-                dq_target_filepath=f"{constants.bronze_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}.csv",
+                dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
                 country_code=country_code,
             )
 
@@ -128,7 +128,7 @@ def school_master_geolocation__successful_manual_checks_sensor(
 ):
     count = 0
     source_directory = (
-        f"{constants.staging_folder}/approved-row-ids/{SCHOOL_DATASET_TYPE}"
+        f"{constants.staging_folder}/approved-row-ids/{DOMAIN_DATASET_TYPE}"
     )
 
     for file_data in adls_file_client.list_paths_generator(
@@ -201,7 +201,7 @@ def school_master_geolocation__failed_manual_checks_sensor(
 ):
     count = 0
     source_directory = (
-        f"{constants.staging_folder}/approved-row-ids/{SCHOOL_DATASET_TYPE}"
+        f"{constants.staging_folder}/approved-row-ids/{DOMAIN_DATASET_TYPE}"
     )
 
     for file_data in adls_file_client.list_paths_generator(
