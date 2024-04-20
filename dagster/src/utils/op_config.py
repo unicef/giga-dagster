@@ -26,6 +26,12 @@ class FileConfig(Config):
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
         """,
     )
+    database_data: dict[str, Any] = Field(
+        default_factory=dict,
+        description="""
+        The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
+        """,
+    )
     file_size_bytes: int
 
     destination_filepath: str = Field(
@@ -108,6 +114,7 @@ def generate_run_ops(
     domain: str,
     country_code: str,
     dq_target_filepath: str = None,
+    database_data: dict = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
 
@@ -123,6 +130,7 @@ def generate_run_ops(
             dq_target_filepath=dq_target_filepath,
             domain=domain,
             country_code=country_code,
+            database_data=database_data,
         )
         run_ops[asset_key] = file_config
 
