@@ -27,12 +27,45 @@ class SendQueryInEnum(enum.Enum):
     NONE = "NONE"
 
 
+# class ApiConfiguration(Config):
+#     id: str
+#     api_auth_api_key: str | None
+#     api_auth_api_value: str | None
+#     api_endpoint: str
+#     authorization_type: AuthorizationTypeEnum
+#     basic_auth_password: str | None
+#     basic_auth_username: str | None
+#     bearer_auth_bearer_token: str | None
+#     data_key: str
+#     date_created: str
+#     date_last_ingested: str
+#     date_last_successfully_ingested: str
+#     date_modified: str
+#     enabled: bool
+#     error_message: str | None
+#     page_number_key: str | None
+#     page_offset_key: str | None
+#     page_send_query_in: SendQueryInEnum
+#     page_size_key: str | None
+#     page_starts_with: int | None
+#     pagination_type: PaginationTypeEnum
+#     query_parameters: str | None
+#     request_body: str | None
+#     request_method: RequestMethodEnum
+#     school_id_key: str
+#     school_id_send_query_in: SendQueryInEnum
+#     size: int | None
+
+#     class Config:
+#         orm_mode = True
+
+
 class ApiConfiguration(Config):
     id: str
     api_auth_api_key: str | None
     api_auth_api_value: str | None
     api_endpoint: str
-    authorization_type: AuthorizationTypeEnum
+    authorization_type: str
     basic_auth_password: str | None
     basic_auth_username: str | None
     bearer_auth_bearer_token: str | None
@@ -45,15 +78,15 @@ class ApiConfiguration(Config):
     error_message: str | None
     page_number_key: str | None
     page_offset_key: str | None
-    page_send_query_in: SendQueryInEnum
+    page_send_query_in: str
     page_size_key: str | None
     page_starts_with: int | None
-    pagination_type: PaginationTypeEnum
+    pagination_type: str
     query_parameters: str | None
     request_body: str | None
-    request_method: RequestMethodEnum
+    request_method: str
     school_id_key: str
-    school_id_send_query_in: SendQueryInEnum
+    school_id_send_query_in: str
     size: int | None
 
     class Config:
