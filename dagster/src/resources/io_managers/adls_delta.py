@@ -91,9 +91,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         table_name: str,
     ):
         spark = self._get_spark_session()
-        config = FileConfig(**context.step_context.op_config)
-        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
-        full_table_name = construct_full_table_name(schema_tier_name, table_name)
+        full_table_name = construct_full_table_name(schema_name, table_name)
 
         if schema_name == "qos":
             columns = data.schema.fields
