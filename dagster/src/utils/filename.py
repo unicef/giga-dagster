@@ -33,16 +33,20 @@ def deconstruct_school_master_filename_components(filepath: str):
             country_code=country_code,
             source=source,
         )
-    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix == ".json":
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.parts[-1].endswith(
+        ".json"
+    ):
         country_code, dataset_type, timestamp = splits
-        timestamp = datetime.fromtimestamp(int(timestamp))
+        timestamp = datetime.strptime(timestamp, expected_timestamp_format)
         return FilenameComponents(
             id="",
             dataset_type=dataset_type,
             timestamp=timestamp,
             country_code=country_code,
         )
-    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix != ".json":
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and not path.parts[
+        -1
+    ].endswith(".json"):
         raise FileExtensionValidationException(
             f"Expected {EXPECTED_APPROVED_IDS_COMPONENTS} components for filename `{path.name}`; got {len(splits)} and missing `.json` extension"
         )
