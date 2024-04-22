@@ -15,7 +15,11 @@ def deconstruct_school_master_filename_components(filepath: str):
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
 
-    EXPECTED_UPLOAD_FILENAME_COMPONENTS = 4 if "geolocation" in path.stem else 5
+    EXPECTED_UPLOAD_FILENAME_COMPONENTS = (
+        EXPECTED_GEOLOCATION_COMPONENTS
+        if "geolocation" in path.stem
+        else EXPECTED_COVERAGE_COMPONENTS
+    )
 
     if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
