@@ -46,7 +46,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     def load_input(self, context: InputContext) -> sql.DataFrame:
         table_name, _, _ = self._get_table_path(context)
         spark = self._get_spark_session()
-        config = FileConfig(**context.upstream_output.step_context.op_config)
+        config = FileConfig(
+            **context.upstream_output.step_context.op_config
+        )  # this is a scam -- gives the current asset step's config, not the upstream asset
         schema_name = config.metastore_schema
 
         schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
