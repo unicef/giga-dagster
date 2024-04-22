@@ -35,10 +35,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             config.metastore_schema, config.tier
         )
         full_table_name = f"{schema_tier_name}.{table_name}"
-
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, schema_tier_name, full_table_name)
+        self._upsert_data(output, config.metastore_schema, full_table_name)
 
         context.log.info(
             f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
@@ -87,19 +86,22 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         self,
         context: InputContext | OutputContext,
         data: sql.DataFrame,
-        schema_name: str,
+        schema_name_for_tier: str,
         table_name: str,
     ):
         spark = self._get_spark_session()
-        full_table_name = construct_full_table_name(schema_name, table_name)
+        full_table_name = construct_full_table_name(schema_name_for_tier, table_name)
+        columns_schema_name = FileConfig(
+            **context.step_context.op_config
+        ).metastore_schema
 
-        if schema_name == "qos":
+        if schema_name_for_tier == "qos":
             columns = data.schema.fields
             partition_columns = ["date"]
         else:
-            columns = get_schema_columns(spark, schema_name)
+            columns = get_schema_columns(spark, columns_schema_name)
             context.log.info(f"columns: {columns}")
-            partition_columns = get_partition_columns(spark, schema_name)
+            partition_columns = get_partition_columns(spark, columns_schema_name)
 
         query = (
             DeltaTable.createIfNotExists(spark)
@@ -111,7 +113,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-        execute_query_with_error_handler(spark, query, schema_name, table_name, context)
+        execute_query_with_error_handler(
+            spark, query, schema_name_for_tier, table_name, context
+        )
 
     def _upsert_data(
         self,
