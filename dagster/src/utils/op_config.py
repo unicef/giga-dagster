@@ -4,10 +4,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from dagster import Config
-from src.constants import DataTier
+from src.constants import DataTier, constants
 from src.schemas.filename_components import FilenameComponents
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.filename import deconstruct_school_master_filename_components
+from src.utils.filename import (
+    deconstruct_adhoc_filename_components,
+    deconstruct_qos_filename_components,
+    deconstruct_school_master_filename_components,
+)
 
 
 class FileConfig(Config):
@@ -74,11 +78,23 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.filepath)
+        if "qos" in self.filepath:
+            return deconstruct_qos_filename_components(self.filepath)
+        elif self.filepath.startswith("gold"):
+            return deconstruct_adhoc_filename_components(self.filepath)
+        else:
+            return deconstruct_school_master_filename_components(self.filepath)
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        return deconstruct_school_master_filename_components(self.destination_filepath)
+        if "qos" in self.filepath:
+            return deconstruct_qos_filename_components(self.destination_filepath)
+        elif self.filepath.startswith(constants.gold_source_folder):
+            return deconstruct_adhoc_filename_components(self.destination_filepath)
+        else:
+            return deconstruct_school_master_filename_components(
+                self.destination_filepath
+            )
 
     @property
     def datahub_source_dataset_urn(self) -> str:
