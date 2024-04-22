@@ -31,7 +31,6 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         config = FileConfig(**context.step_context.op_config)
         table_name, _, _ = self._get_table_path(context)
-        schema_name = config.metastore_schema
         schema_tier_name = construct_schema_name_for_tier(
             config.metastore_schema, config.tier
         )
@@ -39,10 +38,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, schema_name, full_table_name)
+        self._upsert_data(output, schema_tier_name, full_table_name)
 
         context.log.info(
-            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
+            f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
