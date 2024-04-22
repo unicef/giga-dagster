@@ -35,10 +35,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         schema_tier_name = construct_schema_name_for_tier(
             config.metastore_schema, config.tier
         )
-        full_table_name = f"{schema_name}.{table_name}"
+        full_table_name = f"{schema_tier_name}.{table_name}"
 
         self._create_schema_if_not_exists(schema_tier_name)
-        self._create_table_if_not_exists(context, output, schema_name, table_name)
+        self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
         self._upsert_data(output, schema_name, full_table_name)
 
         context.log.info(
