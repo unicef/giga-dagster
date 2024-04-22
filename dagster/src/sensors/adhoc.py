@@ -132,7 +132,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             RunRequest(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
-                tags={"country": filename_components.country_code},
+                tags={"country": country_code},
             ),
         )
 

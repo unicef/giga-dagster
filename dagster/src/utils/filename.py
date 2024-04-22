@@ -14,21 +14,24 @@ def deconstruct_school_master_filename_components(filepath: str):
     path = Path(filepath)
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
-    valid_number_of_splits = (
+
+    EXPECTED_UPLOAD_FILENAME_COMPONENTS = (
         EXPECTED_GEOLOCATION_COMPONENTS
         if "geolocation" in path.stem
         else EXPECTED_COVERAGE_COMPONENTS
     )
 
-    if len(splits) == valid_number_of_splits:
+    if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
+        source = splits[3] if "coverage" in path.stem else None
 
         return FilenameComponents(
             id=id,
             dataset_type=dataset_type,
             timestamp=datetime.strptime(timestamp, expected_timestamp_format),
             country_code=country_code,
+            source=source,
         )
     elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix == ".json":
         country_code, dataset_type, timestamp = splits
@@ -46,7 +49,7 @@ def deconstruct_school_master_filename_components(filepath: str):
 
     else:
         raise ValueError(
-            f"Expected {valid_number_of_splits} components for filename `{path.name}`; got {len(splits)}"
+            f"Expected {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
         )
 
 
