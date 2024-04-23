@@ -1,3 +1,5 @@
+from enum import Enum
+
 from models.qos_apis import SchoolList
 from sqlalchemy import select
 
@@ -24,11 +26,13 @@ def qos_school_list__schedule(context: ScheduleEvaluationContext):
     scheduled_date = context.scheduled_execution_time.strftime("%Y-%m-%d")
 
     with get_db_context() as session:
-        school_list_apis = session.scalars(select(SchoolList).where(SchoolList.enabled))
+        school_list_apis = session.execute(select(SchoolList).where(SchoolList.enabled))
 
         count = 0
-        for api in school_list_apis:
-            row_data = SchoolListConfig.from_orm(api)
+        for api in school_list_apis.mappings():
+            row_data = SchoolListConfig.from_orm(
+                {k: v.value if isinstance(v, Enum) else v for k, v in api.items()}
+            )
             context.log.info(f"configzzz: {row_data.name}")
 
             country_code = "BRA"
