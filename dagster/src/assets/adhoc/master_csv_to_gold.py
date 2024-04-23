@@ -53,7 +53,7 @@ def adhoc__load_master_csv(
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
-        country_code=config.filename_components.country_code,
+        country_code=config.country_code,
         dataset_urn=config.datahub_source_dataset_urn,
     )
     yield Output(raw, metadata=get_output_metadata(config))
@@ -262,7 +262,7 @@ def adhoc__publish_master_to_gold(
         emit_metadata_to_datahub(
             context,
             schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
+            country_code=config.country_code,
             dataset_urn=config.datahub_source_dataset_urn,
         )
     except Exception as error:
@@ -292,7 +292,7 @@ async def adhoc__broadcast_master_release_notes(
         return Output(None)
 
     s: SparkSession = spark.spark_session
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
 
     cdf = (
         s.read.format("delta")
@@ -348,7 +348,7 @@ async def adhoc__broadcast_master_release_notes(
     return Output(
         None,
         metadata={
-            **props,
+            **props.dict(),
             "recipients": recipients,
         },
     )
