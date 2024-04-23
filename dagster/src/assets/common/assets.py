@@ -7,6 +7,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StringType
 from src.constants import DataTier
+from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.resources import ResourceKey
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import (
@@ -154,6 +155,7 @@ def master(
         spark=spark,
         schema_reference=schema_reference,
     )
+
     return Output(
         silver,
         metadata={
@@ -217,3 +219,17 @@ def reference(
             "preview": get_table_preview(silver),
         },
     )
+
+
+@asset
+async def broadcast_master_release_notes(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    master: sql.DataFrame,
+) -> Output[None]:
+    metadata = await send_master_release_notes(context, config, spark, master)
+    if metadata is None:
+        return Output(None)
+
+    return Output(None, metadata=metadata)
