@@ -76,42 +76,9 @@ def deconstruct_adhoc_filename_components(filepath: str) -> FilenameComponents |
     """Deconstruct and validate filename components for adhoc files"""
 
     COUNTRY_CODE_LENGTH = 3
-    EXPECTED_GEOLOCATION_FILENAME_COMPONENTS = 4
-    EXPECTED_COVERAGE_FILENAME_COMPONENTS = 5
 
     path = Path(filepath)
-    splits = path.stem.split("_")
-    expected_timestamp_format = "%Y%m%d-%H%M%S"
     parts_except_name = path.parts[:-1]
-
-    if any("geolocation" in p for p in parts_except_name):
-        if len(splits) != EXPECTED_GEOLOCATION_FILENAME_COMPONENTS:
-            raise FilenameValidationException(
-                f"Expected 4 components for geolocation filename `{path.name}`; got {len(splits)}",
-            )
-
-        id, country_code, dataset_type, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            country_code=country_code,
-        )
-
-    if any("coverage" in p for p in parts_except_name):
-        if len(splits) != EXPECTED_COVERAGE_FILENAME_COMPONENTS:
-            raise FilenameValidationException(
-                f"Expected 5 components for coverage filename `{path.name}`; got {len(splits)}",
-            )
-
-        id, country_code, dataset_type, source, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            source=source,
-            country_code=country_code,
-        )
 
     if any("qos" in p for p in parts_except_name):
         if len(path.parent.name) != COUNTRY_CODE_LENGTH:
