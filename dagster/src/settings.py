@@ -107,7 +107,7 @@ class Settings(BaseSettings):
 
     @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
-        return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
+        return int(timedelta(minutes=2).total_seconds()) if self.IN_PRODUCTION else 30
 
     @property
     def DEFAULT_SCHEDULE_CRON(self) -> str:

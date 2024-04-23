@@ -14,39 +14,46 @@ def deconstruct_school_master_filename_components(filepath: str):
     path = Path(filepath)
     splits = path.stem.split("_")
     expected_timestamp_format = "%Y%m%d-%H%M%S"
-    valid_number_of_splits = (
+
+    EXPECTED_UPLOAD_FILENAME_COMPONENTS = (
         EXPECTED_GEOLOCATION_COMPONENTS
         if "geolocation" in path.stem
         else EXPECTED_COVERAGE_COMPONENTS
     )
 
-    if len(splits) == valid_number_of_splits:
+    if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
+        source = splits[3] if "coverage" in path.stem else None
 
         return FilenameComponents(
             id=id,
             dataset_type=dataset_type,
             timestamp=datetime.strptime(timestamp, expected_timestamp_format),
             country_code=country_code,
+            source=source,
         )
-    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix == ".json":
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.parts[-1].endswith(
+        ".json"
+    ):
         country_code, dataset_type, timestamp = splits
-        timestamp = datetime.fromtimestamp(int(timestamp))
+        timestamp = datetime.strptime(timestamp, expected_timestamp_format)
         return FilenameComponents(
             id="",
             dataset_type=dataset_type,
             timestamp=timestamp,
             country_code=country_code,
         )
-    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and path.suffix != ".json":
+    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and not path.parts[
+        -1
+    ].endswith(".json"):
         raise FileExtensionValidationException(
             f"Expected {EXPECTED_APPROVED_IDS_COMPONENTS} components for filename `{path.name}`; got {len(splits)} and missing `.json` extension"
         )
 
     else:
         raise ValueError(
-            f"Expected {valid_number_of_splits} components for filename `{path.name}`; got {len(splits)}"
+            f"Expected {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
         )
 
 
@@ -69,42 +76,9 @@ def deconstruct_adhoc_filename_components(filepath: str) -> FilenameComponents |
     """Deconstruct and validate filename components for adhoc files"""
 
     COUNTRY_CODE_LENGTH = 3
-    EXPECTED_GEOLOCATION_FILENAME_COMPONENTS = 4
-    EXPECTED_COVERAGE_FILENAME_COMPONENTS = 5
 
     path = Path(filepath)
-    splits = path.stem.split("_")
-    expected_timestamp_format = "%Y%m%d-%H%M%S"
     parts_except_name = path.parts[:-1]
-
-    if any("geolocation" in p for p in parts_except_name):
-        if len(splits) != EXPECTED_GEOLOCATION_FILENAME_COMPONENTS:
-            raise FilenameValidationException(
-                f"Expected 4 components for geolocation filename `{path.name}`; got {len(splits)}",
-            )
-
-        id, country_code, dataset_type, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            country_code=country_code,
-        )
-
-    if any("coverage" in p for p in parts_except_name):
-        if len(splits) != EXPECTED_COVERAGE_FILENAME_COMPONENTS:
-            raise FilenameValidationException(
-                f"Expected 5 components for coverage filename `{path.name}`; got {len(splits)}",
-            )
-
-        id, country_code, dataset_type, source, timestamp = splits
-        return FilenameComponents(
-            id=id,
-            dataset_type=dataset_type,
-            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
-            source=source,
-            country_code=country_code,
-        )
 
     if any("qos" in p for p in parts_except_name):
         if len(path.parent.name) != COUNTRY_CODE_LENGTH:

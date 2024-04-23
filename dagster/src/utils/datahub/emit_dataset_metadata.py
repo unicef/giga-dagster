@@ -2,7 +2,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import country_converter as cc
 import datahub.emitter.mce_builder as builder
 import sentry_sdk
 from dagster_pyspark import PySparkResource
@@ -26,16 +25,11 @@ from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
-from src.utils.datahub.update_policies import update_policies
+from src.utils.datahub.identify_country_name import identify_country_name
+from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_column_descriptions
 from src.utils.sentry import log_op_context
-
-
-def identify_country_name(country_code: str) -> str:
-    coco = cc.CountryConverter()
-    data = coco.data
-    return data[data["ISO3"] == country_code]["name_short"].to_list()[0]
 
 
 def create_dataset_urn(
@@ -254,14 +248,6 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    # context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
-    # ingest_azure_ad_to_datahub_pipeline()
-    # context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
-
-    context.log.info("UPDATING POLICIES IN DATAHUB...")
-    update_policies()
-    context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-
     context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}.",
     )
@@ -295,9 +281,12 @@ def datahub_emit_metadata_with_exception_catcher(
                 dataset_urn=config.datahub_destination_dataset_urn,
                 column_licenses=column_licenses,
                 column_descriptions=column_descriptions,
+                context=context,
             )
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
+
+        update_policy_for_group(config=config, context=context)
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
         log_op_context(context)

@@ -103,17 +103,22 @@ def silver(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
 def master(
     context: OpExecutionContext,
-    silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
-    schema_columns = get_schema_columns(s, schema_name)
+    country_code = config.country_code
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        f"school_{config.dataset_type}", DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    silver = DeltaTable.forName(s, silver_table_name).alias("staging").toDF()
+    schema_columns = get_schema_columns(s, schema_name)
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
     silver = compute_row_hash(silver)
@@ -135,17 +140,22 @@ def master(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
 def reference(
     context: OpExecutionContext,
-    silver: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
-    schema_columns = get_schema_columns(s, schema_name)
+    country_code = config.country_code
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        f"school_{config.dataset_type}", DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    silver = DeltaTable.forName(s, silver_table_name).alias("staging").toDF()
+    schema_columns = get_schema_columns(s, schema_name)
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
     silver = compute_row_hash(silver)

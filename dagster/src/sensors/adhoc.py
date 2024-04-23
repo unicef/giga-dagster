@@ -132,11 +132,14 @@ def school_master__gold_csv_to_deltatable_sensor(
             RunRequest(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
-                tags={"country": filename_components.country_code},
+                tags={"country": country_code},
             ),
         )
 
-    yield from run_requests
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
 
 
 @sensor(
@@ -218,7 +221,10 @@ def school_reference__gold_csv_to_deltatable_sensor(
             RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops)),
         )
 
-    yield from run_requests
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
 
 
 @sensor(
