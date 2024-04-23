@@ -9,7 +9,7 @@ from src.utils.op_config import FileConfig
 
 
 def emit_lineage_base(
-    upstream_filepaths: list[str], dataset_urn: str, context: OpExecutionContext = None
+    upstream_datasets: list[str], dataset_urn: str, context: OpExecutionContext = None
 ) -> None:
     logger = get_context_with_fallback_logger(context)
 
@@ -18,8 +18,11 @@ def emit_lineage_base(
         token=settings.DATAHUB_ACCESS_TOKEN,
     )
     upstream_urn_list = []
-    for filepath in upstream_filepaths:
-        upstream_urn = build_dataset_urn(filepath=filepath)
+    for dataset in upstream_datasets:
+        if dataset.startswith("urn"):
+            upstream_urn = dataset
+        else:
+            upstream_urn = build_dataset_urn(filepath=dataset)
         upstream_urn_list.append(upstream_urn)
 
     logger.info(f"upstream_urn_list: {upstream_urn_list}")
@@ -51,7 +54,7 @@ def emit_lineage(context: OpExecutionContext) -> None:
         context.log.info(f"dataset_urn: {dataset_urn}")
 
         emit_lineage_base(
-            upstream_filepaths=[upstream_dataset_urn],
+            upstream_datasets=[upstream_dataset_urn],
             dataset_urn=dataset_urn,
             context=context,
         )
@@ -104,6 +107,6 @@ if __name__ == "__main__":
     print(upstream_filepaths)
 
     emit_lineage_base(
-        upstream_filepaths=upstream_filepaths,
+        upstream_datasets=upstream_filepaths,
         dataset_urn=dataset_urn,
     )
