@@ -1,7 +1,11 @@
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
+from pyspark.sql.types import StringType
 from src.constants import DataTier
 from src.resources import ResourceKey
 from src.spark.transform_functions import add_missing_columns
@@ -117,12 +121,31 @@ def master(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    silver = DeltaTable.forName(s, silver_table_name).alias("staging").toDF()
+    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    silver_columns = silver.schema.fields
+
     schema_columns = get_schema_columns(s, schema_name)
+    primary_key = get_primary_key(s, schema_name)
+
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
     silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
+
+    column_actions = {}
+    for col in schema_columns:
+        if (
+            not col.nullable
+            and col.name != primary_key
+            and col.dataType == StringType()
+            and col.name not in [c.name for c in silver_columns]
+        ):
+            column_actions[col.name] = f.when(
+                f.col(col.name).isNull() | (f.col(col.name) == ""),
+                f.lit("Unknown"),
+            )
+
+    silver = silver.withColumns(column_actions)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -154,12 +177,30 @@ def reference(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    silver = DeltaTable.forName(s, silver_table_name).alias("staging").toDF()
+    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     schema_columns = get_schema_columns(s, schema_name)
+    primary_key = get_primary_key(s, schema_name)
+    silver_columns = silver.schema.fields
+
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
     silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
+
+    column_actions = {}
+    for col in schema_columns:
+        if (
+            not col.nullable
+            and col.name != primary_key
+            and col.dataType == StringType()
+            and col.name not in [c.name for c in silver_columns]
+        ):
+            column_actions[col.name] = f.when(
+                f.col(col.name).isNull() | (f.col(col.name) == ""),
+                f.lit("Unknown"),
+            )
+
+    silver = silver.withColumns(column_actions)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
