@@ -156,7 +156,7 @@ def staging_step(
 
     upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
     emit_lineage_base(
-        upstream_filepaths=upstream_filepaths,
+        upstream_datasets=upstream_filepaths,
         dataset_urn=config.datahub_destination_dataset_urn,
         context=context,
     )
