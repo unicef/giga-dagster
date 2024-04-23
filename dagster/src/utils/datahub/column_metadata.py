@@ -2,9 +2,11 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from models.file_upload import FileUpload
 from sqlalchemy import select
 
+from dagster import OpExecutionContext
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import settings
 from src.utils.db import get_db_context
+from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 
 
@@ -53,6 +55,7 @@ def add_column_metadata(
     dataset_urn: str,
     column_licenses: dict[str, str],
     column_descriptions: list[dict],
+    context: OpExecutionContext = None,
 ) -> None:
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
@@ -60,25 +63,40 @@ def add_column_metadata(
             token=settings.DATAHUB_ACCESS_TOKEN,
         ),
     )
+    logger = get_context_with_fallback_logger(context)
     # COLUMN LICENSES
     for column, license in column_licenses.items():
-        query = add_column_tag_query(
-            tag_key=license,
-            column=column,
-            dataset_urn=dataset_urn,
-        )
-        datahub_graph_client.execute_graphql(query=query)
+        try:
+            query = add_column_tag_query(
+                tag_key=license,
+                column=column,
+                dataset_urn=dataset_urn,
+            )
+            datahub_graph_client.execute_graphql(query=query)
+        except Exception as error:
+            logger.warning(error)
+            logger.warning(
+                "Expected error if due to a missing field. Some transforms drop original columns."
+            )
+            continue
 
     # COLUMN DESCRIPTIONS
     for item in column_descriptions:
-        column = item["column"]
-        description = item["description"]
-        query = add_column_description_query(
-            column=column,
-            dataset_urn=dataset_urn,
-            description=description,
-        )
-        datahub_graph_client.execute_graphql(query=query)
+        try:
+            column = item["column"]
+            description = item["description"]
+            query = add_column_description_query(
+                column=column,
+                dataset_urn=dataset_urn,
+                description=description,
+            )
+            datahub_graph_client.execute_graphql(query=query)
+        except Exception as error:
+            logger.warning(error)
+            logger.warning(
+                "Expected error if due to a missing field. Some transforms drop original columns."
+            )
+            continue
 
 
 if __name__ == "__main__":

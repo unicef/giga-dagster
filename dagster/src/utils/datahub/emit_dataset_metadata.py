@@ -281,6 +281,7 @@ def datahub_emit_metadata_with_exception_catcher(
                 dataset_urn=config.datahub_destination_dataset_urn,
                 column_licenses=column_licenses,
                 column_descriptions=column_descriptions,
+                context=context,
             )
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
