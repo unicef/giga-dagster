@@ -1,12 +1,15 @@
 from delta import DeltaTable
+from models.approval_requests import ApprovalRequest
 from pyspark import sql
 from pyspark.sql import SparkSession
+from sqlalchemy import update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
+from src.utils.db import get_db_context
 from src.utils.delta import (
     build_deduped_merge_query,
     create_delta_table,
@@ -153,6 +156,18 @@ def staging_step(
         staging = compute_row_hash(staging)
         context.log.info(f"Full {staging.count()=}")
         staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
+
+    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    with get_db_context() as db:
+        db.execute(
+            update(ApprovalRequest)
+            .where(
+                ApprovalRequest.country == country_code,
+                ApprovalRequest.dataset == formatted_dataset,
+            )
+            .values(enabled=True),
+        )
+        db.commit()
 
     upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
     emit_lineage_base(

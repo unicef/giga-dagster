@@ -168,6 +168,12 @@ def school_master_coverage__successful_manual_checks_sensor(
                     metastore_schema="school_reference",
                     tier=DataTier.GOLD,
                 ),
+                "broadcast_master_release_notes": OpDestinationMapping(
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
+                    metastore_schema="school_master",
+                    tier=DataTier.GOLD,
+                ),
             }
 
             run_ops = generate_run_ops(
