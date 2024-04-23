@@ -1,5 +1,5 @@
 from dagster import Definitions, load_assets_from_package_module
-from src import jobs, schedule, sensors
+from src import jobs, sensors
 from src.assets import (
     adhoc,
     admin,
@@ -14,7 +14,6 @@ from src.assets import (
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
     load_jobs_from_package_module,
-    load_schedules_from_package_module,
     load_sensors_from_package_module,
 )
 from src.utils.sentry import setup_sentry
@@ -63,6 +62,6 @@ defs = Definitions(
     ],
     resources=RESOURCE_DEFINITIONS,
     jobs=load_jobs_from_package_module(jobs),
-    schedules=load_schedules_from_package_module(schedule),
+    # schedules=load_schedules_from_package_module(schedule),
     sensors=load_sensors_from_package_module(sensors),
 )
