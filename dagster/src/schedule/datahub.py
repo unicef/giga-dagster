@@ -4,7 +4,6 @@ from src.jobs.datahub import (
     datahub__materialize_prerequisites_job,
     datahub__update_access_job,
 )
-from src.settings import settings
 
 datahub_materialize_prerequisities_schedule = ScheduleDefinition(
     job=datahub__materialize_prerequisites_job,
@@ -13,7 +12,7 @@ datahub_materialize_prerequisities_schedule = ScheduleDefinition(
 
 datahub_update_access_schedule = ScheduleDefinition(
     job=datahub__update_access_job,
-    cron_schedule=settings.DEFAULT_SCHEDULE_CRON,
+    cron_schedule="30 * * * *",
 )
 
 datahub_ingest_coverage_notebooks_schedule = ScheduleDefinition(
