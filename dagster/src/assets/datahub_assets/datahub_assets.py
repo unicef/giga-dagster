@@ -50,7 +50,7 @@ def azure_ad_users_groups(context: OpExecutionContext):
 @asset(deps=[azure_ad_users_groups])
 def datahub_policies(context: OpExecutionContext):
     context.log.info("UPDATING POLICIES IN DATAHUB")
-    update_policies()
+    update_policies(context)
     yield Output(None)
 
 

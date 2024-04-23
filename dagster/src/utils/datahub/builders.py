@@ -14,3 +14,8 @@ def build_dataset_urn(filepath: str, platform: str = "adlsGen2") -> str:
         name=str(stem),
         env=settings.ADLS_ENVIRONMENT,
     )
+
+
+def build_group_urn(country_name: str, dataset_type: str, domain: str) -> str:
+    group_name = f"{country_name}-{domain} {dataset_type}".title()
+    return builder.make_group_urn(groupname=group_name)
