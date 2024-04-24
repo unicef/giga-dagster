@@ -9,3 +9,6 @@ class GraphUser(BaseModel):
     mail: EmailStr | None
     display_name: str | None
     user_principal_name: EmailStr
+
+    class Config:
+        orm_mode = True
