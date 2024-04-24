@@ -95,7 +95,7 @@ class Config(BaseSettings):
             "type": "custom_coverage_fb_check",
         },
         {
-            "assertion": "is_string_less_than_255_characters",
+            "assertion": "is_string_more_than_255_characters",
             "description": "Checks if column {} is less than 255 characters.",
             "type": "format_validation_checks",
         },

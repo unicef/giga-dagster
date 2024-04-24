@@ -366,7 +366,7 @@ if __name__ == "__main__":
     # df = create_giga_school_id(df_bronze)
     # df.show()
     # qos.show()
-    df = row_level_checks(master, "master", "BLZ")
+    df = standard_checks(master, "master")
     df.show()
 
     df = aggregate_report_spark_df(spark=spark, df=df)
@@ -375,25 +375,25 @@ if __name__ == "__main__":
     _json = aggregate_report_json(df, master)
     print(_json)
 
-    # ref
-    df = row_level_checks(reference, "reference", "BLZ")
-    df.show()
+    # # ref
+    # df = row_level_checks(reference, "reference", "BLZ")
+    # df.show()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
 
-    _json = aggregate_report_json(df, reference)
-    print(_json)
+    # _json = aggregate_report_json(df, reference)
+    # print(_json)
 
-    # qos
-    df = row_level_checks(qos, "qos", "BRA")
-    df.show()
+    # # qos
+    # df = row_level_checks(qos, "qos", "BRA")
+    # df.show()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
 
-    _json = aggregate_report_json(df, qos)
-    print(_json)
+    # _json = aggregate_report_json(df, qos)
+    # print(_json)
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
