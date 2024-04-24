@@ -149,7 +149,7 @@ def staging_step(
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
             context.log.info(f"{existing_file.count()=}")
-            staging = staging.union(existing_file)
+            staging = staging.unionByName(existing_file)
             context.log.info(f"{staging.count()=}")
 
         staging = transform_types(staging, schema_name, context)
