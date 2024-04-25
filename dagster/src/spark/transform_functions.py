@@ -189,44 +189,6 @@ def create_bronze_layer_columns(
     return df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
 
 
-def has_critical_error(df: sql.DataFrame) -> sql.DataFrame:
-    # Check if there is any critical error flagged for the row
-    return df.withColumn(
-        "has_critical_error",
-        f.expr(
-            "CASE "
-            "WHEN duplicate_school_id = true "
-            "   OR duplicate_school_id_giga = true "
-            "   OR size(critical_error_empty_column) > 0 "  # schoolname, lat, long, educ level
-            "   OR is_valid_location_values = false "
-            "   OR is_within_country != true "
-            "   THEN true "
-            "ELSE false END",  # schoolname, lat, long, educ level
-        ),
-    )
-
-
-def coordinates_comp(coordinates_list: list[list], row_coords: list) -> list[list]:
-    # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
-    for sublist in coordinates_list:
-        if sublist == row_coords:
-            coordinates_list.remove(sublist)
-            break
-    return coordinates_list
-
-
-coordinates_comp_udf = f.udf(coordinates_comp)
-
-
-def point_110(column) -> float | None:
-    if column is None:
-        return None
-    return int(1000 * float(column)) / 1000
-
-
-point_110_udf = f.udf(point_110)
-
-
 def get_admin_boundaries(
     country_code_iso3: str,
     admin_level: str,
