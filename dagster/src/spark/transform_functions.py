@@ -2,7 +2,6 @@ import io
 import uuid
 
 import geopandas as gpd
-import h3
 import pandas as pd
 from loguru import logger
 from pyspark import sql
@@ -117,16 +116,6 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
         "download_speed_govt",
         f.regexp_replace(f.col("download_speed_govt"), "[^0-9.]", "").cast(FloatType()),
     )
-
-
-def h3_geo_to_h3(latitude, longitude) -> str:
-    if latitude is None or longitude is None:
-        return "0"
-
-    return h3.geo_to_h3(latitude, longitude, resolution=8)
-
-
-h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
 
 
 def column_mapping_rename(
