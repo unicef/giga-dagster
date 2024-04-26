@@ -82,7 +82,7 @@ def geolocation_bronze(
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
-    schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
+    schema_columns = get_schema_columns(s, config.metastore_schema)
 
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)

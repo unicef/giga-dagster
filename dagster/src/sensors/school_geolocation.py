@@ -26,7 +26,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.raw_folder}/{DOMAIN_DATASET_TYPE}"
+    source_directory = f"{constants.UPLOAD_PATH_PREFIX}/{DOMAIN_DATASET_TYPE}"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True

@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 
 from dagster import Config
 
@@ -36,11 +37,11 @@ class ApiConfiguration(Config):
     basic_auth_password: str | None
     basic_auth_username: str | None
     bearer_auth_bearer_token: str | None
-    data_key: str
-    date_created: str
-    date_last_ingested: str
-    date_last_successfully_ingested: str
-    date_modified: str
+    data_key: str | None
+    date_created: datetime
+    date_last_ingested: datetime
+    date_last_successfully_ingested: datetime
+    date_modified: datetime
     enabled: bool
     error_message: str | None
     page_number_key: str | None
@@ -50,10 +51,9 @@ class ApiConfiguration(Config):
     page_starts_with: int | None
     pagination_type: PaginationTypeEnum
     query_parameters: str | None
-    request_body: RequestMethodEnum
-    request_method: str
+    request_body: str | None
+    request_method: RequestMethodEnum
     school_id_key: str
-    school_id_send_query_in: SendQueryInEnum
     size: int | None
 
     class Config:
@@ -69,6 +69,7 @@ class SchoolConnectivityConfig(ApiConfiguration):
     send_date_in: str | None
     response_date_key: str
     response_date_format: str
+    school_id_send_query_in: SendQueryInEnum
 
 
 class SchoolListConfig(ApiConfiguration):
@@ -76,4 +77,3 @@ class SchoolListConfig(ApiConfiguration):
     name: str
     user_email: str
     user_id: str
-    school_connectivity: SchoolConnectivityConfig

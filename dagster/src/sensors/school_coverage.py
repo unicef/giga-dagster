@@ -26,7 +26,7 @@ def school_master_coverage__raw_file_uploads_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}"
+    source_directory = f"{constants.UPLOAD_PATH_PREFIX}/{SCHOOL_DATASET_TYPE}"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
@@ -102,7 +102,7 @@ def school_master_coverage__raw_file_uploads_sensor(
                 metadata=metadata,
                 file_size_bytes=size,
                 domain=DOMAIN,
-                dq_target_filepath=f"{constants.raw_folder}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}{path.suffix}",
+                dq_target_filepath=f"{constants.UPLOAD_PATH_PREFIX}/{SCHOOL_DATASET_TYPE}/{country_code}/{stem}{path.suffix}",
                 country_code=country_code,
             )
 
