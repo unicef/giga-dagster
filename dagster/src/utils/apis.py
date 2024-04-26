@@ -82,7 +82,7 @@ def query_api_data(
                     context, session, row_data, pagination_parameters
                 )
 
-                if page != 2 and len(run_response):
+                if len(run_response):
                     data.extend(run_response)
                     context.log.info(
                         f"{row_data['name']} run # {page}, offset # {total_response_count} was a success",
