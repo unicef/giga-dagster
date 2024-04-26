@@ -63,7 +63,6 @@ jobs:
                     AZURE_EMAIL_SENDER: "$(azureEmailSender)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
-                    EMAIL_TEST_RECIPIENTS: '$(emailTestRecipients)'
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
@@ -89,7 +88,7 @@ jobs:
                     AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
                     AZURE_TENANT_ID: "$(azureAdTenantId)"
                     cookie-secret: "$(cookieSecret)"
-                    OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
+                    OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
                     OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
             - task: Kubernetes@1
@@ -142,7 +141,7 @@ jobs:
 
             - task: Kubernetes@1
               displayName: Create Dagster webserver PDB/HPA
-              condition: or(eq(variables.deployEnv, 'stg'), eq(variables.deployEnv, 'prd'))
+              condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
               inputs:
                 namespace: $(kubernetesNamespace)
                 configurationType: configuration

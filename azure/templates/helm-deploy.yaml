@@ -73,6 +73,7 @@ jobs:
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
+              condition: eq(variables.environment, 'dev')
               inputs:
                 command: upgrade
                 install: true
@@ -85,6 +86,26 @@ jobs:
                   --set image.tag=$(Build.SourceVersion)
                   --set ingress.enabled=true
                   --set ingress.hosts[0]="$(ingressHost)"
+                  --set config.clientIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
+                  --set config.clientSecretRef.secretRef="oi-dagster-secrets-$(deployEnv)"
+                  --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
+
+            - task: HelmDeploy@0
+              displayName: Helm deploy production-config auth proxy
+              condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
+              inputs:
+                command: upgrade
+                install: true
+                chartType: FilePath
+                chartPath: $(Build.SourcesDirectory)/infra/helm/oauth2-proxy
+                releaseName: dagster-authproxy
+                namespace: $(kubernetesNamespace)
+                arguments: >
+                  --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
+                  --set image.tag=$(Build.SourceVersion)
+                  --set ingress.enabled=true
+                  --set ingress.hosts[0]="$(ingressHost)"
+                  --set ingress.annotations."appgw\.ingress\.kubernetes\.io/appgw-ssl-certificate"=kv-cert-gigaglobal
                   --set config.clientIdRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.clientSecretRef.secretRef="oi-dagster-secrets-$(deployEnv)"
                   --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets

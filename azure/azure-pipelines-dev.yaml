@@ -21,6 +21,8 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
+  - name: environment
+    value: dev
   - template: templates/variables.yaml
 
 stages:
