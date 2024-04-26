@@ -17,18 +17,29 @@ def critical_error_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running critical error checks...")
 
+    # all mandatory columns included in critical error checks
     critial_column_dq_checks = [
         f.col(f"dq_is_null_mandatory-{column}") for column in config_column_list
     ]
 
-    if dataset_type == "master":
+    # other critical checks per dataset
+    if dataset_type in ["master", "geolocation"]:
         critial_column_dq_checks.extend(
             [
                 f.col("dq_duplicate-school_id_govt"),
                 f.col("dq_duplicate-school_id_giga"),
                 f.col("dq_is_invalid_range-latitude"),
                 f.col("dq_is_invalid_range-longitude"),
-                # f.col("dq_is_not_within_country"),
+                f.col("dq_is_not_within_country"),
+            ]
+        )
+    elif dataset_type in ["reference", "coverage", "coverage_fb", "coverage_itu"]:
+        critial_column_dq_checks.extend([f.col("dq_duplicate-school_id_giga")])
+    elif dataset_type == "qos":
+        critial_column_dq_checks.extend(
+            [
+                f.col("dq_duplicate-school_id_govt"),
+                f.col("dq_duplicate-school_id_giga"),
             ]
         )
 

@@ -1,67 +1,87 @@
 from decimal import Decimal
+from difflib import SequenceMatcher
 
+import numpy as np
+import pandas as pd
 from h3 import geo_to_h3
 from pyspark.sql.functions import udf
 
+from src.spark.config_expectations import config
+
 from .udf_dependencies import (
+    boundary_distance,
     is_within_boundary_distance,
     is_within_country_gadm,
     is_within_country_geopy,
 )
 
 
-def get_decimal_places_udf_factory(precision: int):
+def get_decimal_places_udf_factory(precision: int) -> callable:
     @udf
-    def get_decimal_places(value):
+    def get_decimal_places(value) -> int | None:
         if value is None:
-            out = None
-        else:
-            decimal_places = -Decimal(str(value)).as_tuple().exponent
-            out = int(decimal_places < precision)
-        return out
+            return None
+
+        decimal_places = -Decimal(str(value)).as_tuple().exponent
+        return int(decimal_places < precision)
 
     return get_decimal_places
 
 
 @udf
-def point_110_udf(value):
+def point_110_udf(value) -> float | None:
     if value is None:
-        point = None
-    else:
-        point = int(1000 * float(value)) / 1000
+        return None
 
-    return point
+    return int(1000 * float(value)) / 1000
 
 
 @udf
-def h3_geo_to_h3_udf(latitude: float, longitude: float):
+def h3_geo_to_h3_udf(latitude: float, longitude: float) -> str:
     if latitude is None or longitude is None:
-        out = "0"
-    else:
-        out = geo_to_h3(latitude, longitude, resolution=8)
+        return "0"
 
-    return out
+    return geo_to_h3(latitude, longitude, resolution=8)
+
+
+BOUNDARY_DISTANCE_THRESHOLD = 150
 
 
 def is_not_within_country_check_udf_factory(
-    country_code_iso2: str, country_code_iso3: str, geometry
-):
+    country_code_iso2: str,
+    country_code_iso3: str,
+    geometry: pd.Series | np.ndarray | pd.DataFrame,
+) -> callable:
     @udf
     def is_not_within_country_check(latitude: float, longitude: float) -> int:
         if latitude is None or longitude is None or country_code_iso3 is None:
-            out = 0
-        else:
-            is_valid_gadm = is_within_country_gadm(latitude, longitude, geometry)
-            is_valid_geopy = is_within_country_geopy(
-                latitude, longitude, country_code_iso2
-            )
-            is_valid_boundary = is_within_boundary_distance(
-                latitude, longitude, geometry
-            )
+            return 0
 
-            is_valid = any([is_valid_gadm, is_valid_geopy, is_valid_boundary])
-            out = int(not is_valid)
+        if is_within_country_gadm(latitude, longitude, geometry):
+            return 0
+        if is_within_boundary_distance(latitude, longitude, geometry):
+            return 0
+        if (
+            boundary_distance(latitude, longitude, geometry)
+            <= BOUNDARY_DISTANCE_THRESHOLD
+        ) and is_within_country_geopy(latitude, longitude, country_code_iso2):
+            return 0
 
-        return out
+        return 1
 
     return is_not_within_country_check
+
+
+@udf
+def has_similar_name_check_udf(school_name, school_name_2) -> int:
+    if school_name is None or school_name_2 is None:
+        return 0
+
+    if (
+        school_name != school_name_2
+        and SequenceMatcher(a=school_name, b=school_name_2).ratio()
+        > config.SIMILARITY_RATIO_CUTOFF
+    ):
+        return 1
+
+    return 0

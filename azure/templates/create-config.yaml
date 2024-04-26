@@ -9,6 +9,13 @@ jobs:
             - checkout: self
 
             - task: Kubernetes@1
+              displayName: Verify namespace secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: get
+                arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml
+
+            - task: Kubernetes@1
               displayName: Create configmap
               inputs:
                 namespace: $(kubernetesNamespace)
@@ -36,13 +43,16 @@ jobs:
                   stringData:
                     POSTGRESQL_USERNAME: "$(postgresqlUsername)"
                     POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
+                    AAD_AZURE_TENANT_ID: "$(aadAzureTenantId)"
+                    AAD_AZURE_CLIENT_ID: "$(aadAzureClientId)"
+                    AAD_AZURE_CLIENT_SECRET: "$(aadAzureClientSecret)"
                     AZURE_SAS_TOKEN: "$(azureSasToken)"
                     AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                     AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-                    AUTH_OIDC_REDIRECT_URL: "$(datahubAzureAdRedirectUrl)"
-                    AUTH_OIDC_CLIENT_ID: "$(azureAdClientId)"
-                    AUTH_OIDC_TENANT_ID: "$(azureAdTenantId)"
-                    AUTH_OIDC_CLIENT_SECRET: "$(datahubAzureAdClientSecret)"
+                    DATAHUB_OIDC_REDIRECT_URL: "$(datahubOidcRedirectUrl)"
+                    DATAHUB_OIDC_CLIENT_ID: "$(datahubOidcClientId)"
+                    DATAHUB_OIDC_CLIENT_SECRET: "$(datahubOidcClientSecret)"
+                    DATAHUB_OIDC_TENANT_ID: "$(datahubOidcTenantId)"
                     DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
                     DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
@@ -57,54 +67,6 @@ jobs:
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
-
-            - task: Kubernetes@1
-              displayName: Create Datahub external service
-              inputs:
-                namespace: $(kubernetesNamespace)
-                configurationType: inline
-                command: apply
-                useConfigurationFile: true
-                inline: |
-                  apiVersion: v1
-                  kind: Service
-                  metadata:
-                    name: datahub-gms-external
-                    labels:
-                      app.kubernetes.io/name: giga-dagster
-                      app.kubernetes.io/part-of: giga-dataops-platform
-                      app.kubernetes.io/component: dagster
-                  spec:
-                    type: ExternalName
-                    externalName: "datahub-datahub-gms.io-datahub-$(deployEnv).svc.cluster.local"
-                    ports:
-                      - port: 8080
-                        targetPort: 8080
-                        protocol: TCP        
-
-            - task: Kubernetes@1
-              displayName: Create ingestion portal database external service
-              inputs:
-                namespace: $(kubernetesNamespace)
-                configurationType: inline
-                command: apply
-                useConfigurationFile: true
-                inline: |
-                  apiVersion: v1
-                  kind: Service
-                  metadata:
-                    name: ingestion-portal-database-external
-                    labels:
-                      app.kubernetes.io/name: giga-dagster
-                      app.kubernetes.io/part-of: giga-dataops-platform
-                      app.kubernetes.io/component: dagster
-                  spec:
-                    type: ExternalName
-                    externalName: "ingestion-portal-postgresql.ictd-ooi-ingestionportal-$(deployEnv).svc.cluster.local"
-                    ports:
-                      - port: 5432
-                        targetPort: 5432
-                        protocol: TCP    
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets
@@ -123,14 +85,10 @@ jobs:
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
                   stringData:
-                    AZURE_TENANT_ID: "$(azureAdTenantId)"
                     AZURE_CLIENT_ID: "$(azureAdClientId)"
                     AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-                    AZURE_REDIRECT_URI: "https://$(appDomain)/auth/callback"
+                    AZURE_TENANT_ID: "$(azureAdTenantId)"
                     cookie-secret: "$(cookieSecret)"
-                    client-id: "$(azureAdClientId)"
-                    client-secret: "$(azureAdClientSecret)"
-                    OAUTH2_PROXY_AZURE_TENANT: "$(azureAdTenantId)"
                     OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
                     OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
@@ -154,7 +112,7 @@ jobs:
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     rpc-authentication-secret: "$(sparkRpcAuthSecret)"
                     SPARK_SSL_NEED_CLIENT_AUTH: "yes"
-                    SPARK_PUBLIC_DNS: "io-dagster-$(deployEnv).unitst.org"
+                    SPARK_PUBLIC_DNS: "$(ingressHost)"
                     SPARK_UI_PROXYBASE: "/spark"
 
             - task: Kubernetes@1

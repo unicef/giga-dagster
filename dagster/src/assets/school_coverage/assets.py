@@ -1,7 +1,6 @@
 from io import BytesIO
 
 import pandas as pd
-import sentry_sdk
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from icecream import ic
@@ -30,17 +29,18 @@ from src.spark.transform_functions import (
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
-from src.utils.datahub.builders import build_dataset_urn
-from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
+from src.utils.datahub.create_validation_tab import (
+    datahub_emit_assertions_with_exception_catcher,
+)
 from src.utils.datahub.emit_dataset_metadata import (
-    emit_metadata_to_datahub,
+    datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
-from src.utils.sentry import log_op_context
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -50,25 +50,14 @@ def coverage_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> bytes:
     df = adls_file_client.download_raw(config.filepath)
 
-    # # for testing only START - will be moved to io manager
-    # filepath = context.run_tags["dagster/run_key"].split("/")[-1]
-    # country_code = filepath.split("_")[1]
-    # platform = builder.make_data_platform_urn("adlsGen2")
-    # dataset_urn = builder.make_dataset_urn(
-    #     platform=platform,
-    #     env=settings.ADLS_ENVIRONMENT,
-    #     name=filepath.split(".")[0].replace("/", "."),
-    # )
-    # emit_metadata_to_datahub(context, df, country_code, dataset_urn)
-    # # for testing only END - will be moved to io manager
-    emit_metadata_to_datahub(
-        context,
-        df=df,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
     )
     yield Output(df, metadata=get_output_metadata(config))
 
@@ -84,11 +73,11 @@ def coverage_data_quality_results(
 
     with get_db_context() as db:
         file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id)
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
         )
         if file_upload is None:
             raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found"
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
         file_upload = FileUploadConfig.from_orm(file_upload)
@@ -101,24 +90,26 @@ def coverage_data_quality_results(
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
-        df_raw, file_upload.column_to_schema_mapping
+        df_raw,
+        file_upload.column_to_schema_mapping,
     )
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
     dq_results = row_level_checks(
         df,
         f"coverage_{source}",
-        config.filename_components.country_code,
+        config.country_code,
         context,
     )
 
     config.metadata.update({"column_mapping": column_mapping})
-    emit_metadata_to_datahub(
-        context,
-        dq_results,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
     )
+
     dq_pandas = dq_results.toPandas()
     yield Output(
         dq_pandas,
@@ -146,25 +137,24 @@ def coverage_data_quality_results_summary(
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, coverage_data_quality_results),
+        aggregate_report_spark_df(s, coverage_data_quality_results),
         df_raw,
     )
 
-    try:
-        config = FileConfig(**context.get_step_execution_context().op_config)
-        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+    datahub_emit_assertions_with_exception_catcher(
+        context=context, dq_summary_statistics=dq_summary_statistics
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
 
-        context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
-        emit_assertions = EmitDatasetAssertionResults(
-            dq_summary_statistics=dq_summary_statistics,
-            context=context,
-            dataset_urn=dq_target_dataset_urn,
-        )
-        emit_assertions()
-    except Exception as error:
-        context.log.error(f"Assertion Run ERROR: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
+    send_email_dq_report_with_config(
+        dq_results=dq_summary_statistics,
+        config=config,
+        context=context,
+    )
 
     yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
@@ -174,14 +164,21 @@ def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
-    emit_metadata_to_datahub(
-        context,
-        df_passed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
     )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
     df_pandas = df_passed.toPandas()
     yield Output(
         df_pandas,
@@ -197,14 +194,22 @@ def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
-    emit_metadata_to_datahub(
-        context,
-        df_failed,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
     )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+        df_failed=df_failed,
+    )
+
     df_pandas = df_failed.toPandas()
     yield Output(
         df_pandas,
@@ -224,7 +229,7 @@ def coverage_bronze(
 ) -> sql.DataFrame:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.filename_components.country_code.lower()
+    silver_table_name = config.country_code.lower()
     full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
 
     if source == "fb":
@@ -237,18 +242,23 @@ def coverage_bronze(
         df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
-        silver = DeltaTable.forName(spark.spark_session, full_silver_table_name).toDF()
+        silver = DeltaTable.forName(s, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
-    emit_metadata_to_datahub(
-        context,
-        df,
-        config.filename_components.country_code,
-        config.datahub_destination_dataset_urn,
+    schema_reference = get_schema_columns_datahub(
+        s,
+        config.metastore_schema,
     )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
     df_pandas = df.toPandas()
     yield Output(
         df_pandas,
@@ -274,12 +284,18 @@ def coverage_staging(
         spark.spark_session,
         upstream_df=coverage_bronze,
     )
-    emit_metadata_to_datahub(
-        context,
-        df=staging,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_destination_dataset_urn,
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
     )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
     return Output(
         None,
         metadata={

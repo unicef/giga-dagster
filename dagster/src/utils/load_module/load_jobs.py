@@ -17,7 +17,8 @@ def load_jobs_from_package_module(
     jobs: Sequence[JobDefinition | UnresolvedAssetJobDefinition] = []
     for module in find_modules_in_package(package_module):
         for job in _find_definition_in_module(
-            module, (JobDefinition, UnresolvedAssetJobDefinition)
+            module,
+            (JobDefinition, UnresolvedAssetJobDefinition),
         ):
             if job_id := id(job) not in job_ids:
                 job_ids.add(job_id)

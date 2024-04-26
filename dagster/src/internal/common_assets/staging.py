@@ -1,13 +1,15 @@
-from datetime import datetime
-
 from delta import DeltaTable
+from models.approval_requests import ApprovalRequest
 from pyspark import sql
 from pyspark.sql import SparkSession
+from sqlalchemy import update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_lineage import emit_lineage_base
+from src.utils.db import get_db_context
 from src.utils.delta import (
     build_deduped_merge_query,
     create_delta_table,
@@ -27,29 +29,14 @@ from src.utils.spark import compute_row_hash, transform_types
 def get_files_for_review(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
-    skip_condition: bool = None,
-    staging_last_modified: datetime = None,
+    skip_current_file: bool = False,
 ):
     files_for_review = []
     for file_info in adls_file_client.list_paths(
         str(config.filepath_object.parent), recursive=False
     ):
-        default_skip_condition = file_info.name == config.filepath
-
-        if staging_last_modified is not None:
-            default_skip_condition = (
-                default_skip_condition
-                or file_info.last_modified < staging_last_modified
-            )
-
-        if skip_condition is None:
-            skip_condition = default_skip_condition
-        else:
-            skip_condition = skip_condition or default_skip_condition
-
-        if skip_condition:
+        if skip_current_file and file_info.name == config.filepath:
             continue
-
         files_for_review.append(file_info)
 
     files_for_review = sorted(files_for_review, key=lambda p: p.last_modified)
@@ -64,18 +51,21 @@ def staging_step(
     upstream_df: sql.DataFrame,
 ):
     schema_name = config.metastore_schema
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
     schema_columns = get_schema_columns(spark, schema_name)
     primary_key = get_primary_key(spark, schema_name)
     silver_tier_schema_name = construct_schema_name_for_tier(
-        schema_name, DataTier.SILVER
+        schema_name,
+        DataTier.SILVER,
     )
     staging_tier_schema_name = construct_schema_name_for_tier(
-        schema_name, DataTier.STAGING
+        schema_name,
+        DataTier.STAGING,
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
     staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
+        staging_tier_schema_name,
+        country_code,
     )
 
     # If silver table exists and no staging table exists, clone it to staging
@@ -98,23 +88,19 @@ def staging_step(
 
         # Load new table (silver clone in staging) as a deltatable
         staging_dt = DeltaTable.forName(spark, staging_table_name)
-        staging_detail = staging_dt.detail().toDF()
-        staging_last_modified = (
-            staging_detail.select("lastModified").first().lastModified
-        )
         staging = staging_dt.alias("staging").toDF()
 
         files_for_review = get_files_for_review(
             adls_file_client,
             config,
-            staging_last_modified=staging_last_modified,
         )
         context.log.info(f"{len(files_for_review)=}")
 
         # Merge each pending file for the same country
         for file_info in files_for_review:
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name, spark
+                file_info.name,
+                spark,
             )
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
@@ -122,19 +108,27 @@ def staging_step(
             staging_dt = DeltaTable.forName(spark, staging_table_name)
             update_columns = [c.name for c in schema_columns if c.name != primary_key]
             query = build_deduped_merge_query(
-                staging_dt, existing_file, primary_key, update_columns
+                staging_dt,
+                existing_file,
+                primary_key,
+                update_columns,
             )
 
             if query is not None:
                 execute_query_with_error_handler(
-                    spark, query, staging_tier_schema_name, country_code, context
+                    spark,
+                    query,
+                    staging_tier_schema_name,
+                    country_code,
+                    context,
                 )
-
             staging = staging_dt.toDF()
     else:
         staging = upstream_df
         staging = transform_types(staging, schema_name, context)
-        files_for_review = get_files_for_review(adls_file_client, config)
+        files_for_review = get_files_for_review(
+            adls_file_client, config, skip_current_file=True
+        )
         context.log.info(f"{len(files_for_review)=}")
 
         create_schema(spark, staging_tier_schema_name)
@@ -149,16 +143,37 @@ def staging_step(
         # If no existing silver table, just merge the spark dataframes
         for file_info in files_for_review:
             existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name, spark
+                file_info.name,
+                spark,
             )
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
             context.log.info(f"{existing_file.count()=}")
-            staging = staging.union(existing_file)
+            staging = staging.unionByName(existing_file)
             context.log.info(f"{staging.count()=}")
 
+        staging = transform_types(staging, schema_name, context)
         staging = compute_row_hash(staging)
         context.log.info(f"Full {staging.count()=}")
         staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
+
+    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    with get_db_context() as db:
+        db.execute(
+            update(ApprovalRequest)
+            .where(
+                ApprovalRequest.country == country_code,
+                ApprovalRequest.dataset == formatted_dataset,
+            )
+            .values(enabled=True),
+        )
+        db.commit()
+
+    upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
+    emit_lineage_base(
+        upstream_datasets=upstream_filepaths,
+        dataset_urn=config.datahub_destination_dataset_urn,
+        context=context,
+    )
 
     return staging

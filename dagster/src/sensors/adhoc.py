@@ -15,8 +15,12 @@ from src.jobs.adhoc import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import (
+    deconstruct_adhoc_filename_components,
+)
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
+
+DOMAIN = "school"
 
 
 @sensor(
@@ -33,7 +37,7 @@ def school_master__gold_csv_to_deltatable_sensor(
     paths_list.extend(
         adls_file_client.list_paths(
             constants.adhoc_master_updates_source_folder, recursive=True
-        )
+        ),
     )
 
     run_requests = []
@@ -51,7 +55,7 @@ def school_master__gold_csv_to_deltatable_sensor(
         size = properties.size
         metastore_schema = "school_master"
 
-        filename_components = deconstruct_filename_components(file_data.name)
+        filename_components = deconstruct_adhoc_filename_components(file_data.name)
         country_code = filename_components.country_code
 
         if not stem.startswith(filename_components.country_code):
@@ -106,6 +110,12 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
             ),
+            "adhoc__broadcast_master_release_notes": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
+            ),
         }
 
         run_ops = generate_run_ops(
@@ -113,6 +123,8 @@ def school_master__gold_csv_to_deltatable_sensor(
             dataset_type="master",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -120,11 +132,14 @@ def school_master__gold_csv_to_deltatable_sensor(
             RunRequest(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
-                tags={"country": filename_components.country_code},
-            )
+                tags={"country": country_code},
+            ),
         )
 
-    yield from run_requests
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
 
 
 @sensor(
@@ -153,7 +168,7 @@ def school_reference__gold_csv_to_deltatable_sensor(
         size = properties.size
         metastore_schema = "school_reference"
 
-        filename_components = deconstruct_filename_components(file_data.name)
+        filename_components = deconstruct_adhoc_filename_components(file_data.name)
         country_code = filename_components.country_code
 
         if not stem.startswith(filename_components.country_code):
@@ -197,14 +212,19 @@ def school_reference__gold_csv_to_deltatable_sensor(
             dataset_type="reference",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
-            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops))
+            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops)),
         )
 
-    yield from run_requests
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
 
 
 @sensor(
@@ -264,6 +284,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
             dataset_type="qos",
             metadata=metadata,
             file_size_bytes=size,
+            domain=DOMAIN,
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
@@ -272,7 +294,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
                 run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
-            )
+            ),
         )
 
     if len(run_requests) == 0:

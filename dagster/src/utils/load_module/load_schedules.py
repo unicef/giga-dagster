@@ -19,7 +19,8 @@ def load_schedules_from_package_module(
     ] = []
     for module in find_modules_in_package(package_module):
         for schedule in _find_definition_in_module(
-            module, (ScheduleDefinition, UnresolvedPartitionedAssetScheduleDefinition)
+            module,
+            (ScheduleDefinition, UnresolvedPartitionedAssetScheduleDefinition),
         ):
             if schedule_id := id(schedule) not in schedule_ids:
                 schedule_ids.add(schedule_id)

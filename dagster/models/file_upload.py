@@ -13,7 +13,7 @@ class FileUpload(BaseModel):
 
     created: Mapped[str] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
+        server_default=func.now(),  # pylint: disable=not-callable
     )
     uploader_id: Mapped[str] = mapped_column(VARCHAR(36), nullable=False, index=True)
     uploader_email: Mapped[str] = mapped_column(String(), nullable=False)
@@ -23,7 +23,14 @@ class FileUpload(BaseModel):
     source: Mapped[str] = mapped_column(nullable=True)
     original_filename: Mapped[str] = mapped_column(nullable=False)
     column_to_schema_mapping: Mapped[dict] = mapped_column(
-        JSON, nullable=False, server_default="{}"
+        JSON,
+        nullable=False,
+        server_default="{}",
+    )
+    column_license: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        server_default="{}",
     )
 
     @hybrid_property

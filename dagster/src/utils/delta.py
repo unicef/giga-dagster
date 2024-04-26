@@ -1,4 +1,4 @@
-from delta.tables import DeltaTable, DeltaTableBuilder
+from delta.tables import DeltaMergeBuilder, DeltaTable, DeltaTableBuilder
 from icecream import ic
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
@@ -7,6 +7,7 @@ from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
+from src.exceptions import MutexException
 from src.utils.schema import construct_full_table_name
 
 
@@ -16,7 +17,7 @@ def execute_query_with_error_handler(
     schema_name: str,
     table_name: str,
     context: InputContext | OutputContext | OpExecutionContext,
-):
+) -> None:
     full_table_name = f"{schema_name}.{table_name}"
 
     try:
@@ -28,7 +29,7 @@ def execute_query_with_error_handler(
             #
             # Deleting a table in ADLS does not drop its metastore entry; the inverse is also true.
             context.log.warning(
-                f"Attempting to drop metastore entry for `{full_table_name}`..."
+                f"Attempting to drop metastore entry for `{full_table_name}`...",
             )
             spark.sql(f"DROP TABLE `{schema_name}`.`{table_name.lower()}`")
             query.execute()
@@ -43,11 +44,14 @@ def create_delta_table(
     table_name: str,
     columns: StructType | list[StructField],
     context: InputContext | OutputContext | OpExecutionContext,
-    if_not_exists=False,
-    replace=False,
-):
+    *,
+    if_not_exists: bool = False,
+    replace: bool = False,
+) -> None:
     if if_not_exists and replace:
-        raise Exception("Only one of `if_not_exists` or `replace` can be set to True.")
+        raise MutexException(
+            "Only one of `if_not_exists` or `replace` can be set to True.",
+        )
 
     full_table_name = construct_full_table_name(schema_name, table_name)
     create_stmt = DeltaTable.create
@@ -66,7 +70,7 @@ def create_delta_table(
     execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
 
-def create_schema(spark: SparkSession, schema_name: str):
+def create_schema(spark: SparkSession, schema_name: str) -> None:
     spark.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
 
 
@@ -75,7 +79,7 @@ def build_deduped_merge_query(
     updates: sql.DataFrame,
     primary_key: str,
     update_columns: list[str],
-):
+) -> DeltaMergeBuilder | None:
     master_df = master.toDF()
     incoming = updates.alias("incoming")
 
@@ -88,11 +92,13 @@ def build_deduped_merge_query(
     # TODO: Might need to specify a predictable order, although by default it's insertion order
     updates_signature = updates_df.agg(
         sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
-            "combined_signature"
-        )
+            "combined_signature",
+        ),
     ).first()["combined_signature"]
     master_to_update_signature = master_ids.agg(
-        sha2(concat_ws("|", collect_list("signature")), 256).alias("combined_signature")
+        sha2(concat_ws("|", collect_list("signature")), 256).alias(
+            "combined_signature",
+        ),
     ).first()["combined_signature"]
 
     has_updates = master_to_update_signature != updates_signature
@@ -102,7 +108,8 @@ def build_deduped_merge_query(
         return None
 
     query = master.alias("master").merge(
-        incoming.alias("incoming"), f"master.{primary_key} = incoming.{primary_key}"
+        incoming.alias("incoming"),
+        f"master.{primary_key} = incoming.{primary_key}",
     )
 
     if has_updates:
@@ -113,7 +120,7 @@ def build_deduped_merge_query(
                     update_columns,
                     [f"incoming.{c}" for c in update_columns],
                     strict=True,
-                )
+                ),
             ),
         )
     if has_insertions:

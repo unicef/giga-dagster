@@ -108,7 +108,7 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
             "WHEN cellular_coverage_type = '3G' OR cellular_coverage_type_fb = '3G' THEN '3G' "
             "WHEN cellular_coverage_type = '2G' OR cellular_coverage_type_fb = '4G' THEN '2G' "
             "ELSE 'no coverage' "
-            "END"
+            "END",
         ),
     )
     cov_stg = cov_stg.drop("cellular_coverage_type_fb")
@@ -118,7 +118,7 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
             "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
-            "END"
+            "END",
         ),
     )
     cov_stg = cov_stg.drop("cellular_coverage_availability_fb")
@@ -209,7 +209,7 @@ def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
             "WHEN cellular_coverage_type = '3G' OR cellular_coverage_type_itu = '3G' THEN '3G' "
             "WHEN cellular_coverage_type = '2G' OR cellular_coverage_type_itu = '4G' THEN '2G' "
             "ELSE 'no coverage' "
-            "END"
+            "END",
         ),
     )
     cov_stg = cov_stg.drop("cellular_coverage_type_itu")
@@ -219,7 +219,7 @@ def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
             "CASE "
             "WHEN cellular_coverage_type = 'no coverage' then 'no' "
             "ELSE 'yes' "
-            "END"
+            "END",
         ),
     )
     cov_stg = cov_stg.drop("cellular_coverage_availability_itu")
@@ -260,7 +260,9 @@ if __name__ == "__main__":
         itu.show()
 
         df = row_level_checks(
-            itu, "coverage_itu", "UZB"
+            itu,
+            "coverage_itu",
+            "UZB",
         )  # dataset plugged in should conform to updated schema! rename if necessary
         df.show()
 

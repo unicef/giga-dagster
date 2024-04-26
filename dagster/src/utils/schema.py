@@ -1,5 +1,6 @@
 from delta import DeltaTable
 from models import Schema
+from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.sql.types import StructField
@@ -15,13 +16,13 @@ from src.constants import DataTier, constants
 
 def get_schema_name(
     context: InputContext | OutputContext | OpExecutionContext | AssetExecutionContext,
-):
+) -> str:
     if isinstance(context, InputContext | OutputContext):
         return context.step_context.op_config["metastore_schema"]
     return context.op_config["metastore_schema"]
 
 
-def get_schema_table(spark: SparkSession, schema_name: str):
+def get_schema_table(spark: SparkSession, schema_name: str) -> sql.DataFrame:
     metaschema_name = Schema.__schema_name__
     full_table_name = f"{metaschema_name}.{schema_name}"
 
@@ -29,7 +30,7 @@ def get_schema_table(spark: SparkSession, schema_name: str):
     return DeltaTable.forName(spark, full_table_name).toDF()
 
 
-def get_schema_columns(spark: SparkSession, schema_name: str):
+def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructField]:
     df = get_schema_table(spark, schema_name)
     return [
         StructField(
@@ -41,7 +42,14 @@ def get_schema_columns(spark: SparkSession, schema_name: str):
     ]
 
 
-def get_schema_columns_datahub(spark: SparkSession, schema_name: str):
+def get_schema_column_descriptions(spark: SparkSession, schema_name: str) -> list[dict]:
+    df = get_schema_table(spark, schema_name)
+    return [
+        {"column": row.name, "description": row.description} for row in df.collect()
+    ]
+
+
+def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:
     df = get_schema_table(spark, schema_name)
     return [
         (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())
@@ -59,7 +67,7 @@ def get_partition_columns(spark: SparkSession, schema_name: str) -> list[str]:
     return [
         row.name
         for row in df.filter(
-            col("partition_order").isNotNull() & (col("partition_order") > 0)
+            col("partition_order").isNotNull() & (col("partition_order") > 0),
         )
         .orderBy("partition_order")
         .select("name")
