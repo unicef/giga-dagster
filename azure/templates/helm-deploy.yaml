@@ -73,7 +73,7 @@ jobs:
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
-              condition: eq(variables.environment, 'dev')
+              condition: or(eq(variables.environment, 'dev'), eq(variables.environment, 'stg'))
               inputs:
                 command: upgrade
                 install: true
@@ -92,7 +92,7 @@ jobs:
 
             - task: HelmDeploy@0
               displayName: Helm deploy production-config auth proxy
-              condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
+              condition: eq(variables.environment, 'prd')
               inputs:
                 command: upgrade
                 install: true
