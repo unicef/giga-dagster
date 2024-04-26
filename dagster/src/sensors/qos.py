@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 from models.qos_apis import SchoolList
@@ -19,7 +19,9 @@ DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
 @sensor(
     job=qos_school_list__automated_data_checks_job,
-    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+    minimum_interval_seconds=int(timedelta(days=1).total_seconds())
+    if settings.IN_PRODUCTION
+    else 30,
 )
 def qos_school_list__new_apis_sensor(
     context: SensorEvaluationContext,
@@ -40,10 +42,7 @@ def qos_school_list__new_apis_sensor(
                 else:
                     config[key] = value
 
-            print(f">>> CONFIG: {config}")
-
             row_data = SchoolListConfig(**config)
-            print(f"\n>>>configzzz: {row_data}\n")
 
             country_code = "RWA"
             metastore_schema = "school_geolocation"
@@ -105,17 +104,10 @@ def qos_school_list__new_apis_sensor(
                 database_data=row_data.json(),
             )
 
-            context.log.info("\n>>>>>>>>>>>>>>>\n")
-            context.log.info(f"RUNOPS: {run_ops}")
-            context.log.info(
-                f"RUNDATA: {row_data.name}, {scheduled_date}, {country_code}"
+            formatted_date = (
+                scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
             )
-
-            # formatted_date = (
-            #     scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
-            # )
-            # run_key = f"{row_data.name}_{formatted_date}"
-            run_key = f"{row_data.name}"
+            run_key = f"{row_data.name}_{formatted_date}"
 
             yield RunRequest(
                 run_key=run_key,

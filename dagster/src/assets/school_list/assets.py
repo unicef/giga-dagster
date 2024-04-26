@@ -1,11 +1,7 @@
-from io import BytesIO
-
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
-from sqlalchemy import select
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -15,7 +11,6 @@ from src.data_quality_checks.utils import (
 )
 from src.internal.common_assets.staging import staging_step
 from src.resources import ResourceKey
-from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
     column_mapping_rename,
     create_bronze_layer_columns,
@@ -33,7 +28,6 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
@@ -43,13 +37,14 @@ from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_raw(
     context: OpExecutionContext, config: FileConfig, spark: PySparkResource
-) -> Output[bytes]:
+) -> Output[pd.DataFrame]:
+    context.log.info(f"Database row: {config.row_data_dict}")
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_api_data(context, database_session, config),
+            query_api_data(context, database_session, config.row_data_dict),
         )
 
     datahub_emit_metadata_with_exception_catcher(
@@ -64,31 +59,16 @@ def qos_school_list_raw(
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_bronze(
     context: OpExecutionContext,
-    qos_school_list_raw: bytes,
+    qos_school_list_raw: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
+    schema_columns = get_schema_columns(s, config.metastore_schema)
+    df, column_mapping = column_mapping_rename(
+        qos_school_list_raw, config.row_data_dict["column_to_schema_mapping"]
+    )
 
-    with get_db_context() as db:
-        file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id),
-        )
-        if file_upload is None:
-            raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
-            )
-
-        file_upload = FileUploadConfig.from_orm(file_upload)
-
-    with BytesIO(qos_school_list_raw) as buffer:
-        buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath)
-
-    schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
-
-    df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
 
@@ -186,7 +166,7 @@ def qos_school_list_dq_passed_rows(
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
         qos_school_list_data_quality_results,
-        config.dataset_type,
+        "geolocation",
     )
 
     schema_reference = get_schema_columns_datahub(
@@ -219,7 +199,7 @@ def qos_school_list_dq_failed_rows(
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_list_data_quality_results,
-        config.dataset_type,
+        "geolocation",
     )
 
     schema_reference = get_schema_columns_datahub(
