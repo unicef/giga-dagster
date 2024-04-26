@@ -99,7 +99,6 @@ def geolocation_bronze(
     )
 
     df_pandas = df.toPandas()
-    context.log.info(f"COUNT ROWS BRONZE LAYER: {df_pandas.shape}")
     return Output(
         df_pandas,
         metadata={
@@ -131,7 +130,6 @@ def geolocation_data_quality_results(
         context,
     )
 
-    context.log.info(f"COUNT ROWS BRONZE LAYER: {dq_results.toPandas().shape}")
     dq_pandas = dq_results.toPandas()
     return Output(
         dq_pandas,
@@ -200,7 +198,6 @@ def geolocation_dq_passed_rows(
     )
 
     df_pandas = df_passed.toPandas()
-    context.log.info(f"COUNT ROWS DF PASSED: {df_pandas.shape}")
     return Output(
         df_pandas,
         metadata={
@@ -235,7 +232,6 @@ def geolocation_dq_failed_rows(
     )
 
     df_pandas = df_failed.toPandas()
-    context.log.info(f"COUNT ROWS DF FAILED: {df_pandas.shape}")
     return Output(
         df_pandas,
         metadata={
@@ -260,7 +256,6 @@ def geolocation_staging(
         spark.spark_session,
         upstream_df=geolocation_dq_passed_rows,
     )
-    context.log.info(f"COUNT ROWS STAGING: {staging.toPandas().shape}")
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,

@@ -141,18 +141,11 @@ def _make_api_request(
     row_data: SchoolList | SchoolConnectivity,
     pagination_parameters: dict = None,
 ) -> list:
-    context.log.info(
-        f">>> BEFORE QUERY: {row_data['query_parameters']}, BODY: {row_data['request_body']}"
-    )
-
     if row_data["page_send_query_in"] == "REQUEST_BODY":
         row_data["request_body"].update(pagination_parameters)
     elif row_data["page_send_query_in"] == "QUERY_PARAMETERS":
         row_data["query_parameters"].update(pagination_parameters)
 
-    context.log.info(
-        f">>> AFTER QUERY: {row_data['query_parameters']}, BODY: {row_data['request_body']}"
-    )
     try:
         if row_data["request_method"] == "GET":
             response = session.get(
@@ -210,8 +203,7 @@ def _generate_pagination_parameters(
     pagination_params = {}
     if row_data["pagination_type"] == "PAGE_NUMBER":
         pagination_params[row_data["page_number_key"]] = page
-        # pagination_params[row_data["page_size_key"]] = row_data["size"]
-        pagination_params[row_data["page_size_key"]] = 10
+        pagination_params[row_data["page_size_key"]] = row_data["size"]
 
     elif row_data["pagination_type"] == "LIMIT_OFFSET":
         pagination_params[row_data["page_offset_key"]] = offset
