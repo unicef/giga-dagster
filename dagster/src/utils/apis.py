@@ -17,7 +17,16 @@ def query_api_data(
     row_data: SchoolList | SchoolConnectivity,
 ) -> list:
     session = requests.Session()
+
+    ## Initialize
     session.headers.update({"Content-Type": "application/json"})
+    row_data["request_body"] = (
+        {} if not row_data["request_body"] else row_data["request_body"]
+    )
+    row_data["query_parameters"] = (
+        {} if not row_data["query_parameters"] else row_data["query_parameters"]
+    )
+
     data = []
 
     auth_headers = _generate_auth(row_data)
@@ -29,8 +38,6 @@ def query_api_data(
         try:
             data = _make_api_request(context, session, row_data)
         except Exception as e:
-            # @TODO: update database date_last_ingested
-            # @TODO: update database error_message to actual error message - make str error
             update_statement = (
                 update(SchoolList)
                 .where(SchoolList.id == row_data["id"])
@@ -44,9 +51,6 @@ def query_api_data(
             database_session.execute(update_statement)
             raise e
 
-        # @TODO: update database date_last_succesfully_ingested
-        # @TODO: update database date_last_ingested
-        # @TODO: update database error_message to NONE
         update_statement = (
             update(SchoolList)
             .where(SchoolList.id == row_data["id"])
@@ -60,78 +64,75 @@ def query_api_data(
         )
         database_session.execute(update_statement)
 
-        return data
-
-    page = (
-        row_data["page_starts_with"]
-        if row_data["pagination_type"] == "PAGE_NUMBER"
-        else 0
-    )
-    offset = 0
-
-    while True:
-        pagination_parameters = _generate_pagination_parameters(row_data, page, offset)
-
-        try:
-            run_response = data.extend(
-                _make_api_request(context, session, row_data, pagination_parameters),
+    else:
+        page = (
+            row_data["page_starts_with"]
+            if row_data["pagination_type"] == "PAGE_NUMBER"
+            else 0
+        )
+        offset = 0
+        total_response_count = 0
+        while True:
+            pagination_parameters = _generate_pagination_parameters(
+                row_data, page, offset
             )
-            total_response_count = len(run_response) + offset
 
-            if len(run_response):
-                data.extend(run_response)
-                context.log.info(
-                    f"{row_data['name']} run # {page}, offset # {total_response_count} was a success",
+            try:
+                run_response = _make_api_request(
+                    context, session, row_data, pagination_parameters
                 )
+
+                if page != 2 and len(run_response):
+                    data.extend(run_response)
+                    context.log.info(
+                        f"{row_data['name']} run # {page}, offset # {total_response_count} was a success",
+                    )
+                    total_response_count = len(run_response) + offset
+
+                else:
+                    raise ValueError(
+                        f"{row_data['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response) if len(run_response) else 0})",
+                    )
+
+            except ValueError as e:
+                context.log.info(e)
+                break
+            except Exception as e:
+                error_message = f"{row_data['name']} run # {page}, offset # {total_response_count} failed: {e}"
+                context.log.info(error_message)
+
+                update_statement = (
+                    update(SchoolList)
+                    .where(SchoolList.id == row_data["id"])
+                    .values(
+                        {
+                            "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                            "error_message": e,
+                        }
+                    )
+                )
+                database_session.execute(update_statement)
+                raise ExternalApiException(error_message) from e
             else:
-                raise ValueError(
-                    f"{row_data['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response)})",
+                offset += len(run_response)
+                page += 1
+                context.log.info(
+                    f"Next run: {row_data['name']} run # {page}, offset # {offset}",
                 )
 
-        except ValueError as e:
-            context.log.info(e)
-            break
-        except Exception as e:
-            error_message = f"{row_data['name']} run # {page}, offset # {total_response_count} failed: {e}"
-            context.log.info(error_message)
-
-            # @TODO: update database date_last_ingested
-            # @TODO: update database error_message to actual error message - make str error
-            update_statement = (
-                update(SchoolList)
-                .where(SchoolList.id == row_data["id"])
-                .values(
-                    {
-                        "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                        "error_message": e,
-                    }
-                )
-            )
-            database_session.execute(update_statement)
-            raise ExternalApiException(error_message) from e
-        else:
-            offset += len(run_response)
-            page += 1
-            context.log.info(
-                f"Next run: {row_data['name']} run # {page}, offset # {offset}",
-            )
-
-        # @TODO: update database date_last_succesfully_ingested
-        # @TODO: update database date_last_ingested
-        # @TODO: update database error_message to NONE
-        update_statement = (
-            update(SchoolList)
-            .where(SchoolList.id == row_data["id"])
-            .values(
-                {
-                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                    "date_last_succesfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                    "error_message": None,
-                },
-            )
+    update_statement = (
+        update(SchoolList)
+        .where(SchoolList.id == row_data["id"])
+        .values(
+            {
+                "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                "date_last_successfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                "error_message": None,
+            },
         )
-        database_session.execute(update_statement)
-        return data
+    )
+    database_session.execute(update_statement)
+    return data
 
 
 def _make_api_request(
@@ -140,12 +141,18 @@ def _make_api_request(
     row_data: SchoolList | SchoolConnectivity,
     pagination_parameters: dict = None,
 ) -> list:
-    # @TODO: change names
-    if row_data["send_query_in"] == "REQUEST_BODY":
+    context.log.info(
+        f">>> BEFORE QUERY: {row_data['query_parameters']}, BODY: {row_data['request_body']}"
+    )
+
+    if row_data["page_send_query_in"] == "REQUEST_BODY":
         row_data["request_body"].update(pagination_parameters)
-    elif row_data["send_query_in"] == "QUERY_PARAMETERS":
+    elif row_data["page_send_query_in"] == "QUERY_PARAMETERS":
         row_data["query_parameters"].update(pagination_parameters)
 
+    context.log.info(
+        f">>> AFTER QUERY: {row_data['query_parameters']}, BODY: {row_data['request_body']}"
+    )
     try:
         if row_data["request_method"] == "GET":
             response = session.get(
@@ -173,7 +180,7 @@ def _make_api_request(
     return (
         response.json()
         if row_data["data_key"] is None
-        else response[row_data["data_key"]].json()
+        else response.json()[row_data["data_key"]]
     )
 
 
@@ -201,10 +208,12 @@ def _generate_pagination_parameters(
     offset: int,
 ) -> dict:
     pagination_params = {}
-    if row_data.pagination_type == "PAGE_NUMBER":
+    if row_data["pagination_type"] == "PAGE_NUMBER":
         pagination_params[row_data["page_number_key"]] = page
-        pagination_params[row_data["page_size_key"]] = row_data["size"]
-    elif row_data.pagination_type == "LIMIT_OFFSET":
+        # pagination_params[row_data["page_size_key"]] = row_data["size"]
+        pagination_params[row_data["page_size_key"]] = 10
+
+    elif row_data["pagination_type"] == "LIMIT_OFFSET":
         pagination_params[row_data["page_offset_key"]] = offset
         pagination_params[row_data["page_size_key"]] = row_data["size"]
     return pagination_params

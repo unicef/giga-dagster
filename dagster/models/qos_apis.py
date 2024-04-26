@@ -84,46 +84,7 @@ class ApiConfiguration(BaseModel):
         Enum(RequestMethodEnum), default=RequestMethodEnum.GET, nullable=False
     )
     school_id_key: Mapped[str] = mapped_column(nullable=False)
-    school_id_send_query_in: Mapped[SendQueryInEnum] = mapped_column(
-        Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
-    )
     size: Mapped[int] = mapped_column(nullable=True)
-
-
-# class ApiConfiguration(BaseModel):
-#     __abstract__ = True
-
-#     api_auth_api_key: Mapped[str] = mapped_column(nullable=True)
-#     api_auth_api_value: Mapped[str] = mapped_column(nullable=True)
-#     api_endpoint: Mapped[str] = mapped_column(nullable=True)
-#     authorization_type: Mapped[str] = mapped_column(nullable=True)
-#     basic_auth_password: Mapped[str] = mapped_column(nullable=True)
-#     basic_auth_username: Mapped[str] = mapped_column(nullable=True)
-#     bearer_auth_bearer_token: Mapped[str] = mapped_column(nullable=True)
-
-#     data_key: Mapped[str] = mapped_column(nullable=True)
-#     date_created: Mapped[str] = mapped_column(nullable=True)
-#     date_modified: Mapped[str] = mapped_column(nullable=True)
-#     date_last_successfully_ingested: Mapped[str] = mapped_column(nullable=True)
-#     date_last_ingested: Mapped[str] = mapped_column(nullable=True)
-
-#     enabled: Mapped[bool] = mapped_column(default=True)
-#     error_message: Mapped[str] = mapped_column(nullable=True)
-
-#     page_number_key: Mapped[str] = mapped_column(nullable=True)
-#     page_offset_key: Mapped[str] = mapped_column(nullable=True)
-#     page_size_key: Mapped[str] = mapped_column(nullable=True)
-#     page_starts_with: Mapped[int] = mapped_column(nullable=True)
-#     pagination_type: Mapped[str] = mapped_column(nullable=True)
-
-#     query_parameters: Mapped[dict] = mapped_column(JSON, nullable=True)
-#     request_body: Mapped[dict] = mapped_column(JSON, nullable=True)
-
-#     request_method: Mapped[str] = mapped_column(nullable=True)
-#     school_id_key: Mapped[str] = mapped_column(nullable=True)
-#     page_send_query_in: Mapped[str] = mapped_column(nullable=True)
-#     school_id_send_query_in: Mapped[str] = mapped_column(nullable=True)
-#     size: Mapped[int] = mapped_column(nullable=True)
 
 
 class SchoolList(ApiConfiguration):
@@ -150,6 +111,9 @@ class SchoolConnectivity(ApiConfiguration):
     school_list_id: Mapped[str] = mapped_column(ForeignKey("qos_school_list.id"))
     school_list: Mapped["SchoolList"] = relationship(
         "SchoolList", back_populates="school_connectivity"
+    )
+    school_id_send_query_in: Mapped[SendQueryInEnum] = mapped_column(
+        Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
     )
 
     date_key: Mapped[str] = mapped_column(nullable=True, default=None)

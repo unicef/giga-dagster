@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from models.qos_apis import SchoolList
 from sqlalchemy import select
@@ -11,8 +12,8 @@ from src.settings import settings
 from src.utils.db import get_db_context
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
-DOMAIN = "qos-school"
-DATASET_TYPE = "list"
+DOMAIN = "qos"
+DATASET_TYPE = "school-list"
 DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
 
@@ -30,12 +31,23 @@ def qos_school_list__new_apis_sensor(
 
         count = 0
         for api in school_list_apis:
-            row_data = SchoolListConfig.from_orm(api)
-            context.log.info(f"configzzz: {row_data.name}")
+            config = {}
+            for key, value in api.__dict__.items():
+                if isinstance(value, Enum):
+                    config[key] = value.value
+                elif isinstance(value, datetime):
+                    config[key] = value.strftime("%Y-%m-%d %H:%M:%S")
+                else:
+                    config[key] = value
 
-            country_code = "BRA"
+            print(f">>> CONFIG: {config}")
+
+            row_data = SchoolListConfig(**config)
+            print(f"\n>>>configzzz: {row_data}\n")
+
+            country_code = "RWA"
             metastore_schema = "school_geolocation"
-            stem = f"{row_data.name}_{scheduled_date}"
+            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}"
 
             ops_destination_mapping = {
                 "qos_school_list_raw": OpDestinationMapping(
@@ -90,7 +102,7 @@ def qos_school_list__new_apis_sensor(
                 domain=DOMAIN,
                 dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 country_code=country_code,
-                database_data=row_data,
+                database_data=row_data.json(),
             )
 
             context.log.info("\n>>>>>>>>>>>>>>>\n")
@@ -99,8 +111,14 @@ def qos_school_list__new_apis_sensor(
                 f"RUNDATA: {row_data.name}, {scheduled_date}, {country_code}"
             )
 
+            # formatted_date = (
+            #     scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
+            # )
+            # run_key = f"{row_data.name}_{formatted_date}"
+            run_key = f"{row_data.name}"
+
             yield RunRequest(
-                run_key=f"{row_data.name}_{scheduled_date}",
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 from dagster import Config
 from src.constants import DataTier, constants
 from src.schemas.filename_components import FilenameComponents
+from src.schemas.qos import SchoolListConfig
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
@@ -30,8 +32,8 @@ class FileConfig(Config):
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
         """,
     )
-    database_data: dict[str, Any] = Field(
-        default_factory=dict,
+    database_data: str = Field(
+        default=None,
         description="""
         The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
         """,
@@ -114,6 +116,10 @@ class FileConfig(Config):
             return build_dataset_urn(self.destination_filepath, platform="deltaLake")
         return build_dataset_urn(self.destination_filepath)
 
+    @property
+    def row_data_dict(self) -> SchoolListConfig:
+        return json.loads(self.database_data)
+
 
 class OpDestinationMapping(BaseModel):
     source_filepath: str
@@ -130,7 +136,7 @@ def generate_run_ops(
     domain: str,
     country_code: str,
     dq_target_filepath: str = None,
-    database_data: dict = None,
+    database_data: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
 
