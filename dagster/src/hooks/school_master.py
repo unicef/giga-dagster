@@ -9,10 +9,7 @@ from src.utils.op_config import FileConfig
 @success_hook
 def school_dq_checks_location_db_update_hook(context: HookContext):
     """Updates the Ingestion Portal database entry with the ADLS location of the DQ checks results."""
-    if context.step_key not in [
-        "geolocation_data_quality_results_summary",
-        "coverage_data_quality_results_summary",
-    ]:
+    if not context.step_key.endswith("_data_quality_results_summary"):
         return
 
     context.log.info("Running database update hook for DQ checks location...")
@@ -25,6 +22,30 @@ def school_dq_checks_location_db_update_hook(context: HookContext):
             .values(
                 {
                     FileUpload.dq_report_path: str(config.destination_filepath_object),
+                },
+            ),
+        )
+        db.commit()
+
+    context.log.info("Database update hook OK")
+
+
+@success_hook
+def school_dq_overall_location_db_update_hook(context: HookContext):
+    """Updates the Ingestion Portal database entry with the ADLS location of the DQ checks results."""
+    if not context.step_key.endswith("_data_quality_results"):
+        return
+
+    context.log.info("Running database update hook for full DQ results location...")
+    config = FileConfig(**context.op_config)
+
+    with get_db_context() as db:
+        db.execute(
+            update(FileUpload)
+            .where(FileUpload.id == config.filename_components.id)
+            .values(
+                {
+                    FileUpload.dq_full_path: str(config.destination_filepath_object),
                 },
             ),
         )
