@@ -37,7 +37,7 @@ class FileUpload(BaseModel):
     )
 
     @hybrid_property
-    def upload_path(self) -> str:
+    def filename(self) -> str:
         timestamp = self.created.strftime("%Y%m%d-%H%M%S")
         ext = Path(self.original_filename).suffix
         filename_elements = [self.id, self.country, self.dataset]
@@ -46,6 +46,16 @@ class FileUpload(BaseModel):
 
         filename_elements.append(timestamp)
         filename = "_".join(filename_elements)
-        return (
-            f"{constants.UPLOAD_PATH_PREFIX}/school-{self.dataset}-data/{filename}{ext}"
-        )
+        return f"{filename}{ext}"
+
+    @hybrid_property
+    def upload_path(self) -> str:
+        filename_parts = [
+            constants.UPLOAD_PATH_PREFIX,
+            self.dataset
+            if self.dataset == "unstructured"
+            else f"school-{self.dataset}",
+            self.country,
+            self.filename,
+        ]
+        return "/".join(filename_parts)
