@@ -152,14 +152,14 @@ def _make_api_request(
                 row_data["api_endpoint"],
                 params=row_data["query_parameters"],
             )
+            response.raise_for_status()
         elif row_data["request_method"] == "POST":
             response = session.post(
                 row_data["api_endpoint"],
                 params=row_data["query_parameters"],
                 data=row_data["request_body"],
             )
-
-        response.raise_for_status()
+            response.raise_for_status()
 
     except requests.HTTPError as e:
         error_message = f"Error in {row_data['api_endpoint']} endpoint: HTTP request returned status code {response.status_code}"
