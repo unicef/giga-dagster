@@ -18,7 +18,6 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.apis import query_api_data
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -28,6 +27,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.db import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.qos_apis.school_list import query_school_list_data
 from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
@@ -44,7 +44,7 @@ def qos_school_list_raw(
     context.log.info(f"Database row: {config.row_data_dict}")
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_api_data(context, database_session, config.row_data_dict),
+            query_school_list_data(context, database_session, config.row_data_dict),
         )
 
     datahub_emit_metadata_with_exception_catcher(

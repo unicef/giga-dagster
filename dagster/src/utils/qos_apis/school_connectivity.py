@@ -4,7 +4,7 @@ import requests
 from schemas.qos import SchoolConnectivityConfig, SchoolList
 from sqlalchemy import update
 from sqlalchemy.orm import Session
-from src.utils.apis.common import (
+from src.utils.qos_apis.common import (
     _generate_auth,
     _generate_pagination_parameters,
     _make_API_request,
