@@ -1,3 +1,5 @@
+from functools import reduce
+
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
@@ -9,6 +11,7 @@ from pyspark.sql.types import StringType
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.resources import ResourceKey
+from src.schemas.approval_request import CDFSelection
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import (
     ADLSFileClient,
@@ -38,21 +41,37 @@ def silver(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_row_ids = adls_file_client.download_json(config.filepath)
+    passing_rows = [
+        CDFSelection(**r) for r in adls_file_client.download_json(config.filepath)
+    ]
 
     schema_name = config.metastore_schema
     country_code = config.country_code
-    primary_key = get_primary_key(s, schema_name)
+    schema_columns = get_schema_columns(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
-
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
 
-    staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
-    df_passed = staging.filter(staging[primary_key].isin(passing_row_ids))
+    staging_cdf = (
+        s.read.format("delta")
+        .option("readChangeFeed", "true")
+        .option("startingVersion", 0)
+        .table(staging_table_name)
+    )
+
+    conditions = [
+        (
+            (f.col("school_id_giga") == r.school_id_giga)
+            & (f.col("_change_type") == r._change_type)
+            & (f.col("_commit_version") == r._commit_version)
+        )
+        for r in passing_rows
+    ]
+    df_passed = staging_cdf.filter(reduce(lambda x, y: x | y, conditions))
+    df_passed = df_passed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 
@@ -207,22 +226,37 @@ def manual_review_failed_rows(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_row_ids = adls_file_client.download_json(config.filepath)
+    passing_rows = [
+        CDFSelection(**r) for r in adls_file_client.download_json(config.filepath)
+    ]
 
     schema_name = config.metastore_schema
     country_code = config.country_code
-    primary_key = get_primary_key(s, schema_name)
+    schema_columns = get_schema_columns(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
-
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
 
-    staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
+    staging_cdf = (
+        s.read.format("delta")
+        .option("readChangeFeed", "true")
+        .option("startingVersion", 0)
+        .table(staging_table_name)
+    )
 
-    df_failed = staging.filter(~staging[primary_key].isin(passing_row_ids))
+    conditions = [
+        (
+            (f.col("school_id_giga") == r.school_id_giga)
+            & (f.col("_change_type") == r._change_type)
+            & (f.col("_commit_version") == r._commit_version)
+        )
+        for r in passing_rows
+    ]
+    df_failed = staging_cdf.filter(~reduce(lambda x, y: x | y, conditions))
+    df_failed = df_failed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 

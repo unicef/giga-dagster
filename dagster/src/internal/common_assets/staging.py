@@ -1,4 +1,5 @@
 from delta import DeltaTable
+from icecream import ic
 from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
@@ -147,18 +148,20 @@ class StagingStep:
         return staging
 
     @property
-    def silver_table_exists(self):
+    def silver_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return self.spark.catalog.tableExists(
-            self.silver_table_name
-        ) and DeltaTable.isDeltaTable(self.spark, self.silver_table_path)
+        return ic(
+            self.spark.catalog.tableExists(self.silver_table_name)
+            and DeltaTable.isDeltaTable(self.spark, self.silver_table_path)
+        )
 
     @property
-    def staging_table_exists(self):
+    def staging_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return self.spark.catalog.tableExists(
-            self.staging_table_name
-        ) and DeltaTable.isDeltaTable(self.spark, self.staging_table_path)
+        return ic(
+            self.spark.catalog.tableExists(self.staging_table_name)
+            and DeltaTable.isDeltaTable(self.spark, self.staging_table_path)
+        )
 
     def create_staging_table_from_silver(self):
         silver = (
@@ -173,7 +176,7 @@ class StagingStep:
             self.country_code,
             self.schema_columns,
             self.context,
-            replace=True,
+            if_not_exists=True,
         )
         silver.write.format("delta").mode("append").saveAsTable(self.staging_table_name)
 
