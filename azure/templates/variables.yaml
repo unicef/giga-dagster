@@ -29,6 +29,8 @@ variables:
   datahubOidcClientSecret: $(DATAHUB_OIDC_CLIENT_SECRET)
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
+  mlabDbConnectionString: $(MLAB_DB_CONNECTION_STRING)
+  procoDbConnectionString: $(PROCO_DB_CONNECTION_STRING)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)

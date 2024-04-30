@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
+    MLAB_DB_CONNECTION_STRING: str = ""
+    PROCO_DB_CONNECTION_STRING: str = ""
 
     # Derived settings
     @property
