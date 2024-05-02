@@ -254,7 +254,6 @@ def geolocation_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        upstream_df=geolocation_dq_passed_rows,
     )
     staging = staging_step(geolocation_dq_passed_rows)
 
