@@ -41,9 +41,7 @@ def silver(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_rows = [
-        CDFSelection(**r) for r in adls_file_client.download_json(config.filepath)
-    ]
+    passing_row_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
@@ -61,16 +59,18 @@ def silver(
         .option("startingVersion", 0)
         .table(staging_table_name)
     )
+    staging_cdf = staging_cdf.withColumn(
+        "change_id",
+        f.concat_ws(
+            "|",
+            f.col("school_id_giga"),
+            f.col("_change_type"),
+            f.col("_commit_version").cast(StringType()),
+            f.col("_commit_timestamp").cast(StringType()),
+        ),
+    )
 
-    conditions = [
-        (
-            (f.col("school_id_giga") == r.school_id_giga)
-            & (f.col("_change_type") == r._change_type)
-            & (f.col("_commit_version") == r._commit_version)
-        )
-        for r in passing_rows
-    ]
-    df_passed = staging_cdf.filter(reduce(lambda x, y: x | y, conditions))
+    df_passed = staging_cdf.filter(f.col("change_id").isin(passing_row_change_ids))
     df_passed = df_passed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
