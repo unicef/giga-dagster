@@ -283,8 +283,8 @@ def datahub_emit_metadata_with_exception_catcher(
                 context.log.warning(
                     "No column licenses defined for datasets after staging."
                 )
-                pass
                 column_licenses = None
+                pass
             add_column_metadata(
                 dataset_urn=config.datahub_destination_dataset_urn,
                 column_licenses=column_licenses,
