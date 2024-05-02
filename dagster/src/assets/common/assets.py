@@ -233,3 +233,23 @@ def manual_review_failed_rows(
         schema_reference=schema_reference,
     )
     return Output(df_failed, metadata=get_output_metadata(config))
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
+def manual_review_passed_rows(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[sql.DataFrame]:
+    s: SparkSession = spark.spark_session
+
+    schema_name = config.metastore_schema
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+    return Output(None)

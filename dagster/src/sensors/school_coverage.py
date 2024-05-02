@@ -150,6 +150,12 @@ def school_master_coverage__successful_manual_checks_sensor(
             country_code = filename_components.country_code
 
             ops_destination_mapping = {
+                "manual_review_passed_rows": OpDestinationMapping(
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                    destination_filepath=str(path),
+                    metastore_schema="school_coverage",
+                    tier=DataTier.RAW,
+                ),
                 "silver": OpDestinationMapping(
                     source_filepath=str(path),
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
@@ -232,7 +238,7 @@ def school_master_coverage__failed_manual_checks_sensor(
             ops_destination_mapping = {
                 "manual_review_failed_rows": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=str(path),
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage.db/{country_code.lower()}",
                     metastore_schema=metastore_schema,
                     tier=DataTier.RAW,
                 ),
