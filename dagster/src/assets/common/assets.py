@@ -6,6 +6,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StringType
+from pyspark.sql.window import Window
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.resources import ResourceKey
@@ -88,6 +89,17 @@ def silver(
     )
 
     df_passed = staging_cdf.filter(f.col("change_id").isin(passing_rows_change_ids))
+
+    # In case multiple rows with the same school_id_giga are present, get only the row of the latest version.
+    df_passed = df_passed.withColumn(
+        "row_number",
+        f.row_number().over(
+            Window.partitionBy("school_id_giga").orderBy(
+                f.col("_commit_version").desc(),
+                f.col("_change_type"),
+            )
+        ),
+    ).filter(f.col("row_number") == 1)
     df_passed = df_passed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
