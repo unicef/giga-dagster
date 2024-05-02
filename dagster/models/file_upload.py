@@ -1,3 +1,4 @@
+from enum import Enum
 from pathlib import Path
 
 from sqlalchemy import JSON, VARCHAR, DateTime, String, func
@@ -6,6 +7,14 @@ from sqlalchemy.orm import Mapped, mapped_column
 from src.constants import constants
 
 from .base_database import BaseModel
+
+
+class DQStatusEnum(Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"
+    TIMEOUT = "TIMEOUT"
+    SKIPPED = "SKIPPED"
 
 
 class FileUpload(BaseModel):
@@ -19,6 +28,9 @@ class FileUpload(BaseModel):
     uploader_email: Mapped[str] = mapped_column(String(), nullable=False)
     dq_report_path: Mapped[str] = mapped_column(nullable=True, default=None)
     dq_full_path: Mapped[str] = mapped_column(nullable=True, default=None)
+    dq_status: Mapped[DQStatusEnum] = mapped_column(
+        nullable=False, default=DQStatusEnum.IN_PROGRESS
+    )
     bronze_path: Mapped[str] = mapped_column(nullable=True, default=None)
     is_processed_in_staging: Mapped[bool] = mapped_column(nullable=False, default=False)
     country: Mapped[str] = mapped_column(VARCHAR(3), nullable=False)
