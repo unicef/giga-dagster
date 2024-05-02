@@ -39,51 +39,53 @@
 # def qos_school_connectivity_raw(
 #     context: OpExecutionContext,
 #     config: FileConfig,
-#     adls_file_client: ADLSFileClient,
 #     spark: PySparkResource,
-# ) -> pd.DataFrame:
+# ) -> Output[pd.DataFrame]:
 #     s: SparkSession = spark.spark_session
 #     context.log.info(f"Database row: {config.row_data_dict}")
 #     database_data = config.row_data_dict
 
-#     schema_name = "school_geolocation"
 #     country_code = "RWA"
-#     silver_tier_schema_name = construct_schema_name_for_tier(
-#         schema_name, DataTier.SILVER
-#     )
-#     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-#     silver = DeltaTable.forName(s, silver_table_name).toDF()
 
 #     if database_data.school_id_key and database_data.school_list.school_id_key:
-#         all_school_ids = set()
+#         school_ids = set()
+
+#         schema_name = "school_geolocation"
+#         silver_tier_schema_name = construct_schema_name_for_tier(
+#             schema_name, DataTier.SILVER
+#         )
+#         silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+#         silver = DeltaTable.forName(s, silver_table_name).toDF()
 #         current_school_ids = (
 #             silver.select(silver(database_data.school_list.school_id_key))
 #             .distinct()
 #             .collect()
 #         )
 
-#         archived_files = adls_file_client.list_paths(
-#             "archive/missing-giga-school-id"
-#         )  # should we check all files? I think we'll get a lot of duplicates from previous runs -- should we just get the most recent archived file?
+# ## Shouldn't be here, it's new data + archived data
+#         archived_files_schema_name = construct_schema_name_for_tier('qos', DataTier.RAW)
+#         archived_table_name = construct_full_table_name(archived_files_schema_name, country_code)
 
-#         archived_files.sort(key=lambda x: x["date_modified"], reverse=True)
+#         archived_file = DeltaTable.forName(s, archived_table_name).toDF()
 
-#         # # Get the most recent archived file (should have all archived rows)
-#         # school_list_data_archived = (
-#         #     adls_file_client.download_delta_table_as_spark_dataframe(
-#         #         f"{settings.AZURE_BLOB_CONNECTION_URI}/{archived_files[0]}",
-#         #         spark.spark_session,
-#         #     ).toPandas()
-#         # )
+#         archived_school_ids = (
+#             archived_file.select(archived_file(database_data.school_list.school_id_key))
+#             .distinct()
+#             .collect()
+#         )
+
+#         school_ids.update(current_school_ids)
+#         school_ids.update(archived_school_ids)
+
 #         df = pd.DataFrame()
 #         with get_db_context() as database_session:
-#             for id in all_school_ids:
+#             for id in school_ids:
 #                 data = pd.DataFrame.from_records(
 #                     query_school_connectivity_API_data(
 #                         context, database_session, config.row_data_dict, id
 #                     ),
 #                 )
-#                 df = df.append(df, ignore_index=True)
+#                 df = df.append(data, ignore_index=True)
 
 #     else:
 #         df = pd.DataFrame.from_records(
@@ -98,19 +100,26 @@
 #         spark=spark,
 #         schema_reference=df,
 #     )
-#     yield Output(df, **get_output_metadata(config))
+#     return Output(df, **get_output_metadata(config))
 
 
 # @asset(io_manager_key="adls_pandas_io_manager")
 # def qos_school_connectivity_bronze(
 #     context: OpExecutionContext,
 #     qos_school_connectivity_raw: sql.DataFrame,
+#     spark: PySparkResource,
 #     config: FileConfig,
-# ) -> pd.DataFrame:
+# ) -> Output[pd.DataFrame]:
 #     ## @RENZ NEED TO ADD GIGA_SCHOOL_ID
 #     # df = create_bronze_layer_columns(qos_school_connectivity_raw)
-#     # emit_metadata_to_datahub(context, df=qos_school_connectivity_raw)
-#     yield Output(df.toPandas(), metadata=get_output_metadata(config))
+
+#     datahub_emit_metadata_with_exception_catcher(
+#         context=context,
+#         config=config,
+#         spark=spark,
+#         schema_reference=df,
+#     )
+#     return Output(df.toPandas(), metadata=get_output_metadata(config))
 
 
 # @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -129,7 +138,7 @@
 #     country_code = config.country_code
 #     dq_results = row_level_checks(
 #         qos_school_connectivity_bronze,
-#         "geolocation",
+#         "qos",
 #         country_code,
 #         context,
 #     )
