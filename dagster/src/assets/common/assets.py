@@ -1,5 +1,3 @@
-from functools import reduce
-
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark import sql
@@ -11,7 +9,6 @@ from pyspark.sql.types import StringType
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.resources import ResourceKey
-from src.schemas.approval_request import CDFSelection
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import (
     ADLSFileClient,
@@ -33,6 +30,26 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
+def manual_review_passed_rows(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    s: SparkSession = spark.spark_session
+
+    schema_name = config.metastore_schema
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+    return Output(None)
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def silver(
     context: OpExecutionContext,
@@ -41,7 +58,7 @@ def silver(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_row_change_ids = adls_file_client.download_json(config.filepath)
+    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
@@ -70,7 +87,7 @@ def silver(
         ),
     )
 
-    df_passed = staging_cdf.filter(f.col("change_id").isin(passing_row_change_ids))
+    df_passed = staging_cdf.filter(f.col("change_id").isin(passing_rows_change_ids))
     df_passed = df_passed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
@@ -226,9 +243,7 @@ def manual_review_failed_rows(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_rows = [
-        CDFSelection(**r) for r in adls_file_client.download_json(config.filepath)
-    ]
+    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
@@ -246,16 +261,18 @@ def manual_review_failed_rows(
         .option("startingVersion", 0)
         .table(staging_table_name)
     )
+    staging_cdf = staging_cdf.withColumn(
+        "change_id",
+        f.concat_ws(
+            "|",
+            f.col("school_id_giga"),
+            f.col("_change_type"),
+            f.col("_commit_version").cast(StringType()),
+            f.col("_commit_timestamp").cast(StringType()),
+        ),
+    )
 
-    conditions = [
-        (
-            (f.col("school_id_giga") == r.school_id_giga)
-            & (f.col("_change_type") == r._change_type)
-            & (f.col("_commit_version") == r._commit_version)
-        )
-        for r in passing_rows
-    ]
-    df_failed = staging_cdf.filter(~reduce(lambda x, y: x | y, conditions))
+    df_failed = staging_cdf.filter(~f.col("change_id").isin(passing_rows_change_ids))
     df_failed = df_failed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
@@ -267,23 +284,3 @@ def manual_review_failed_rows(
         schema_reference=schema_reference,
     )
     return Output(df_failed, metadata=get_output_metadata(config))
-
-
-@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
-def manual_review_passed_rows(
-    context: OpExecutionContext,
-    spark: PySparkResource,
-    config: FileConfig,
-) -> Output[sql.DataFrame]:
-    s: SparkSession = spark.spark_session
-
-    schema_name = config.metastore_schema
-    schema_reference = get_schema_columns_datahub(s, schema_name)
-
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=schema_reference,
-    )
-    return Output(None)
