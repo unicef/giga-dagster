@@ -94,7 +94,6 @@ def master(
 
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
-    silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
 
     column_actions = {}
@@ -111,6 +110,7 @@ def master(
             )
 
     silver = silver.withColumns(column_actions)
+    silver = compute_row_hash(silver)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -150,7 +150,6 @@ def reference(
 
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
-    silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
 
     column_actions = {}
@@ -167,6 +166,7 @@ def reference(
             )
 
     silver = silver.withColumns(column_actions)
+    silver = compute_row_hash(silver)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
