@@ -132,6 +132,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
 def update_policy_for_group(
     config: FileConfig, context: OpExecutionContext = None
 ) -> None:
+    logger = get_context_with_fallback_logger(context)
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
