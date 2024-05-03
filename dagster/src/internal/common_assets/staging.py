@@ -6,6 +6,7 @@ from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from sqlalchemy import select, update
+from pyspark.sql.types import StructType
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
@@ -89,6 +90,7 @@ class StagingStep:
 
             # If silver table exists and staging table exists, merge files for review to existing staging table
             self.sync_schema()
+            self.sync_schema()
             df = self.standard_transforms(upstream_df)
             staging = self.upsert_staging(df)
         else:
@@ -100,10 +102,10 @@ class StagingStep:
             else:
                 self.create_empty_staging_table()
                 (
-                  staging.write.option("mergeSchema", "true")
-                  .format("delta")
-                  .mode("append")
-                  .saveAsTable(self.staging_table_name)
+                    staging.write.option("mergeSchema", "true")
+                    .format("delta")
+                    .mode("append")
+                    .saveAsTable(self.staging_table_name)
                 )
 
             self.context.log.info(f"Full {staging.count()=}")
@@ -178,6 +180,29 @@ class StagingStep:
             self.schema_columns,
             self.context,
             if_not_exists=True,
+        )
+
+    def sync_schema(self):
+        """Update the schema of existing delta tables based on the reference schema delta tables."""
+        updated_schema = StructType(self.schema_columns)
+        updated_columns = sorted(updated_schema.fieldNames())
+
+        existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
+        existing_columns = sorted(existing_df.schema.fieldNames())
+
+        if updated_columns != existing_columns:
+            empty_data = self.spark.sparkContext.emptyRDD()
+            updated_schema_df = self.spark.createDataFrame(
+                data=empty_data, schema=updated_schema
+            )
+
+            (
+                updated_schema_df.write.option("mergeSchema", "true")
+                .format("delta")
+                .mode("append")
+                .saveAsTable(self.staging_table_name)
+            )
+    
         )
 
     def sync_schema(self):
