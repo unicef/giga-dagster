@@ -138,7 +138,7 @@ def update_policy_for_group(
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
     dataset_type = config.dataset_type
