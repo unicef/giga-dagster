@@ -218,7 +218,11 @@ def school_reference__gold_csv_to_deltatable_sensor(
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
-            RunRequest(run_key=str(path), run_config=RunConfig(ops=run_ops)),
+            RunRequest(
+                run_key=str(path),
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            ),
         )
 
     if len(run_requests) == 0:
