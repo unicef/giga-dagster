@@ -40,7 +40,6 @@ class Settings(BaseSettings):
     HIVE_METASTORE_URI: str
     AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
-    EMAIL_TEST_RECIPIENTS: list[str]
     AZURE_EMAIL_SENDER: str
     INGESTION_POSTGRESQL_USERNAME: str
     INGESTION_POSTGRESQL_PASSWORD: str
@@ -63,6 +62,8 @@ class Settings(BaseSettings):
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
+    MLAB_DB_CONNECTION_STRING: str = ""
+    PROCO_DB_CONNECTION_STRING: str = ""
 
     # Derived settings
     @property
@@ -107,7 +108,7 @@ class Settings(BaseSettings):
 
     @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
-        return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
+        return int(timedelta(minutes=2).total_seconds()) if self.IN_PRODUCTION else 30
 
     @property
     def DEFAULT_SCHEDULE_CRON(self) -> str:

@@ -1,8 +1,6 @@
 import os
-from datetime import datetime
 from io import BytesIO
 
-import country_converter as coco
 import numpy as np
 import pandas as pd
 import sentry_sdk
@@ -21,9 +19,10 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from src.internal.groups import GroupsApi
+from src.internal.common_assets.master_release_notes import (
+    send_master_release_notes,
+)
 from src.resources import ResourceKey
-from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
 from src.utils.datahub.emit_dataset_metadata import (
@@ -34,10 +33,6 @@ from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
-from src.utils.send_email_master_release_notification import (
-    EmailProps,
-    send_email_master_release_notification,
-)
 from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
@@ -53,7 +48,7 @@ def adhoc__load_master_csv(
     raw = adls_file_client.download_raw(config.filepath)
     emit_metadata_to_datahub(
         context,
-        country_code=config.filename_components.country_code,
+        country_code=config.country_code,
         dataset_urn=config.datahub_source_dataset_urn,
     )
     yield Output(raw, metadata=get_output_metadata(config))
@@ -262,7 +257,7 @@ def adhoc__publish_master_to_gold(
         emit_metadata_to_datahub(
             context,
             schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
+            country_code=config.country_code,
             dataset_urn=config.datahub_source_dataset_urn,
         )
     except Exception as error:
@@ -279,76 +274,17 @@ def adhoc__publish_master_to_gold(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 async def adhoc__broadcast_master_release_notes(
     context: OpExecutionContext,
     config: FileConfig,
     spark: PySparkResource,
     adhoc__publish_master_to_gold: sql.DataFrame,
 ) -> Output[None]:
-    rows = adhoc__publish_master_to_gold.count()
-    if rows == 0:
-        context.log.warning("No data in master, skipping email.")
+    metadata = await send_master_release_notes(
+        context, config, spark, adhoc__publish_master_to_gold
+    )
+    if metadata is None:
         return Output(None)
 
-    s: SparkSession = spark.spark_session
-    country_code = config.filename_components.country_code
-
-    cdf = (
-        s.read.format("delta")
-        .option("readChangeFeed", "true")
-        .option("startingVersion", 0)
-        .table(f"school_master.{country_code}")
-    )
-
-    if cdf.count() == 0:
-        context.log.warning("No changes to master, skipping email.")
-        return Output(None)
-
-    added = cdf.filter(f.col("_change_type") == "insert").count()
-    modified = cdf.filter(f.col("_change_type") == "update_preimage").count()
-    country = coco.convert(country_code, to="name_short")
-
-    detail = s.sql(f"DESCRIBE DETAIL `school_master`.`{country_code}`").first()
-    if detail is None:
-        update_date = datetime.now()
-    else:
-        update_date = detail["lastModified"]
-
-    history = s.sql(f"DESCRIBE HISTORY `school_master`.`{country_code}`")
-    version = history.select(f.max("version").alias("version")).first()
-    if version is None:
-        version = 0
-    else:
-        version = version["version"]
-
-    props = EmailProps(
-        added=added,
-        country=country,
-        modified=modified,
-        updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
-        version=version,
-        rows=rows,
-    )
-
-    members = await GroupsApi.list_country_members(country_code=country_code)
-    recipients = [item.mail for item in members.values() if item.mail is not None]
-
-    if settings.ADMIN_EMAIL:
-        recipients.append(settings.ADMIN_EMAIL)
-
-    if len(recipients) == 0:
-        context.log.warning(
-            f"No recipients for country {country_code}, skipping email."
-        )
-        return Output(None)
-
-    await send_email_master_release_notification(props=props, recipients=recipients)
-
-    return Output(
-        None,
-        metadata={
-            **props,
-            "recipients": recipients,
-        },
-    )
+    return Output(None, metadata=metadata)

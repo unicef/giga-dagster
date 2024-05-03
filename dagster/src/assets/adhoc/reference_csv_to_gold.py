@@ -3,6 +3,7 @@ from io import BytesIO
 
 import numpy as np
 import pandas as pd
+import sentry_sdk
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
@@ -16,9 +17,12 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.resources import ResourceKey
-from src.utils.adls import ADLSFileClient, get_output_filepath
+from src.utils.adls import ADLSFileClient
+from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+from src.utils.metadata import get_output_metadata
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.sentry import log_op_context
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
@@ -31,7 +35,12 @@ def adhoc__load_reference_csv(
     config: FileConfig,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
-    yield Output(raw, metadata={"filepath": get_output_filepath(context)})
+    emit_metadata_to_datahub(
+        context,
+        country_code=config.country_code,
+        dataset_urn=config.datahub_source_dataset_urn,
+    )
+    yield Output(raw, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -68,13 +77,14 @@ def adhoc__reference_data_quality_checks(
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
     yield Output(
         dq_checked.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata=get_output_metadata(config),
     )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__reference_dq_checks_passed(
     context: OpExecutionContext,
+    config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
     dq_passed = extract_dq_passed_rows(
@@ -88,13 +98,14 @@ def adhoc__reference_dq_checks_passed(
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
     yield Output(
         dq_passed.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata=get_output_metadata(config),
     )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__reference_dq_checks_failed(
     context: OpExecutionContext,
+    config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
 ) -> pd.DataFrame:
     dq_failed = extract_dq_failed_rows(
@@ -103,7 +114,7 @@ def adhoc__reference_dq_checks_failed(
     )
     yield Output(
         dq_failed.toPandas(),
-        metadata={"filepath": get_output_filepath(context)},
+        metadata=get_output_metadata(config),
     )
 
 
@@ -112,6 +123,7 @@ def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_dq_checks_passed: sql.DataFrame,
+    spark: PySparkResource,
 ) -> sql.DataFrame:
     gold = transform_types(
         adhoc__reference_dq_checks_passed,
@@ -119,4 +131,21 @@ def adhoc__publish_reference_to_gold(
         context,
     )
     gold = compute_row_hash(gold)
-    yield Output(gold, metadata={"filepath": get_output_filepath(context)})
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
+    )
+    try:
+        emit_metadata_to_datahub(
+            context,
+            schema_reference=schema_reference,
+            country_code=config.country_code,
+            dataset_urn=config.datahub_source_dataset_urn,
+        )
+    except Exception as error:
+        context.log.error(f"Error on Datahub Emit Metadata: {error}")
+        log_op_context(context)
+        sentry_sdk.capture_exception(error=error)
+
+    yield Output(gold, metadata=get_output_metadata(config))

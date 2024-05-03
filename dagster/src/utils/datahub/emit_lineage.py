@@ -1,40 +1,60 @@
-import datahub.emitter.mce_builder as builder
-from datahub.emitter.rest_emitter import DatahubRestEmitter
+import sentry_sdk
+from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
+from src.utils.sentry import log_op_context
+
+
+def emit_lineage_query(
+    upstream_urn: str, downstream_urn: str, context: OpExecutionContext = None
+) -> None:
+    datahub_graph_client = DataHubGraph(
+        DatahubClientConfig(
+            server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
+        ),
+    )
+    logger = get_context_with_fallback_logger(context)
+
+    query = f"""
+        mutation {{
+            updateLineage(input: {{
+                edgesToAdd: [{{
+                    downstreamUrn: "{downstream_urn}",
+                    upstreamUrn: "{upstream_urn}"
+                }}]
+                edgesToRemove: []
+            }})
+        }}"""
+    logger.info(query)
+    datahub_graph_client.execute_graphql(query=query)
+    logger.info("LINEAGE EMITTED.")
 
 
 def emit_lineage_base(
-    upstream_filepaths: list[str], dataset_urn: str, context: OpExecutionContext = None
+    upstream_datasets: list[str], dataset_urn: str, context: OpExecutionContext = None
 ) -> None:
     logger = get_context_with_fallback_logger(context)
 
-    datahub_emitter = DatahubRestEmitter(
-        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-        token=settings.DATAHUB_ACCESS_TOKEN,
-    )
-    upstream_urn_list = []
-    for filepath in upstream_filepaths:
-        upstream_urn = build_dataset_urn(filepath=filepath)
-        upstream_urn_list.append(upstream_urn)
-
-    logger.info(f"upstream_urn_list: {upstream_urn_list}")
-    logger.info(f"dataset_urn: {dataset_urn}")
-
-    lineage_mce = builder.make_lineage_mce(
-        upstream_urn_list,  # Upstream URNs
-        dataset_urn,  # Downstream URN
-    )
-    logger.info(f"lineage_mce: {lineage_mce}")
-    logger.info("EMITTING LINEAGE...")
-
-    datahub_emitter.emit_mce(lineage_mce)
-
-    logger.info("SUCCESS. LINEAGE EMITTED TO DATAHUB.")
+    for dataset in upstream_datasets:
+        try:
+            if dataset.startswith("urn"):
+                upstream_urn = dataset
+            else:
+                upstream_urn = build_dataset_urn(filepath=dataset)
+            emit_lineage_query(
+                upstream_urn=upstream_urn, downstream_urn=dataset_urn, context=context
+            )
+        except Exception as error:
+            logger.warning(f"Datahub Lineage Exception: {error}")
+            sentry_sdk.capture_exception(error=error)
+            if context is not None:
+                log_op_context(context)
+            pass
 
 
 def emit_lineage(context: OpExecutionContext) -> None:
@@ -51,7 +71,7 @@ def emit_lineage(context: OpExecutionContext) -> None:
         context.log.info(f"dataset_urn: {dataset_urn}")
 
         emit_lineage_base(
-            upstream_filepaths=[upstream_dataset_urn],
+            upstream_datasets=[upstream_dataset_urn],
             dataset_urn=dataset_urn,
             context=context,
         )
@@ -104,6 +124,6 @@ if __name__ == "__main__":
     print(upstream_filepaths)
 
     emit_lineage_base(
-        upstream_filepaths=upstream_filepaths,
+        upstream_datasets=upstream_filepaths,
         dataset_urn=dataset_urn,
     )

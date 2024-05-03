@@ -98,7 +98,7 @@ def coverage_data_quality_results(
     dq_results = row_level_checks(
         df,
         f"coverage_{source}",
-        config.filename_components.country_code,
+        config.country_code,
         context,
     )
 
@@ -137,7 +137,7 @@ def coverage_data_quality_results_summary(
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, coverage_data_quality_results),
+        aggregate_report_spark_df(s, coverage_data_quality_results),
         df_raw,
     )
 
@@ -229,7 +229,7 @@ def coverage_bronze(
 ) -> sql.DataFrame:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.filename_components.country_code.lower()
+    silver_table_name = config.country_code.lower()
     full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
 
     if source == "fb":
@@ -242,14 +242,14 @@ def coverage_bronze(
         df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
-        silver = DeltaTable.forName(spark.spark_session, full_silver_table_name).toDF()
+        silver = DeltaTable.forName(s, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
+        s,
         config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(

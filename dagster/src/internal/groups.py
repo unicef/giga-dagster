@@ -10,8 +10,6 @@ from azure.identity import ClientSecretCredential
 from src.schemas.user import GraphUser
 from src.settings import settings
 
-# from .auth import graph_client
-
 graph_scopes = ["https://graph.microsoft.com/.default"]
 graph_credentials = ClientSecretCredential(
     tenant_id=settings.AAD_AZURE_TENANT_ID,
@@ -26,6 +24,7 @@ class GroupsApi:
         GroupsRequestBuilder.GroupsRequestBuilderGetQueryParameters(
             select=["id", "description", "displayName"],
             filter="securityEnabled eq true",
+            top=999,
         )
     )
     group_request_config = (
@@ -65,7 +64,7 @@ class GroupsApi:
             filtered_groups = [
                 item.id
                 for item in groups.value
-                if item.display_name.split("-")[0] == full_country_name
+                if item.display_name.rsplit("-", 1)[0] == full_country_name
             ]
 
         except ODataError as err:
@@ -88,3 +87,35 @@ class GroupsApi:
                     raise Exception(err.error.message) from err
 
         return members
+
+    @classmethod
+    async def list_group_members(cls, group_name: str) -> list[GraphUser]:
+        try:
+            all_groups = await graph_client.groups.get(
+                request_configuration=cls.group_request_config
+            )
+            group = next(
+                (
+                    item.id
+                    for item in all_groups.value
+                    if item.display_name == group_name
+                ),
+                None,
+            )
+
+        except ODataError as err:
+            raise Exception(err.error.message) from err
+
+        if group is not None:
+            try:
+                updated_request_configuration = cls.user_request_config.headers.add(
+                    "ConsistencyLevel", "eventual"
+                )
+                users = await graph_client.groups.by_group_id(group).members.get(
+                    request_configuration=updated_request_configuration
+                )
+                return [GraphUser.from_orm(u) for u in users.value]
+            except ODataError as err:
+                raise Exception(err.error.message) from err
+
+        return []
