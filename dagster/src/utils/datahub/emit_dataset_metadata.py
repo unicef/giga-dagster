@@ -294,11 +294,19 @@ def datahub_emit_metadata_with_exception_catcher(
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
 
-        update_policy_for_group(config=config, context=context)
+        try:
+            context.log.info("DATAHUB UPDATE POLICIES...")
+            update_policy_for_group(config=config, context=context)
+        except Exception as error:
+            context.log.error(f"Error on Datahub Update Policies: {error}")
+            log_op_context(context)
+            sentry_sdk.capture_exception(error=error)
+            pass
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
         log_op_context(context)
         sentry_sdk.capture_exception(error=error)
+        pass
 
 
 if __name__ == "__main__":
