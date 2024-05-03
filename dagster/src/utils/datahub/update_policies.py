@@ -145,6 +145,7 @@ def update_policy_for_group(
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
+    logger.info(f"policy group urn: {group_urn}")
     update_policy_base(
         group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
     )
@@ -175,6 +176,8 @@ def update_policy_base(
                 logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
             except Exception:
                 logger.error(error)
+    else:
+        logger.error(f"INVALID COUNTRY NAME: {country_name}")
 
 
 if __name__ == "__main__":
