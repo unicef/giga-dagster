@@ -88,36 +88,20 @@ class StagingStep:
 
             # If silver table exists and staging table exists, merge files for review to existing staging table
             df = self.standard_transforms(upstream_df)
-
-            staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
-            update_columns = [
-                c.name for c in self.schema_columns if c.name != self.primary_key
-            ]
-            query = build_deduped_merge_query(
-                staging_dt,
-                df,
-                self.primary_key,
-                update_columns,
-            )
-
-            if query is not None:
-                execute_query_with_error_handler(
-                    self.spark,
-                    query,
-                    self.staging_tier_schema_name,
-                    self.country_code,
-                    self.context,
-                )
-            staging = staging_dt.toDF()
+            staging = self.upsert_staging(df)
         else:
             # If silver table does not exist, merge files for review into one spark dataframe
-            self.create_empty_staging_table()
-
             staging = self.standard_transforms(upstream_df)
+
+            if self.staging_table_exists:
+                staging = self.upsert_staging(staging)
+            else:
+                self.create_empty_staging_table()
+                staging.write.format("delta").mode("append").saveAsTable(
+                    self.staging_table_name
+                )
+
             self.context.log.info(f"Full {staging.count()=}")
-            staging.write.format("delta").mode("append").saveAsTable(
-                self.staging_table_name
-            )
 
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
         with get_db_context() as db:
@@ -194,3 +178,25 @@ class StagingStep:
     def standard_transforms(self, df: sql.DataFrame):
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
+
+    def upsert_staging(self, df: sql.DataFrame):
+        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
+        update_columns = [
+            c.name for c in self.schema_columns if c.name != self.primary_key
+        ]
+        query = build_deduped_merge_query(
+            staging_dt,
+            df,
+            self.primary_key,
+            update_columns,
+        )
+
+        if query is not None:
+            execute_query_with_error_handler(
+                self.spark,
+                query,
+                self.staging_tier_schema_name,
+                self.country_code,
+                self.context,
+            )
+        return staging_dt.toDF()
