@@ -1,6 +1,7 @@
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
@@ -102,6 +103,26 @@ def staging_step(
             existing_file = add_missing_columns(existing_file, schema_columns)
             existing_file = transform_types(existing_file, schema_name, context)
             existing_file = compute_row_hash(existing_file)
+
+            updated_schema = StructType(schema_columns)
+            updated_columns = sorted(updated_schema.fieldNames())
+
+            existing_df = DeltaTable.forName(spark, staging_table_name).toDF()
+            existing_columns = sorted(existing_df.schema.fieldNames())
+
+            if updated_columns != existing_columns:
+                empty_data = spark.sparkContext.emptyRDD()
+                updated_schema_df = spark.createDataFrame(
+                    data=empty_data, schema=updated_schema
+                )
+
+                (
+                    updated_schema_df.write.option("mergeSchema", "true")
+                    .format("delta")
+                    .mode("append")
+                    .saveAsTable(staging_table_name)
+                )
+
             staging_dt = DeltaTable.forName(spark, staging_table_name)
             update_columns = [c.name for c in schema_columns if c.name != primary_key]
             query = build_deduped_merge_query(
@@ -152,7 +173,12 @@ def staging_step(
         staging = transform_types(staging, schema_name, context)
         staging = compute_row_hash(staging)
         context.log.info(f"Full {staging.count()=}")
-        staging.write.format("delta").mode("append").saveAsTable(staging_table_name)
+        (
+            staging.write.option("mergeSchema", "true")
+            .format("delta")
+            .mode("append")
+            .saveAsTable(staging_table_name)
+        )
 
     upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
     emit_lineage_base(
