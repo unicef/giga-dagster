@@ -31,5 +31,3 @@ data:
     insecure_oidc_skip_issuer_verification = true
     oidc_email_claim = "preferred_username"
     footer = "-"
-  SPARK_DRIVER_CORES: "2"
-  SPARK_DRIVER_MEMORY_MB: "2219"
