@@ -13,7 +13,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import staging_step
+from src.internal.common_assets.staging import StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
@@ -241,7 +241,7 @@ def geolocation_dq_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 def geolocation_staging(
     context: OpExecutionContext,
     geolocation_dq_passed_rows: sql.DataFrame,
@@ -249,13 +249,13 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    staging = staging_step(
+    staging_step = StagingStep(
         context,
         config,
         adls_file_client,
         spark.spark_session,
-        upstream_df=geolocation_dq_passed_rows,
     )
+    staging = staging_step(geolocation_dq_passed_rows)
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
