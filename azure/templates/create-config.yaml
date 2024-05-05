@@ -68,6 +68,8 @@ jobs:
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
                     MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
                     PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
+                    SPARK_DRIVER_CORES: "$(sparkDriverCores)"
+                    SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

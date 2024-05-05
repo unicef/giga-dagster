@@ -34,4 +34,6 @@ variables:
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
+  sparkDriverCores: $(SPARK_DRIVER_CORES)
+  sparkDriverMemoryMB: $(SPARK_DRIVER_MEMORY_MB)
   system.debug: true
