@@ -23,7 +23,6 @@ variables:
   emailRendererBearerToken: $(EMAIL_RENDERER_BEARER_TOKEN)
   emailRendererServiceUrl: $(EMAIL_RENDERER_SERVICE_URL)
   cookieSecret: $(AUTH_COOKIE_SECRET)
-  githubAccessToken: $(GITHUB_ACCESS_TOKEN)
   datahubAccessToken: $(DATAHUB_ACCESS_TOKEN)
   datahubOidcRedirectUrl: $(DATAHUB_OIDC_REDIRECT_URL)
   datahubOidcClientId: $(DATAHUB_OIDC_CLIENT_ID)
