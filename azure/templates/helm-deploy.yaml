@@ -23,6 +23,13 @@ jobs:
                 namespace: $(kubernetesNamespace)
 
             - task: HelmDeploy@0
+              displayName: Helm uninstall Spark
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: uninstall
+                arguments: spark
+
+            - task: HelmDeploy@0
               displayName: Helm deploy Spark
               inputs:
                 command: upgrade
