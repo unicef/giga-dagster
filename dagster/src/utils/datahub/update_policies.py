@@ -123,7 +123,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
     )
     for group_urn in group_urns_iterator():
         update_policy_base(
-            group_urn=group_urn,
+            group_urn=parse.unquote(group_urn),
             datahub_graph_client=datahub_graph_client,
             context=context,
         )
