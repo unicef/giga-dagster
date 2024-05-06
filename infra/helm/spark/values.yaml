@@ -167,7 +167,7 @@ master:
       value: "thrift://hive-metastore:9083"
   ## @param master.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for master nodes
   ##
-  extraEnvVarsCM: giga-dagster-configmap
+  extraEnvVarsCM: ""
   ## @param master.extraEnvVarsSecret Name of existing Secret containing extra env vars for master nodes
   ##
   extraEnvVarsSecret: giga-dagster-secrets
@@ -449,7 +449,7 @@ worker:
       value: "thrift://hive-metastore:9083"
   ## @param worker.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for worker nodes
   ##
-  extraEnvVarsCM: giga-dagster-configmap
+  extraEnvVarsCM: ""
   ## @param worker.extraEnvVarsSecret Name of existing Secret containing extra env vars for worker nodes
   ##
   extraEnvVarsSecret: giga-dagster-secrets
