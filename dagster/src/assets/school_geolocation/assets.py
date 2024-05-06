@@ -249,14 +249,6 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    staging_step = StagingStep(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-    )
-    staging = staging_step(geolocation_dq_passed_rows)
-
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
@@ -267,6 +259,13 @@ def geolocation_staging(
         spark=spark,
         schema_reference=schema_reference,
     )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+    )
+    staging = staging_step(geolocation_dq_passed_rows)
 
     return Output(
         None,

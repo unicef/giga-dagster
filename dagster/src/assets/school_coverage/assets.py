@@ -277,14 +277,6 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
-    staging_step = StagingStep(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-    )
-    staging = staging_step(coverage_bronze)
-
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
@@ -295,6 +287,13 @@ def coverage_staging(
         spark=spark,
         schema_reference=schema_reference,
     )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+    )
+    staging = staging_step(coverage_bronze)
 
     return Output(
         None,
