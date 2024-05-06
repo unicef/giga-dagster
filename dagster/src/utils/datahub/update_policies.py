@@ -178,7 +178,9 @@ def update_policy_base(
             except Exception:
                 logger.error(error)
     else:
-        logger.error(f"INVALID COUNTRY NAME: {country_name}")
+        logger.error(
+            f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
+        )
 
 
 if __name__ == "__main__":
