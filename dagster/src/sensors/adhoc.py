@@ -116,6 +116,18 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
             ),
+            "adhoc__generate_silver_geolocation": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                metastore_schema="school_geolocation",
+                tier=DataTier.SILVER,
+            ),
+            "adhoc__generate_silver_coverage": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+                metastore_schema="school_coverage",
+                tier=DataTier.SILVER,
+            ),
         }
 
         run_ops = generate_run_ops(
@@ -204,6 +216,18 @@ def school_reference__gold_csv_to_deltatable_sensor(
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
+            ),
+            "adhoc__generate_silver_geolocation": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                metastore_schema="school_geolocation",
+                tier=DataTier.SILVER,
+            ),
+            "adhoc__generate_silver_coverage": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+                metastore_schema="school_coverage",
+                tier=DataTier.SILVER,
             ),
         }
 
