@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 
 from pydantic import EmailStr
-from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
+from sqlalchemy import JSON, VARCHAR, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -96,6 +96,7 @@ class SchoolList(ApiConfiguration):
     name: Mapped[str] = mapped_column(nullable=False, server_default="")
     user_email: Mapped[EmailStr] = mapped_column(String(), nullable=False)
     user_id: Mapped[str] = mapped_column(nullable=False)
+    country: Mapped[str] = mapped_column(VARCHAR(3), nullable=False)
 
     school_connectivity: Mapped["SchoolConnectivity"] = relationship(
         "SchoolConnectivity", back_populates="school_list"

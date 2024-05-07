@@ -77,3 +77,4 @@ class SchoolListConfig(ApiConfiguration):
     name: str
     user_email: str
     user_id: str
+    country: str
