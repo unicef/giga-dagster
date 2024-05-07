@@ -6,7 +6,6 @@ from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from sqlalchemy import select, update
-from pyspark.sql.types import StructType
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
@@ -89,9 +88,8 @@ class StagingStep:
                 self.create_staging_table_from_silver()
 
             # If silver table exists and staging table exists, merge files for review to existing staging table
-            self.sync_schema()
-            self.sync_schema()
             df = self.standard_transforms(upstream_df)
+            self.sync_schema()
             staging = self.upsert_staging(df)
         else:
             # If silver table does not exist, merge files for review into one spark dataframe
@@ -202,30 +200,7 @@ class StagingStep:
                 .mode("append")
                 .saveAsTable(self.staging_table_name)
             )
-    
-        )
 
-    def sync_schema(self):
-        """Update the schema of existing delta tables based on the reference schema delta tables."""
-        updated_schema = StructType(self.schema_columns)
-        updated_columns = sorted(updated_schema.fieldNames())
-
-        existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
-        existing_columns = sorted(existing_df.schema.fieldNames())
-
-        if updated_columns != existing_columns:
-            empty_data = self.spark.sparkContext.emptyRDD()
-            updated_schema_df = self.spark.createDataFrame(
-                data=empty_data, schema=updated_schema
-            )
-
-            (
-                updated_schema_df.write.option("mergeSchema", "true")
-                .format("delta")
-                .mode("append")
-                .saveAsTable(self.staging_table_name)
-            )
-    
     def standard_transforms(self, df: sql.DataFrame):
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
