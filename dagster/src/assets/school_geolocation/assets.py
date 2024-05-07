@@ -130,6 +130,17 @@ def geolocation_data_quality_results(
         context,
     )
 
+    filepath_id = config.filepath.split("/")[-1].split("_")[0]
+    filepath_timestamp = config.filepath.split(".")[0].split("_")[-1].replace("-", "_")
+
+    schema_name = f"{config.metastore_schema}_dq_results"
+    table_name = f"{filepath_id}_{country_code}_{filepath_timestamp}"
+    full_table_name = f"{schema_name}.{table_name}"
+
+    s: SparkSession = spark.spark_session
+    s.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
+    dq_results.write.format("delta").mode("overwrite").saveAsTable(full_table_name)
+
     dq_pandas = dq_results.toPandas()
     return Output(
         dq_pandas,

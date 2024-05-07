@@ -104,6 +104,17 @@ def coverage_data_quality_results(
 
     config.metadata.update({"column_mapping": column_mapping})
 
+    filepath_id = config.filepath.split("/")[-1].split("_")[0]
+    filepath_timestamp = config.filepath.split(".")[0].split("_")[-1].replace("-", "_")
+
+    schema_name = f"{config.metastore_schema}_{source}_dq_results"
+    table_name = f"{filepath_id}_{config.country_code}_{filepath_timestamp}"
+    full_table_name = f"{schema_name}.{table_name}"
+
+    s: SparkSession = spark.spark_session
+    s.sql(f"CREATE SCHEMA IF NOT EXISTS `{schema_name}`")
+    dq_results.write.format("delta").mode("overwrite").saveAsTable(full_table_name)
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
