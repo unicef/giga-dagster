@@ -1,13 +1,15 @@
 from delta import DeltaTable
+from icecream import ic
 from models.approval_requests import ApprovalRequest
+from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
-from src.spark.transform_functions import add_missing_columns
+from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db import get_db_context
@@ -44,162 +46,183 @@ def get_files_for_review(
     return files_for_review
 
 
-def staging_step(
-    context: OpExecutionContext,
-    config: FileConfig,
-    adls_file_client: ADLSFileClient,
-    spark: SparkSession,
-    upstream_df: sql.DataFrame,
-):
-    schema_name = config.metastore_schema
-    country_code = config.country_code
-    schema_columns = get_schema_columns(spark, schema_name)
-    primary_key = get_primary_key(spark, schema_name)
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        schema_name,
-        DataTier.SILVER,
-    )
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        schema_name,
-        DataTier.STAGING,
-    )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name,
-        country_code,
-    )
+class StagingStep:
+    def __init__(
+        self,
+        context: OpExecutionContext,
+        config: FileConfig,
+        adls_file_client: ADLSFileClient,
+        spark: SparkSession,
+    ):
+        self.context = context
+        self.config = config
+        self.adls_file_client = adls_file_client
+        self.spark = spark
 
-    # If silver table exists and no staging table exists, clone it to staging
-    # If silver table exists and staging table exists, merge files for review to existing staging table
-    # If silver table does not exist, merge files for review into one spark dataframe
-    if spark.catalog.tableExists(silver_table_name):
-        if not spark.catalog.tableExists(staging_table_name):
-            # Clone silver table to staging
-            silver = DeltaTable.forName(spark, silver_table_name).alias("silver").toDF()
-            create_schema(spark, staging_tier_schema_name)
-            create_delta_table(
-                spark,
-                staging_tier_schema_name,
-                country_code,
-                schema_columns,
-                context,
-                if_not_exists=True,
-            )
-            silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
-
-        # Load new table (silver clone in staging) as a deltatable
-        staging_dt = DeltaTable.forName(spark, staging_table_name)
-        staging = staging_dt.alias("staging").toDF()
-
-        files_for_review = get_files_for_review(
-            adls_file_client,
-            config,
+        self.schema_name = config.metastore_schema
+        self.country_code = config.country_code
+        self.schema_columns = get_schema_columns(spark, self.schema_name)
+        self.primary_key = get_primary_key(spark, self.schema_name)
+        self.silver_tier_schema_name = construct_schema_name_for_tier(
+            self.schema_name,
+            DataTier.SILVER,
         )
-        context.log.info(f"{len(files_for_review)=}")
+        self.staging_tier_schema_name = construct_schema_name_for_tier(
+            self.schema_name,
+            DataTier.STAGING,
+        )
+        self.silver_table_name = construct_full_table_name(
+            self.silver_tier_schema_name, self.country_code
+        )
+        self.staging_table_name = construct_full_table_name(
+            self.staging_tier_schema_name,
+            self.country_code,
+        )
+        self.silver_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.silver_tier_schema_name}.db/{self.country_code.lower()}"
+        self.staging_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.staging_tier_schema_name}.db/{self.country_code.lower()}"
 
-        # Merge each pending file for the same country
-        for file_info in files_for_review:
-            existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name,
-                spark,
-            )
-            existing_file = add_missing_columns(existing_file, schema_columns)
-            existing_file = transform_types(existing_file, schema_name, context)
-            existing_file = compute_row_hash(existing_file)
+    def __call__(self, upstream_df: sql.DataFrame):
+        if self.silver_table_exists:
+            if not self.staging_table_exists:
+                # If silver table exists and no staging table exists, clone it to staging
+                self.create_staging_table_from_silver()
 
-            updated_schema = StructType(schema_columns)
-            updated_columns = sorted(updated_schema.fieldNames())
+            # If silver table exists and staging table exists, merge files for review to existing staging table
+            self.sync_schema()
+            df = self.standard_transforms(upstream_df)
+            staging = self.upsert_staging(df)
+        else:
+            # If silver table does not exist, merge files for review into one spark dataframe
+            staging = self.standard_transforms(upstream_df)
 
-            existing_df = DeltaTable.forName(spark, staging_table_name).toDF()
-            existing_columns = sorted(existing_df.schema.fieldNames())
-
-            if updated_columns != existing_columns:
-                empty_data = spark.sparkContext.emptyRDD()
-                updated_schema_df = spark.createDataFrame(
-                    data=empty_data, schema=updated_schema
-                )
-
+            if self.staging_table_exists:
+                staging = self.upsert_staging(staging)
+            else:
+                self.create_empty_staging_table()
                 (
-                    updated_schema_df.write.option("mergeSchema", "true")
-                    .format("delta")
-                    .mode("append")
-                    .saveAsTable(staging_table_name)
+                  staging.write.option("mergeSchema", "true")
+                  .format("delta")
+                  .mode("append")
+                  .saveAsTable(self.staging_table_name)
                 )
 
-            staging_dt = DeltaTable.forName(spark, staging_table_name)
-            update_columns = [c.name for c in schema_columns if c.name != primary_key]
-            query = build_deduped_merge_query(
-                staging_dt,
-                existing_file,
-                primary_key,
-                update_columns,
+            self.context.log.info(f"Full {staging.count()=}")
+
+        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        with get_db_context() as db:
+            db.execute(
+                update(ApprovalRequest)
+                .where(
+                    (ApprovalRequest.country == self.country_code)
+                    & (ApprovalRequest.dataset == formatted_dataset)
+                )
+                .values(enabled=True),
             )
+            db.commit()
 
-            if query is not None:
-                execute_query_with_error_handler(
-                    spark,
-                    query,
-                    staging_tier_schema_name,
-                    country_code,
-                    context,
+            files_for_review = db.scalars(
+                select(FileUpload).where(
+                    (FileUpload.country == self.country_code)
+                    & (FileUpload.dataset == self.config.dataset_type)
                 )
-            staging = staging_dt.toDF()
-    else:
-        staging = upstream_df
-        staging = transform_types(staging, schema_name, context)
-        files_for_review = get_files_for_review(
-            adls_file_client, config, skip_current_file=True
-        )
-        context.log.info(f"{len(files_for_review)=}")
+            )
+            upstream_filepaths = [f.upload_path for f in files_for_review]
 
-        create_schema(spark, staging_tier_schema_name)
+        emit_lineage_base(
+            upstream_datasets=upstream_filepaths,
+            dataset_urn=self.config.datahub_destination_dataset_urn,
+            context=self.context,
+        )
+
+        return staging
+
+    @property
+    def silver_table_exists(self) -> bool:
+        # Metastore entry must be present AND ADLS path must be a valid Delta Table
+        return ic(
+            self.spark.catalog.tableExists(self.silver_table_name)
+            and DeltaTable.isDeltaTable(self.spark, self.silver_table_path)
+        )
+
+    @property
+    def staging_table_exists(self) -> bool:
+        # Metastore entry must be present AND ADLS path must be a valid Delta Table
+        return ic(
+            self.spark.catalog.tableExists(self.staging_table_name)
+            and DeltaTable.isDeltaTable(self.spark, self.staging_table_path)
+        )
+
+    def create_staging_table_from_silver(self):
+        silver = (
+            DeltaTable.forName(self.spark, self.silver_table_name)
+            .alias("silver")
+            .toDF()
+        )
+        create_schema(self.spark, self.staging_tier_schema_name)
         create_delta_table(
-            spark,
-            staging_tier_schema_name,
-            country_code,
-            schema_columns,
-            context,
+            self.spark,
+            self.staging_tier_schema_name,
+            self.country_code,
+            self.schema_columns,
+            self.context,
             if_not_exists=True,
         )
-        # If no existing silver table, just merge the spark dataframes
-        for file_info in files_for_review:
-            existing_file = adls_file_client.download_csv_as_spark_dataframe(
-                file_info.name,
-                spark,
-            )
-            existing_file = add_missing_columns(existing_file, schema_columns)
-            existing_file = transform_types(existing_file, schema_name, context)
-            context.log.info(f"{existing_file.count()=}")
-            staging = staging.unionByName(existing_file)
-            context.log.info(f"{staging.count()=}")
+        silver.write.format("delta").mode("append").saveAsTable(self.staging_table_name)
 
-        staging = transform_types(staging, schema_name, context)
-        staging = compute_row_hash(staging)
-        context.log.info(f"Full {staging.count()=}")
-        (
-            staging.write.option("mergeSchema", "true")
-            .format("delta")
-            .mode("append")
-            .saveAsTable(staging_table_name)
+    def create_empty_staging_table(self):
+        create_schema(self.spark, self.staging_tier_schema_name)
+        create_delta_table(
+            self.spark,
+            self.staging_tier_schema_name,
+            self.country_code,
+            self.schema_columns,
+            self.context,
+            if_not_exists=True,
         )
 
-    formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    with get_db_context() as db:
-        db.execute(
-            update(ApprovalRequest)
-            .where(
-                ApprovalRequest.country == country_code,
-                ApprovalRequest.dataset == formatted_dataset,
+    def sync_schema(self):
+        """Update the schema of existing delta tables based on the reference schema delta tables."""
+        updated_schema = StructType(self.schema_columns)
+        updated_columns = sorted(updated_schema.fieldNames())
+
+        existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
+        existing_columns = sorted(existing_df.schema.fieldNames())
+
+        if updated_columns != existing_columns:
+            empty_data = self.spark.sparkContext.emptyRDD()
+            updated_schema_df = self.spark.createDataFrame(
+                data=empty_data, schema=updated_schema
             )
-            .values(enabled=True),
+
+            (
+                updated_schema_df.write.option("mergeSchema", "true")
+                .format("delta")
+                .mode("append")
+                .saveAsTable(self.staging_table_name)
+            )
+    
+    def standard_transforms(self, df: sql.DataFrame):
+        df = transform_types(df, self.schema_name, self.context)
+        return compute_row_hash(df)
+
+    def upsert_staging(self, df: sql.DataFrame):
+        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
+        update_columns = [
+            c.name for c in self.schema_columns if c.name != self.primary_key
+        ]
+        query = build_deduped_merge_query(
+            staging_dt,
+            df,
+            self.primary_key,
+            update_columns,
         )
-        db.commit()
 
-    upstream_filepaths = [file_info.get("name") for file_info in files_for_review]
-    emit_lineage_base(
-        upstream_datasets=upstream_filepaths,
-        dataset_urn=config.datahub_destination_dataset_urn,
-        context=context,
-    )
-
-    return staging
+        if query is not None:
+            execute_query_with_error_handler(
+                self.spark,
+                query,
+                self.staging_tier_schema_name,
+                self.country_code,
+                self.context,
+            )
+        return staging_dt.toDF()

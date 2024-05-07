@@ -199,7 +199,13 @@ def create_bronze_layer_columns(
     # df = standardize_school_name(df)
 
     # Timestamp of ingestion
-    return df.withColumn("connectivity_govt_ingestion_timestamp", f.current_timestamp())
+    return df.withColumn(
+        "connectivity_govt_ingestion_timestamp",
+        f.when(
+            f.col("connectivity_govt_ingestion_timestamp").isNull(),
+            f.current_timestamp(),
+        ),
+    )
 
 
 def get_critical_errors_empty_column(*args) -> list[str]:

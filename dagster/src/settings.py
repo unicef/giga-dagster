@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
-    SPARK_DRIVER_CORES: str = "2"
-    SPARK_DRIVER_MEMORY: str = "2g"
+    SPARK_DRIVER_CORES: int = 2
+    SPARK_DRIVER_MEMORY_MB: int = 1365
     LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""

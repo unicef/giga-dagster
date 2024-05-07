@@ -13,7 +13,7 @@ from src.utils.schema import construct_full_table_name
 
 def execute_query_with_error_handler(
     spark: SparkSession,
-    query: DeltaTableBuilder,
+    query: DeltaTableBuilder | DeltaMergeBuilder,
     schema_name: str,
     table_name: str,
     context: InputContext | OutputContext | OpExecutionContext,

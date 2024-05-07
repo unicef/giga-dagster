@@ -37,7 +37,9 @@ def send_email_base(
 
     message = {
         "senderAddress": settings.AZURE_EMAIL_SENDER,
-        "recipients": {"to": [{"address": recipient} for recipient in recipients]},
+        "recipients": {
+            "bcc": [{"address": recipient} for recipient in recipients],
+        },
         "content": {
             "subject": subject,
             "html": data.get("html"),
