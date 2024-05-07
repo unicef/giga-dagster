@@ -6,6 +6,7 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import (
     get_schema_columns,
 )
+from src.utils.spark import compute_row_hash
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -24,6 +25,8 @@ def adhoc__generate_silver_geolocation(
 
     schema_columns = get_schema_columns(spark, schema_name="school_geolocation")
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+
+    df_silver = compute_row_hash(df_silver)
 
     return Output(
         df_silver,
@@ -48,6 +51,8 @@ def adhoc__generate_silver_coverage(
 
     schema_columns = get_schema_columns(spark, schema_name="school_coverage")
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+
+    df_silver = compute_row_hash(df_silver)
 
     return Output(
         df_silver,
