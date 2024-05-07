@@ -36,4 +36,5 @@ variables:
   ingressHost: $(INGRESS_HOST)
   sparkDriverCores: $(SPARK_DRIVER_CORES)
   sparkDriverMemoryMB: $(SPARK_DRIVER_MEMORY_MB)
+  githubAccessToken: $(GITHUB_ACCESS_TOKEN)
   system.debug: true
