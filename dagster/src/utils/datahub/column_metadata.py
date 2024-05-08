@@ -53,8 +53,8 @@ def add_column_description_query(
 
 def add_column_metadata(
     dataset_urn: str,
-    column_licenses: dict[str, str],
-    column_descriptions: list[dict],
+    column_licenses: dict[str, str] = None,
+    column_descriptions: list[dict] = None,
     context: OpExecutionContext = None,
 ) -> None:
     datahub_graph_client = DataHubGraph(
@@ -65,38 +65,44 @@ def add_column_metadata(
     )
     logger = get_context_with_fallback_logger(context)
     # COLUMN LICENSES
-    for column, license in column_licenses.items():
-        try:
-            query = add_column_tag_query(
-                tag_key=license,
-                column=column,
-                dataset_urn=dataset_urn,
-            )
-            datahub_graph_client.execute_graphql(query=query)
-        except Exception as error:
-            logger.warning(error)
-            logger.warning(
-                "Expected error if due to a missing field. Some transforms drop original columns."
-            )
-            continue
+    if column_licenses is not None:
+        for column, license in column_licenses.items():
+            try:
+                query = add_column_tag_query(
+                    tag_key=license,
+                    column=column,
+                    dataset_urn=dataset_urn,
+                )
+                datahub_graph_client.execute_graphql(query=query)
+            except Exception as error:
+                logger.warning(error)
+                logger.warning(
+                    "Expected error if due to a missing field. Some transforms drop original columns."
+                )
+                continue
+    else:
+        context.log.warning("No column licenses to emit.")
 
     # COLUMN DESCRIPTIONS
-    for item in column_descriptions:
-        try:
-            column = item["column"]
-            description = item["description"]
-            query = add_column_description_query(
-                column=column,
-                dataset_urn=dataset_urn,
-                description=description,
-            )
-            datahub_graph_client.execute_graphql(query=query)
-        except Exception as error:
-            logger.warning(error)
-            logger.warning(
-                "Expected error if due to a missing field. Some transforms drop original columns."
-            )
-            continue
+    if column_descriptions is not None:
+        for item in column_descriptions:
+            try:
+                column = item["column"]
+                description = item["description"]
+                query = add_column_description_query(
+                    column=column,
+                    dataset_urn=dataset_urn,
+                    description=description,
+                )
+                datahub_graph_client.execute_graphql(query=query)
+            except Exception as error:
+                logger.warning(error)
+                logger.warning(
+                    "Expected error if due to a missing field. Some transforms drop original columns."
+                )
+                continue
+    else:
+        context.log.warning("No column descriptions to emit.")
 
 
 if __name__ == "__main__":

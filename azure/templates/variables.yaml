@@ -29,7 +29,12 @@ variables:
   datahubOidcClientSecret: $(DATAHUB_OIDC_CLIENT_SECRET)
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
+  mlabDbConnectionString: $(MLAB_DB_CONNECTION_STRING)
+  procoDbConnectionString: $(PROCO_DB_CONNECTION_STRING)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
+  sparkDriverCores: $(SPARK_DRIVER_CORES)
+  sparkDriverMemoryMB: $(SPARK_DRIVER_MEMORY_MB)
+  githubAccessToken: $(GITHUB_ACCESS_TOKEN)
   system.debug: true

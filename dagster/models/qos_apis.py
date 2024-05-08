@@ -33,6 +33,11 @@ class SendParametersInEnum(enum.Enum):
     NONE = "NONE"
 
 
+class SendDateInEnum(enum.Enum):
+    BODY = "BODY"
+    QUERY_PARAMETERS = "QUERY_PARAMETERS"
+
+
 class ApiConfiguration(BaseModel):
     __abstract__ = True
 

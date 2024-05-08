@@ -15,7 +15,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import staging_step
+from src.internal.common_assets.staging import StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
@@ -269,7 +269,7 @@ def coverage_bronze(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 def coverage_staging(
     context: OpExecutionContext,
     coverage_bronze: sql.DataFrame,
@@ -277,14 +277,6 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
-    staging = staging_step(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        upstream_df=coverage_bronze,
-    )
-
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
@@ -295,6 +287,13 @@ def coverage_staging(
         spark=spark,
         schema_reference=schema_reference,
     )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+    )
+    staging = staging_step(coverage_bronze)
 
     return Output(
         None,

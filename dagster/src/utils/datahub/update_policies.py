@@ -2,6 +2,7 @@ import json
 from urllib import parse
 
 import country_converter as cc
+import sentry_sdk
 from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
@@ -10,6 +11,7 @@ from src.utils.datahub.builders import build_group_urn
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
+from src.utils.sentry import log_op_context
 
 
 def policy_mutation_query(group_urn: str) -> str:
@@ -123,7 +125,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
     )
     for group_urn in group_urns_iterator():
         update_policy_base(
-            group_urn=group_urn,
+            group_urn=parse.unquote(group_urn),
             datahub_graph_client=datahub_graph_client,
             context=context,
         )
@@ -132,19 +134,21 @@ def update_policies(context: OpExecutionContext = None) -> None:
 def update_policy_for_group(
     config: FileConfig, context: OpExecutionContext = None
 ) -> None:
+    logger = get_context_with_fallback_logger(context)
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
         )
     )
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
     dataset_type = config.dataset_type
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
+    logger.info(f"policy group urn: {group_urn}")
     update_policy_base(
         group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
     )
@@ -166,7 +170,7 @@ def update_policy_base(
             datahub_graph_client.execute_graphql(query=query)
             logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
         except Exception as error:
-            logger.error(error)
+            logger.warning(error)
             try:
                 query = create_policy_query(group_urn=group_urn)
                 logger.info(f"CREATING DATAHUB POLICY: {group_urn}...")
@@ -175,6 +179,13 @@ def update_policy_base(
                 logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
             except Exception:
                 logger.error(error)
+                log_op_context(context)
+                sentry_sdk.capture_exception(error=error)
+    else:
+        warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
+        logger.warning(warning_message)
+        log_op_context(context)
+        sentry_sdk.capture_message(warning_message)
 
 
 if __name__ == "__main__":

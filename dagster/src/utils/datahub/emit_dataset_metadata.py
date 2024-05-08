@@ -275,8 +275,16 @@ def datahub_emit_metadata_with_exception_catcher(
                 spark.spark_session,
                 config.metastore_schema,
             )
-            column_licenses = get_column_licenses(config=config)
-            context.log.info(column_licenses)
+            try:
+                column_licenses = get_column_licenses(config=config)
+                context.log.info(column_licenses)
+            except Exception as e:
+                context.log.warning(f"Cannot retrieve licenses: {e}")
+                context.log.warning(
+                    "No column licenses defined for datasets after staging."
+                )
+                column_licenses = None
+                pass
             add_column_metadata(
                 dataset_urn=config.datahub_destination_dataset_urn,
                 column_licenses=column_licenses,
@@ -286,11 +294,19 @@ def datahub_emit_metadata_with_exception_catcher(
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
 
-        update_policy_for_group(config=config, context=context)
+        try:
+            context.log.info("DATAHUB UPDATE POLICIES...")
+            update_policy_for_group(config=config, context=context)
+        except Exception as error:
+            context.log.error(f"Error on Datahub Update Policies: {error}")
+            log_op_context(context)
+            sentry_sdk.capture_exception(error=error)
+            pass
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
         log_op_context(context)
         sentry_sdk.capture_exception(error=error)
+        pass
 
 
 if __name__ == "__main__":

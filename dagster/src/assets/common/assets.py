@@ -6,6 +6,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StringType
+from pyspark.sql.window import Window
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.resources import ResourceKey
@@ -30,6 +31,26 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 
+@asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
+def manual_review_passed_rows(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    s: SparkSession = spark.spark_session
+
+    schema_name = config.metastore_schema
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+    return Output(None)
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def silver(
     context: OpExecutionContext,
@@ -38,21 +59,48 @@ def silver(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_row_ids = adls_file_client.download_json(config.filepath)
+    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
-    primary_key = get_primary_key(s, schema_name)
+    schema_columns = get_schema_columns(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
-
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
 
-    staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
-    df_passed = staging.filter(staging[primary_key].isin(passing_row_ids))
+    staging_cdf = (
+        s.read.format("delta")
+        .option("readChangeFeed", "true")
+        .option("startingVersion", 0)
+        .table(staging_table_name)
+    )
+    staging_cdf = staging_cdf.withColumn(
+        "change_id",
+        f.concat_ws(
+            "|",
+            f.col("school_id_giga"),
+            f.col("_change_type"),
+            f.col("_commit_version").cast(StringType()),
+            f.col("_commit_timestamp").cast(StringType()),
+        ),
+    )
+
+    df_passed = staging_cdf.filter(f.col("change_id").isin(passing_rows_change_ids))
+
+    # In case multiple rows with the same school_id_giga are present, get only the row of the latest version.
+    df_passed = df_passed.withColumn(
+        "row_number",
+        f.row_number().over(
+            Window.partitionBy("school_id_giga").orderBy(
+                f.col("_commit_version").desc(),
+                f.col("_change_type"),
+            )
+        ),
+    ).filter(f.col("row_number") == 1)
+    df_passed = df_passed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 
@@ -94,7 +142,6 @@ def master(
 
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
-    silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
 
     column_actions = {}
@@ -111,6 +158,7 @@ def master(
             )
 
     silver = silver.withColumns(column_actions)
+    silver = compute_row_hash(silver)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -150,7 +198,6 @@ def reference(
 
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
-    silver = compute_row_hash(silver)
     silver = silver.select([c.name for c in schema_columns])
 
     column_actions = {}
@@ -167,6 +214,7 @@ def reference(
             )
 
     silver = silver.withColumns(column_actions)
+    silver = compute_row_hash(silver)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -207,22 +255,37 @@ def manual_review_failed_rows(
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_row_ids = adls_file_client.download_json(config.filepath)
+    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
-    primary_key = get_primary_key(s, schema_name)
+    schema_columns = get_schema_columns(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
-
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
 
-    staging = DeltaTable.forName(s, staging_table_name).alias("staging").toDF()
+    staging_cdf = (
+        s.read.format("delta")
+        .option("readChangeFeed", "true")
+        .option("startingVersion", 0)
+        .table(staging_table_name)
+    )
+    staging_cdf = staging_cdf.withColumn(
+        "change_id",
+        f.concat_ws(
+            "|",
+            f.col("school_id_giga"),
+            f.col("_change_type"),
+            f.col("_commit_version").cast(StringType()),
+            f.col("_commit_timestamp").cast(StringType()),
+        ),
+    )
 
-    df_failed = staging.filter(~staging[primary_key].isin(passing_row_ids))
+    df_failed = staging_cdf.filter(~f.col("change_id").isin(passing_rows_change_ids))
+    df_failed = df_failed.select(*[c.name for c in schema_columns])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 

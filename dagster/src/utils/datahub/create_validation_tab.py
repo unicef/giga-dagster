@@ -115,7 +115,7 @@ class EmitDatasetAssertionResults:
                 dataset_urn=self.dataset_urn,
             )
             assertion_urn = builder.make_assertion_urn(
-                f"{dq_check_result['assertion']}_desc_{dq_check_result['description']}",
+                f"{dq_check_result['assertion']}_desc_{dq_check_result['description']}_dataset_{self.dataset_urn}",
             )
             assertion_data_platform_instance = DataPlatformInstance(
                 platform=builder.make_data_platform_urn("spark"),

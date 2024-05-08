@@ -13,7 +13,7 @@ jobs:
               inputs:
                 namespace: $(kubernetesNamespace)
                 command: get
-                arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml
+                arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml --ignore-not-found
 
             - task: Kubernetes@1
               displayName: Create configmap
@@ -66,6 +66,11 @@ jobs:
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
+                    PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
+                    SPARK_DRIVER_CORES: "$(sparkDriverCores)"
+                    SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
+                    GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

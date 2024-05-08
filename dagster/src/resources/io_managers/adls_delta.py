@@ -4,6 +4,7 @@ from icecream import ic
 from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
@@ -148,6 +149,25 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         else:
             columns = get_schema_columns(spark, schema_name)
             primary_key = get_primary_key(spark, schema_name)
+
+            updated_schema = StructType(columns)
+            updated_columns = sorted(updated_schema.fieldNames())
+
+            existing_df = DeltaTable.forName(spark, full_table_name).toDF()
+            existing_columns = sorted(existing_df.schema.fieldNames())
+
+            if updated_columns != existing_columns:
+                empty_data = spark.sparkContext.emptyRDD()
+                updated_schema_df = spark.createDataFrame(
+                    data=empty_data, schema=updated_schema
+                )
+
+                (
+                    updated_schema_df.write.option("mergeSchema", "true")
+                    .format("delta")
+                    .mode("append")
+                    .saveAsTable(full_table_name)
+                )
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
