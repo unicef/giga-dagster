@@ -226,7 +226,7 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     if dataset_type in ["master", "reference", "geolocation"]:
         df = df.filter(df.dq_has_critical_error == 0)
         df = df.select(*columns)
-    elif dataset_type == "geolocation":
+    elif dataset_type == "geolocation":  ## @QUESTION: @renz when will this ever fire
         df = df.filter(
             (df["dq_duplicate-school_id_giga"] == 0)
             & (df["dq_is_null_mandatory-school_id_giga"] == 0)

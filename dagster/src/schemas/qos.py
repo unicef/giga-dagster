@@ -1,31 +1,13 @@
-import enum
 from datetime import datetime
 
+from models.qos_apis import (
+    AuthorizationTypeEnum,
+    PaginationTypeEnum,
+    RequestMethodEnum,
+    SendParametersInEnum,
+)
+
 from dagster import Config
-
-
-class AuthorizationTypeEnum(enum.Enum):
-    BEARER_TOKEN = "BEARER_TOKEN"
-    BASIC_AUTH = "BASIC_AUTH"
-    API_KEY = "API_KEY"
-    NONE = "NONE"
-
-
-class PaginationTypeEnum(enum.Enum):
-    PAGE_NUMBER = "PAGE_NUMBER"
-    LIMIT_OFFSET = "LIMIT_OFFSET"
-    NONE = "NONE"
-
-
-class RequestMethodEnum(enum.Enum):
-    POST = "POST"
-    GET = "GET"
-
-
-class SendQueryInEnum(enum.Enum):
-    BODY = "BODY"
-    QUERY_PARAMETERS = "QUERY_PARAMETERS"
-    NONE = "NONE"
 
 
 class ApiConfiguration(Config):
@@ -46,7 +28,7 @@ class ApiConfiguration(Config):
     error_message: str | None
     page_number_key: str | None
     page_offset_key: str | None
-    page_send_query_in: str
+    page_send_query_in: SendParametersInEnum
     page_size_key: str | None
     page_starts_with: int | None
     pagination_type: PaginationTypeEnum
@@ -73,8 +55,8 @@ class SchoolConnectivityConfig(ApiConfiguration):
     school_list_id: str
     date_key: str | None
     date_format: str | None
-    send_date_in: str | None
+    send_date_in: SendParametersInEnum
     response_date_key: str
     response_date_format: str
-    school_id_send_query_in: SendQueryInEnum
+    school_id_send_query_in: SendParametersInEnum
     school_list: SchoolListConfig

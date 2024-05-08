@@ -27,15 +27,10 @@ class RequestMethodEnum(enum.Enum):
     GET = "GET"
 
 
-class SendQueryInEnum(enum.Enum):
+class SendParametersInEnum(enum.Enum):
     BODY = "BODY"
     QUERY_PARAMETERS = "QUERY_PARAMETERS"
     NONE = "NONE"
-
-
-class SendDateInEnum(enum.Enum):
-    BODY = "BODY"
-    QUERY_PARAMETERS = "QUERY_PARAMETERS"
 
 
 class ApiConfiguration(BaseModel):
@@ -45,7 +40,7 @@ class ApiConfiguration(BaseModel):
     api_auth_api_value: Mapped[str] = mapped_column(nullable=True)
     api_endpoint: Mapped[str] = mapped_column(nullable=False)
     authorization_type: Mapped[AuthorizationTypeEnum] = mapped_column(
-        Enum(AuthorizationTypeEnum), default=AuthorizationTypeEnum.NONE, nullable=False
+        Enum(AuthorizationTypeEnum), default=AuthorizationTypeEnum.NONE, nullable=True
     )
     basic_auth_password: Mapped[str] = mapped_column(nullable=True)
     basic_auth_username: Mapped[str] = mapped_column(nullable=True)
@@ -68,13 +63,13 @@ class ApiConfiguration(BaseModel):
     error_message: Mapped[str] = mapped_column(nullable=True)
     page_number_key: Mapped[str] = mapped_column(nullable=True)
     page_offset_key: Mapped[str] = mapped_column(nullable=True)
-    page_send_query_in: Mapped[SendQueryInEnum] = mapped_column(
-        Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
+    page_send_query_in: Mapped[SendParametersInEnum] = mapped_column(
+        Enum(SendParametersInEnum), default=SendParametersInEnum.NONE, nullable=True
     )
     page_size_key: Mapped[str] = mapped_column(nullable=True)
     page_starts_with: Mapped[int] = mapped_column(nullable=True)
     pagination_type: Mapped[PaginationTypeEnum] = mapped_column(
-        Enum(PaginationTypeEnum), default=PaginationTypeEnum.NONE, nullable=False
+        Enum(PaginationTypeEnum), default=PaginationTypeEnum.NONE, nullable=True
     )
     query_parameters: Mapped[dict] = mapped_column(
         JSON, nullable=True, server_default="{}"
@@ -83,7 +78,7 @@ class ApiConfiguration(BaseModel):
     request_method: Mapped[RequestMethodEnum] = mapped_column(
         Enum(RequestMethodEnum), default=RequestMethodEnum.GET, nullable=False
     )
-    school_id_key: Mapped[str] = mapped_column(nullable=False)
+    school_id_key: Mapped[str] = mapped_column(nullable=True)
     size: Mapped[int] = mapped_column(nullable=True)
 
 
@@ -112,13 +107,15 @@ class SchoolConnectivity(ApiConfiguration):
     school_list: Mapped["SchoolList"] = relationship(
         "SchoolList", back_populates="school_connectivity"
     )
-    school_id_send_query_in: Mapped[SendQueryInEnum] = mapped_column(
-        Enum(SendQueryInEnum), default=SendQueryInEnum.NONE, nullable=False
+    school_id_send_query_in: Mapped[SendParametersInEnum] = mapped_column(
+        Enum(SendParametersInEnum), default=SendParametersInEnum.NONE, nullable=True
     )
 
     date_key: Mapped[str] = mapped_column(nullable=True, default=None)
     date_format: Mapped[str] = mapped_column(nullable=True, default=None)
-    send_date_in: Mapped[SendDateInEnum] = mapped_column(nullable=True, default=None)
+    send_date_in: Mapped[SendParametersInEnum] = mapped_column(
+        nullable=True, default=SendParametersInEnum.NONE
+    )
     response_date_key: Mapped[str] = mapped_column(nullable=False, default="")
     response_date_format: Mapped[str] = mapped_column(
         nullable=False, default="%Y-%m-%d"
