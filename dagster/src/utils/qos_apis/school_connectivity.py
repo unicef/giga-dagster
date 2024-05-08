@@ -37,6 +37,7 @@ def query_school_connectivity_data(
 
     auth_headers = _generate_auth_parameters(row_data)
     _generate_school_id_query_parameters(row_data, school_id)
+    _generate_date_query_parameters(row_data)
 
     context.log.info(
         f"schoolidq: {row_data['query_parameters']}, {row_data['request_body']}"
@@ -159,8 +160,26 @@ def query_school_connectivity_data(
 def _generate_school_id_query_parameters(
     row_data: SchoolConnectivity, school_id: int
 ) -> None:
-    if row_data["school_id_key"] and school_id:
+    if (
+        row_data["school_id_key"]
+        and school_id
+        and row_data["school_id_send_query_in"] != "NONE"
+    ):
         school_id_parameters = {}
         school_id_parameters[row_data["school_id_key"]] = school_id
 
         _update_parameters(row_data, school_id_parameters, "school_id_send_query_in")
+
+
+def _generate_date_query_parameters(row_data: SchoolConnectivity) -> None:
+    if (
+        row_data["date_key"]
+        and row_data["date_format"]
+        and row_data["date_send_query_in"] != "NONE"
+    ):
+        date_parameters = {}
+        date_parameters[row_data["date_key"]] = datetime.now().strftime(
+            row_data["date_format"]
+        )
+
+        _update_parameters(row_data, date_parameters, "date_send_query_in")

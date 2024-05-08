@@ -99,10 +99,13 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if schema_name_for_tier == "qos":
             columns = data.schema.fields
-            partition_columns = ["date"]
+            partition_columns = [
+                FileConfig(
+                    **context.step_context.op_config
+                ).row_data_dict.response_date_key
+            ]
         else:
             columns = get_schema_columns(spark, columns_schema_name)
-            context.log.info(f"columns: {columns}")
             partition_columns = get_partition_columns(spark, columns_schema_name)
 
         query = (
