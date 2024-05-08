@@ -99,12 +99,6 @@ def qos_school_list_data_quality_results(
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
-
     country_code = config.country_code
     dq_results = row_level_checks(
         qos_school_list_bronze,
@@ -114,6 +108,12 @@ def qos_school_list_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+
     return Output(
         dq_pandas,
         metadata={

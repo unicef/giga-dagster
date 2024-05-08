@@ -7,7 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 from src.exceptions import ExternalApiException
 from src.utils.qos_apis.common import (
-    _generate_auth,
+    _generate_auth_parameters,
     _generate_pagination_parameters,
     _make_api_request,
 )
@@ -15,7 +15,7 @@ from src.utils.qos_apis.common import (
 from dagster import OpExecutionContext
 
 
-def query_school_list_api_data(
+def query_school_list_data(
     context: OpExecutionContext, database_session: Session, row_data: SchoolList
 ) -> list:
     session = requests.Session()
@@ -31,12 +31,12 @@ def query_school_list_api_data(
 
     data = []
 
-    auth_headers = _generate_auth(row_data)
+    auth_headers = _generate_auth_parameters(row_data)
 
     if auth_headers is not None:
         session.headers.update(auth_headers)
 
-    if row_data["pagination_type"] is None:
+    if row_data["pagination_type"] == "NONE":
         try:
             data = _make_api_request(context, session, row_data)
         except Exception as e:
@@ -52,19 +52,21 @@ def query_school_list_api_data(
             )
             database_session.execute(update_statement)
             raise e
-
-        update_statement = (
-            update(SchoolList)
-            .where(SchoolList.id == row_data["id"])
-            .values(
-                {
-                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                    "date_last_succesfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                    "error_message": None,
-                },
+        else:
+            update_statement = (
+                update(SchoolList)
+                .where(SchoolList.id == row_data["id"])
+                .values(
+                    {
+                        "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                        "date_last_succesfully_ingested": datetime.now(
+                            tz=ZoneInfo("UTC")
+                        ),
+                        "error_message": None,
+                    },
+                )
             )
-        )
-        database_session.execute(update_statement)
+            database_session.execute(update_statement)
 
     else:
         page = (
@@ -74,15 +76,12 @@ def query_school_list_api_data(
         )
         offset = 0
         total_response_count = 0
+
         while True:
-            pagination_parameters = _generate_pagination_parameters(
-                row_data, page, offset
-            )
+            _generate_pagination_parameters(row_data, page, offset)
 
             try:
-                run_response = _make_api_request(
-                    context, session, row_data, pagination_parameters
-                )
+                run_response = _make_api_request(context, session, row_data)
 
                 if len(run_response):
                     data.extend(run_response)
