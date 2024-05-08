@@ -1,8 +1,8 @@
 from base64 import b64encode
 
 import requests
-from exceptions import ExternalApiException
 from models.qos_apis import SchoolConnectivity, SchoolList
+from src.exceptions import ExternalApiException
 
 from dagster import OpExecutionContext
 
@@ -11,12 +11,11 @@ def _make_api_request(
     context: OpExecutionContext,
     session: requests.Session,
     row_data: SchoolList | SchoolConnectivity,
-    pagination_parameters: dict = None,
-    school_id_query_parameters: dict = None,
 ) -> list:
-    _update_parameters(row_data, pagination_parameters, "page_send_query_in")
-    _update_parameters(row_data, school_id_query_parameters, "school_id_send_query_in")
-
+    context.log.info(
+        f"Making request to {row_data['api_endpoint']}, query: {row_data['query_parameters']}, body: {row_data['request_body']}"
+    )
+    response = None
     try:
         if row_data["request_method"] == "GET":
             response = session.get(
@@ -40,15 +39,15 @@ def _make_api_request(
         error_message = f"Error in {row_data['api_endpoint']} endpoint: {e}"
         context.log.info(error_message)
         raise ExternalApiException(error_message) from e
+    else:
+        return (
+            response.json()
+            if not row_data["data_key"]
+            else response.json()[row_data["data_key"]]
+        )
 
-    return (
-        response.json()
-        if row_data["data_key"] is None
-        else response.json()[row_data["data_key"]]
-    )
 
-
-def _generate_auth(
+def _generate_auth_parameters(
     row_data: SchoolList | SchoolConnectivity,
 ) -> dict[str, str] | None:
     if row_data["authorization_type"] == "BASIC_AUTH":
@@ -70,16 +69,18 @@ def _generate_pagination_parameters(
     row_data: SchoolList | SchoolConnectivity,
     page: int,
     offset: int,
-) -> dict:
-    pagination_params = {}
-    if row_data["pagination_type"] == "PAGE_NUMBER":
-        pagination_params[row_data["page_number_key"]] = page
-        pagination_params[row_data["page_size_key"]] = row_data["size"]
+) -> None:
+    if row_data["pagination_type"] != "NONE":
+        pagination_parameters = {}
+        if row_data["pagination_type"] == "PAGE_NUMBER":
+            pagination_parameters[row_data["page_number_key"]] = page
+            pagination_parameters[row_data["page_size_key"]] = row_data["size"]
 
-    elif row_data["pagination_type"] == "LIMIT_OFFSET":
-        pagination_params[row_data["page_offset_key"]] = offset
-        pagination_params[row_data["page_size_key"]] = row_data["size"]
-    return pagination_params
+        elif row_data["pagination_type"] == "LIMIT_OFFSET":
+            pagination_parameters[row_data["page_offset_key"]] = offset
+            pagination_parameters[row_data["page_size_key"]] = row_data["size"]
+
+        _update_parameters(row_data, pagination_parameters, "page_send_query_in")
 
 
 def _update_parameters(
@@ -88,7 +89,7 @@ def _update_parameters(
     parameter_send_key: str,
 ) -> None:
     if parameters:
-        if row_data[parameter_send_key] == "REQUEST_BODY":
+        if row_data[parameter_send_key] == "BODY":
             row_data["request_body"].update(parameters)
         elif row_data[parameter_send_key] == "QUERY_PARAMETERS":
             row_data["query_parameters"].update(parameters)
