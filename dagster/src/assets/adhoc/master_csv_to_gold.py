@@ -24,9 +24,10 @@ from src.internal.common_assets.master_release_notes import (
 )
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
-from src.utils.datahub.create_validation_tab import EmitDatasetAssertionResults
+from src.utils.datahub.create_validation_tab import (
+    datahub_emit_assertions_with_exception_catcher,
+)
 from src.utils.datahub.emit_dataset_metadata import (
-    create_dataset_urn,
     emit_metadata_to_datahub,
 )
 from src.utils.logger import ContextLoggerWithLoguruFallback
@@ -224,14 +225,10 @@ def adhoc__master_dq_checks_summary(
         ),
         adhoc__master_data_quality_checks,
     )
-
-    dataset_urn = create_dataset_urn(context, is_upstream=False)
-    emit_assertions = EmitDatasetAssertionResults(
-        dataset_urn=dataset_urn,
-        dq_summary_statistics=df_summary,
-        context=context,
+    datahub_emit_assertions_with_exception_catcher(
+        context=context, dq_summary_statistics=df_summary
     )
-    emit_assertions()
+
     yield Output(df_summary, metadata=get_output_metadata(config))
 
 
@@ -258,7 +255,7 @@ def adhoc__publish_master_to_gold(
             context,
             schema_reference=schema_reference,
             country_code=config.country_code,
-            dataset_urn=config.datahub_source_dataset_urn,
+            dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")

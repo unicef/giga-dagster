@@ -126,6 +126,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             file_size_bytes=size,
             domain=DOMAIN,
             country_code=country_code,
+            dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
         )
 
         context.log.info(f"FILE: {path}")
