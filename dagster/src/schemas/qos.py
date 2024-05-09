@@ -4,7 +4,7 @@ from models.qos_apis import (
     AuthorizationTypeEnum,
     PaginationTypeEnum,
     RequestMethodEnum,
-    SendParametersInEnum,
+    SendQueryInEnum,
 )
 
 from dagster import Config
@@ -28,7 +28,7 @@ class ApiConfiguration(Config):
     error_message: str | None
     page_number_key: str | None
     page_offset_key: str | None
-    page_send_query_in: SendParametersInEnum
+    page_send_query_in: SendQueryInEnum
     page_size_key: str | None
     page_starts_with: int | None
     pagination_type: PaginationTypeEnum
@@ -55,10 +55,10 @@ class SchoolConnectivityConfig(ApiConfiguration):
     school_list_id: str
     date_key: str | None
     date_format: str | None
-    send_date_in: SendParametersInEnum
+    send_date_in: SendQueryInEnum
     response_date_key: str
     response_date_format: str
-    school_id_send_query_in: SendParametersInEnum
+    school_id_send_query_in: SendQueryInEnum
     school_list: SchoolListConfig
     has_school_id_giga: bool
     school_id_giga_govt_key: str
