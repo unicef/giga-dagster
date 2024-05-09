@@ -198,6 +198,7 @@ def emit_metadata_to_datahub(
     datahub_emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
+        retry_max_times=5,
     )
 
     dataset_properties = define_dataset_properties(context, country_code=country_code)
@@ -227,6 +228,7 @@ def emit_metadata_to_datahub(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
         ),
     )
 

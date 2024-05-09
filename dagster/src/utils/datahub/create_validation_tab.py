@@ -41,6 +41,7 @@ class EmitDatasetAssertionResults:
         self.emitter = DatahubRestEmitter(
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
         )
         self.context = context
         self.dataset_urn = dataset_urn
