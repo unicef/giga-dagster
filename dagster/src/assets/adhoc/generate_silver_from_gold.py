@@ -42,19 +42,16 @@ def get_df(
 
 
 def join_gold(
-    context: OpExecutionContext,
     config: FileConfig,
     s: SparkSession,
 ) -> Output[sql.DataFrame]:
     adhoc__publish_master_to_gold = get_df(
-        context,
         s,
         schema_name="school_master",
         country_code=config.country_code,
         tier=DataTier.GOLD,
     )
     adhoc__publish_reference_to_gold = get_df(
-        context,
         s,
         schema_name="school_reference",
         country_code=config.country_code,
@@ -74,7 +71,7 @@ def adhoc__generate_silver_geolocation(
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
-    df_one_gold = join_gold(context, config, s)
+    df_one_gold = join_gold(config, s)
 
     schema_name = "school_geolocation"
     schema_columns = get_schema_columns(s, schema_name)
@@ -100,7 +97,7 @@ def adhoc__generate_silver_coverage(
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
-    df_one_gold = join_gold(context, config, s)
+    df_one_gold = join_gold(config, s)
 
     schema_name = "school_coverage"
     schema_columns = get_schema_columns(s, schema_name)
