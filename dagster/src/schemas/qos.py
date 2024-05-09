@@ -35,7 +35,7 @@ class ApiConfiguration(Config):
     query_parameters: str | None
     request_body: str | None
     request_method: RequestMethodEnum
-    school_id_key: str
+    school_id_key: str | None
     size: int | None
 
     class Config:
@@ -47,6 +47,7 @@ class SchoolListConfig(ApiConfiguration):
     name: str
     user_email: str
     user_id: str
+    country: str
 
 
 class SchoolConnectivityConfig(ApiConfiguration):

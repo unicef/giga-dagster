@@ -48,6 +48,15 @@ def tag_mutation_with_exception(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         ),
     )
     try:

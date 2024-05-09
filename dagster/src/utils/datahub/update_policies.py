@@ -84,6 +84,15 @@ def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         ),
     )
     query = f"tag:{tag}"
@@ -105,6 +114,15 @@ def group_urns_iterator():
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
     )
     return datahub_graph_client.get_urns_by_filter(entity_types=["corpGroup"])
@@ -121,6 +139,15 @@ def update_policies(context: OpExecutionContext = None) -> None:
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
     )
     for group_urn in group_urns_iterator():
@@ -139,6 +166,15 @@ def update_policy_for_group(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
     )
     country_code = config.country_code
@@ -193,6 +229,15 @@ if __name__ == "__main__":
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
     )
     logger = get_context_with_fallback_logger()
