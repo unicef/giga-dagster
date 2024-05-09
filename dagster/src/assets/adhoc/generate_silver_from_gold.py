@@ -57,6 +57,8 @@ def join_gold(
         country_code=config.country_code,
         tier=DataTier.GOLD,
     )
+    adhoc__publish_master_to_gold.drop("signature")
+    adhoc__publish_reference_to_gold.drop("signature")
     df_one_gold = adhoc__publish_master_to_gold.join(
         adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
     )
