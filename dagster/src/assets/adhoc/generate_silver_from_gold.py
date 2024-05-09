@@ -58,9 +58,6 @@ def join_gold(
         tier=DataTier.GOLD,
     )
     adhoc__publish_master_to_gold = adhoc__publish_master_to_gold.drop("signature")
-    adhoc__publish_reference_to_gold = adhoc__publish_reference_to_gold.drop(
-        "signature"
-    )
     df_one_gold = adhoc__publish_master_to_gold.join(
         adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
     )
@@ -81,6 +78,7 @@ def adhoc__generate_silver_geolocation(
     schema_columns = get_schema_columns(s, schema_name)
 
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+    df_silver = df_silver.drop("signature")
     df_silver = transform_types(df_silver, schema_name, context)
     df_silver = compute_row_hash(df_silver)
 
@@ -107,6 +105,7 @@ def adhoc__generate_silver_coverage(
     schema_columns = get_schema_columns(s, schema_name)
 
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+    df_silver = df_silver.drop("signature")
     df_silver = transform_types(df_silver, schema_name, context)
     df_silver = compute_row_hash(df_silver)
 
