@@ -102,8 +102,11 @@ class StagingStep:
                 staging = self.upsert_staging(staging)
             else:
                 self.create_empty_staging_table()
-                staging.write.format("delta").mode("append").saveAsTable(
-                    self.staging_table_name
+                (
+                    staging.write.option("mergeSchema", "true")
+                    .format("delta")
+                    .mode("append")
+                    .saveAsTable(self.staging_table_name)
                 )
 
             self.context.log.info(f"Full {staging.count()=}")
