@@ -1,8 +1,15 @@
+from datetime import datetime
+
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from dateutil import parser
 from delta import DeltaTable
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
+from pyspark.sql.functions import udf
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -39,8 +46,8 @@ def qos_school_connectivity_raw(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
-    context.log.info(f"Database row: {config.row_data_dict}")
     database_data = config.row_data_dict
+    context.log.info(f"Database row: {database_data}")
 
     complete_school_id_parameters = bool(
         database_data["school_id_key"]
@@ -50,6 +57,7 @@ def qos_school_connectivity_raw(
 
     df = pd.DataFrame()
 
+    ## If the connectivity API requires school IDs to be passed as part of the request, get the list of unique school IDs from the silver geolocation table
     if complete_school_id_parameters:
         schema_name = "school_geolocation"
         silver_tier_schema_name = construct_schema_name_for_tier(
@@ -59,12 +67,15 @@ def qos_school_connectivity_raw(
             silver_tier_schema_name, config.country_code
         )
 
-        if spark.catalog.tableExists(silver_table_name):
+        if s.catalog.tableExists(silver_table_name):
             silver = DeltaTable.forName(s, silver_table_name).toDF()
+            field_to_query = database_data["school_list"]["school_id_key"]
+            silver_column_to_query = database_data["school_list"][
+                "column_to_schema_mapping"
+            ][field_to_query]
+
             unique_school_ids = (
-                silver.select(silver(database_data["school_list"]["school_id_key"]))
-                .distinct()
-                .collect()
+                silver.select(silver(silver_column_to_query)).distinct().collect()
             )
 
             with get_db_context() as database_session:
@@ -91,8 +102,17 @@ def qos_school_connectivity_raw(
         schema_reference=df,
     )
 
-    context.log.info(f">> df: {df}")
     return Output(df, metadata=get_output_metadata(config))
+
+
+@udf
+def parse_dates(value: str, database_data: dict[str, str]) -> str:
+    if database_data["response_date_format"] == "ISO8601":
+        return parser.parse(value).strftime("%Y-%m-%d-%H%M%S")
+    else:
+        return datetime.strptime(value, database_data["response_date_format"]).strftime(
+            "%Y-%m-%d-%H%M%S"
+        )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -102,36 +122,72 @@ def qos_school_connectivity_bronze(
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
-    # s: SparkSession = spark.spark_session
-    # database_data = config.row_data_dict
+    s: SparkSession = spark.spark_session
+    database_data = config.row_data_dict
 
-    # schema_name = "school_geolocation"
-    # silver_tier_schema_name = construct_schema_name_for_tier(
-    #     schema_name, DataTier.SILVER
-    # )
-    # silver_table_name = construct_full_table_name(
-    #     silver_tier_schema_name, config.country_code
-    # )
+    schema_name = "school_geolocation"
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        schema_name, DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(
+        silver_tier_schema_name, config.country_code
+    )
 
-    # bronze = pd.DataFrame()
-    bronze = qos_school_connectivity_raw.toPandas()
+    bronze = sql.DataFrame()
 
-    # if s.catalog.tableExists(silver_table_name):
-    #     context.log.info(f"table exists")
-    #     silver = DeltaTable.forName(s, silver_table_name).toDF()
-    #     primary_key = get_primary_key(s, schema_name)
-    #     context.log.info(f"pkey: {primary_key}")
+    ## Filter out school connectivity data for schools not in the school geolocation silver table. Add school_id_giga to school_connectivity if it does not exist yet
+    if s.catalog.tableExists(silver_table_name):
+        if database_data["has_school_id_giga"]:
+            silver_ids = (
+                DeltaTable.forName(s, silver_table_name).toDF().select("school_id_giga")
+            )
+            bronze = qos_school_connectivity_raw.join(
+                silver_ids,
+                qos_school_connectivity_raw[database_data["school_id_giga_govt_key"]]
+                == silver_ids["school_id_giga"],
+                "inner",
+            )
+            bronze = bronze.drop(bronze[database_data["school_id_giga_govt_key"]])
+        else:
+            silver_ids = (
+                DeltaTable.forName(s, silver_table_name)
+                .toDF()
+                .select("school_id_govt", "school_id_giga")
+            )
+            bronze = qos_school_connectivity_raw.join(
+                silver_ids,
+                qos_school_connectivity_raw[database_data["school_id_giga_govt_key"]]
+                == silver_ids["school_id_govt"],
+                "inner",
+            )
+            bronze = bronze.drop("school_id_govt")
 
-    #     unique_school_ids = (
-    #         silver.select(silver(database_data.school_list.school_id_key))
-    #         .distinct()
-    #         .collect()
-    #     )
+        context.log.info(
+            f"qos raw: {len(qos_school_connectivity_raw.toPandas())}, qos bronze: {len(qos_school_connectivity_bronze)}"
+        )
 
-    #     context.log.info(f"unique: {unique_school_ids}")
+    if not bronze.isEmpty:
+        ## Transform the time partition column to the correct format
+        bronze = bronze.withColumn(
+            database_data["response_date_key"],
+            parse_dates(f.col(database_data["response_date_key"]), database_data),
+        )
 
-    #     bronze = qos_school_connectivity_raw.filter(qos_school_connectivity_raw[primary_key].isin(unique_school_ids)).toPandas()
-    #     context.log.info(f"qos raw: {len(qos_school_connectivity_raw.toPandas())}, qos bronze: {len(qos_school_connectivity_bronze)}")
+        ## Add gigasync_id column
+        column_actions = {
+            "signature": f.sha2(f.concat_ws("|", *bronze.columns), 256),
+            "gigasync_id": f.sha2(
+                f.concat_ws(
+                    "_",
+                    f.col("school_id_giga"),
+                    f.col("timestamp"),
+                ),
+                256,
+            ),
+            "date": f.to_date(f.col(database_data["response_date_key"])),
+        }
+        bronze = bronze.withColumns(column_actions).dropDuplicates(["gigasync_id"])
+        context.log.info(f"Calculated SHA256 signature for {bronze.count()} rows")
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -140,7 +196,7 @@ def qos_school_connectivity_bronze(
     )
 
     return Output(
-        bronze,
+        bronze.toPandas(),
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(bronze),
@@ -293,9 +349,3 @@ def qos_school_connectivity_gold(
             "preview": get_table_preview(qos_school_connectivity_dq_passed_rows),
         },
     )
-
-
-# # Get date key, date send in, date format
-# # Send date request in send_in, following date_format
-# # How will you know the increment value for the date? e.g. hourly, daily, etc (DAY LEVEL PARTITION)
-# # How will you keep track of backfill status without a separate partitioned ingestion pipeline? (JUST TODAY'S DATE)
