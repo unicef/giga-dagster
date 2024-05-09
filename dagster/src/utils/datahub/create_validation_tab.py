@@ -115,10 +115,10 @@ class EmitDatasetAssertionResults:
                 dataset_urn=self.dataset_urn,
             )
             assertion_id = (
-                dq_check_result["column"]
-                + "__"
-                + dq_check_result["assertion"]
-                + "__"
+                dq_check_result["assertion"]
+                + "_"
+                + dq_check_result["column"]
+                + "_"
                 + self.dataset_urn
             )
             assertion_urn = builder.make_assertion_urn(assertion_id=assertion_id)
