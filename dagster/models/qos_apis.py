@@ -126,4 +126,4 @@ class SchoolConnectivity(ApiConfiguration):
         nullable=False, default="%Y-%m-%d"
     )
     has_school_id_giga: Mapped[bool] = mapped_column(nullable=True, default=False)
-    school_id_giga_govt_key = Mapped[str] = mapped_column(nullable=False, default="")
+    school_id_giga_govt_key: Mapped[str] = mapped_column(nullable=False, default="")
