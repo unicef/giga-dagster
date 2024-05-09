@@ -1,3 +1,4 @@
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 from geopy.distance import geodesic
@@ -15,17 +16,21 @@ def get_point(longitude: float, latitude: float) -> None | Point:
     return None
 
 
-# Inside based on GADM admin boundaries data
+# Inside based on GADM admin boundaries data (pandas_udf)
 def is_within_country_gadm(
-    latitude: float,
-    longitude: float,
-    geometry: pd.Series | pd.DataFrame | np.ndarray,
-) -> bool:
-    point = get_point(longitude, latitude)
-    if point is not None and geometry is not None:
-        return point.within(geometry)
-
-    return False
+    latitude: pd.Series,
+    longitude: pd.Series,
+    boundaries: gpd.GeoDataFrame,
+    country_code_iso3: str,
+) -> pd.Series:
+    point_var = [get_point(x, y) for x, y in zip(longitude, latitude, strict=False)]
+    gdf_points = gpd.GeoDataFrame(
+        pd.DataFrame({"latitude": latitude, "longitude": longitude}),
+        crs="epsg:4326",
+        geometry=point_var,
+    )
+    gdf_joined = gpd.sjoin(gdf_points, boundaries, how="left")
+    return gdf_joined["GID_0"].map(lambda x: 0 if x == country_code_iso3 else 1)
 
 
 # Inside based on geopy
@@ -58,9 +63,12 @@ def is_within_boundary_distance(
     latitude: float,
     longitude: float,
     geometry: pd.Series | pd.DataFrame | np.ndarray,
+    dq_is_not_within_country: int,
 ) -> bool:
-    point = get_point(longitude, latitude)
+    if dq_is_not_within_country == 0:
+        return True
 
+    point = get_point(longitude, latitude)
     if point is not None and geometry is not None:
         p1, _ = nearest_points(geometry, point)
 
