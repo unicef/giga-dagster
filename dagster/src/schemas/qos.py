@@ -70,6 +70,8 @@ class SchoolConnectivityConfig(ApiConfiguration):
     response_date_key: str
     response_date_format: str
     school_id_send_query_in: SendQueryInEnum
+    has_school_id_giga: bool
+    school_id_giga_govt_key: str
 
 
 class SchoolListConfig(ApiConfiguration):
