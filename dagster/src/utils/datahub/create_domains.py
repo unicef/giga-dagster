@@ -22,6 +22,14 @@ def create_domains() -> list[str]:
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
             retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
 
         datahub_emitter.emit(event)
