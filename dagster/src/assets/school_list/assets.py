@@ -64,10 +64,14 @@ def qos_school_list_bronze(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
+    database_data = config.row_data_dict
     schema_columns = get_schema_columns(s, config.metastore_schema)
     df, column_mapping = column_mapping_rename(
-        qos_school_list_raw, config.row_data_dict["column_to_schema_mapping"]
+        qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
+
+    columns_to_drop = [x for x in df.columns if x not in schema_columns]
+    df = df.drop(*columns_to_drop)
 
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
