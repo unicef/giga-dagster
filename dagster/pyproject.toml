@@ -35,7 +35,7 @@ geopy = "^2.4.0"
 h3 = "^3.7.6"
 fastparquet = "^2023.8.0"
 grpcio-status = "^1.59.0"
-acryl-datahub = { extras = ["azure-ad"], version = "^0.12.0.1" }
+acryl-datahub = { extras = ["azure-ad"], version = "0.12.0" }
 shapely = "^2.0.2"
 geopandas = "^0.14.1"
 thefuzz = "^0.20.0"
