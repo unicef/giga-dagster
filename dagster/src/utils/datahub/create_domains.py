@@ -21,6 +21,7 @@ def create_domains() -> list[str]:
         datahub_emitter = DatahubRestEmitter(
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
         )
 
         datahub_emitter.emit(event)

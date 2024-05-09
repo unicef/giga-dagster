@@ -61,6 +61,7 @@ def add_column_metadata(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
         ),
     )
     logger = get_context_with_fallback_logger(context)
@@ -111,6 +112,7 @@ if __name__ == "__main__":
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
         ),
     )
     # COLUMN LICENSES
