@@ -34,7 +34,6 @@ from src.utils.schema import (
     construct_schema_name_for_tier,
     get_schema_columns_datahub,
 )
-from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -259,11 +258,11 @@ def qos_school_connectivity_data_quality_results_summary(
         spark=spark,
     )
 
-    send_email_dq_report_with_config(
-        dq_results=dq_summary_statistics,
-        config=config,
-        context=context,
-    )
+    # send_email_dq_report_with_config(
+    #     dq_results=dq_summary_statistics,
+    #     config=config,
+    #     context=context,
+    # )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
