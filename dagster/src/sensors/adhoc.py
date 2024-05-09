@@ -256,7 +256,6 @@ def school_master__generate_silver_sensor(
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
-        metastore_schema = "school_reference"
 
         filename_components = deconstruct_adhoc_filename_components(file_data.name)
         country_code = filename_components.country_code
@@ -266,15 +265,15 @@ def school_master__generate_silver_sensor(
 
         ops_destination_mapping = {
             "adhoc__generate_silver_geolocation": OpDestinationMapping(
-                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
-                metastore_schema=metastore_schema,
+                metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
             "adhoc__generate_silver_coverage": OpDestinationMapping(
-                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                metastore_schema=metastore_schema,
+                metastore_schema="school_coverage",
                 tier=DataTier.SILVER,
             ),
         }
