@@ -199,6 +199,14 @@ def emit_metadata_to_datahub(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
         retry_max_times=5,
+        retry_status_codes=[
+            403,
+            429,
+            500,
+            502,
+            503,
+            504,
+        ],
     )
 
     dataset_properties = define_dataset_properties(context, country_code=country_code)
@@ -229,6 +237,14 @@ def emit_metadata_to_datahub(
             server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
             retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         ),
     )
 
