@@ -18,13 +18,11 @@ from dagster import OpExecutionContext, Output, asset
 
 
 def get_df(
-    spark: PySparkResource,
+    s: SparkSession,
     schema_name: str,
     country_code: str,
     tier: DataTier,
 ) -> Output[sql.DataFrame]:
-    s: SparkSession = spark.spark_session
-
     schema_columns = get_schema_columns(s, schema_name)
     tier_schema_name = construct_schema_name_for_tier(
         schema_name=schema_name, tier=tier
@@ -46,10 +44,8 @@ def get_df(
 def join_gold(
     context: OpExecutionContext,
     config: FileConfig,
-    spark: PySparkResource,
+    s: SparkSession,
 ) -> Output[sql.DataFrame]:
-    s: SparkSession = spark.spark_session
-
     adhoc__publish_master_to_gold = get_df(
         context,
         s,
