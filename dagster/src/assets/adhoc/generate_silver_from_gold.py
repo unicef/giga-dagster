@@ -58,7 +58,7 @@ def join_gold(
         tier=DataTier.GOLD,
     )
     df_one_gold = adhoc__publish_master_to_gold.join(
-        adhoc__publish_reference_to_gold, on="id", how="left"
+        adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
     )
     return df_one_gold
 
