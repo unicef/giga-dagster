@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 import numpy as np
 import pandas as pd
 from h3 import geo_to_h3
-from pyspark.sql.functions import udf
+from pyspark.sql.functions import pandas_udf, udf
 
 from src.spark.config_expectations import config
 
@@ -47,19 +47,32 @@ def h3_geo_to_h3_udf(latitude: float, longitude: float) -> str:
 BOUNDARY_DISTANCE_THRESHOLD = 150
 
 
-def is_not_within_country_check_udf_factory(
-    country_code_iso2: str,
+def is_not_within_country_boundaries_udf_factory(
     country_code_iso3: str,
     geometry: pd.Series | np.ndarray | pd.DataFrame,
 ) -> callable:
-    @udf
-    def is_not_within_country_check(latitude: float, longitude: float) -> int:
-        if latitude is None or longitude is None or country_code_iso3 is None:
-            return 0
+    @pandas_udf("int")
+    def is_not_within_country_check(
+        latitude: pd.Series, longitude: pd.Series
+    ) -> pd.Series:
+        return is_within_country_gadm(latitude, longitude, geometry, country_code_iso3)
 
-        if is_within_country_gadm(latitude, longitude, geometry):
-            return 0
-        if is_within_boundary_distance(latitude, longitude, geometry):
+    return is_not_within_country_check
+
+
+def is_not_within_country_check_udf_factory(
+    country_code_iso2: str,
+    geometry: pd.Series | np.ndarray | pd.DataFrame,
+) -> callable:
+    geometry = geometry["geometry"][0]
+
+    @udf
+    def is_not_within_country_check(
+        latitude: float, longitude: float, dq_is_not_within_country: int
+    ) -> int:
+        if is_within_boundary_distance(
+            latitude, longitude, geometry, dq_is_not_within_country
+        ):
             return 0
         if (
             boundary_distance(latitude, longitude, geometry)
