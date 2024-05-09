@@ -141,7 +141,7 @@ def adhoc__publish_reference_to_gold(
             context,
             schema_reference=schema_reference,
             country_code=config.country_code,
-            dataset_urn=config.datahub_source_dataset_urn,
+            dataset_urn=config.datahub_destination_dataset_urn,
         )
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
