@@ -15,14 +15,6 @@ from src.utils.sentry import log_op_context
 
 
 def policy_mutation_query(group_urn: str) -> str:
-    return f"""
-    mutation {{
-        {update_policy_base_query(group_urn)}
-    }}
-    """
-
-
-def update_policy_base_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
     country_name = group_name.split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
@@ -31,6 +23,7 @@ def update_policy_base_query(group_urn: str) -> str:
     )
 
     return f"""
+    mutation {{
         updatePolicy(
             urn: "urn:li:dataHubPolicy:{group_name}-viewer",
             input: {{
@@ -50,12 +43,13 @@ def update_policy_base_query(group_urn: str) -> str:
                     allGroups: false
                 }}
         }})
+    }}
     """
 
 
 def create_policy_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
-    country_name = group_name.split("-")[0]
+    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
     datasets_urns_list = list_datasets_by_filter(
         tag=country_name, dataset_type=dataset_type
@@ -156,38 +150,12 @@ def update_policies(context: OpExecutionContext = None) -> None:
             ],
         )
     )
-    logger = get_context_with_fallback_logger(context)
-    queries = ""
-    for i, group_urn in enumerate(group_urns_iterator()):
-        country_name = parse.unquote(
-            group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+    for group_urn in group_urns_iterator():
+        update_policy_base(
+            group_urn=parse.unquote(group_urn),
+            datahub_graph_client=datahub_graph_client,
+            context=context,
         )
-        if is_valid_country_name(country_name):
-            base_query = update_policy_base_query(group_urn=group_urn)
-            queries = queries + " " + f"update{i}: {base_query}"
-        else:
-            warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
-            logger.warning(warning_message)
-            log_op_context(context)
-            sentry_sdk.capture_message(warning_message)
-
-    batch_mutation_query = f"""
-        mutation {{
-            {queries}
-        }}
-        """
-    try:
-        logger.info("UPDATING DATAHUB POLICIES...")
-        logger.info(batch_mutation_query)
-        graphql_execution = datahub_graph_client.execute_graphql(
-            query=batch_mutation_query
-        )
-        logger.info(graphql_execution)
-        logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-    except Exception as error:
-        logger.error(error)
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
 
 
 def update_policy_for_group(
@@ -229,7 +197,7 @@ def update_policy_base(
 ) -> None:
     logger = get_context_with_fallback_logger(context)
 
-    country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1].split("-")[0])
+    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
@@ -257,57 +225,31 @@ def update_policy_base(
 
 
 if __name__ == "__main__":
-
-    def test_update_policies(context: OpExecutionContext = None) -> None:
-        datahub_graph_client = DataHubGraph(
-            DatahubClientConfig(
-                server=settings.DATAHUB_METADATA_SERVER_URL,
-                token=settings.DATAHUB_ACCESS_TOKEN,
-                retry_max_times=5,
-                retry_status_codes=[
-                    403,
-                    429,
-                    500,
-                    502,
-                    503,
-                    504,
-                ],
-            )
+    datahub_graph_client = DataHubGraph(
+        DatahubClientConfig(
+            server=settings.DATAHUB_METADATA_SERVER_URL,
+            token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
-        logger = get_context_with_fallback_logger(context)
-        queries = ""
-        for i, group_urn in enumerate(group_urns_iterator()):
-            country_name = parse.unquote(
-                group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
-            )
-            logger.info(country_name)
-            if is_valid_country_name(country_name):
-                base_query = update_policy_base_query(group_urn=group_urn)
-                queries = queries + " " + f"update{i}: {base_query}"
-            else:
-                warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
-                logger.warning(warning_message)
-                # log_op_context(context)
-                # sentry_sdk.capture_message(warning_message)
-            if i == 5:
-                break
-
-        batch_mutation_query = f"""
-            mutation {{
-                {queries}
-            }}
-            """
-        try:
-            logger.info("UPDATING DATAHUB POLICIES...")
-            logger.info(batch_mutation_query)
-            graphql_execution = datahub_graph_client.execute_graphql(
-                query=batch_mutation_query
-            )
-            logger.info(graphql_execution)
-            logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-        except Exception as error:
-            logger.error(error)
-            log_op_context(context)
-            sentry_sdk.capture_exception(error=error)
-
-    test_update_policies()
+    )
+    logger = get_context_with_fallback_logger()
+    country_code = "ATA"
+    country_name = identify_country_name(country_code=country_code)
+    logger.info(country_name)
+    domain = "school"
+    dataset_type = "geolocation"
+    group_urn = build_group_urn(
+        country_name=country_name, dataset_type=dataset_type, domain=domain
+    )
+    update_policy_base(
+        group_urn=group_urn,
+        datahub_graph_client=datahub_graph_client,
+    )
