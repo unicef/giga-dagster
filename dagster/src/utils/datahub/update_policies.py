@@ -1,4 +1,5 @@
 import json
+from time import sleep
 from urllib import parse
 
 import country_converter as cc
@@ -156,6 +157,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
             datahub_graph_client=datahub_graph_client,
             context=context,
         )
+        sleep(3)
 
 
 def update_policy_for_group(
