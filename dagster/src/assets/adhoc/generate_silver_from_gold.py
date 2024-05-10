@@ -2,6 +2,7 @@ from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
+    functions as f,
 )
 from src.constants import DataTier
 from src.resources import ResourceKey
@@ -61,6 +62,18 @@ def join_gold(
     df_one_gold = adhoc__publish_master_to_gold.join(
         adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
     )
+    columns_with_null = [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "school_id_govt_type",
+        "education_level_govt",
+    ]
+    df_one_gold = df_one_gold.withColumns(
+        {
+            column: f.when(f.col(column).isNull(), "Unknown")
+            for column in columns_with_null
+        }
+    )
     return df_one_gold
 
 
@@ -116,3 +129,45 @@ def adhoc__generate_silver_coverage(
             "preview": get_table_preview(df_silver),
         },
     )
+
+
+if __name__ == "__main__":
+    from src.utils.spark import get_spark_session
+
+    s = get_spark_session()
+
+    def test_join_gold(
+        # config: FileConfig,
+        s: SparkSession = s,
+    ) -> Output[sql.DataFrame]:
+        adhoc__publish_master_to_gold = get_df(
+            s,
+            schema_name="school_master",
+            country_code="AIA",  # config.country_code,
+            tier=DataTier.GOLD,
+        )
+        adhoc__publish_reference_to_gold = get_df(
+            s,
+            schema_name="school_reference",
+            country_code="AIA",  # config.country_code,
+            tier=DataTier.GOLD,
+        )
+        adhoc__publish_master_to_gold = adhoc__publish_master_to_gold.drop("signature")
+        df_one_gold = adhoc__publish_master_to_gold.join(
+            adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
+        )
+        columns_with_null = [
+            "cellular_coverage_availability",
+            "cellular_coverage_type",
+            "school_id_govt_type",
+            "education_level_govt",
+        ]
+        df_one_gold = df_one_gold.withColumns(
+            {
+                column: f.when(f.col(column).isNull(), "Unknown")
+                for column in columns_with_null
+            }
+        )
+        return df_one_gold
+
+    test_join_gold()
