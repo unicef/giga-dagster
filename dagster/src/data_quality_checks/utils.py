@@ -346,15 +346,15 @@ if __name__ == "__main__":
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
     # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/GIN_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/GIN_master_reference.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
-    # file_url_qos = (
-    #     f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
-    # )
+    file_url_qos = (
+        f"{settings.AZURE_BLOB_CONNECTION_URI}/gold/qos/BRA/2024-03-07_04-10-02.csv"
+    )
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-    master = spark.read.csv(file_url_master, header=True)
+    # master = spark.read.csv(file_url_master, header=True)
     # reference = spark.read.csv(file_url_reference, header=True)
-    # qos = spark.read.csv(file_url_qos, header=True)
+    qos = spark.read.csv(file_url_qos, header=True)
     # df_bronze = master.join(reference, how="left", on="school_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
@@ -365,23 +365,23 @@ if __name__ == "__main__":
     # df_bronze.show()
     # df = create_giga_school_id(df_bronze)
     # df.show()
-    # qos.show()
+    qos.show()
     # master = master.filter(master["admin1"] == "São Paulo")
-    print(master.count(), len(master.columns))
-    master.show()
+    # print(master.count(), len(master.columns))
+    # master.show()
     # master = master.filter(~(f.col("latitude").like("%Sr%")) & ~(f.col("longitude").like("%Sr%")))
     # filtered_df.show()
 
-    # master
-    df = row_level_checks(master, "master", "BRA")
-    df.show()
-    # df.explain()
+    # # master
+    # df = row_level_checks(master, "master", "BRA")
+    # df.show()
+    # # df.explain()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
 
-    _json = aggregate_report_json(df, master)
-    print(_json)
+    # _json = aggregate_report_json(df, master)
+    # print(_json)
 
     # # ref
     # df = row_level_checks(reference, "reference", "BLZ")
@@ -393,15 +393,15 @@ if __name__ == "__main__":
     # _json = aggregate_report_json(df, reference)
     # print(_json)
 
-    # # qos
-    # df = row_level_checks(qos, "qos", "BRA")
-    # df.show()
+    # qos
+    df = row_level_checks(qos, "qos", "BRA")
+    df.show()
 
-    # df = aggregate_report_spark_df(spark=spark, df=df)
-    # df.show()
+    df = aggregate_report_spark_df(spark=spark, df=df)
+    df.show()
 
-    # _json = aggregate_report_json(df, qos)
-    # print(_json)
+    _json = aggregate_report_json(df, qos)
+    print(_json)
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])

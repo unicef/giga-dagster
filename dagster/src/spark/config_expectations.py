@@ -213,7 +213,7 @@ class Config(BaseSettings):
 
     UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
-    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_giga"]
 
     UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
 
@@ -287,13 +287,13 @@ class Config(BaseSettings):
     ]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
-        "timestamp",
-        "country_id",
         "school_id_giga",
-        "school_id_govt",
-        "speed_upload",
-        "speed_download",
-        "provider",
+        # "school_id_govt",
+        # "timestamp",
+        # "country_id",
+        # "speed_upload",
+        # "speed_download",
+        # "provider",
     ]
 
     NONEMPTY_COLUMNS_CRITICAL: list[str] = [

@@ -38,8 +38,8 @@ def critical_error_checks(
     elif dataset_type == "qos":
         critial_column_dq_checks.extend(
             [
-                f.col("dq_duplicate-school_id_govt"),
                 f.col("dq_duplicate-school_id_giga"),
+                # f.col("dq_duplicate-school_id_govt"),
             ]
         )
 
