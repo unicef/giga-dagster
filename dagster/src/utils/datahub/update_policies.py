@@ -157,7 +157,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
             datahub_graph_client=datahub_graph_client,
             context=context,
         )
-        sleep(3)
+        sleep(7)
 
 
 def update_policy_for_group(
