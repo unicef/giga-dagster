@@ -129,10 +129,12 @@ def school_master__gold_csv_to_deltatable_sensor(
             dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
         )
 
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
+
         context.log.info(f"FILE: {path}")
         run_requests.append(
             RunRequest(
-                run_key=str(path),
+                run_key=f"{path}:{last_modified}",
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             ),
@@ -218,10 +220,12 @@ def school_reference__gold_csv_to_deltatable_sensor(
             country_code=country_code,
         )
 
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
+
         context.log.info(f"FILE: {path}")
         run_requests.append(
             RunRequest(
-                run_key=str(path),
+                run_key=f"{path}:{last_modified}",
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             ),
