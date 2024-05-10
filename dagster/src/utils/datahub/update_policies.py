@@ -208,22 +208,16 @@ def update_policy_base(
             datahub_graph_client.execute_graphql(query=query)
             logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
         except Exception as error:
-            logger.warning(error)
-            try:
-                query = create_policy_query(group_urn=group_urn)
-                logger.info(f"CREATING DATAHUB POLICY: {group_urn}...")
-                logger.info(query)
-                datahub_graph_client.execute_graphql(query=query)
-                logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
-            except Exception:
-                logger.error(error)
+            logger.error(error)
+            sentry_sdk.capture_exception(error=error)
+            if context is not None:
                 log_op_context(context)
-                sentry_sdk.capture_exception(error=error)
     else:
         warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
         logger.warning(warning_message)
-        log_op_context(context)
         sentry_sdk.capture_message(warning_message)
+        if context is not None:
+            log_op_context(context)
 
 
 if __name__ == "__main__":
