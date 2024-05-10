@@ -2,7 +2,6 @@ from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
-    functions as f,
 )
 from src.constants import DataTier
 from src.resources import ResourceKey
@@ -68,12 +67,7 @@ def join_gold(
         "school_id_govt_type",
         "education_level_govt",
     ]
-    df_one_gold = df_one_gold.withColumns(
-        {
-            column: f.when(f.col(column).isNull(), "Unknown")
-            for column in columns_with_null
-        }
-    )
+    df_one_gold = df_one_gold.fillna("Unknown", columns_with_null)
     return df_one_gold
 
 
@@ -143,13 +137,13 @@ if __name__ == "__main__":
         adhoc__publish_master_to_gold = get_df(
             s,
             schema_name="school_master",
-            country_code="AIA",  # config.country_code,
+            country_code="BEN",  # config.country_code,
             tier=DataTier.GOLD,
         )
         adhoc__publish_reference_to_gold = get_df(
             s,
             schema_name="school_reference",
-            country_code="AIA",  # config.country_code,
+            country_code="BEN",  # config.country_code,
             tier=DataTier.GOLD,
         )
         adhoc__publish_master_to_gold = adhoc__publish_master_to_gold.drop("signature")
@@ -162,12 +156,7 @@ if __name__ == "__main__":
             "school_id_govt_type",
             "education_level_govt",
         ]
-        df_one_gold = df_one_gold.withColumns(
-            {
-                column: f.when(f.col(column).isNull(), "Unknown")
-                for column in columns_with_null
-            }
-        )
+        df_one_gold = df_one_gold.fillna("Unknown", columns_with_null)
         return df_one_gold
 
-    test_join_gold()
+    gold = test_join_gold()
