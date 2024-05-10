@@ -49,7 +49,7 @@ def policy_mutation_query(group_urn: str) -> str:
 
 def create_policy_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
-    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+    country_name = group_name.split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
     datasets_urns_list = list_datasets_by_filter(
         tag=country_name, dataset_type=dataset_type
@@ -197,7 +197,7 @@ def update_policy_base(
 ) -> None:
     logger = get_context_with_fallback_logger(context)
 
-    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+    country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1].split("-")[0])
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
