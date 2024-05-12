@@ -201,7 +201,7 @@ def reset_staging_table(
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
 
     try:
-        adls_file_client.delete(staging_table_path)
+        adls_file_client.delete(staging_table_path, is_directory=True)
     except ResourceNotFoundError as e:
         context.log.warning(e)
 

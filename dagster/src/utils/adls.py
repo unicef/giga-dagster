@@ -160,6 +160,6 @@ class ADLSFileClient(ConfigurableResource):
         return renamed_file_client
 
     @staticmethod
-    def delete(filepath: str, is_directory=False):
+    def delete(filepath: str, *, is_directory=False):
         file_client = _adls.get_file_client(file_path=filepath)
         file_client.delete_file(recursive=is_directory)
