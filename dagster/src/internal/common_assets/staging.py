@@ -90,7 +90,6 @@ class StagingStep:
             # If silver table exists and staging table exists, merge files for review to existing staging table
             df = self.standard_transforms(upstream_df)
             self.sync_schema()
-            self.reload_schema()
             staging = self.upsert_staging(df)
         else:
             # If silver table does not exist, merge files for review into one spark dataframe
@@ -98,7 +97,6 @@ class StagingStep:
 
             if self.staging_table_exists:
                 self.sync_schema()
-                self.reload_schema()
                 staging = self.upsert_staging(staging)
             else:
                 self.create_empty_staging_table()
@@ -208,6 +206,7 @@ class StagingStep:
                 .mode("append")
                 .saveAsTable(self.staging_table_name)
             )
+            self.reload_schema()
 
     def reload_schema(self):
         self.schema_columns = get_schema_columns(self.spark, self.schema_name)
