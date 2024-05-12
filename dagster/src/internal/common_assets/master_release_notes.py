@@ -52,7 +52,8 @@ async def send_master_release_notes(
         return None
 
     added = cdf.filter(f.col("_change_type") == "insert").count()
-    modified = cdf.filter(f.col("_change_type") == "update_preimage").count()
+    modified = cdf.filter(f.col("_change_type") == "update_postimage").count()
+    deleted = cdf.filter(f.col("_change_type") == "delete").count()
     country = coco.convert(country_code, to="name_short")
 
     detail = dt.detail().first()
@@ -62,9 +63,10 @@ async def send_master_release_notes(
         update_date = detail.lastModified
 
     props = EmailProps(
-        added=added,
         country=country,
+        added=added,
         modified=modified,
+        deleted=deleted,
         updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
         version=latest_version,
         rows=rows,
