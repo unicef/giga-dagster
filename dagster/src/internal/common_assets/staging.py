@@ -119,7 +119,12 @@ class StagingStep:
                     (ApprovalRequest.country == self.country_code)
                     & (ApprovalRequest.dataset == formatted_dataset)
                 )
-                .values(enabled=True),
+                .values(
+                    {
+                        ApprovalRequest.enabled: True,
+                        ApprovalRequest.is_merge_processing: False,
+                    }
+                ),
             )
             db.commit()
 

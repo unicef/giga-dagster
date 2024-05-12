@@ -90,7 +90,8 @@ def silver(
 
     df_passed = staging_cdf.filter(f.col("change_id").isin(passing_rows_change_ids))
 
-    # In case multiple rows with the same school_id_giga are present, get only the row of the latest version.
+    # In case multiple rows with the same school_id_giga are present,
+    # get only the row of the latest version.
     df_passed = df_passed.withColumn(
         "row_number",
         f.row_number().over(
