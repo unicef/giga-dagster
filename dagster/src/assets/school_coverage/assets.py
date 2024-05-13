@@ -306,6 +306,10 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
+    if coverage_bronze.count() == 0:
+        context.log.warning("Skipping staging as there are no passing bronze rows")
+        return Output(None)
+
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
