@@ -224,9 +224,7 @@ def school_master_geolocation__admin_delete_rows_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = (
-        f"{constants.staging_folder}/delete-row-ids/{DOMAIN_DATASET_TYPE}"
-    )
+    source_directory = f"{constants.staging_folder}/delete-row-ids"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True

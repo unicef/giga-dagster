@@ -219,14 +219,12 @@ def school_master_coverage__post_manual_checks_sensor(
     job=school_master_coverage__admin_delete_rows_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_master_geolocation__admin_delete_rows_sensor(
+def school_master_coverage__admin_delete_rows_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = (
-        f"{constants.staging_folder}/delete-row-ids/{DOMAIN_DATASET_TYPE}"
-    )
+    source_directory = f"{constants.staging_folder}/delete-row-ids"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
@@ -247,9 +245,9 @@ def school_master_geolocation__admin_delete_rows_sensor(
             country_code = filename_components.country_code
 
             ops_destination_mapping = {
-                "geolocation_delete_staging": OpDestinationMapping(
+                "coverage_delete_staging": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.RAW,
                 ),
