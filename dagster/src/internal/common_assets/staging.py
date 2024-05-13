@@ -1,3 +1,5 @@
+import enum
+
 from delta import DeltaTable
 from icecream import ic
 from models.approval_requests import ApprovalRequest
@@ -14,6 +16,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db import get_db_context
 from src.utils.delta import (
+    build_deduped_delete_query,
     build_deduped_merge_query,
     create_delta_table,
     create_schema,
@@ -46,6 +49,11 @@ def get_files_for_review(
     return files_for_review
 
 
+class StagingChangeTypeEnum(enum.Enum):
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+
 class StagingStep:
     def __init__(
         self,
@@ -53,11 +61,13 @@ class StagingStep:
         config: FileConfig,
         adls_file_client: ADLSFileClient,
         spark: SparkSession,
+        change_type: StagingChangeTypeEnum,
     ):
         self.context = context
         self.config = config
         self.adls_file_client = adls_file_client
         self.spark = spark
+        self.change_type = change_type
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
@@ -88,26 +98,34 @@ class StagingStep:
                 self.create_staging_table_from_silver()
 
             # If silver table exists and staging table exists, merge files for review to existing staging table
-            df = self.standard_transforms(upstream_df)
-            self.sync_schema()
-            staging = self.upsert_staging(df)
+            if self.change_type != StagingChangeTypeEnum.DELETE:
+                staging = self.standard_transforms(upstream_df)
+                self.sync_schema()
+                staging = self.upsert_rows(staging)
+            else:
+                self.sync_schema()
+                staging = self.delete_rows(staging)
+
         else:
             # If silver table does not exist, merge files for review into one spark dataframe
-            staging = self.standard_transforms(upstream_df)
+            if self.change_type == StagingChangeTypeEnum.UPDATE:
+                staging = self.standard_transforms(upstream_df)
 
-            if self.staging_table_exists:
-                self.sync_schema()
-                staging = self.upsert_staging(staging)
+                if self.staging_table_exists:
+                    self.sync_schema()
+                    staging = self.upsert_rows(staging)
+                else:
+                    self.create_empty_staging_table()
+                    (
+                        staging.write.option("mergeSchema", "true")
+                        .format("delta")
+                        .mode("append")
+                        .saveAsTable(self.staging_table_name)
+                    )
+
+                self.context.log.info(f"Full {staging.count()=}")
             else:
-                self.create_empty_staging_table()
-                (
-                    staging.write.option("mergeSchema", "true")
-                    .format("delta")
-                    .mode("append")
-                    .saveAsTable(self.staging_table_name)
-                )
-
-            self.context.log.info(f"Full {staging.count()=}")
+                pass  # Cannot delete rows when silver and staging tables do not exist
 
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
         with get_db_context() as db:
@@ -215,7 +233,7 @@ class StagingStep:
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
 
-    def upsert_staging(self, df: sql.DataFrame):
+    def upsert_rows(self, df: sql.DataFrame):
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
         update_columns = [
             c.name for c in self.schema_columns if c.name != self.primary_key
@@ -226,6 +244,21 @@ class StagingStep:
             self.primary_key,
             update_columns,
         )
+
+        if query is not None:
+            execute_query_with_error_handler(
+                self.spark,
+                query,
+                self.staging_tier_schema_name,
+                self.country_code,
+                self.context,
+            )
+        return staging_dt.toDF()
+
+    def delete_rows(self, df: sql.DataFrame):
+        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
+
+        query = build_deduped_delete_query(staging_dt, df, self.primary_key)
 
         if query is not None:
             execute_query_with_error_handler(
