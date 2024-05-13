@@ -1,12 +1,13 @@
 from datetime import datetime
 from pathlib import Path
 
-from src.exceptions import FileExtensionValidationException, FilenameValidationException
+from src.exceptions import FilenameValidationException
 from src.schemas.filename_components import FilenameComponents
 
 EXPECTED_GEOLOCATION_COMPONENTS = 4
 EXPECTED_COVERAGE_COMPONENTS = 5
 EXPECTED_APPROVED_IDS_COMPONENTS = 3
+EXPECTED_DELETE_IDS_COMPONENTS = 2
 
 
 def deconstruct_school_master_filename_components(filepath: str):
@@ -44,13 +45,16 @@ def deconstruct_school_master_filename_components(filepath: str):
             timestamp=timestamp,
             country_code=country_code,
         )
-    elif len(splits) == EXPECTED_APPROVED_IDS_COMPONENTS and not path.parts[
-        -1
-    ].endswith(".json"):
-        raise FileExtensionValidationException(
-            f"Expected {EXPECTED_APPROVED_IDS_COMPONENTS} components for filename `{path.name}`; got {len(splits)} and missing `.json` extension"
+    elif len(splits) == EXPECTED_DELETE_IDS_COMPONENTS and path.parts[-1].endswith(
+        ".json"
+    ):
+        country_code, timestamp = splits
+        timestamp = datetime.strptime(timestamp, expected_timestamp_format)
+        return FilenameComponents(
+            id="",
+            timestamp=timestamp,
+            country_code=country_code,
         )
-
     else:
         raise ValueError(
             f"Expected {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
