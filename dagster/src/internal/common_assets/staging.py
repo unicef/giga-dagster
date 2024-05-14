@@ -91,20 +91,20 @@ class StagingStep:
         self.silver_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.silver_tier_schema_name}.db/{self.country_code.lower()}"
         self.staging_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.staging_tier_schema_name}.db/{self.country_code.lower()}"
 
-    def __call__(self, upstream_df: sql.DataFrame):
+    def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
         if self.silver_table_exists:
             if not self.staging_table_exists:
                 # If silver table exists and no staging table exists, clone it to staging
                 self.create_staging_table_from_silver()
 
+            self.sync_schema()
+
             # If silver table exists and staging table exists, merge files for review to existing staging table
             if self.change_type != StagingChangeTypeEnum.DELETE:
                 staging = self.standard_transforms(upstream_df)
-                self.sync_schema()
                 staging = self.upsert_rows(staging)
             else:
-                self.sync_schema()
-                staging = self.delete_rows(staging)
+                staging = self.delete_rows(upstream_df)
 
         else:
             # If silver table does not exist, merge files for review into one spark dataframe
@@ -125,7 +125,7 @@ class StagingStep:
 
                 self.context.log.info(f"Full {staging.count()=}")
             else:
-                pass  # Cannot delete rows when silver and staging tables do not exist
+                return None  # Cannot delete rows when silver and staging tables do not exist
 
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
         with get_db_context() as db:
@@ -255,7 +255,7 @@ class StagingStep:
             )
         return staging_dt.toDF()
 
-    def delete_rows(self, df: sql.DataFrame):
+    def delete_rows(self, df: list[str]):
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
 
         query = build_deduped_delete_query(staging_dt, df, self.primary_key)

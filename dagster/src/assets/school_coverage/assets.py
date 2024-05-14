@@ -345,18 +345,12 @@ def coverage_delete_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    s: SparkSession = spark.spark_session
     delete_row_ids = adls_file_client.download_json(config.filepath)
 
-    schema_reference = get_schema_columns_datahub(
-        s,
-        config.metastore_schema,
-    )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
         spark=spark,
-        schema_reference=schema_reference,
     )
     staging_step = StagingStep(
         context,

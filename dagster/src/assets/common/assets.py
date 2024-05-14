@@ -167,13 +167,14 @@ def silver(
 
     inserts = df_passed.filter(df_passed["_change_type"] == "insert")
     inserts = inserts.select(*[c.name for c in schema_columns])
-    updates = df_passed.filter(df_passed["_change_type"] == "update")
+    updates = df_passed.filter(df_passed["_change_type"] == "update_postimage")
     updates = updates.select(*[c.name for c in schema_columns])
     deletes = df_passed.filter(df_passed["_change_type"] == "delete")
     deletes = deletes.select(*[c.name for c in schema_columns])
 
     silver = silver.unionAll(inserts)
-    silver = silver.filter(~f.col(primary_key).isin(deletes.select(primary_key)))
+    delete_ids = [row[primary_key] for row in deletes.select(primary_key).collect()]
+    silver = silver.filter(~f.col(primary_key).isin(delete_ids))
     silver = updates.unionAll(silver).dropDuplicates([primary_key])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
