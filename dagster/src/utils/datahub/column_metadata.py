@@ -5,7 +5,7 @@ from sqlalchemy import select
 from dagster import OpExecutionContext
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import settings
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 

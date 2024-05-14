@@ -12,7 +12,7 @@ from src.constants import DataTier
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.delta import (
     build_deduped_merge_query,
     create_delta_table,

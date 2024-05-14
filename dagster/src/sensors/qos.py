@@ -9,7 +9,7 @@ from src.constants import DataTier, constants
 from src.jobs.qos import qos_school_list__automated_data_checks_job
 from src.schemas.qos import SchoolListConfig
 from src.settings import settings
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DOMAIN = "qos"
