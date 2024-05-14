@@ -74,7 +74,7 @@ def coverage_data_quality_results(
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
     with get_db_context() as db:
@@ -140,7 +140,7 @@ def coverage_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
-    yield Output(
+    return Output(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
@@ -194,7 +194,7 @@ def coverage_dq_passed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -209,7 +209,7 @@ def coverage_dq_passed_rows(
     )
 
     df_pandas = df_passed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -224,7 +224,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -240,7 +240,7 @@ def coverage_dq_failed_rows(
     )
 
     df_pandas = df_failed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -255,7 +255,7 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
     silver_table_name = config.country_code.lower()
@@ -289,7 +289,7 @@ def coverage_bronze(
     )
 
     df_pandas = df.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),

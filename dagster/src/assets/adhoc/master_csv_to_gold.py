@@ -51,7 +51,7 @@ def adhoc__load_master_csv(
         config=config,
         spark=spark,
     )
-    yield Output(raw, metadata=get_output_metadata(config))
+    return Output(raw, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -60,7 +60,7 @@ def adhoc__master_data_transforms(
     adhoc__load_master_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     logger = ContextLoggerWithLoguruFallback(context)
 
     s: SparkSession = spark.spark_session
@@ -93,7 +93,7 @@ def adhoc__master_data_transforms(
     )
 
     df_pandas = sdf.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -107,7 +107,7 @@ def adhoc__df_duplicates(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     df_duplicates = adhoc__master_data_transforms.where(
         adhoc__master_data_transforms.row_num != 1,
     )
@@ -116,7 +116,7 @@ def adhoc__df_duplicates(
     context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
 
     df_pandas = df_duplicates.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -130,7 +130,7 @@ def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     logger = ContextLoggerWithLoguruFallback(context)
 
     filepath = config.filepath
@@ -153,7 +153,7 @@ def adhoc__master_data_quality_checks(
     )
 
     df_pandas = dq_checked.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -167,7 +167,7 @@ def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
         f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}",
@@ -180,7 +180,7 @@ def adhoc__master_dq_checks_passed(
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
 
     df_pandas = dq_passed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -194,14 +194,14 @@ def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> Output[pd.DataFrame]:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
         f"Extract failed rows: {len(dq_failed.columns)=}, {dq_failed.count()=}",
     )
 
     df_pandas = dq_failed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -237,7 +237,7 @@ def adhoc__publish_master_to_gold(
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     gold = transform_types(
         adhoc__master_dq_checks_passed,
         config.metastore_schema,
@@ -256,7 +256,7 @@ def adhoc__publish_master_to_gold(
         schema_reference=schema_reference,
     )
 
-    yield Output(
+    return Output(
         gold,
         metadata={
             **get_output_metadata(config),

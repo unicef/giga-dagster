@@ -88,7 +88,7 @@ def build_deduped_merge_query(
 
     updates_df = incoming_ids.join(master_ids, primary_key, "inner")
     inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
-    deletes_df = incoming_ids.join(master_ids, primary_key, "right_anti")
+    deletes_df = master_ids.join(incoming_ids, primary_key, "left_anti")
 
     # TODO: Might need to specify a predictable order, although by default it's insertion order
     updates_signature = updates_df.agg(
