@@ -2,6 +2,7 @@ from datetime import datetime
 
 import country_converter as coco
 from dagster_pyspark import PySparkResource
+from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -32,10 +33,17 @@ async def send_master_release_notes(
     s: SparkSession = spark.spark_session
     country_code = config.country_code
 
+    dt = DeltaTable.forName(s, f"school_master.{country_code}")
+    latest_version = (dt.history().orderBy(f.col("version").desc()).first()).version
+    if latest_version is None:
+        latest_version = 0
+
+    context.log.info(f"{latest_version=}")
+
     cdf = (
         s.read.format("delta")
         .option("readChangeFeed", "true")
-        .option("startingVersion", 0)
+        .option("startingVersion", latest_version)
         .table(f"school_master.{country_code}")
     )
 
@@ -44,28 +52,23 @@ async def send_master_release_notes(
         return None
 
     added = cdf.filter(f.col("_change_type") == "insert").count()
-    modified = cdf.filter(f.col("_change_type") == "update_preimage").count()
+    modified = cdf.filter(f.col("_change_type") == "update_postimage").count()
+    deleted = cdf.filter(f.col("_change_type") == "delete").count()
     country = coco.convert(country_code, to="name_short")
 
-    detail = s.sql(f"DESCRIBE DETAIL `school_master`.`{country_code}`").first()
+    detail = dt.detail().first()
     if detail is None:
         update_date = datetime.now()
     else:
-        update_date = detail["lastModified"]
-
-    history = s.sql(f"DESCRIBE HISTORY `school_master`.`{country_code}`")
-    version = history.select(f.max("version").alias("version")).first()
-    if version is None:
-        version = 0
-    else:
-        version = version["version"]
+        update_date = detail.lastModified
 
     props = EmailProps(
-        added=added,
         country=country,
+        added=added,
         modified=modified,
+        deleted=deleted,
         updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
-        version=version,
+        version=latest_version,
         rows=rows,
     )
 

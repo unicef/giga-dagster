@@ -3,6 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
+from datahub.metadata.schema_classes import FabricTypeClass
 from pydantic import BaseSettings, PostgresDsn
 
 
@@ -93,6 +94,15 @@ class Settings(BaseSettings):
             if self.DEPLOY_ENV == DeploymentEnvironment.LOCAL
             else self.DEPLOY_ENV
         )
+
+    @property
+    def DATAHUB_ENVIRONMENT(self) -> FabricTypeClass:
+        if self.DEPLOY_ENV == DeploymentEnvironment.STAGING:
+            return FabricTypeClass.STG
+        elif self.DEPLOY_ENV == DeploymentEnvironment.PRODUCTION:
+            return FabricTypeClass.PROD
+        else:
+            return FabricTypeClass.DEV
 
     @property
     def AZURE_BLOB_SAS_HOST(self) -> str:

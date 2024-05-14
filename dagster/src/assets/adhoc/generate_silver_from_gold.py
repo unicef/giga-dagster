@@ -58,12 +58,16 @@ def join_gold(
         tier=DataTier.GOLD,
     )
     adhoc__publish_master_to_gold = adhoc__publish_master_to_gold.drop("signature")
-    adhoc__publish_reference_to_gold = adhoc__publish_reference_to_gold.drop(
-        "signature"
-    )
     df_one_gold = adhoc__publish_master_to_gold.join(
         adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
     )
+    columns_with_null = [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "school_id_govt_type",
+        "education_level_govt",
+    ]
+    df_one_gold = df_one_gold.fillna("Unknown", columns_with_null)
     return df_one_gold
 
 
@@ -81,6 +85,7 @@ def adhoc__generate_silver_geolocation(
     schema_columns = get_schema_columns(s, schema_name)
 
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+    df_silver = df_silver.drop("signature")
     df_silver = transform_types(df_silver, schema_name, context)
     df_silver = compute_row_hash(df_silver)
 
@@ -107,6 +112,7 @@ def adhoc__generate_silver_coverage(
     schema_columns = get_schema_columns(s, schema_name)
 
     df_silver = df_one_gold.select([c.name for c in schema_columns])
+    df_silver = df_silver.drop("signature")
     df_silver = transform_types(df_silver, schema_name, context)
     df_silver = compute_row_hash(df_silver)
 
@@ -117,3 +123,40 @@ def adhoc__generate_silver_coverage(
             "preview": get_table_preview(df_silver),
         },
     )
+
+
+if __name__ == "__main__":
+    from src.utils.spark import get_spark_session
+
+    s = get_spark_session()
+
+    def test_join_gold(
+        # config: FileConfig,
+        s: SparkSession = s,
+    ) -> Output[sql.DataFrame]:
+        adhoc__publish_master_to_gold = get_df(
+            s,
+            schema_name="school_master",
+            country_code="BEN",  # config.country_code,
+            tier=DataTier.GOLD,
+        )
+        adhoc__publish_reference_to_gold = get_df(
+            s,
+            schema_name="school_reference",
+            country_code="BEN",  # config.country_code,
+            tier=DataTier.GOLD,
+        )
+        adhoc__publish_master_to_gold = adhoc__publish_master_to_gold.drop("signature")
+        df_one_gold = adhoc__publish_master_to_gold.join(
+            adhoc__publish_reference_to_gold, on="school_id_giga", how="left"
+        )
+        columns_with_null = [
+            "cellular_coverage_availability",
+            "cellular_coverage_type",
+            "school_id_govt_type",
+            "education_level_govt",
+        ]
+        df_one_gold = df_one_gold.fillna("Unknown", columns_with_null)
+        return df_one_gold
+
+    gold = test_join_gold()

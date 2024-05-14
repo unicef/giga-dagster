@@ -158,3 +158,8 @@ class ADLSFileClient(ConfigurableResource):
         renamed_file_client = file_client.rename_file(new_name=new_path)
         print(f"File {old_filepath} renamed to {new_path}")
         return renamed_file_client
+
+    @staticmethod
+    def delete(filepath: str, *, is_directory=False):
+        file_client = _adls.get_file_client(file_path=filepath)
+        file_client.delete_file(recursive=is_directory)

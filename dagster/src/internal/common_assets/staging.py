@@ -96,6 +96,7 @@ class StagingStep:
             staging = self.standard_transforms(upstream_df)
 
             if self.staging_table_exists:
+                self.sync_schema()
                 staging = self.upsert_staging(staging)
             else:
                 self.create_empty_staging_table()
@@ -116,7 +117,12 @@ class StagingStep:
                     (ApprovalRequest.country == self.country_code)
                     & (ApprovalRequest.dataset == formatted_dataset)
                 )
-                .values(enabled=True),
+                .values(
+                    {
+                        ApprovalRequest.enabled: True,
+                        ApprovalRequest.is_merge_processing: False,
+                    }
+                ),
             )
             db.commit()
 
@@ -200,6 +206,10 @@ class StagingStep:
                 .mode("append")
                 .saveAsTable(self.staging_table_name)
             )
+            self.reload_schema()
+
+    def reload_schema(self):
+        self.schema_columns = get_schema_columns(self.spark, self.schema_name)
 
     def standard_transforms(self, df: sql.DataFrame):
         df = transform_types(df, self.schema_name, self.context)

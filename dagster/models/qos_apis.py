@@ -127,5 +127,8 @@ class SchoolConnectivity(ApiConfiguration):
     response_date_format: Mapped[str] = mapped_column(
         nullable=False, default="%Y-%m-%d"
     )
-    has_school_id_giga: Mapped[bool] = mapped_column(nullable=True, default=False)
-    school_id_giga_govt_key: Mapped[str] = mapped_column(nullable=False, default="")
+
+    has_school_id_giga: Mapped[bool] = mapped_column(nullable=False, default=True)
+    school_id_giga_govt_key: Mapped[str] = mapped_column(
+        nullable=False, default="school_id_giga"
+    )

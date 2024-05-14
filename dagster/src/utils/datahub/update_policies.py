@@ -1,4 +1,5 @@
 import json
+from time import sleep
 from urllib import parse
 
 import country_converter as cc
@@ -49,7 +50,7 @@ def policy_mutation_query(group_urn: str) -> str:
 
 def create_policy_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
-    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+    country_name = group_name.split("-")[0]
     dataset_type = group_name.split(" ")[1].lower()
     datasets_urns_list = list_datasets_by_filter(
         tag=country_name, dataset_type=dataset_type
@@ -156,6 +157,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
             datahub_graph_client=datahub_graph_client,
             context=context,
         )
+        sleep(7)
 
 
 def update_policy_for_group(
@@ -197,7 +199,7 @@ def update_policy_base(
 ) -> None:
     logger = get_context_with_fallback_logger(context)
 
-    country_name = group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+    country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1].split("-")[0])
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
@@ -206,22 +208,16 @@ def update_policy_base(
             datahub_graph_client.execute_graphql(query=query)
             logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
         except Exception as error:
-            logger.warning(error)
-            try:
-                query = create_policy_query(group_urn=group_urn)
-                logger.info(f"CREATING DATAHUB POLICY: {group_urn}...")
-                logger.info(query)
-                datahub_graph_client.execute_graphql(query=query)
-                logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
-            except Exception:
-                logger.error(error)
+            logger.error(error)
+            sentry_sdk.capture_exception(error=error)
+            if context is not None:
                 log_op_context(context)
-                sentry_sdk.capture_exception(error=error)
     else:
         warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
         logger.warning(warning_message)
-        log_op_context(context)
         sentry_sdk.capture_message(warning_message)
+        if context is not None:
+            log_op_context(context)
 
 
 if __name__ == "__main__":

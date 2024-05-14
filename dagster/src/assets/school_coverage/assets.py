@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pandas as pd
@@ -36,10 +37,15 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db import get_db_context
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.schema import (
+    construct_full_table_name,
+    get_schema_columns,
+    get_schema_columns_datahub,
+)
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
@@ -87,6 +93,10 @@ def coverage_data_quality_results(
         pdf = pandas_loader(buffer, config.filepath)
 
     source = config.filename_components.source
+    schema_name = config.metastore_schema
+    id = config.filename_components.id
+    country_code = config.country_code
+    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
@@ -103,6 +113,25 @@ def coverage_data_quality_results(
     )
 
     config.metadata.update({"column_mapping": column_mapping})
+
+    dq_results_schema_name = f"{schema_name}_{source}_dq_results"
+    table_name = f"{id}_{country_code}_{current_timestamp}"
+    schema_columns = dq_results.schema.fields
+    dq_results_table_name = construct_full_table_name(
+        dq_results_schema_name,
+        table_name,
+    )
+
+    create_schema(s, dq_results_schema_name)
+    create_delta_table(
+        s,
+        dq_results_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -277,6 +306,10 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
+    if coverage_bronze.count() == 0:
+        context.log.warning("Skipping staging as there are no passing bronze rows")
+        return Output(None)
+
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
