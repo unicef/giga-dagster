@@ -2,7 +2,6 @@ from datetime import datetime
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from dateutil import parser
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import (
@@ -10,6 +9,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.functions import udf
+from pyspark.sql.types import StructType
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -32,6 +32,7 @@ from src.utils.qos_apis.school_connectivity import query_school_connectivity_dat
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
+    get_schema_columns,
     get_schema_columns_datahub,
 )
 
@@ -74,7 +75,9 @@ def qos_school_connectivity_raw(
             ][field_to_query]
 
             unique_school_ids = (
-                silver.select(silver(silver_column_to_query)).distinct().collect()
+                (silver.select(silver_column_to_query))
+                .rdd.flatMap(lambda x: x)
+                .collect()
             )
 
             with get_db_context() as database_session:
@@ -104,16 +107,6 @@ def qos_school_connectivity_raw(
     return Output(df, metadata=get_output_metadata(config))
 
 
-@udf
-def parse_dates(value: str, database_data: dict[str, str]) -> str:
-    if database_data["response_date_format"] == "ISO8601":
-        return parser.parse(value).strftime("%Y-%m-%d-%H%M%S")
-    else:
-        return datetime.strptime(value, database_data["response_date_format"]).strftime(
-            "%Y-%m-%d-%H%M%S"
-        )
-
-
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_connectivity_bronze(
     context: OpExecutionContext,
@@ -132,45 +125,62 @@ def qos_school_connectivity_bronze(
         silver_tier_schema_name, config.country_code
     )
 
-    bronze = sql.DataFrame()
+    schema_columns = get_schema_columns(s, "qos")
+    schema = StructType(schema_columns)
+    bronze = s.createDataFrame([], schema=schema)
 
     ## Filter out school connectivity data for schools not in the school geolocation silver table. Add school_id_giga to school_connectivity if it does not exist yet
     if s.catalog.tableExists(silver_table_name):
         if database_data["has_school_id_giga"]:
             silver_ids = (
                 DeltaTable.forName(s, silver_table_name).toDF().select("school_id_giga")
+            ).collect()
+            bronze = qos_school_connectivity_raw.filter(
+                f.col(database_data["school_id_giga_govt_key"]).isin(silver_ids)
             )
-            bronze = qos_school_connectivity_raw.join(
-                silver_ids,
-                qos_school_connectivity_raw[database_data["school_id_giga_govt_key"]]
-                == silver_ids["school_id_giga"],
-                "inner",
-            )
-            bronze = bronze.drop(bronze[database_data["school_id_giga_govt_key"]])
         else:
             silver_ids = (
                 DeltaTable.forName(s, silver_table_name)
                 .toDF()
                 .select("school_id_govt", "school_id_giga")
             )
-            bronze = qos_school_connectivity_raw.join(
-                silver_ids,
-                qos_school_connectivity_raw[database_data["school_id_giga_govt_key"]]
-                == silver_ids["school_id_govt"],
-                "inner",
+            bronze = qos_school_connectivity_raw.filter(
+                f.col(database_data["school_id_giga_govt_key"]).isin(
+                    silver_ids.select("school_id_govt").collect()
+                )
             )
-            bronze = bronze.drop("school_id_govt")
+            bronze = bronze.join(silver_ids, "school_id_govt", "left")
 
         context.log.info(
-            f"qos raw: {len(qos_school_connectivity_raw.toPandas())}, qos bronze: {len(qos_school_connectivity_bronze)}"
+            f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
         )
+
+    @udf
+    def parse_dates(value: str) -> str:
+        return datetime.strptime(
+            value, database_data["response_date_format"]
+        ).isoformat()
 
     if not bronze.isEmpty:
         ## Transform the time partition column to the correct format
-        bronze = bronze.withColumn(
-            database_data["response_date_key"],
-            parse_dates(f.col(database_data["response_date_key"]), database_data),
-        )
+        if database_data["response_date_format"] == "ISO8601":
+            # no transform needed actually, this is what we expect
+            if database_data["response_date_key"] != "timestamp":
+                bronze = (
+                    bronze.withColumn(
+                        "timestamp", f.col(database_data["response_date_key"])
+                    ),
+                )
+        elif database_data["response_date_format"] == "timestamp":
+            bronze = bronze.withColumn(
+                "timestamp",
+                f.from_unixtime(f.col(database_data["response_date_key"])),
+            )
+        else:
+            bronze = bronze.withColumn(
+                "timestamp",
+                parse_dates(f.col(database_data["response_date_key"])),
+            )
 
         ## Add gigasync_id column
         column_actions = {
