@@ -51,7 +51,7 @@ def adhoc__load_master_csv(
         config=config,
         spark=spark,
     )
-    return Output(raw, metadata=get_output_metadata(config))
+    yield Output(raw, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
