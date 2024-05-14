@@ -55,7 +55,7 @@ def qos_school_list__new_apis_sensor(
 
             row_data = SchoolListConfig(**config)
 
-            country_code = "RWA"
+            country_code = row_data.country
             metastore_schema = "school_geolocation"
             stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}"
 
@@ -166,7 +166,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
 
         row_data = SchoolConnectivityConfig(**school_connectivity_config)
 
-        country_code = "RWA"
+        country_code = row_data.school_list.country
         metastore_schema = "qos"
         stem = f"{row_data.school_list.name.replace(' ', '-')}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}"
 
