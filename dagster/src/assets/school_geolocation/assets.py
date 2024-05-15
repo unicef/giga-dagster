@@ -14,7 +14,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingStep
+from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
@@ -296,8 +296,41 @@ def geolocation_staging(
         config,
         adls_file_client,
         spark.spark_session,
+        StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(geolocation_dq_passed_rows)
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(staging),
+        },
+    )
+
+
+@asset
+def geolocation_delete_staging(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    delete_row_ids = adls_file_client.download_json(config.filepath)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.DELETE,
+    )
+    staging = staging_step(delete_row_ids)
 
     return Output(
         None,

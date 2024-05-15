@@ -88,6 +88,7 @@ def build_deduped_merge_query(
 
     updates_df = incoming_ids.join(master_ids, primary_key, "inner")
     inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
+    deletes_df = master_ids.join(incoming_ids, primary_key, "left_anti")
 
     # TODO: Might need to specify a predictable order, although by default it's insertion order
     updates_signature = updates_df.agg(
@@ -103,6 +104,7 @@ def build_deduped_merge_query(
 
     has_updates = master_to_update_signature != updates_signature
     has_insertions = inserts_df.count() > 0
+    has_deletions = deletes_df.count() > 0
 
     if not (ic(has_updates) or ic(has_insertions)):
         return None
@@ -125,5 +127,32 @@ def build_deduped_merge_query(
         )
     if has_insertions:
         query = query.whenNotMatchedInsertAll()
+    if has_deletions:
+        query = query.whenNotMatchedBySourceDelete()
+
+    return query
+
+
+def build_deduped_delete_query(
+    master: DeltaTable,
+    delete_ids: list[str],
+    primary_key: str,
+) -> DeltaMergeBuilder | None:
+    master_df = master.toDF()
+
+    deletes_df = master_df.filter(master_df[primary_key].isin(delete_ids))
+
+    has_deletes = deletes_df.count() > 0
+
+    if not (ic(has_deletes)):
+        return None
+
+    query = master.alias("master").merge(
+        deletes_df.alias("deletes"),
+        f"master.{primary_key} = deletes.{primary_key}",
+    )
+
+    if has_deletes:
+        query = query.whenMatchedDelete()
 
     return query

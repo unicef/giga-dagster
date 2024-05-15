@@ -20,7 +20,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
-from src.utils.metadata import get_output_metadata
+from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 from src.utils.spark import compute_row_hash, transform_types
@@ -50,7 +50,7 @@ def adhoc__reference_data_quality_checks(
     adhoc__load_reference_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     filepath = config.filepath
     filename = filepath.split("/")[-1]
@@ -76,9 +76,12 @@ def adhoc__reference_data_quality_checks(
 
     dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
-    yield Output(
+    return Output(
         dq_checked.toPandas(),
-        metadata=get_output_metadata(config),
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(dq_checked),
+        },
     )
 
 
@@ -87,7 +90,7 @@ def adhoc__reference_dq_checks_passed(
     context: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     dq_passed = extract_dq_passed_rows(
         adhoc__reference_data_quality_checks,
         "reference",
@@ -97,9 +100,13 @@ def adhoc__reference_dq_checks_passed(
         f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256),
     )
     context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
-    yield Output(
-        dq_passed.toPandas(),
-        metadata=get_output_metadata(config),
+    df_pandas = dq_passed.toPandas()
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
     )
 
 
@@ -108,14 +115,17 @@ def adhoc__reference_dq_checks_failed(
     context: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     dq_failed = extract_dq_failed_rows(
         adhoc__reference_data_quality_checks,
         "reference",
     )
-    yield Output(
+    return Output(
         dq_failed.toPandas(),
-        metadata=get_output_metadata(config),
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(dq_failed.toPandas()),
+        },
     )
 
 
@@ -125,7 +135,7 @@ def adhoc__publish_reference_to_gold(
     config: FileConfig,
     adhoc__reference_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     gold = transform_types(
         adhoc__reference_dq_checks_passed,
         config.metastore_schema,
@@ -144,4 +154,7 @@ def adhoc__publish_reference_to_gold(
         schema_reference=schema_reference,
     )
 
-    yield Output(gold, metadata=get_output_metadata(config))
+    return Output(
+        gold,
+        metadata={**get_output_metadata(config), "preview": get_table_preview(gold)},
+    )

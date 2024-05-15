@@ -16,7 +16,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingStep
+from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
@@ -74,7 +74,7 @@ def coverage_data_quality_results(
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
     with get_db_context() as db:
@@ -140,7 +140,7 @@ def coverage_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
-    yield Output(
+    return Output(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
@@ -157,7 +157,7 @@ def coverage_data_quality_results_summary(
     coverage_raw: bytes,
     coverage_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
-) -> dict | list[dict]:
+) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
     with BytesIO(coverage_raw) as buffer:
@@ -185,7 +185,7 @@ def coverage_data_quality_results_summary(
         context=context,
     )
 
-    yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
+    return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -194,7 +194,7 @@ def coverage_dq_passed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -209,7 +209,7 @@ def coverage_dq_passed_rows(
     )
 
     df_pandas = df_passed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -224,7 +224,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -240,7 +240,7 @@ def coverage_dq_failed_rows(
     )
 
     df_pandas = df_failed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -255,7 +255,7 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
     silver_table_name = config.country_code.lower()
@@ -289,7 +289,7 @@ def coverage_bronze(
     )
 
     df_pandas = df.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -325,8 +325,41 @@ def coverage_staging(
         config,
         adls_file_client,
         spark.spark_session,
+        StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(coverage_bronze)
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(staging),
+        },
+    )
+
+
+@asset
+def coverage_delete_staging(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    delete_row_ids = adls_file_client.download_json(config.filepath)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.DELETE,
+    )
+    staging = staging_step(delete_row_ids)
 
     return Output(
         None,

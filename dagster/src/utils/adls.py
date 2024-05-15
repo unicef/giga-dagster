@@ -120,7 +120,7 @@ class ADLSFileClient(ConfigurableResource):
     ) -> sql.DataFrame:
         return DeltaTable.forName(spark, table_name).toDF()
 
-    def download_json(self, filepath: str) -> dict:
+    def download_json(self, filepath: str) -> dict | list:
         file_client = _adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
