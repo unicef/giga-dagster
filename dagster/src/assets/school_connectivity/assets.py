@@ -25,7 +25,7 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.qos_apis.school_connectivity import query_school_connectivity_data
