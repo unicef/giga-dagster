@@ -129,13 +129,19 @@ def school_master__gold_csv_to_deltatable_sensor(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/failed/{stem}.csv",
                 metastore_schema=master_metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
+                tier=DataTier.MANUAL_REJECTED,
             ),
             "adhoc__reference_dq_checks_failed": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/full/{reference_stem}.csv",
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-reference/failed/{reference_stem}.csv",
                 metastore_schema=reference_metastore_schema,
                 tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "adhoc__generate_silver_geolocation": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                metastore_schema="school_geolocation",
+                tier=DataTier.SILVER,
             ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",

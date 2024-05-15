@@ -57,7 +57,8 @@ def adhoc__load_master_csv(
 
 
 @asset(
-    io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, output_required=False
+    io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value,
+    output_required=False,
 )
 def adhoc__load_reference_csv(
     context: OpExecutionContext,
@@ -348,6 +349,56 @@ def adhoc__master_dq_checks_summary(
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+def adhoc__generate_silver_geolocation(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    adhoc__master_dq_checks_passed: sql.DataFrame,
+    adhoc__reference_dq_checks_passed: Optional[sql.DataFrame],
+) -> Output[sql.DataFrame]:
+    s: SparkSession = spark.spark_session
+
+    df_one_gold = adhoc__master_dq_checks_passed
+    if adhoc__reference_dq_checks_passed is not None:
+        df_one_gold = df_one_gold.join(
+            adhoc__reference_dq_checks_passed, "school_id_giga", "left"
+        )
+
+    schema_name = "school_geolocation"
+    schema_columns = get_schema_columns(s, schema_name)
+
+    df_silver = df_one_gold.select([c.name for c in schema_columns])
+    columns_with_null = [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "school_id_govt_type",
+        "education_level_govt",
+    ]
+    df_silver = df_silver.fillna("Unknown", columns_with_null)
+    df_silver = transform_types(df_silver, schema_name, context)
+    df_silver = compute_row_hash(df_silver)
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        schema_name,
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
+    return Output(
+        df_silver,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_silver),
+        },
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
