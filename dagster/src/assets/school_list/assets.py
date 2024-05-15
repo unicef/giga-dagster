@@ -18,7 +18,6 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.apis import query_api_data
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -28,6 +27,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.qos_apis.school_list import query_school_list_data
 from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
@@ -44,7 +44,7 @@ def qos_school_list_raw(
     context.log.info(f"Database row: {config.row_data_dict}")
     with get_db_context() as database_session:
         df = pd.DataFrame.from_records(
-            query_api_data(context, database_session, config.row_data_dict),
+            query_school_list_data(context, database_session, config.row_data_dict),
         )
 
     datahub_emit_metadata_with_exception_catcher(
@@ -64,10 +64,14 @@ def qos_school_list_bronze(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
+    database_data = config.row_data_dict
     schema_columns = get_schema_columns(s, config.metastore_schema)
     df, column_mapping = column_mapping_rename(
-        qos_school_list_raw, config.row_data_dict["column_to_schema_mapping"]
+        qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
+
+    columns_to_drop = [x for x in df.columns if x not in schema_columns]
+    df = df.drop(*columns_to_drop)
 
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
@@ -99,12 +103,6 @@ def qos_school_list_data_quality_results(
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
-
     country_code = config.country_code
     dq_results = row_level_checks(
         qos_school_list_bronze,
@@ -114,6 +112,12 @@ def qos_school_list_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+
     return Output(
         dq_pandas,
         metadata={

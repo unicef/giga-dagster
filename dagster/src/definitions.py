@@ -7,6 +7,7 @@ from src.assets import (
     common,
     datahub_assets,
     migrations,
+    school_connectivity,
     school_coverage,
     school_geolocation,
     school_list,
@@ -37,8 +38,11 @@ defs = Definitions(
             group_name=school_list.GROUP_NAME,
         ),
         *load_assets_from_package_module(
-            package_module=common,
-            group_name=common.GROUP_NAME,
+            package_module=school_connectivity,
+            group_name=school_connectivity.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=common, group_name=common.GROUP_NAME
         ),
         *load_assets_from_package_module(
             package_module=datahub_assets,

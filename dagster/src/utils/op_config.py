@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from dagster import Config
 from src.constants import DataTier, constants
 from src.schemas.filename_components import FilenameComponents
-from src.schemas.qos import SchoolListConfig
+from src.schemas.qos import SchoolConnectivityConfig, SchoolListConfig
 from src.utils.datahub.builders import build_dataset_urn
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
@@ -117,7 +117,7 @@ class FileConfig(Config):
         return build_dataset_urn(self.destination_filepath)
 
     @property
-    def row_data_dict(self) -> SchoolListConfig:
+    def row_data_dict(self) -> SchoolListConfig | SchoolConnectivityConfig:
         return json.loads(self.database_data)
 
 

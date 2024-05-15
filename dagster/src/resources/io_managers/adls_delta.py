@@ -103,7 +103,6 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             partition_columns = ["date"]
         else:
             columns = get_schema_columns(spark, columns_schema_name)
-            context.log.info(f"columns: {columns}")
             partition_columns = get_partition_columns(spark, columns_schema_name)
 
         query = (
