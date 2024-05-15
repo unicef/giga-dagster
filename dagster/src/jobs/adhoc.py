@@ -3,18 +3,8 @@ from dagster import define_asset_job
 school_master__convert_gold_csv_to_deltatable_job = define_asset_job(
     name="school_master__convert_gold_csv_to_deltatable_job",
     selection=[
-        "*adhoc__broadcast_master_release_notes",
-        "adhoc__master_dq_checks_failed*",
-        "adhoc__master_dq_checks_summary*",
-        "adhoc__df_duplicates*",
-    ],
-)
-
-school_reference__convert_gold_csv_to_deltatable_job = define_asset_job(
-    name="school_reference__convert_gold_csv_to_deltatable_job",
-    selection=[
-        "*adhoc__publish_reference_to_gold",
-        "adhoc__reference_dq_checks_failed*",
+        "adhoc__load_master_csv*",
+        "adhoc__load_reference_csv*",
     ],
 )
 

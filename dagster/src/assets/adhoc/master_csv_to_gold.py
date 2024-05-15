@@ -1,5 +1,6 @@
 import os
 from io import BytesIO
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -35,6 +36,7 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns, get_schema_columns_datahub
 from src.utils.spark import compute_row_hash, transform_types
 
+from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -46,6 +48,29 @@ def adhoc__load_master_csv(
     spark: PySparkResource,
 ) -> bytes:
     raw = adls_file_client.download_raw(config.filepath)
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+    yield Output(raw, metadata=get_output_metadata(config))
+
+
+@asset(
+    io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, output_required=False
+)
+def adhoc__load_reference_csv(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    config: FileConfig,
+    spark: PySparkResource,
+) -> Optional[bytes]:
+    try:
+        raw = adls_file_client.download_raw(config.filepath)
+    except ResourceNotFoundError as e:
+        context.log.warning(f"Skipping due to no reference data found:\n{e}")
+        return None
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -163,6 +188,50 @@ def adhoc__master_data_quality_checks(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+def adhoc__reference_data_quality_checks(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+    adhoc__load_reference_csv: Optional[bytes] = None,
+) -> Optional[pd.DataFrame]:
+    if adhoc__load_reference_csv is None:
+        return None
+
+    s: SparkSession = spark.spark_session
+    filepath = config.filepath
+    filename = filepath.split("/")[-1]
+    file_stem = os.path.splitext(filename)[0]
+    country_iso3 = file_stem.split("_")[0]
+
+    with BytesIO(adhoc__load_reference_csv) as buffer:
+        buffer.seek(0)
+        df: pd.DataFrame = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
+    df = df.loc[:, ~df.columns.duplicated(keep="first")]
+    df = df.loc[:, ~df.columns.str.contains(r".+\.\d+$")]
+    sdf = s.createDataFrame(df)
+
+    columns = get_schema_columns(s, config.metastore_schema)
+    columns_to_add = {}
+    for column in columns:
+        if column.name not in sdf.columns:
+            columns_to_add[column.name] = f.lit(None).cast(NullType())
+
+    sdf = sdf.withColumns(columns_to_add)
+    context.log.info(f"Renamed {len(columns_to_add)} columns")
+
+    dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
+    dq_checked = transform_types(dq_checked, config.metastore_schema, context)
+    yield Output(
+        dq_checked.toPandas(),
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(dq_checked),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -190,6 +259,34 @@ def adhoc__master_dq_checks_passed(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+def adhoc__reference_dq_checks_passed(
+    context: OpExecutionContext,
+    config: FileConfig,
+    adhoc__reference_data_quality_checks: Optional[sql.DataFrame] = None,
+) -> Optional[pd.DataFrame]:
+    if adhoc__reference_data_quality_checks is None:
+        return None
+
+    dq_passed = extract_dq_passed_rows(
+        adhoc__reference_data_quality_checks,
+        "reference",
+    )
+    dq_passed = dq_passed.withColumn(
+        "signature",
+        f.sha2(f.concat_ws("|", *sorted(dq_passed.columns)), 256),
+    )
+    context.log.info(f"Calculated SHA256 signature for {dq_passed.count()} rows")
+    df_pandas = dq_passed.toPandas()
+    yield Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -206,6 +303,28 @@ def adhoc__master_dq_checks_failed(
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+def adhoc__reference_dq_checks_failed(
+    _: OpExecutionContext,
+    config: FileConfig,
+    adhoc__reference_data_quality_checks: Optional[sql.DataFrame] = None,
+) -> Optional[pd.DataFrame]:
+    if adhoc__reference_data_quality_checks is None:
+        return None
+
+    dq_failed = extract_dq_failed_rows(
+        adhoc__reference_data_quality_checks,
+        "reference",
+    )
+    yield Output(
+        dq_failed.toPandas(),
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(dq_failed.toPandas()),
         },
     )
 
@@ -262,6 +381,40 @@ def adhoc__publish_master_to_gold(
             **get_output_metadata(config),
             "preview": get_table_preview(gold),
         },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+def adhoc__publish_reference_to_gold(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    adhoc__reference_dq_checks_passed: Optional[sql.DataFrame] = None,
+) -> Optional[sql.DataFrame]:
+    if adhoc__reference_dq_checks_passed is None:
+        return None
+
+    gold = transform_types(
+        adhoc__reference_dq_checks_passed,
+        config.metastore_schema,
+        context,
+    )
+    gold = compute_row_hash(gold)
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
+    yield Output(
+        gold,
+        metadata={**get_output_metadata(config), "preview": get_table_preview(gold)},
     )
 
 
