@@ -1,5 +1,6 @@
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
+from sqlalchemy import text
 
 from dagster import Config, DagsterRunStatus, OpExecutionContext, RunsFilter, asset
 
@@ -63,7 +64,7 @@ def admin__test_mlab_db_connection(context: OpExecutionContext):
     from src.utils.db.mlab import get_db_context
 
     with get_db_context() as db:
-        context.log.info(db.execute("SELECT 1"))
+        context.log.info(db.execute(text("SELECT 1")))
 
 
 @asset
@@ -71,4 +72,4 @@ def admin__test_proco_db_connection(context: OpExecutionContext):
     from src.utils.db.proco import get_db_context
 
     with get_db_context() as db:
-        context.log.info(db.execute("SELECT 1"))
+        context.log.info(db.execute(text("SELECT 1")))
