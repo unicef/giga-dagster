@@ -13,7 +13,7 @@ def get_point(longitude: float, latitude: float) -> None | Point:
         return Point(longitude, latitude)
     except Exception as exc:
         logger.error(exc)
-    return None
+    return Point(181, 91)  # non existent coordinates, default value for nulls
 
 
 # Inside based on GADM admin boundaries data (pandas_udf)
