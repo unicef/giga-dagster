@@ -177,6 +177,7 @@ class StagingStep:
         )
 
     def create_staging_table_from_silver(self):
+        self.context.log.info("Creating staging from silver if not exists...")
         silver = (
             DeltaTable.forName(self.spark, self.silver_table_name)
             .alias("silver")
@@ -194,6 +195,7 @@ class StagingStep:
         silver.write.format("delta").mode("append").saveAsTable(self.staging_table_name)
 
     def create_empty_staging_table(self):
+        self.context.log.info("Creating empty staging table...")
         create_schema(self.spark, self.staging_tier_schema_name)
         create_delta_table(
             self.spark,
@@ -206,6 +208,7 @@ class StagingStep:
 
     def sync_schema(self):
         """Update the schema of existing delta tables based on the reference schema delta tables."""
+        self.context.log.info("Checking for schema update...")
         updated_schema = StructType(self.schema_columns)
         updated_columns = sorted(updated_schema.fieldNames())
 
@@ -213,6 +216,7 @@ class StagingStep:
         existing_columns = sorted(existing_df.schema.fieldNames())
 
         if updated_columns != existing_columns:
+            self.context.log.info("Updating schema...")
             empty_data = self.spark.sparkContext.emptyRDD()
             updated_schema_df = self.spark.createDataFrame(
                 data=empty_data, schema=updated_schema
@@ -230,10 +234,12 @@ class StagingStep:
         self.schema_columns = get_schema_columns(self.spark, self.schema_name)
 
     def standard_transforms(self, df: sql.DataFrame):
+        self.context.log.info("Performing standard transforms...")
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
 
     def upsert_rows(self, df: sql.DataFrame):
+        self.context.log.info("Performing upsert...")
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
         update_columns = [
             c.name for c in self.schema_columns if c.name != self.primary_key
@@ -256,6 +262,7 @@ class StagingStep:
         return staging_dt.toDF()
 
     def delete_rows(self, df: list[str]):
+        self.context.log.info("Performing delete...")
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
 
         query = build_deduped_delete_query(staging_dt, df, self.primary_key)
