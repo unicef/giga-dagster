@@ -18,8 +18,3 @@ school_master__generate_mock_table_cdf_job = define_asset_job(
     name="school_master__generate_mock_table_cdf_job",
     selection="*adhoc__generate_v3",
 )
-
-# school_master__generate_silver_job = define_asset_job(
-#     name="school_master__generate_silver_job",
-#     selection=["adhoc__generate_silver_geolocation", "adhoc__generate_silver_coverage"],
-# )
