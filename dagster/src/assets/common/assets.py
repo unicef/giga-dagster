@@ -19,7 +19,7 @@ from src.utils.adls import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig

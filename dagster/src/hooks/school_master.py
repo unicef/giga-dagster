@@ -2,7 +2,7 @@ from models.file_upload import DQStatusEnum, FileUpload
 from sqlalchemy import update
 
 from dagster import HookContext, failure_hook, success_hook
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.op_config import FileConfig
 
 
