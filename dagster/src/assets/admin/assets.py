@@ -56,3 +56,19 @@ def admin__drop_table(
     s: SparkSession = spark.spark_session
     s.sql(f"DROP TABLE IF EXISTS {config.schema_name}.{config.table_name}")
     context.log.info(f"Dropped table {config.schema_name}.{config.table_name}")
+
+
+@asset
+def admin__test_mlab_db_connection(context: OpExecutionContext):
+    from src.utils.db.mlab import get_db_context
+
+    with get_db_context() as db:
+        context.log.info(db.execute("SELECT 1"))
+
+
+@asset
+def admin__test_proco_db_connection(context: OpExecutionContext):
+    from src.utils.db.proco import get_db_context
+
+    with get_db_context() as db:
+        context.log.info(db.execute("SELECT 1"))
