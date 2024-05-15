@@ -15,7 +15,7 @@ class MlabSchools(BaseModel):
     )
 
     school_id_govt: Mapped[int] = mapped_column(VARCHAR(36), nullable=False, index=True)
-    source: Mapped[str] = mapped_column(VARCHAR(20), nullable=False, default='mlab')
+    source: Mapped[str] = mapped_column(VARCHAR(20), nullable=False, default="mlab")
     country_code: Mapped[str] = mapped_column(VARCHAR(2), nullable=False)
 
 
@@ -27,10 +27,9 @@ class GigaMeterSchools(BaseModel):
         server_default=func.now(),
     )
 
-
     school_id_giga: Mapped[str] = mapped_column(VARCHAR(36), nullable=False)
     school_id_govt: Mapped[int] = mapped_column(nullable=False)
-    source: Mapped[str] = mapped_column(nullable=False, default='daily_checkapp')
+    source: Mapped[str] = mapped_column(nullable=False, default="daily_checkapp")
 
 
 class RTSchools(BaseModel):
