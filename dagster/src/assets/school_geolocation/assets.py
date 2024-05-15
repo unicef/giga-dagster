@@ -327,16 +327,18 @@ def geolocation_delete_staging(
     )
     staging = staging_step(delete_row_ids)
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
+    if staging is not None:
+        datahub_emit_metadata_with_exception_catcher(
+            context=context,
+            config=config,
+            spark=spark,
+        )
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "preview": get_table_preview(staging),
+            },
+        )
 
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "preview": get_table_preview(staging),
-        },
-    )
+    return Output(None, metadata={**get_output_metadata(config)})
