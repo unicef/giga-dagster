@@ -368,14 +368,75 @@ def adhoc__generate_silver_geolocation(
         )
 
     df_silver = add_missing_columns(df_one_gold, schema_columns)
-    columns_with_null = [
-        # "cellular_coverage_availability",
-        # "cellular_coverage_type",
+    columns_non_nullable = [
         "school_id_govt_type",
         "education_level_govt",
     ]
     column_actions = {
-        c: f.when(f.col(c).isNull(), "Unknown") for c in columns_with_null
+        c: f.when(f.col(c).isNull(), "Unknown") for c in columns_non_nullable
+    }
+    df_silver = df_silver.withColumns(column_actions)
+    df_silver = transform_types(df_silver, schema_name, context)
+    df_silver = compute_row_hash(df_silver, context)
+
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        schema_name,
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
+    return Output(
+        df_silver,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df_silver),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+def adhoc__generate_silver_coverage(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    adhoc__master_dq_checks_passed: sql.DataFrame,
+    adhoc__reference_dq_checks_passed: sql.DataFrame,
+) -> Output[sql.DataFrame]:
+    s: SparkSession = spark.spark_session
+    schema_name = "school_coverage"
+    schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
+    master_columns = [
+        c
+        for c in column_names
+        if c in adhoc__master_dq_checks_passed.schema.fieldNames()
+    ]
+
+    df_one_gold = adhoc__master_dq_checks_passed.select(*master_columns)
+    if not adhoc__reference_dq_checks_passed.isEmpty():
+        reference_columns = [
+            c
+            for c in column_names
+            if c in adhoc__reference_dq_checks_passed.schema.fieldNames()
+        ]
+        df_one_gold = df_one_gold.join(
+            adhoc__reference_dq_checks_passed.select(*reference_columns),
+            "school_id_giga",
+            "left",
+        )
+
+    df_silver = add_missing_columns(df_one_gold, schema_columns)
+    columns_non_nullable = [
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+    ]
+    column_actions = {
+        c: f.when(f.col(c).isNull(), "Unknown") for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
