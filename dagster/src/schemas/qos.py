@@ -51,7 +51,7 @@ class SchoolListConfig(ApiConfiguration):
 
 
 class SchoolConnectivityConfig(ApiConfiguration):
-    ingestion_frequency_minutes: int
+    ingestion_frequency: int
     schema_url: str | None
     school_list_id: str | None
     date_key: str | None
