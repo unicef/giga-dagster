@@ -139,13 +139,13 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema=reference_metastore_schema,
                 tier=DataTier.DATA_QUALITY_CHECKS,
             ),
-            "adhoc__generate_silver_geolocation": OpDestinationMapping(
+            "adhoc__publish_silver_geolocation": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
                 metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
-            "adhoc__generate_silver_coverage": OpDestinationMapping(
+            "adhoc__publish_silver_coverage": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
                 metastore_schema="school_coverage",

@@ -337,7 +337,7 @@ def adhoc__master_dq_checks_summary(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
-def adhoc__generate_silver_geolocation(
+def adhoc__publish_silver_geolocation(
     context: OpExecutionContext,
     config: FileConfig,
     spark: PySparkResource,
@@ -400,7 +400,7 @@ def adhoc__generate_silver_geolocation(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
-def adhoc__generate_silver_coverage(
+def adhoc__publish_silver_coverage(
     context: OpExecutionContext,
     config: FileConfig,
     spark: PySparkResource,
