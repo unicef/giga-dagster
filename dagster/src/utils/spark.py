@@ -283,5 +283,11 @@ def transform_qos_bra_types(
     return df
 
 
-def compute_row_hash(df: sql.DataFrame) -> sql.DataFrame:
-    return df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))
+def compute_row_hash(
+    df: sql.DataFrame, context: OpExecutionContext = None
+) -> sql.DataFrame:
+    out = df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))
+    if context is not None:
+        context.log.info(f"Calculated SHA256 signature for {out.count()} rows")
+
+    return out

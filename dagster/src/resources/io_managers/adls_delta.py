@@ -29,6 +29,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
         if output is None:
             return
+        if output.isEmpty():
+            return
 
         config = FileConfig(**context.step_context.op_config)
         table_name, _, _ = self._get_table_path(context)

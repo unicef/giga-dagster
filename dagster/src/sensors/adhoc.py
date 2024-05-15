@@ -10,7 +10,6 @@ from dagster import (
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
-    school_master__generate_silver_job,
     school_qos__convert_csv_to_deltatable_job,
 )
 from src.settings import settings
@@ -55,6 +54,9 @@ def school_master__gold_csv_to_deltatable_sensor(
         else:
             reference_path = adls_filepath.replace("/master/", "/reference/")
 
+        reference_path = reference_path.replace(
+            "school_geolocation_coverage_master.", "master_reference."
+        )
         reference_path = Path(reference_path)
         stem = path.stem
         reference_stem = reference_path.stem
@@ -190,74 +192,74 @@ def school_master__gold_csv_to_deltatable_sensor(
         yield from run_requests
 
 
-@sensor(
-    job=school_master__generate_silver_job,
-    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
-)
-def school_master__generate_silver_sensor(
-    context: SensorEvaluationContext,
-    adls_file_client: ADLSFileClient,
-):
-    paths_list = adls_file_client.list_paths(
-        f"{constants.gold_source_folder}/reference", recursive=False
-    )
-    run_requests = []
-
-    for file_data in paths_list:
-        if file_data.is_directory:
-            context.log.warning(f"Skipping {file_data.name}")
-            continue
-
-        adls_filepath = file_data.name
-        path = Path(adls_filepath)
-        stem = path.stem
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
-
-        filename_components = deconstruct_adhoc_filename_components(file_data.name)
-        country_code = filename_components.country_code
-
-        if not stem.startswith(filename_components.country_code):
-            stem = f"{filename_components.country_code}_{stem}"
-
-        ops_destination_mapping = {
-            "adhoc__generate_silver_geolocation": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
-                metastore_schema="school_geolocation",
-                tier=DataTier.SILVER,
-            ),
-            "adhoc__generate_silver_coverage": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                metastore_schema="school_coverage",
-                tier=DataTier.SILVER,
-            ),
-        }
-
-        run_ops = generate_run_ops(
-            ops_destination_mapping,
-            dataset_type="silver",
-            metadata=metadata,
-            file_size_bytes=size,
-            domain=DOMAIN,
-            country_code=country_code,
-        )
-
-        context.log.info(f"FILE: {path}")
-        run_requests.append(
-            RunRequest(
-                run_key="generate_silver_for_" + str(path),
-                run_config=RunConfig(ops=run_ops),
-                tags={"country": country_code},
-            ),
-        )
-
-    if len(run_requests) == 0:
-        yield SkipReason("No files found to process.")
-    else:
-        yield from run_requests
+# @sensor(
+#     job=school_master__generate_silver_job,
+#     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+# )
+# def school_master__generate_silver_sensor(
+#     context: SensorEvaluationContext,
+#     adls_file_client: ADLSFileClient,
+# ):
+#     paths_list = adls_file_client.list_paths(
+#         f"{constants.gold_source_folder}/reference", recursive=False
+#     )
+#     run_requests = []
+#
+#     for file_data in paths_list:
+#         if file_data.is_directory:
+#             context.log.warning(f"Skipping {file_data.name}")
+#             continue
+#
+#         adls_filepath = file_data.name
+#         path = Path(adls_filepath)
+#         stem = path.stem
+#         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+#         metadata = properties.metadata
+#         size = properties.size
+#
+#         filename_components = deconstruct_adhoc_filename_components(file_data.name)
+#         country_code = filename_components.country_code
+#
+#         if not stem.startswith(filename_components.country_code):
+#             stem = f"{filename_components.country_code}_{stem}"
+#
+#         ops_destination_mapping = {
+#             "adhoc__generate_silver_geolocation": OpDestinationMapping(
+#                 source_filepath=str(path),
+#                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+#                 metastore_schema="school_geolocation",
+#                 tier=DataTier.SILVER,
+#             ),
+#             "adhoc__generate_silver_coverage": OpDestinationMapping(
+#                 source_filepath=str(path),
+#                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+#                 metastore_schema="school_coverage",
+#                 tier=DataTier.SILVER,
+#             ),
+#         }
+#
+#         run_ops = generate_run_ops(
+#             ops_destination_mapping,
+#             dataset_type="silver",
+#             metadata=metadata,
+#             file_size_bytes=size,
+#             domain=DOMAIN,
+#             country_code=country_code,
+#         )
+#
+#         context.log.info(f"FILE: {path}")
+#         run_requests.append(
+#             RunRequest(
+#                 run_key="generate_silver_for_" + str(path),
+#                 run_config=RunConfig(ops=run_ops),
+#                 tags={"country": country_code},
+#             ),
+#         )
+#
+#     if len(run_requests) == 0:
+#         yield SkipReason("No files found to process.")
+#     else:
+#         yield from run_requests
 
 
 @sensor(
