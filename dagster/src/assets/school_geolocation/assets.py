@@ -318,11 +318,6 @@ def geolocation_delete_staging(
 ) -> Output[None]:
     delete_row_ids = adls_file_client.download_json(config.filepath)
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
     staging_step = StagingStep(
         context,
         config,
@@ -331,6 +326,12 @@ def geolocation_delete_staging(
         StagingChangeTypeEnum.DELETE,
     )
     staging = staging_step(delete_row_ids)
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
 
     return Output(
         None,
