@@ -317,6 +317,9 @@ def geolocation_delete_staging(
     config: FileConfig,
 ) -> Output[None]:
     delete_row_ids = adls_file_client.download_json(config.filepath)
+    if isinstance(delete_row_ids, list):
+        # dedupe change IDs
+        delete_row_ids = list(set(delete_row_ids))
 
     staging_step = StagingStep(
         context,
