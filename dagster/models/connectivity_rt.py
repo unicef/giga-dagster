@@ -7,7 +7,7 @@ from .base_database import BaseModel
 
 
 class MlabSchools(BaseModel):
-    __tablename__ = "mlab_schools"
+    __tablename__ = "measurements"
 
     created: Mapped[str] = mapped_column(
         DateTime(timezone=True),

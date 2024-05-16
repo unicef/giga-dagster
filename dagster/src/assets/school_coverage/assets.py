@@ -346,12 +346,10 @@ def coverage_delete_staging(
     config: FileConfig,
 ) -> Output[None]:
     delete_row_ids = adls_file_client.download_json(config.filepath)
+    if isinstance(delete_row_ids, list):
+        # dedupe change IDs
+        delete_row_ids = list(set(delete_row_ids))
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
     staging_step = StagingStep(
         context,
         config,
@@ -361,10 +359,18 @@ def coverage_delete_staging(
     )
     staging = staging_step(delete_row_ids)
 
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "preview": get_table_preview(staging),
-        },
-    )
+    if staging is not None:
+        datahub_emit_metadata_with_exception_catcher(
+            context=context,
+            config=config,
+            spark=spark,
+        )
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "preview": get_table_preview(staging),
+            },
+        )
+
+    return Output(None, metadata={**get_output_metadata(config)})

@@ -6,6 +6,7 @@ from src.assets import (
     azure_ad,
     common,
     datahub_assets,
+    debug,
     migrations,
     school_connectivity,
     school_coverage,
@@ -59,6 +60,10 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=admin,
             group_name=admin.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=debug,
+            group_name=debug.GROUP_NAME,
         ),
         *load_assets_from_package_module(
             package_module=azure_ad,
