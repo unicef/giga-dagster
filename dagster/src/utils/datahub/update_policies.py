@@ -24,7 +24,7 @@ def policy_mutation_query(group_urn: str) -> str:
 
 def update_policy_base_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
-    country_name = group_name.split("-")[0]
+    country_name = group_name.rsplit("-", 1)[0]
     dataset_type = group_name.split(" ")[1].lower()
     datasets_urns_list = list_datasets_by_filter(
         tag=country_name, dataset_type=dataset_type
@@ -55,7 +55,7 @@ def update_policy_base_query(group_urn: str) -> str:
 
 def create_policy_query(group_urn: str) -> str:
     group_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1])
-    country_name = group_name.split("-")[0]
+    country_name = group_name.rsplit("-", 1)[0]
     dataset_type = group_name.split(" ")[1].lower()
     datasets_urns_list = list_datasets_by_filter(
         tag=country_name, dataset_type=dataset_type
@@ -144,9 +144,9 @@ def update_policies(context: OpExecutionContext = None) -> None:
     logger = get_context_with_fallback_logger(context)
     queries = ""
     for i, group_urn in enumerate(group_urns_iterator()):
-        country_name = parse.unquote(
-            group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
-        )
+        country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1]).rsplit(
+            "-", 1
+        )[0]
         if is_valid_country_name(country_name):
             base_query = update_policy_base_query(group_urn=group_urn)
             queries = queries + " " + f"update{i}: {base_query}"
@@ -238,8 +238,9 @@ def update_policy_base(
     context: OpExecutionContext = None,
 ) -> None:
     logger = get_context_with_fallback_logger(context)
-
-    country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1].split("-")[0])
+    country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1]).rsplit(
+        "-", 1
+    )[0]
     if is_valid_country_name(country_name):
         try:
             query = policy_mutation_query(group_urn=group_urn)
@@ -282,8 +283,8 @@ if __name__ == "__main__":
         queries = ""
         for i, group_urn in enumerate(group_urns_iterator()):
             country_name = parse.unquote(
-                group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
-            )
+                group_urn.split("urn:li:corpGroup:")[1]
+            ).rsplit("-", 1)[0]
             logger.info(country_name)
             if is_valid_country_name(country_name):
                 base_query = update_policy_base_query(group_urn=group_urn)
