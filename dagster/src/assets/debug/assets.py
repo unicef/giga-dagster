@@ -91,7 +91,7 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
                 SELECT
                     DISTINCT dca.giga_id_school school_id_giga,
                     school_id school_id_govt,
-                    'daily_checkapp' source,
+                    'daily_checkapp' source
                 FROM dailycheckapp_measurements dca
                 WHERE dca.giga_id_school !=''
                 LIMIT 10
