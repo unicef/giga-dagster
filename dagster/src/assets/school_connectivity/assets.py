@@ -169,6 +169,15 @@ def qos_school_connectivity_bronze(
     #     f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
     # )
 
+    if database_data["has_school_id_giga"]:
+        bronze = bronze.withColumnRenamed(
+            database_data["school_id_giga_govt_key"], "school_id_giga"
+        )
+    else:
+        bronze = bronze.withColumnRenamed(
+            database_data["school_id_giga_govt_key"], "school_id_govt"
+        )
+
     @udf
     def parse_dates(value: str) -> str:
         return datetime.strptime(
