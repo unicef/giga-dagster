@@ -1,3 +1,4 @@
+import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
 from sqlalchemy import text
@@ -36,13 +37,13 @@ def debug__drop_table(
 
 
 @asset
-def debug__test_mlab_db_connection(context: OpExecutionContext):
+def debug__test_mlab_db_connection(_: OpExecutionContext):
     from src.utils.db.mlab import get_db_context
 
     with get_db_context() as db:
-        context.log.info(db.execute(text("SELECT 1")))
-        res = db.scalars(
-            text("""
+        res = (
+            db.execute(
+                text("""
         SELECT
             DISTINCT mlab.school_id school_id_govt,
             (min(mlab."timestamp") over (partition by mlab.school_id))::DATE mlab_created_date,
@@ -51,60 +52,62 @@ def debug__test_mlab_db_connection(context: OpExecutionContext):
         FROM public.measurements mlab
         LIMIT 10
         """)
-        ).all()
-        res = [
-            {k: v for k, v in r.__dict__.items() if k != "_sa_instance_state"}
-            for r in res
-        ]
+            )
+            .mappings()
+            .all()
+        )
 
-    return Output(None, metadata={"mlab_schools": MetadataValue.json(res)})
+    res = pd.DataFrame.from_records(res)
+    return Output(None, metadata={"mlab_schools": MetadataValue.md(res.to_markdown())})
 
 
 @asset
-def debug__test_proco_db_connection(context: OpExecutionContext):
+def debug__test_proco_db_connection(_: OpExecutionContext):
     from src.utils.db.proco import get_db_context
 
     with get_db_context() as db:
-        context.log.info(db.execute(text("SELECT 1")))
-        res = db.scalars(
-            text("""
-        SELECT
-            DISTINCT sch.giga_id_school school_id_giga,
-            sch.external_id school_id_govt,
-            (min(stat.created) over (partition by stat.school_id)) connectivity_RT_ingestion_timestamp,
-            c.code country_code,
-            c.name country
-        FROM connection_statistics_schooldailystatus stat
-        LEFT JOIN schools_school sch ON sch.id = stat.school_id
-        LEFT JOIN locations_country c ON c.id = sch.country_id
-        LIMIT 10
-        """)
-        ).all()
-        rt_schools = [
-            {k: v for k, v in r.__dict__.items() if k != "_sa_instance_state"}
-            for r in res
-        ]
+        rt_schools = (
+            db.execute(
+                text("""
+                SELECT
+                    DISTINCT sch.giga_id_school school_id_giga,
+                    sch.external_id school_id_govt,
+                    (min(stat.created) over (partition by stat.school_id)) connectivity_RT_ingestion_timestamp,
+                    c.code country_code,
+                    c.name country
+                FROM connection_statistics_schooldailystatus stat
+                LEFT JOIN schools_school sch ON sch.id = stat.school_id
+                LEFT JOIN locations_country c ON c.id = sch.country_id
+                LIMIT 10
+                """)
+            )
+            .mappings()
+            .all()
+        )
 
-        res = db.scalars(
-            text("""
-        SELECT
-            DISTINCT dca.giga_id_school school_id_giga,
-            school_id school_id_govt,
-            'daily_checkapp' source,
-        FROM dailycheckapp_measurements dca
-        WHERE dca.giga_id_school !=''
-        LIMIT 10
-        """)
-        ).all()
-        giga_meter_schools = [
-            {k: v for k, v in r.__dict__.items() if k != "_sa_instance_state"}
-            for r in res
-        ]
+        giga_meter_schools = (
+            db.execute(
+                text("""
+                SELECT
+                    DISTINCT dca.giga_id_school school_id_giga,
+                    school_id school_id_govt,
+                    'daily_checkapp' source,
+                FROM dailycheckapp_measurements dca
+                WHERE dca.giga_id_school !=''
+                LIMIT 10
+                """)
+            )
+            .mappings()
+            .all()
+        )
+
+    rt_schools = pd.DataFrame.from_records(rt_schools)
+    giga_meter_schools = pd.DataFrame.from_records(giga_meter_schools)
 
     return Output(
         None,
         metadata={
-            "giga_meter_schools": MetadataValue.json(giga_meter_schools),
-            "rt_schools": MetadataValue.json(rt_schools),
+            "giga_meter_schools": MetadataValue.md(giga_meter_schools.to_markdown()),
+            "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
         },
     )
