@@ -141,6 +141,27 @@ def is_valid_country_name(country_name: str) -> bool:
 
 
 def update_policies(context: OpExecutionContext = None) -> None:
+    logger = get_context_with_fallback_logger(context)
+    queries = ""
+    for i, group_urn in enumerate(group_urns_iterator()):
+        country_name = parse.unquote(
+            group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
+        )
+        if is_valid_country_name(country_name):
+            base_query = update_policy_base_query(group_urn=group_urn)
+            queries = queries + " " + f"update{i}: {base_query}"
+        else:
+            warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
+            logger.warning(warning_message)
+            log_op_context(context)
+            sentry_sdk.capture_message(warning_message)
+        if i % 100 == 0:
+            execute_batch_mutation(queries)
+            queries = ""
+    execute_batch_mutation(queries)
+
+
+def execute_batch_mutation(queries: str, context: OpExecutionContext = None):
     datahub_graph_client = DataHubGraph(
         DatahubClientConfig(
             server=settings.DATAHUB_METADATA_SERVER_URL,
@@ -157,19 +178,6 @@ def update_policies(context: OpExecutionContext = None) -> None:
         )
     )
     logger = get_context_with_fallback_logger(context)
-    queries = ""
-    for i, group_urn in enumerate(group_urns_iterator()):
-        country_name = parse.unquote(
-            group_urn.split("urn:li:corpGroup:")[1].split("-")[0]
-        )
-        if is_valid_country_name(country_name):
-            base_query = update_policy_base_query(group_urn=group_urn)
-            queries = queries + " " + f"update{i}: {base_query}"
-        else:
-            warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
-            logger.warning(warning_message)
-            log_op_context(context)
-            sentry_sdk.capture_message(warning_message)
 
     batch_mutation_query = f"""
         mutation {{
