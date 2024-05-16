@@ -54,6 +54,7 @@ def qos_school_connectivity_raw(
         and database_data["school_list"]["school_id_key"]
         and database_data["school_id_send_query_in"] != "NONE"
     )
+    context.log.info(f">> boolschool id params: {complete_school_id_parameters}")
 
     df = pd.DataFrame()
 
@@ -104,7 +105,14 @@ def qos_school_connectivity_raw(
         schema_reference=df,
     )
 
-    return Output(df, metadata=get_output_metadata(config))
+    context.log.info(f">>> df count: {df.count()}")
+    return Output(
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df),
+        },
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -127,33 +135,40 @@ def qos_school_connectivity_bronze(
 
     schema_columns = get_schema_columns(s, "qos")
     schema = StructType(schema_columns)
-    bronze = s.createDataFrame([], schema=schema)
+    bronze = s.createDataFrame(qos_school_connectivity_raw, schema=schema)
 
+    context.log.info(
+        f"silver tbl: {silver_table_name}, exists?: {s.catalog.tableExists(silver_table_name)}"
+    )
     ## Filter out school connectivity data for schools not in the school geolocation silver table. Add school_id_giga to school_connectivity if it does not exist yet
-    if s.catalog.tableExists(silver_table_name):
-        if database_data["has_school_id_giga"]:
-            silver_ids = (
-                DeltaTable.forName(s, silver_table_name).toDF().select("school_id_giga")
-            ).collect()
-            bronze = qos_school_connectivity_raw.filter(
-                f.col(database_data["school_id_giga_govt_key"]).isin(silver_ids)
-            )
-        else:
-            silver_ids = (
-                DeltaTable.forName(s, silver_table_name)
-                .toDF()
-                .select("school_id_govt", "school_id_giga")
-            )
-            bronze = qos_school_connectivity_raw.filter(
-                f.col(database_data["school_id_giga_govt_key"]).isin(
-                    silver_ids.select("school_id_govt").collect()
-                )
-            )
-            bronze = bronze.join(silver_ids, "school_id_govt", "left")
+    # if s.catalog.tableExists(silver_table_name):
+    #     if database_data["has_school_id_giga"]:
+    #         silver_ids = (
+    #             DeltaTable.forName(s, silver_table_name).toDF().select("school_id_giga")
+    #         ).collect()
+    #         context.log.info(f">>> connec silver Ids1: {silver_ids}")
+    #         bronze = qos_school_connectivity_raw.filter(
+    #             f.col(database_data["school_id_giga_govt_key"]).isin(silver_ids)
+    #         )
+    #         context.log.info(f">>> bronze after filter1: {bronze.count()}, {bronze.toPandas().head(5)}")
+    #     else:
+    #         silver_ids = (
+    #             DeltaTable.forName(s, silver_table_name)
+    #             .toDF()
+    #             .select("school_id_govt", "school_id_giga")
+    #         )
+    #         context.log.info(f">>> connec silver Ids: {silver_ids}")
+    #         bronze = qos_school_connectivity_raw.filter(
+    #             f.col(database_data["school_id_giga_govt_key"]).isin(
+    #                 silver_ids.select("school_id_govt").collect()
+    #             )
+    #         )
+    #         bronze = bronze.join(silver_ids, "school_id_govt", "left")
+    #         context.log.info(f">>> bronze after filter: {bronze.count()}, {bronze.toPandas().head(5)}")
 
-        context.log.info(
-            f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
-        )
+    context.log.info(
+        f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
+    )
 
     @udf
     def parse_dates(value: str) -> str:

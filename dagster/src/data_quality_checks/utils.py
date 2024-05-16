@@ -240,11 +240,13 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
             & (df["dq_is_null_mandatory-school_id_giga"] == 0),
         )
         df = df.select(*columns)
+    else:
+        df = df.select(*columns)
     return df
 
 
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
-    if dataset_type in ["master", "reference", "geolocation"]:
+    if dataset_type in ["master", "reference", "geolocation", "school-connectivity"]:
         df = df.filter(df.dq_has_critical_error == 1)
     elif dataset_type == "geolocation":
         df = df.filter(

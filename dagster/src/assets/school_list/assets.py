@@ -53,7 +53,11 @@ def qos_school_list_raw(
         spark=spark,
         schema_reference=df,
     )
-    return Output(df, metadata=get_output_metadata(config))
+
+    context.log.info(f">>>> count: {df.count()}")
+    return Output(
+        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -86,6 +90,7 @@ def qos_school_list_bronze(
     )
 
     df_pandas = df.toPandas()
+    context.log.info(f">>>> count: {df.count()}")
     return Output(
         df_pandas,
         metadata={

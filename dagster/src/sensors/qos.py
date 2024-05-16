@@ -134,9 +134,9 @@ def qos_school_list__new_apis_sensor(
 
 @sensor(
     job=qos_school_connectivity__automated_data_checks_job,
-    minimum_interval_seconds=int(timedelta(minutes=1).total_seconds())
+    minimum_interval_seconds=int(timedelta(minutes=10).total_seconds())
     if settings.IN_PRODUCTION
-    else 30,
+    else int(timedelta(minutes=5).total_seconds()),
 )
 def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
     DATASET_TYPE = "school-connectivity"
@@ -157,6 +157,12 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             next_execution_date = croniter(
                 api.ingestion_frequency, api.date_last_ingested
             ).get_next(datetime)
+            context.log.info(
+                f">>> next exec!!last: {api.date_last_ingested}, {next_execution_date}, {datetime.now(UTC)}"
+            )
+            context.log.info(
+                f">>> next execyes?!!: {api.ingestion_frequency}, {next_execution_date > datetime.now(UTC)}"
+            )
             if next_execution_date > datetime.now(UTC):
                 continue
 
