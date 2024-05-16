@@ -153,12 +153,13 @@ def update_policies(context: OpExecutionContext = None) -> None:
         else:
             warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
             logger.warning(warning_message)
-            log_op_context(context)
+            if context is not None:
+                log_op_context(context)
             sentry_sdk.capture_message(warning_message)
         if i % 100 == 0:
-            execute_batch_mutation(queries)
+            execute_batch_mutation(queries, context)
             queries = ""
-    execute_batch_mutation(queries)
+    execute_batch_mutation(queries, context)
 
 
 def execute_batch_mutation(queries: str, context: OpExecutionContext = None):
@@ -194,7 +195,8 @@ def execute_batch_mutation(queries: str, context: OpExecutionContext = None):
         logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
     except Exception as error:
         logger.error(error)
-        log_op_context(context)
+        if context is not None:
+            log_op_context(context)
         sentry_sdk.capture_exception(error=error)
 
 
