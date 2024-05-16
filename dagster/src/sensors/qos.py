@@ -136,7 +136,7 @@ def qos_school_list__new_apis_sensor(
     job=qos_school_connectivity__automated_data_checks_job,
     minimum_interval_seconds=int(timedelta(minutes=10).total_seconds())
     if settings.IN_PRODUCTION
-    else int(timedelta(minutes=5).total_seconds()),
+    else 30,
 )
 def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
     DATASET_TYPE = "school-connectivity"

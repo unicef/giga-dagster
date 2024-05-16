@@ -9,7 +9,6 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StructType
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -32,7 +31,6 @@ from src.utils.qos_apis.school_connectivity import query_school_connectivity_dat
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_schema_columns,
     get_schema_columns_datahub,
 )
 
@@ -133,9 +131,10 @@ def qos_school_connectivity_bronze(
         silver_tier_schema_name, config.country_code
     )
 
-    schema_columns = get_schema_columns(s, "qos")
-    schema = StructType(schema_columns)
-    bronze = s.createDataFrame(qos_school_connectivity_raw, schema=schema)
+    # schema_columns = get_schema_columns(s, "qos")
+    # schema = StructType(schema_columns)
+    bronze = qos_school_connectivity_raw
+    # bronze = s.createDataFrame(qos_school_connectivity_raw, schema=schema)
 
     context.log.info(
         f"silver tbl: {silver_table_name}, exists?: {s.catalog.tableExists(silver_table_name)}"
@@ -166,9 +165,9 @@ def qos_school_connectivity_bronze(
     #         bronze = bronze.join(silver_ids, "school_id_govt", "left")
     #         context.log.info(f">>> bronze after filter: {bronze.count()}, {bronze.toPandas().head(5)}")
 
-    context.log.info(
-        f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
-    )
+    # context.log.info(
+    #     f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
+    # )
 
     @udf
     def parse_dates(value: str) -> str:
