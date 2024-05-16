@@ -156,7 +156,7 @@ def update_policies(context: OpExecutionContext = None) -> None:
             if context is not None:
                 log_op_context(context)
             sentry_sdk.capture_message(warning_message)
-        if i % 100 == 0:
+        if i % 100 == 0 and i != 0:
             execute_batch_mutation(queries, context)
             queries = ""
     execute_batch_mutation(queries, context)
