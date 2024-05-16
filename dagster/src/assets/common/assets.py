@@ -1,3 +1,4 @@
+from azure.core.exceptions import ResourceNotFoundError
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
@@ -32,7 +33,6 @@ from src.utils.schema import (
 )
 from src.utils.spark import compute_row_hash, transform_types
 
-from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -120,6 +120,7 @@ def silver(
     schema_name = config.metastore_schema
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
@@ -153,32 +154,41 @@ def silver(
 
     # In case multiple rows with the same school_id_giga are present,
     # get only the row of the latest version.
-    df_passed = df_passed.withColumn(
-        "row_number",
-        f.row_number().over(
-            Window.partitionBy("school_id_giga").orderBy(
-                f.col("_commit_version").desc(),
-                f.col("_change_type"),
-            )
-        ),
-    ).filter(f.col("row_number") == 1)
+    #
+    # The case where there is more than 1 _commit_version for the same school_id_giga
+    # is for the update_preimage/update_postimage pair. Order by _change_type so that
+    # update_postimage takes precedence.
+    df_passed = (
+        df_passed.withColumn(
+            "row_number",
+            f.row_number().over(
+                Window.partitionBy("school_id_giga").orderBy(
+                    f.col("_commit_version").desc(),
+                    f.col("_change_type"),
+                )
+            ),
+        )
+        .filter(f.col("row_number") == 1)
+        .drop("row_number")
+    )
 
     silver = DeltaTable.forName(s, silver_table_name).toDF()
 
-    inserts = df_passed.filter(df_passed["_change_type"] == "insert")
-    inserts = inserts.select(*[c.name for c in schema_columns])
-    updates = df_passed.filter(df_passed["_change_type"] == "update_postimage")
-    updates = updates.select(*[c.name for c in schema_columns])
-    deletes = df_passed.filter(df_passed["_change_type"] == "delete")
-    deletes = deletes.select(*[c.name for c in schema_columns])
+    inserts = df_passed.filter(f.col("_change_type") == "insert").select(*column_names)
+    updates = df_passed.filter(f.col("_change_type") == "update_postimage").select(
+        *column_names
+    )
+    deletes = df_passed.filter(f.col("_change_type") == "delete").select(*column_names)
 
-    silver = silver.unionByName(inserts)
-    delete_ids = [row[primary_key] for row in deletes.select(primary_key).collect()]
-    silver = silver.filter(~f.col(primary_key).isin(delete_ids))
-    silver = updates.unionByName(silver).dropDuplicates([primary_key])
+    silver = (
+        silver.unionAll(inserts)
+        .join(updates.alias("updates"), primary_key, "inner")  # join with updates
+        .select("updates.*")  # select values from the updates side
+        .join(deletes, primary_key, "left_anti")  # remove deletes
+        .dropDuplicates([primary_key])  # just to be sure, remove duplicate rows
+    )
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
-
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -287,10 +297,9 @@ def master(
             and col.name not in [c.name for c in silver_columns]
         ):
             column_actions[col.name] = f.when(
-                f.col(col.name).isNull() | (f.col(col.name) == ""),
+                f.col(col.name).isNull(),
                 f.lit("Unknown"),
             )
-
     silver = silver.withColumns(column_actions)
     silver = compute_row_hash(silver)
 

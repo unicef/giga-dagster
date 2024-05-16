@@ -80,6 +80,16 @@ def build_deduped_merge_query(
     primary_key: str,
     update_columns: list[str],
 ) -> DeltaMergeBuilder | None:
+    """
+    Delta Lake increments the dataset version and generates a change log when performing
+    a merge, regardless of whether there were actually any changes. We perform a basic
+    signature check to determine if there were actually any changes and perform the
+    relevant merge operations only if there is at least one change for that particular
+    operation (i.e. insert, update, delete).
+
+    IMPORTANT: Because of this, it is crucial that you do not pass in partial datasets for the
+    `updates` DataFrame. Otherwise, you may end up deleting more rows than you intended.
+    """
     master_df = master.toDF()
     incoming = updates.alias("incoming")
 
