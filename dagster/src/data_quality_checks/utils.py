@@ -223,41 +223,13 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     else:
         columns = [col for col in df.columns if not col.startswith("dq_")]
 
-    if dataset_type in ["master", "reference", "geolocation"]:
-        df = df.filter(df.dq_has_critical_error == 0)
-        df = df.select(*columns)
-    elif dataset_type == "geolocation":  ## @QUESTION: @renz when will this ever fire
-        df = df.filter(
-            (df["dq_duplicate-school_id_giga"] == 0)
-            & (df["dq_is_null_mandatory-school_id_giga"] == 0)
-            & (df["dq_is_null_mandatory-education_level_govt"] == 0)
-            & (df["dq_is_null_mandatory-school_id_govt_type"] == 0),
-        )
-        df = df.select(*columns)
-    elif dataset_type.startswith("coverage"):
-        df = df.filter(
-            (df["dq_duplicate-school_id_giga"] == 0)
-            & (df["dq_is_null_mandatory-school_id_giga"] == 0),
-        )
-        df = df.select(*columns)
+    df = df.filter(df.dq_has_critical_error == 0)
+    df = df.select(*columns)
     return df
 
 
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
-    if dataset_type in ["master", "reference", "geolocation"]:
-        df = df.filter(df.dq_has_critical_error == 1)
-    elif dataset_type == "geolocation":
-        df = df.filter(
-            (df["dq_duplicate-school_id_giga"] == 1)
-            | (df["dq_is_null_mandatory-school_id_giga"] == 1)
-            | (df["dq_is_null_mandatory-education_level_govt"] == 1)
-            | (df["dq_is_null_mandatory-school_id_govt_type"] == 1),
-        )
-    elif dataset_type.startswith("coverage"):
-        df = df.filter(
-            (df["dq_duplicate-school_id_giga"] == 1)
-            | (df["dq_is_null_mandatory-school_id_giga"] == 1),
-        )
+    df = df.filter(df.dq_has_critical_error == 1)
     return df
 
 
@@ -397,11 +369,19 @@ if __name__ == "__main__":
     df = row_level_checks(qos, "qos", "BRA")
     df.show()
 
-    df = aggregate_report_spark_df(spark=spark, df=df)
-    df.show()
+    # df = aggregate_report_spark_df(spark=spark, df=df)
+    # df.show()
 
-    _json = aggregate_report_json(df, qos)
-    print(_json)
+    # _json = aggregate_report_json(df, qos)
+    # print(_json)
+
+    pas = dq_split_passed_rows(df, "qos")
+    fail = dq_split_failed_rows(df, "qos")
+
+    print(pas.count())
+    print(fail.count())
+    pas.show()
+    fail.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
