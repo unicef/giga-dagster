@@ -143,9 +143,7 @@ def update_policy_for_group(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
     logger.info(f"policy group urn: {group_urn}")
-    update_policy_base(
-        group_urn=group_urn, datahub_graph_client=datahub_graph_client, context=context
-    )
+    update_policy_base(group_urn=group_urn, context=context)
 
 
 def update_policy_base(
