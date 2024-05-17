@@ -17,6 +17,7 @@ from src.utils.db.primary import get_db_context
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DOMAIN = "qos"
+DATAHUB_DOMAIN = "School"
 
 
 def generate_dagster_config(api_data: dict[str, str]) -> dict[str, str]:
@@ -109,7 +110,7 @@ def qos_school_list__new_apis_sensor(
                 dataset_type=DATASET_TYPE,
                 metadata={},
                 file_size_bytes=0,
-                domain=DOMAIN,
+                domain=DATAHUB_DOMAIN,
                 dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 country_code=country_code,
                 database_data=row_data.json(),
@@ -220,7 +221,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             dataset_type=DATASET_TYPE,
             metadata={},
             file_size_bytes=0,
-            domain=DOMAIN,
+            domain=DATAHUB_DOMAIN,
             dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
             country_code=country_code,
             database_data=row_data.json(),

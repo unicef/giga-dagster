@@ -32,7 +32,6 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
-from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -50,8 +49,6 @@ def qos_school_list_raw(
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
-        spark=spark,
-        schema_reference=df,
     )
     return Output(df, metadata=get_output_metadata(config))
 
@@ -150,12 +147,6 @@ def qos_school_list_data_quality_results_summary(
         context=context,
         config=config,
         spark=spark,
-    )
-
-    send_email_dq_report_with_config(
-        dq_results=dq_summary_statistics,
-        config=config,
-        context=context,
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
