@@ -8,6 +8,7 @@ from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.datahub.builders import build_group_urn
+from src.utils.datahub.graphql import execute_batch_mutation
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
@@ -160,44 +161,6 @@ def update_policies(context: OpExecutionContext = None) -> None:
             execute_batch_mutation(queries, context)
             queries = ""
     execute_batch_mutation(queries, context)
-
-
-def execute_batch_mutation(queries: str, context: OpExecutionContext = None):
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        )
-    )
-    logger = get_context_with_fallback_logger(context)
-
-    batch_mutation_query = f"""
-        mutation {{
-            {queries}
-        }}
-        """
-    try:
-        logger.info("UPDATING DATAHUB POLICIES...")
-        logger.info(batch_mutation_query)
-        graphql_execution = datahub_graph_client.execute_graphql(
-            query=batch_mutation_query
-        )
-        logger.info(graphql_execution)
-        logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-    except Exception as error:
-        logger.error(error)
-        if context is not None:
-            log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
 
 
 def update_policy_for_group(
