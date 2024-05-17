@@ -12,6 +12,7 @@ from src.assets import (
     school_coverage,
     school_geolocation,
     school_list,
+    unstructured,
 )
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
@@ -68,6 +69,10 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=azure_ad,
             group_name=azure_ad.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=unstructured,
+            group_name=unstructured.GROUP_NAME,
         ),
     ],
     resources=RESOURCE_DEFINITIONS,
