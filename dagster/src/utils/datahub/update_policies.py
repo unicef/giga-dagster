@@ -3,12 +3,10 @@ from urllib import parse
 
 import country_converter as cc
 import sentry_sdk
-from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
-from src.settings import settings
 from src.utils.datahub.builders import build_group_urn
-from src.utils.datahub.graphql import execute_batch_mutation
+from src.utils.datahub.graphql import datahub_graph_client, execute_batch_mutation
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
@@ -87,21 +85,6 @@ def create_policy_query(group_urn: str) -> str:
 
 
 def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        ),
-    )
     query = f"tag:{tag}"
     dataset_urns_iterator = datahub_graph_client.get_urns_by_filter(
         entity_types=["dataset"],
@@ -117,21 +100,6 @@ def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
 
 
 def group_urns_iterator():
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        )
-    )
     return datahub_graph_client.get_urns_by_filter(entity_types=["corpGroup"])
 
 
@@ -167,21 +135,6 @@ def update_policy_for_group(
     config: FileConfig, context: OpExecutionContext = None
 ) -> None:
     logger = get_context_with_fallback_logger(context)
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        )
-    )
     country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
@@ -197,7 +150,6 @@ def update_policy_for_group(
 
 def update_policy_base(
     group_urn: str,
-    datahub_graph_client: DataHubGraph[DatahubClientConfig],
     context: OpExecutionContext = None,
 ) -> None:
     logger = get_context_with_fallback_logger(context)
@@ -227,21 +179,6 @@ def update_policy_base(
 if __name__ == "__main__":
 
     def test_update_policies(context: OpExecutionContext = None) -> None:
-        datahub_graph_client = DataHubGraph(
-            DatahubClientConfig(
-                server=settings.DATAHUB_METADATA_SERVER_URL,
-                token=settings.DATAHUB_ACCESS_TOKEN,
-                retry_max_times=5,
-                retry_status_codes=[
-                    403,
-                    429,
-                    500,
-                    502,
-                    503,
-                    504,
-                ],
-            )
-        )
         logger = get_context_with_fallback_logger(context)
         queries = ""
         for i, group_urn in enumerate(group_urns_iterator()):
