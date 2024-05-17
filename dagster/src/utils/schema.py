@@ -42,11 +42,11 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
     ]
 
 
-def get_schema_column_descriptions(spark: SparkSession, schema_name: str) -> list[dict]:
+def get_schema_column_descriptions(
+    spark: SparkSession, schema_name: str
+) -> dict[str:str]:
     df = get_schema_table(spark, schema_name)
-    return [
-        {"column": row.name, "description": row.description} for row in df.collect()
-    ]
+    return {row.name: row.description for row in df.collect()}
 
 
 def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:

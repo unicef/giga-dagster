@@ -1,9 +1,8 @@
 import sentry_sdk
-from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
-from src.settings import settings
 from src.utils.datahub.builders import build_dataset_urn
+from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
@@ -12,21 +11,6 @@ from src.utils.sentry import log_op_context
 def emit_lineage_query(
     upstream_urn: str, downstream_urn: str, context: OpExecutionContext = None
 ) -> None:
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        ),
-    )
     logger = get_context_with_fallback_logger(context)
 
     query = f"""
