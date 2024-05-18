@@ -56,3 +56,17 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
             "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
         },
     )
+
+
+@asset
+def debug__test_connectivity_merge(_: OpExecutionContext):
+    from src.spark.transform_functions import connectivity_rt_dataset
+
+    return Output(
+        None,
+        metadata={
+            "preview": MetadataValue.md(
+                connectivity_rt_dataset().toPandas().head(10).to_markdown()
+            )
+        },
+    )

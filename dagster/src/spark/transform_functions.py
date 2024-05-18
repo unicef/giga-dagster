@@ -5,20 +5,16 @@ import geopandas as gpd
 import h3
 import pandas as pd
 from loguru import logger
-from models.connectivity_rt import GigaMeterSchools, MlabSchools, RTSchools
 from pyspark import sql
 from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import ArrayType, FloatType, StringType, StructField, StructType
-from sqlalchemy import select
 
 from azure.storage.blob import BlobServiceClient
 from src.settings import settings
 from src.spark.config_expectations import config
 from src.spark.udf_dependencies import get_point
-from src.utils.db.mlab import get_db_context as mlab_db
-from src.utils.db.proco import get_db_context as proco_db
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -385,10 +381,16 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def connectivity_rt_dataset():
+    from src.internal.connectivity_queries import (
+        get_giga_meter_schools,
+        get_mlab_schools,
+        get_rt_schools,
+    )
+
     # get raw datasets
-    rt_data = proco_db.scalars(select(RTSchools))
-    mlab_data = mlab_db.scalars(select(MlabSchools))
-    dca_data = proco_db.scalars(select(GigaMeterSchools))
+    rt_data = get_rt_schools()
+    mlab_data = get_mlab_schools()
+    dca_data = get_giga_meter_schools()
 
     # Assert schemas
     all_rt_schema = StructType(
