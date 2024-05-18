@@ -9,12 +9,7 @@ from pyspark import sql
 from pyspark.sql import (
     functions as f,
 )
-from pyspark.sql.types import (
-    ArrayType,
-    FloatType,
-    StringType,
-    StructField,
-)
+from pyspark.sql.types import ArrayType, FloatType, StringType, StructField, StructType
 
 from azure.storage.blob import BlobServiceClient
 from src.settings import settings
@@ -385,17 +380,129 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
+def connectivity_rt_dataset():
+    from src.internal.connectivity_queries import (
+        get_giga_meter_schools,
+        get_mlab_schools,
+        get_rt_schools,
+    )
+
+    # get raw datasets
+    rt_data = get_rt_schools()
+    mlab_data = get_mlab_schools()
+    dca_data = get_giga_meter_schools()
+
+    # Assert schemas
+    all_rt_schema = StructType(
+        [
+            StructField("school_id_giga", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
+            StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
+            StructField("country_code", StringType(), True),
+            StructField("country", StringType(), True),
+        ]
+    )
+    # Create the DataFrame
+    df_all_rt = spark.createDataFrame(rt_data, all_rt_schema)
+
+    mlab_schema = StructType(
+        [
+            StructField("mlab_created_date", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
+            StructField("source", StringType(), True),
+            StructField("country_code", StringType(), True),
+        ]
+    )
+    # Create the DataFrame
+    df_mlab = spark.createDataFrame(mlab_data, mlab_schema)
+
+    dca_schema = StructType(
+        [
+            StructField("school_id_giga", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
+            StructField("source", StringType(), True),
+        ]
+    )
+    df_dca = spark.createDataFrame(dca_data, dca_schema)
+
+    # transforms
+    # cast to proper format
+    df_all_rt = df_all_rt.withColumn(
+        "connectivity_rt_ingestion_timestamp",
+        f.to_timestamp(
+            f.col("connectivity_rt_ingestion_timestamp"),
+            "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+        ),
+    )
+    df_mlab = df_mlab.withColumn(
+        "mlab_created_date", f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd")
+    )
+
+    # dataset prefixes
+    column_renames = {col: f"{col}_mlab" for col in df_mlab.schema.fieldNames()}
+    df_mlab = df_mlab.withColumnsRenamed(column_renames)
+    # df_mlab.show()
+
+    column_renames = {col: f"{col}_pcdc" for col in df_dca.schema.fieldNames()}
+    df_dca = df_dca.withColumnsRenamed(column_renames)
+    # df_dca.show()
+    # df_all_rt.show()
+
+    # merge three datasets
+    all_rt_schools = df_all_rt.join(
+        df_mlab,
+        how="left",
+        on=[
+            df_all_rt.school_id_govt == df_mlab.school_id_govt_mlab,
+            df_all_rt.country_code == df_mlab.country_code_mlab,
+        ],
+    ).join(
+        df_dca, how="left", on=df_all_rt.school_id_giga == df_dca.school_id_giga_pcdc
+    )
+
+    # create source column
+    all_rt_schools = all_rt_schools.withColumn(
+        "source",
+        f.regexp_replace(
+            f.concat_ws(
+                ", ", f.trim(f.col("source_pcdc")), f.trim(f.col("source_mlab"))
+            ),
+            "^, |, $",
+            "",
+        ),
+    )
+
+    all_rt_schools = all_rt_schools.withColumn(
+        "connectivity_RT_datasource",
+        f.when(
+            (f.col("source") == "") & (f.col("country") == "Brazil"), "nic_br"
+        ).otherwise(f.col("source")),
+    )
+
+    # select relevant columns
+    realtime_columns = [
+        "school_id_giga",
+        "country",
+        "school_id_govt",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_RT_datasource",
+    ]
+    all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
+
+    return all_rt_schools.select(*realtime_columns)
+
+
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
     spark = get_spark_session()
-    master = spark.read.csv(file_url_master, header=True)
+    # master = spark.read.csv(file_url_master, header=True)
     # reference = spark.read.csv(file_url_reference, header=True)
     # df_bronze = master.join(reference, how="left", on="school_id_giga")
 
@@ -403,22 +510,22 @@ if __name__ == "__main__":
     # df = create_bronze_layer_columns(df)
     # df.show()
 
-    df = master.filter(master["admin1"] == "Rondônia")
+    # df = master.filter(master["admin1"] == "Rondônia")
     # df = master.filter(master["admin1"] == "São Paulo")
-    df = df.select(
-        [
-            "school_id_giga",
-            "school_id_govt",
-            "school_name",
-            "education_level",
-            "latitude",
-            "longitude",
-        ],
-    )
-    df = df.withColumn("latitude", f.lit(32.618))
-    df = df.withColumn("longitude", f.lit(78.576))
-    df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # df = df.select(
+    #     [
+    #         "school_id_giga",
+    #         "school_id_govt",
+    #         "school_name",
+    #         "education_level",
+    #         "latitude",
+    #         "longitude",
+    #     ],
+    # )
+    # df = df.withColumn("latitude", f.lit(32.618))
+    # df = df.withColumn("longitude", f.lit(78.576))
+    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
+    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
 
     # df = df.withColumn("school_name", f.trim(f.col("school_name")))
     # df = df.withColumn("latitude", f.lit(17.5066649))
@@ -431,13 +538,13 @@ if __name__ == "__main__":
 
     # grouped_df = df.groupBy("admin1").agg(f.count("*").alias("row_count"))
     # grouped_df.orderBy(grouped_df["row_count"].desc()).show()
-    df.show()
-    print(df.count())
+    # df.show(truncate=False)
+    # print(df.count())
 
     # test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
     # test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
-    test = add_disputed_region_column(df=df)
-    test.show()
+    # test = add_disputed_region_column(df=df)
+    # test.show()
 
     # test = test.filter(test["admin2"] != test["admin21"])
     # test.show()
@@ -461,3 +568,157 @@ if __name__ == "__main__":
     #     data = json.load(file)
 
     # dq_passed_rows(df, data).show()
+
+    rt_data = [
+        {
+            "school_id_giga": "82679ff0-f358-33d0-b3ce-4fc4c2740b7e",
+            "school_id_govt": 11000023,
+            "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
+            "country_code": "BRA",
+            "country": "Brazil",
+        },
+        {
+            "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
+            "school_id_govt": 17959,
+            "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
+            "country_code": "Test",
+            "country": "Brazil",
+        },
+        {
+            "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
+            "school_id_govt": 17959,
+            "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
+            "country_code": "Test",
+            "country": "Brazil",
+        },
+    ]
+
+    mlab_data = [
+        {
+            "mlab_created_date": "2024-05-16",
+            "school_id_govt": "11000023",
+            "source": "mlab",
+            "country_code": "BRA",
+        },
+    ]
+
+    dca_data = [
+        {
+            "school_id_giga": "82679ff0-f358-33d0-b3ce-4fc4c2740b7e",
+            "school_id_govt": "11000023",
+            "source": "daily_checkapp",
+        },
+        {
+            "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
+            "school_id_govt": 17959,
+            "source": "daily_checkapp",
+        },
+    ]
+
+    # def connectivity_rt_dataset():
+    #     # get raw datasets
+    #     rt_data = proco_db.scalars(select(RTSchools))
+    #     mlab_data = mlab_db.scalars(select(MlabSchools))
+    #     dca_data = proco_db.scalars(select(GigaMeterSchools))
+
+    #     # assert schemas
+    #     all_rt_schema = StructType(
+    #         [
+    #             StructField("school_id_giga", StringType(), True),
+    #             StructField("school_id_govt", StringType(), True),
+    #             StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
+    #             StructField("country_code", StringType(), True),
+    #             StructField("country", StringType(), True),
+    #         ]
+    #     )
+    #     # Create the DataFrame
+    #     df_all_rt = spark.createDataFrame(rt_data, all_rt_schema)
+
+    #     mlab_schema = StructType(
+    #         [
+    #             StructField("mlab_created_date", StringType(), True),
+    #             StructField("school_id_govt", StringType(), True),
+    #             StructField("source", StringType(), True),
+    #             StructField("country_code", StringType(), True),
+    #         ]
+    #     )
+    #     # Create the DataFrame
+    #     df_mlab = spark.createDataFrame(mlab_data, mlab_schema)
+
+    #     dca_schema = StructType(
+    #         [
+    #             StructField("school_id_giga", StringType(), True),
+    #             StructField("school_id_govt", StringType(), True),
+    #             StructField("source", StringType(), True),
+    #         ]
+    #     )
+    #     df_dca = spark.createDataFrame(dca_data, dca_schema)
+
+    #     # transforms
+    #     # cast to proper format
+    #     df_all_rt = df_all_rt.withColumn(
+    #         "connectivity_rt_ingestion_timestamp",
+    #         f.to_timestamp(
+    #             f.col("connectivity_rt_ingestion_timestamp"),
+    #             "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+    #         ),
+    #     )
+    #     df_mlab = df_mlab.withColumn(
+    #         "mlab_created_date", f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd")
+    #     )
+
+    #     # dataset prefixes
+    #     for col in df_mlab.columns:
+    #         df_mlab = df_mlab.withColumnRenamed(col, col + "_mlab")
+    #     df_mlab.show()
+
+    #     for col in df_dca.columns:
+    #         df_dca = df_dca.withColumnRenamed(col, col + "_pcdc")
+    #     df_dca.show()
+    #     df_all_rt.show()
+
+    #     # merge three datasets
+    #     all_rt_schools = df_all_rt.join(
+    #         df_mlab,
+    #         how="left",
+    #         on=[
+    #             df_all_rt.school_id_govt == df_mlab.school_id_govt_mlab,
+    #             df_all_rt.country_code == df_mlab.country_code_mlab,
+    #         ],
+    #     ).join(
+    #         df_dca, how="left", on=df_all_rt.school_id_giga == df_dca.school_id_giga_pcdc
+    #     )
+
+    #     # create source column
+    #     all_rt_schools = all_rt_schools.withColumn(
+    #         "source",
+    #         f.regexp_replace(
+    #             f.concat_ws(
+    #                 ", ", f.trim(f.col("source_pcdc")), f.trim(f.col("source_mlab"))
+    #             ),
+    #             "^, |, $",
+    #             "",
+    #         ),
+    #     )
+
+    #     all_rt_schools = all_rt_schools.withColumn(
+    #         "connectivity_RT_datasource",
+    #         f.when(
+    #             (f.col("source") == "") & (f.col("country") == "Brazil"), "nic_br"
+    #         ).otherwise(f.col("source")),
+    #     )
+
+    #     # select relevant columns
+    #     realtime_columns = [
+    #         "school_id_giga",
+    #         "country",
+    #         "school_id_govt",
+    #         "connectivity_RT_ingestion_timestamp",
+    #         "connectivity_RT_datasource",
+    #     ]
+    #     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
+
+    #     return all_rt_schools.select(*realtime_columns)
+
+    test = connectivity_rt_dataset(rt_data, mlab_data, dca_data)
+    test.show()
