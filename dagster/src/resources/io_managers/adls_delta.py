@@ -40,7 +40,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         full_table_name = f"{schema_tier_name}.{table_name}"
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, config.metastore_schema, full_table_name)
+        self._upsert_data(output, config.metastore_schema, full_table_name, context)
 
         context.log.info(
             f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
@@ -126,6 +126,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         data: sql.DataFrame,
         schema_name: str,
         full_table_name: str,
+        context: OutputContext = None,
     ):
         spark = self._get_spark_session()
 
@@ -169,7 +170,13 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
-        query = build_deduped_merge_query(master, data, primary_key, update_columns)
+        query = build_deduped_merge_query(
+            master,
+            data,
+            primary_key,
+            update_columns,
+            context,
+        )
 
         if query is not None:
             query.execute()

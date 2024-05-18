@@ -79,6 +79,7 @@ def build_deduped_merge_query(
     updates: sql.DataFrame,
     primary_key: str,
     update_columns: list[str],
+    context: OpExecutionContext | OutputContext = None,
 ) -> DeltaMergeBuilder | None:
     """
     Delta Lake increments the dataset version and generates a change log when performing
@@ -112,12 +113,18 @@ def build_deduped_merge_query(
         ),
     ).first()["combined_signature"]
 
-    has_updates = master_to_update_signature != updates_signature
-    has_insertions = inserts_df.count() > 0
-    has_deletions = deletes_df.count() > 0
+    inserts_count = inserts_df.count()
+    deletes_count = deletes_df.count()
 
-    if not (ic(has_updates) or ic(has_insertions)):
+    has_updates = master_to_update_signature != updates_signature
+    has_insertions = inserts_count > 0
+    has_deletions = deletes_count > 0
+
+    if not (has_updates or has_insertions):
         return None
+
+    if context is not None:
+        context.log.info(f"{inserts_count=}, {deletes_count=}, {has_updates=}")
 
     query = master.alias("master").merge(
         incoming.alias("incoming"),
@@ -137,7 +144,7 @@ def build_deduped_merge_query(
         )
     if has_insertions:
         query = query.whenNotMatchedInsertAll()
-    if has_deletions:
+    if ic(has_deletions):
         query = query.whenNotMatchedBySourceDelete()
 
     return query
