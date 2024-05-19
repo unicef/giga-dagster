@@ -7,8 +7,10 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
 from dagster import InputContext, OutputContext
+from src.constants import constants
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
@@ -40,7 +42,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         full_table_name = f"{schema_tier_name}.{table_name}"
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, config.metastore_schema, full_table_name)
+        self._upsert_data(output, config.metastore_schema, full_table_name, context)
 
         context.log.info(
             f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
@@ -117,6 +119,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
+        if schema_name_for_tier in ["qos", "school-connectivity"]:
+            query = query.property(
+                "delta.logRetentionDuration", constants.qos_retention_period
+            )
+        else:
+            query = query.property(
+                "delta.logRetentionDuration", constants.school_master_retention_period
+            )
+
         execute_query_with_error_handler(
             spark, query, schema_name_for_tier, table_name, context
         )
@@ -126,21 +137,27 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         data: sql.DataFrame,
         schema_name: str,
         full_table_name: str,
+        context: OutputContext = None,
     ):
         spark = self._get_spark_session()
+        is_qos = schema_name in ["qos", "school-connectivity"]
 
-        if schema_name == "qos":
+        if is_qos:
             gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
             incoming_schema = data.schema
             gold_columns = {col.name for col in gold_schema.fields}
             gold_columns.discard("signature")
             incoming_columns = {col.name for col in incoming_schema.fields}
 
-            if len(gold_columns.symmetric_difference(incoming_columns)) > 0:
+            if len(incoming_columns.difference(gold_columns)) > 0:
+                # Incoming schema has columns that are not in the gold schema
                 dummy_df = spark.createDataFrame([], schema=incoming_schema)
                 dummy_df.write.format("delta").option("mergeSchema", "true").mode(
                     "append"
                 ).saveAsTable(full_table_name)
+            if len(gold_columns.difference(incoming_columns)) > 0:
+                # Master schema has columns that are not in the incoming schema
+                data = add_missing_columns(data, gold_schema.fields)
 
             columns = incoming_schema.fields
             primary_key = "gigasync_id"
@@ -169,7 +186,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
-        query = build_deduped_merge_query(master, data, primary_key, update_columns)
+        query = build_deduped_merge_query(
+            master,
+            data,
+            primary_key,
+            update_columns,
+            context=context,
+            is_partial_dataset=is_qos,
+            is_qos=is_qos,
+        )
 
         if query is not None:
             query.execute()
