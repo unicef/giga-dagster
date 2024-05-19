@@ -9,6 +9,7 @@ from pyspark.sql.types import StructType
 from dagster import InputContext, OutputContext
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
@@ -138,11 +139,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             gold_columns.discard("signature")
             incoming_columns = {col.name for col in incoming_schema.fields}
 
-            if len(gold_columns.symmetric_difference(incoming_columns)) > 0:
+            if len(incoming_columns.difference(gold_columns)) > 0:
+                # Incoming schema has columns that are not in the gold schema
                 dummy_df = spark.createDataFrame([], schema=incoming_schema)
                 dummy_df.write.format("delta").option("mergeSchema", "true").mode(
                     "append"
                 ).saveAsTable(full_table_name)
+            if len(gold_columns.difference(incoming_columns)) > 0:
+                # Master schema has columns that are not in the incoming schema
+                data = add_missing_columns(data, gold_schema.fields)
 
             columns = incoming_schema.fields
             primary_key = "gigasync_id"
