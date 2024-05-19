@@ -79,7 +79,9 @@ def build_deduped_merge_query(
     updates: sql.DataFrame,
     primary_key: str,
     update_columns: list[str],
+    *,
     context: OpExecutionContext | OutputContext = None,
+    is_partial_dataset=False,
 ) -> DeltaMergeBuilder | None:
     """
     Delta Lake increments the dataset version and generates a change log when performing
@@ -89,7 +91,8 @@ def build_deduped_merge_query(
     operation (i.e. insert, update, delete).
 
     IMPORTANT: Because of this, it is crucial that you do not pass in partial datasets for the
-    `updates` DataFrame. Otherwise, you may end up deleting more rows than you intended.
+    `updates` DataFrame without explicitly setting the `is_partial_dataset` flag. Otherwise,
+    you may end up deleting more rows than you intended.
     """
     master_df = master.toDF()
     incoming = updates.alias("incoming")
@@ -120,7 +123,9 @@ def build_deduped_merge_query(
     has_insertions = inserts_count > 0
     has_deletions = deletes_count > 0
 
-    if not (has_updates or has_insertions):
+    if not any(
+        [has_updates, has_insertions, (has_deletions and not is_partial_dataset)]
+    ):
         return None
 
     if context is not None:
@@ -144,7 +149,7 @@ def build_deduped_merge_query(
         )
     if has_insertions:
         query = query.whenNotMatchedInsertAll()
-    if ic(has_deletions):
+    if ic(has_deletions) and not is_partial_dataset:
         query = query.whenNotMatchedBySourceDelete()
 
     return query
