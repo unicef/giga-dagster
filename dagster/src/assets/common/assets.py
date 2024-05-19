@@ -1,4 +1,3 @@
-from azure.core.exceptions import ResourceNotFoundError
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
@@ -8,10 +7,14 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StringType
-from pyspark.sql.window import Window
 from sqlalchemy import update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
+from src.internal.merge import (
+    in_cluster_merge,
+    manual_review_dedupe_strat,
+    post_manual_review_merge,
+)
 from src.resources import ResourceKey
 from src.settings import settings
 from src.spark.transform_functions import add_missing_columns
@@ -32,8 +35,9 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
-from src.utils.spark import compute_row_hash, in_cluster_merge, transform_types
+from src.utils.spark import compute_row_hash, transform_types
 
+from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -102,7 +106,6 @@ def manual_review_failed_rows(
     )
 
     df_failed = staging_cdf.filter(~f.col("change_id").isin(passing_rows_change_ids))
-    df_failed = df_failed.select(*column_names)
 
     # Check if a rejects table already exists
     # If yes, do an in-cluster merge
@@ -112,42 +115,26 @@ def manual_review_failed_rows(
         construct_full_table_name(rejected_tier_schema_name, country_code)
     ):
         rejected = DeltaTable.forName(s, rejected_table_name).toDF()
-        inserts = df_failed.filter(f.col("_change_type") == "insert").select(
-            *column_names
-        )
-        updates = df_failed.filter(f.col("_change_type") == "update_postimage").select(
-            *column_names
-        )
-        deletes = df_failed.filter(f.col("_change_type") == "delete").select(
-            *column_names
-        )
-        context.log.info(
-            f"{inserts.count()=}, retain/{updates.count()=}, {deletes.count()=}"
-        )
-
-        rejected = (
-            rejected.join(updates.alias("updates"), primary_key, "inner")
-            .select("updates.*")
-            .join(deletes, primary_key, "left_anti")
-            .unionByName(inserts)
-            .dropDuplicates([primary_key])
+        new_rejected = post_manual_review_merge(
+            rejected, df_failed, column_names, primary_key, context
         )
     else:
-        rejected = df_failed
+        new_rejected = df_failed.select(*column_names)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
-
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
         spark=spark,
         schema_reference=schema_reference,
     )
+
     return Output(
-        rejected,
+        new_rejected,
         metadata={
             **get_output_metadata(config),
-            "row_count": rejected.count(),
+            "preview": get_table_preview(new_rejected),
+            "row_count": new_rejected.count(),
         },
     )
 
@@ -167,6 +154,7 @@ def silver(
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
+    primary_key = get_primary_key(s, schema_name)
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
@@ -177,7 +165,6 @@ def silver(
         schema_name, DataTier.SILVER
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-    primary_key = get_primary_key(s, schema_name)
 
     staging_cdf = (
         s.read.format("delta")
@@ -195,58 +182,17 @@ def silver(
         ),
     )
 
-    df_passed = staging_cdf.filter(f.col("change_id").isin(passing_rows_change_ids))
+    bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
+    df_passed = staging_cdf.filter(
+        f.col("change_id").isin(bc_passing_rows_change_ids.value)
+    )
     context.log.info(f"{df_passed.count()=}")
 
-    # In case multiple rows with the same school_id_giga are present,
-    # get only the row of the latest version.
-    #
-    # The case where there is more than 1 _commit_version for the same school_id_giga
-    # is for the update_preimage/update_postimage pair. Order by _change_type so that
-    # update_postimage takes precedence.
-    df_passed = (
-        df_passed.withColumn(
-            "row_number",
-            f.row_number().over(
-                Window.partitionBy("school_id_giga").orderBy(
-                    f.col("_commit_version").desc(),
-                    f.col("_change_type"),
-                )
-            ),
-        )
-        .filter(f.col("row_number") == 1)
-        .drop("row_number")
-    )
-
+    df_passed = manual_review_dedupe_strat(df_passed)
     silver = DeltaTable.forName(s, silver_table_name).toDF()
-
-    inserts = df_passed.filter(f.col("_change_type") == "insert").select(*column_names)
-    updates = df_passed.filter(f.col("_change_type") == "update_postimage").select(
-        *column_names
+    new_silver = post_manual_review_merge(
+        silver, df_passed, column_names, primary_key, context
     )
-    deletes = df_passed.filter(f.col("_change_type") == "delete").select(*column_names)
-
-    silver = (
-        silver.alias("silver")
-        .join(updates.alias("updates"), primary_key, "left")  # join with updates
-        .withColumns(
-            {
-                f"resolved_{c}": f.coalesce(f.col(f"updates.{c}"), f.col(f"silver.{c}"))
-                for c in column_names
-                if c != primary_key
-            }
-        )
-        .select(
-            *[primary_key, *[f"resolved_{c}" for c in column_names if c != primary_key]]
-        )
-        .withColumnsRenamed(
-            {f"resolved_{c}": c for c in column_names if c != primary_key}
-        )
-        .join(deletes, primary_key, "left_anti")  # remove deletes
-        .unionByName(inserts)
-        .dropDuplicates([primary_key])  # just to be sure, remove duplicate rows
-    )
-    silver = silver.select(*column_names)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -257,11 +203,11 @@ def silver(
     )
 
     return Output(
-        silver,
+        new_silver,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(df_passed),
-            "row_count": silver.count(),
+            "preview": get_table_preview(new_silver),
+            "row_count": new_silver.count(),
         },
     )
 
@@ -340,7 +286,7 @@ def master(
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    silver_columns = silver.schema.fields
+    silver_columns = get_schema_columns(s, f"school_{config.dataset_type}")
 
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
@@ -358,16 +304,20 @@ def master(
     new_master = in_cluster_merge(current_master, silver, primary_key, column_names)
     column_actions = {}
     for col in schema_columns:
+        # If the column value is NULL, add a placeholder value if the following
+        # conditions are met:
+        # - The column is not nullable
+        # - The column is not the primary key
+        # - The column type is string
+        # - The column is not in the silver table (e.g. the column comes from the
+        #   coverage schema, but we are currently processing a silver geolocation table)
         if (
             not col.nullable
             and col.name != primary_key
             and col.dataType == StringType()
             and col.name not in [c.name for c in silver_columns]
         ):
-            column_actions[col.name] = f.when(
-                f.col(col.name).isNull(),
-                f.lit("Unknown"),
-            )
+            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
     new_master = new_master.withColumns(column_actions)
     new_master = compute_row_hash(new_master)
 
@@ -437,12 +387,8 @@ def reference(
             and col.dataType == StringType()
             and col.name not in [c.name for c in silver_columns]
         ):
-            column_actions[col.name] = f.when(
-                f.col(col.name).isNull() | (f.col(col.name) == ""),
-                f.lit("Unknown"),
-            )
+            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
     new_reference = new_reference.withColumns(column_actions)
-
     new_reference = compute_row_hash(new_reference)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
@@ -457,7 +403,7 @@ def reference(
         new_reference,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(silver),
+            "preview": get_table_preview(new_reference),
             "row_count": new_reference.count(),
         },
     )

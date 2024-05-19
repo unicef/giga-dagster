@@ -6,7 +6,7 @@ from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
 from pyspark.sql import SparkSession, types
-from pyspark.sql.functions import coalesce, col, concat_ws, count, sha2, udf
+from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
 from src.settings import settings
@@ -291,35 +291,3 @@ def compute_row_hash(
         context.log.info(f"Calculated SHA256 signature for {out.count()} rows")
 
     return out
-
-
-def in_cluster_merge(
-    master: sql.DataFrame,
-    new: sql.DataFrame,
-    primary_key: str,
-    column_names: list[str],
-) -> sql.DataFrame:
-    inserts = new.join(master, primary_key, "left_anti")
-    updates = master.join(new.alias("new"), primary_key, "inner").select("new.*")
-    deletes = master.join(new, primary_key, "left_anti")
-
-    return (
-        master.alias("master")
-        .join(updates.alias("updates"), primary_key, "inner")
-        .withColumns(
-            {
-                f"resolved_{c}": coalesce(col(f"updates.{c}"), col(f"master.{c}"))
-                for c in column_names
-                if c != primary_key
-            }
-        )
-        .select(
-            *[primary_key, *[f"resolved_{c}" for c in column_names if c != primary_key]]
-        )
-        .withColumnsRenamed(
-            {f"resolved_{c}": c for c in column_names if c != primary_key}
-        )
-        .join(deletes, primary_key, "left_anti")
-        .unionByName(inserts)
-        .dropDuplicates([primary_key])
-    )
