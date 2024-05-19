@@ -7,6 +7,7 @@ import pandas as pd
 from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
+    SparkSession,
     functions as f,
 )
 from pyspark.sql.types import ArrayType, FloatType, StringType, StructField, StructType
@@ -380,7 +381,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
-def connectivity_rt_dataset():
+def connectivity_rt_dataset(spark: SparkSession):
     from src.internal.connectivity_queries import (
         get_giga_meter_schools,
         get_mlab_schools,
@@ -720,5 +721,5 @@ if __name__ == "__main__":
 
     #     return all_rt_schools.select(*realtime_columns)
 
-    test = connectivity_rt_dataset(rt_data, mlab_data, dca_data)
+    test = connectivity_rt_dataset(spark)
     test.show()

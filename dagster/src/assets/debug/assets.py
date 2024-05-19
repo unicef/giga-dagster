@@ -59,14 +59,20 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
 
 
 @asset
-def debug__test_connectivity_merge(_: OpExecutionContext):
+def debug__test_connectivity_merge(
+    _: OpExecutionContext,
+    spark: PySparkResource,
+):
     from src.spark.transform_functions import connectivity_rt_dataset
 
     return Output(
         None,
         metadata={
             "preview": MetadataValue.md(
-                connectivity_rt_dataset().toPandas().head(10).to_markdown()
+                connectivity_rt_dataset(spark.spark_session)
+                .toPandas()
+                .head(10)
+                .to_markdown()
             )
         },
     )
