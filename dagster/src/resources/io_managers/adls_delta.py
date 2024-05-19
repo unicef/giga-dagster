@@ -7,6 +7,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
 from dagster import InputContext, OutputContext
+from src.constants import constants
 from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.spark.transform_functions import add_missing_columns
@@ -118,6 +119,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
+        if schema_name_for_tier in ["qos", "school-connectivity"]:
+            query = query.property(
+                "delta.logRetentionDuration", constants.qos_retention_period
+            )
+        else:
+            query = query.property(
+                "delta.logRetentionDuration", constants.school_master_retention_period
+            )
+
         execute_query_with_error_handler(
             spark, query, schema_name_for_tier, table_name, context
         )
