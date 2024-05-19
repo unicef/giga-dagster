@@ -1,5 +1,6 @@
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
+from src.utils.metadata import get_table_preview
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
@@ -59,22 +60,15 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
 
 
 @asset
-def debug__test_connectivity_merge(
-    _: OpExecutionContext,
-    spark: PySparkResource,
-):
+def debug__test_connectivity_merge(_: OpExecutionContext, spark: PySparkResource):
     from src.spark.transform_functions import connectivity_rt_dataset
 
     connectivity = connectivity_rt_dataset(spark.spark_session)
-    timestamps = [
-        r["connectivity_rt_ingestion_timestamp"]
-        for r in connectivity.select("connectivity_rt_ingestion_timestamp").collect()
-    ]
 
     return Output(
         None,
         metadata={
-            "preview": MetadataValue.json(timestamps),
+            "preview": get_table_preview(connectivity),
             "row_count": connectivity.count(),
         },
     )
