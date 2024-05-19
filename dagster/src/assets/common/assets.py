@@ -11,9 +11,9 @@ from sqlalchemy import update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
-    in_cluster_merge,
+    full_in_cluster_merge,
     manual_review_dedupe_strat,
-    post_manual_review_merge,
+    partial_cdf_in_cluster_merge,
 )
 from src.resources import ResourceKey
 from src.settings import settings
@@ -118,7 +118,7 @@ def manual_review_failed_rows(
         construct_full_table_name(rejected_tier_schema_name, country_code)
     ):
         rejected = DeltaTable.forName(s, rejected_table_name).toDF()
-        new_rejected = post_manual_review_merge(
+        new_rejected = partial_cdf_in_cluster_merge(
             rejected, df_failed, column_names, primary_key, context
         )
     else:
@@ -193,7 +193,7 @@ def silver(
 
     df_passed = manual_review_dedupe_strat(df_passed)
     current_silver = DeltaTable.forName(s, silver_table_name).toDF()
-    new_silver = post_manual_review_merge(
+    new_silver = partial_cdf_in_cluster_merge(
         current_silver, df_passed, column_names, primary_key, context
     )
 
@@ -304,7 +304,9 @@ def master(
         s, construct_full_table_name("school_master", country_code)
     ).toDF()
 
-    new_master = in_cluster_merge(current_master, silver, primary_key, column_names)
+    new_master = full_in_cluster_merge(
+        current_master, silver, primary_key, column_names
+    )
     column_actions = {}
     for col in schema_columns:
         # If the column value is NULL, add a placeholder value if the following
@@ -376,7 +378,7 @@ def reference(
         current_reference = DeltaTable.forName(
             s, construct_full_table_name("school_reference", country_code)
         ).toDF()
-        new_reference = in_cluster_merge(
+        new_reference = full_in_cluster_merge(
             current_reference, silver, primary_key, column_names
         )
     else:

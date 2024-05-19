@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
+from src.internal.merge import partial_in_cluster_merge
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
@@ -244,6 +245,12 @@ class StagingStep:
         update_columns = [
             c.name for c in self.schema_columns if c.name != self.primary_key
         ]
+        df = partial_in_cluster_merge(
+            staging_dt.toDF(),
+            df,
+            self.primary_key,
+            column_names=[c.name for c in self.schema_columns],
+        )
         query = build_deduped_merge_query(
             staging_dt,
             df,

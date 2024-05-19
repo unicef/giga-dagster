@@ -39,7 +39,7 @@ class Constants(BaseSettings):
     qos_source_folder = "gold/qos"
 
     # can't set infinite, just set to a value most likely beyond the extinction of the human race
-    school_master_retention_period = "interval 1000000000 weeks"
+    school_master_retention_period = "interval 1000000 weeks"
     qos_retention_period = "interval 90 days"
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
