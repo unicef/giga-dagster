@@ -65,14 +65,16 @@ def debug__test_connectivity_merge(
 ):
     from src.spark.transform_functions import connectivity_rt_dataset
 
+    connectivity = connectivity_rt_dataset(spark.spark_session)
+    timestamps = [
+        r["connectivity_rt_ingestion_timestamp"]
+        for r in connectivity.select("connectivity_rt_ingestion_timestamp").collect()
+    ]
+
     return Output(
         None,
         metadata={
-            "preview": MetadataValue.md(
-                connectivity_rt_dataset(spark.spark_session)
-                .toPandas()
-                .head(10)
-                .to_markdown()
-            )
+            "preview": MetadataValue.json(timestamps),
+            "row_count": connectivity.count(),
         },
     )
