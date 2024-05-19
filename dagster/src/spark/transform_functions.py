@@ -10,7 +10,14 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, FloatType, StringType, StructField, StructType
+from pyspark.sql.types import (
+    ArrayType,
+    FloatType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 
 from azure.storage.blob import BlobServiceClient
 from src.settings import settings
@@ -433,7 +440,7 @@ def connectivity_rt_dataset(spark: SparkSession):
         f.to_timestamp(
             f.col("connectivity_rt_ingestion_timestamp"),
             "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
-        ),
+        ).cast(TimestampType()),
     )
     df_mlab = df_mlab.withColumn(
         "mlab_created_date", f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd")
@@ -490,7 +497,9 @@ def connectivity_rt_dataset(spark: SparkSession):
     ]
     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
 
-    return all_rt_schools.select(*realtime_columns)
+    out = all_rt_schools.select(*realtime_columns)
+    out.show()
+    return out
 
 
 if __name__ == "__main__":

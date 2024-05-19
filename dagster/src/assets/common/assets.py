@@ -172,10 +172,10 @@ def silver(
     deletes = df_passed.filter(df_passed["_change_type"] == "delete")
     deletes = deletes.select(*[c.name for c in schema_columns])
 
-    silver = silver.unionAll(inserts)
+    silver = silver.unionByName(inserts)
     delete_ids = [row[primary_key] for row in deletes.select(primary_key).collect()]
     silver = silver.filter(~f.col(primary_key).isin(delete_ids))
-    silver = updates.unionAll(silver).dropDuplicates([primary_key])
+    silver = updates.unionByName(silver).dropDuplicates([primary_key])
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
 
