@@ -289,6 +289,11 @@ def compute_row_hash(
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
 
-    out = df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))
+    # Exclude previous row hash if it is present
+    columns = df.columns
+    if "signature" in columns:
+        columns.remove("signature")
+
+    out = df.withColumn("signature", sha2(concat_ws("|", *sorted(columns)), 256))
     logger.info(f"Calculated SHA256 signature for {out.count()} rows")
     return out
