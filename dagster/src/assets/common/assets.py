@@ -105,7 +105,10 @@ def manual_review_failed_rows(
         ),
     )
 
-    df_failed = staging_cdf.filter(~f.col("change_id").isin(passing_rows_change_ids))
+    bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
+    df_failed = staging_cdf.filter(
+        ~f.col("change_id").isin(bc_passing_rows_change_ids.value)
+    )
 
     # Check if a rejects table already exists
     # If yes, do an in-cluster merge
@@ -189,9 +192,9 @@ def silver(
     context.log.info(f"{df_passed.count()=}")
 
     df_passed = manual_review_dedupe_strat(df_passed)
-    silver = DeltaTable.forName(s, silver_table_name).toDF()
+    current_silver = DeltaTable.forName(s, silver_table_name).toDF()
     new_silver = post_manual_review_merge(
-        silver, df_passed, column_names, primary_key, context
+        current_silver, df_passed, column_names, primary_key, context
     )
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
