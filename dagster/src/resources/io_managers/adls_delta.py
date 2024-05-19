@@ -193,6 +193,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             update_columns,
             context=context,
             is_partial_dataset=is_qos,
+            is_qos=is_qos,
         )
 
         if query is not None:

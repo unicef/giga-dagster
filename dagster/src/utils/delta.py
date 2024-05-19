@@ -2,7 +2,10 @@ from delta.tables import DeltaMergeBuilder, DeltaTable, DeltaTableBuilder
 from icecream import ic
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import StructField, StructType
 
@@ -82,6 +85,7 @@ def build_deduped_merge_query(
     *,
     context: OpExecutionContext | OutputContext = None,
     is_partial_dataset=False,
+    is_qos=False,
 ) -> DeltaMergeBuilder | None:
     """
     Delta Lake increments the dataset version and generates a change log when performing
@@ -97,6 +101,22 @@ def build_deduped_merge_query(
     master_df = master.toDF()
     incoming = updates.alias("incoming")
 
+    if is_qos:
+        incoming_partitions = [
+            r.date for r in incoming.select(f.col("date")).distinct().collect()
+        ]
+        bc_incoming_partitions = incoming.sparkSession.sparkContext.broadcast(
+            incoming_partitions
+        )
+        master_df = master_df.filter(f.col("date").isin(bc_incoming_partitions.value))
+        merge_condition = (
+            f.col(f"master.{primary_key}") == f.col(f"incoming.{primary_key}")
+        ) & (f.col("incoming.date").isin(bc_incoming_partitions.value))
+    else:
+        merge_condition = f.col(f"master.{primary_key}") == f.col(
+            f"incoming.{primary_key}"
+        )
+
     master_ids = master_df.select(primary_key, "signature")
     incoming_ids = incoming.select(primary_key, "signature")
 
@@ -104,7 +124,7 @@ def build_deduped_merge_query(
     inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
     deletes_df = master_ids.join(incoming_ids, primary_key, "left_anti")
 
-    # TODO: Might need to specify a predictable order, although by default it's insertion order
+    # Might need to specify a predictable order, although by default it's insertion order
     updates_signature = updates_df.agg(
         sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
             "combined_signature",
@@ -131,10 +151,7 @@ def build_deduped_merge_query(
     if context is not None:
         context.log.info(f"{inserts_count=}, {deletes_count=}, {has_updates=}")
 
-    query = master.alias("master").merge(
-        incoming.alias("incoming"),
-        f"master.{primary_key} = incoming.{primary_key}",
-    )
+    query = master.alias("master").merge(incoming.alias("incoming"), merge_condition)
 
     if has_updates:
         query = query.whenMatchedUpdate(
