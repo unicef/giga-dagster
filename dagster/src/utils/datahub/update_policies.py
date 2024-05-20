@@ -138,7 +138,12 @@ def update_policy_for_group(
     country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
-    dataset_type = config.dataset_type if "school" not in config.dataset_type else "QoS"
+    dataset_type = (
+        "QoS"
+        if (config.dataset_type).lower()
+        in ["school-connectivity", "school-list", "qos"]
+        else config.dataset_type
+    )
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
@@ -184,7 +189,11 @@ if __name__ == "__main__":
         context = None
         logger = get_context_with_fallback_logger(context)
         country_name = identify_country_name(country_code=country_code)
-        dataset_type = dataset_type if "school" not in dataset_type else "QoS"
+        dataset_type = (
+            "QoS"
+            if (dataset_type).lower() in ["school-connectivity", "school-list", "qos"]
+            else dataset_type
+        )
         group_urn = build_group_urn(
             country_name=country_name, dataset_type=dataset_type, domain=domain
         )
@@ -193,6 +202,8 @@ if __name__ == "__main__":
 
     test_update_policy_for_group(dataset_type="coverage", country_code="RWA")
     test_update_policy_for_group(dataset_type="school-connectivity", country_code="RWA")
+    test_update_policy_for_group(dataset_type="school-list", country_code="RWA")
+    test_update_policy_for_group(dataset_type="qos", country_code="RWA")
 
     # def test_update_policies(context: OpExecutionContext = None) -> None:
     #     logger = get_context_with_fallback_logger(context)
