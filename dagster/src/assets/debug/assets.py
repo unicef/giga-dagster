@@ -1,6 +1,9 @@
+import json
+from datetime import datetime
+
+import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
-from src.utils.metadata import get_table_preview
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
@@ -60,15 +63,37 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
 
 
 @asset
-def debug__test_connectivity_merge(_: OpExecutionContext, spark: PySparkResource):
-    from src.spark.transform_functions import connectivity_rt_dataset
+def debug__test_connectivity_merge(
+    _: OpExecutionContext,
+    # spark: PySparkResource,
+):
+    from src.internal.connectivity_queries import get_rt_schools
 
-    connectivity = connectivity_rt_dataset(spark.spark_session)
+    rt_data = get_rt_schools()
+    df = pd.DataFrame.from_records(rt_data)
+
+    # connectivity = connectivity_rt_dataset(spark.spark_session)
+    # timestamps = [
+    #     r["connectivity_rt_ingestion_timestamp"]
+    #     for r in connectivity.select("connectivity_rt_ingestion_timestamp").collect()
+    # ]
+
+    def serialize(val):
+        if isinstance(val, pd.Timestamp | datetime):
+            return val.isoformat()
+        return val
+
+    ret = (
+        df[["connectivity_rt_ingestion_timestamp"]]
+        .applymap(serialize)
+        .to_dict(orient="records")
+    )
 
     return Output(
         None,
         metadata={
-            "preview": get_table_preview(connectivity),
-            "row_count": connectivity.count(),
+            "preview": MetadataValue.json(ret),
+            "output": json.dumps(ret, indent=2),
+            "row_count": len(df),
         },
     )
