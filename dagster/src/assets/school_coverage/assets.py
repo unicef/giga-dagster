@@ -194,7 +194,7 @@ def coverage_dq_passed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[sql.DataFrame]:
+) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -224,7 +224,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[sql.DataFrame]:
+) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -255,7 +255,7 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> Output[sql.DataFrame]:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
     silver_table_name = config.country_code.lower()

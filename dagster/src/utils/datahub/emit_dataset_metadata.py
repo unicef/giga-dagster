@@ -8,7 +8,6 @@ from dagster_pyspark import PySparkResource
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
-from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     DatasetPropertiesClass,
     NullTypeClass,
@@ -25,6 +24,7 @@ from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
+from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.op_config import FileConfig
@@ -232,22 +232,6 @@ def emit_metadata_to_datahub(
         context.log.info(schema_metadata_event)
         datahub_emitter.emit(schema_metadata_event)
 
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-            retry_max_times=5,
-            retry_status_codes=[
-                403,
-                429,
-                500,
-                502,
-                503,
-                504,
-            ],
-        ),
-    )
-
     domain_urn = set_domain(context)
     domain_query = f"""
     mutation setDomain {{
@@ -274,7 +258,7 @@ def emit_metadata_to_datahub(
 def datahub_emit_metadata_with_exception_catcher(
     context: OpExecutionContext,
     config: FileConfig,
-    spark: PySparkResource,
+    spark: PySparkResource = None,
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:

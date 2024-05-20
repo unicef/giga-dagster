@@ -99,8 +99,6 @@ def qos_school_connectivity_raw(
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
-        spark=spark,
-        schema_reference=df,
     )
 
     context.log.info(f">>> df count: {df.count()}")
@@ -225,6 +223,7 @@ def qos_school_connectivity_bronze(
         context=context,
         config=config,
         spark=spark,
+        schema_reference=bronze,
     )
 
     return Output(
@@ -241,7 +240,6 @@ def qos_school_connectivity_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     qos_school_connectivity_bronze: sql.DataFrame,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     country_code = config.country_code
     dq_results = row_level_checks(
@@ -255,7 +253,6 @@ def qos_school_connectivity_data_quality_results(
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
-        spark=spark,
     )
     return Output(
         dq_pandas,
@@ -288,14 +285,7 @@ def qos_school_connectivity_data_quality_results_summary(
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
-        spark=spark,
     )
-
-    # send_email_dq_report_with_config(
-    #     dq_results=dq_summary_statistics,
-    #     config=config,
-    #     context=context,
-    # )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
@@ -374,6 +364,15 @@ def qos_school_connectivity_gold(
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
     return Output(
         qos_school_connectivity_dq_passed_rows,
         metadata={
