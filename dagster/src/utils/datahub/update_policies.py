@@ -138,7 +138,7 @@ def update_policy_for_group(
     country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
-    dataset_type = config.dataset_type
+    dataset_type = config.dataset_type if "school" not in config.dataset_type else "QoS"
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
