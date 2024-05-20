@@ -54,7 +54,6 @@ def qos_school_connectivity_raw(
         and database_data["school_list"]["school_id_key"]
         and database_data["school_id_send_query_in"] != "NONE"
     )
-    context.log.info(f">> boolschool id params: {complete_school_id_parameters}")
 
     df = pd.DataFrame()
 
@@ -101,7 +100,6 @@ def qos_school_connectivity_raw(
         config=config,
     )
 
-    context.log.info(f">>> df count: {df.count()}")
     return Output(
         df,
         metadata={
