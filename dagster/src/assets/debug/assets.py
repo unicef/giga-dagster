@@ -17,8 +17,8 @@ class DropTableConfig(DropSchemaConfig):
 class ExternalDbQueryConfig(Config):
     country_code: str = Field(
         ...,
-        min_length=3,
-        max_length=3,
+        min_length=2,
+        max_length=2,
         description="ISO-2 country code",
     )
 
