@@ -37,7 +37,7 @@ def generate_dagster_config(api_data: dict[str, str]) -> dict[str, str]:
     job=qos_school_list__automated_data_checks_job,
     minimum_interval_seconds=int(timedelta(days=1).total_seconds())
     if settings.IN_PRODUCTION
-    else 30,
+    else 60,
 )
 def qos_school_list__new_apis_sensor(
     context: SensorEvaluationContext,
@@ -58,7 +58,9 @@ def qos_school_list__new_apis_sensor(
 
             country_code = row_data.country
             metastore_schema = "school_geolocation"
-            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}"
+            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
+                " ", ""
+            )
 
             ops_destination_mapping = {
                 "qos_school_list_raw": OpDestinationMapping(
@@ -119,7 +121,7 @@ def qos_school_list__new_apis_sensor(
             formatted_date = (
                 scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
             )
-            run_key = f"{row_data.name}_{formatted_date}"
+            run_key = f"{row_data.name.replace(' ', '')}_{formatted_date}"
 
             yield RunRequest(
                 run_key=run_key,
@@ -137,7 +139,7 @@ def qos_school_list__new_apis_sensor(
     job=qos_school_connectivity__automated_data_checks_job,
     minimum_interval_seconds=int(timedelta(minutes=10).total_seconds())
     if settings.IN_PRODUCTION
-    else 30,
+    else 60,
 )
 def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
     DATASET_TYPE = "school-connectivity"
@@ -175,7 +177,9 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
 
         country_code = row_data.school_list.country
         metastore_schema = "qos"
-        stem = f"{row_data.school_list.name.replace(' ', '-')}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}"
+        stem = f"{row_data.school_list.name.replace(' ', '-')}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
+            " ", ""
+        )
 
         ops_destination_mapping = {
             "qos_school_connectivity_raw": OpDestinationMapping(
@@ -236,7 +240,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
         formatted_date = (
             scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
         )
-        run_key = f"{row_data.school_list.name}_{formatted_date}"
+        run_key = f"{row_data.school_list.name.replace(' ', '')}_{formatted_date}"
 
         yield RunRequest(
             run_key=run_key,

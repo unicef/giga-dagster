@@ -12,6 +12,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
+    add_missing_values,
     column_mapping_rename,
     create_bronze_layer_columns,
 )
@@ -71,11 +72,19 @@ def qos_school_list_bronze(
         qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
 
-    columns_to_drop = [x for x in df.columns if x not in schema_columns]
+    columns_to_drop = [
+        x for x in df.columns if x not in [c.name for c in schema_columns]
+    ]
+
     df = df.drop(*columns_to_drop)
 
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
+
+    columns_to_fill = ["education_level_govt", "school_id_govt_type"]
+    df = add_missing_values(
+        df, [c for c in schema_columns if c.name in columns_to_fill]
+    )
 
     config.metadata.update({"column_mapping": column_mapping})
 
@@ -232,6 +241,10 @@ def qos_school_list_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if qos_school_list_dq_passed_rows.count() == 0:
+        context.log.warning("Skipping staging as there are no rows passing DQ checks")
+        return Output(None)
+
     staging_step = StagingStep(
         context,
         config,
