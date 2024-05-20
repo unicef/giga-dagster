@@ -39,7 +39,7 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_raw(
-    context: OpExecutionContext, config: FileConfig, spark: PySparkResource
+    context: OpExecutionContext, config: FileConfig
 ) -> Output[pd.DataFrame]:
     context.log.info(f"Database row: {config.row_data_dict}")
     with get_db_context() as database_session:
@@ -117,11 +117,10 @@ def qos_school_list_data_quality_results(
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
-    country_code = config.country_code
     dq_results = row_level_checks(
         qos_school_list_bronze,
         "geolocation",
-        country_code,
+        config.country_code,
         context,
     )
 
