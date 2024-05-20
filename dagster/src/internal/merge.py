@@ -41,11 +41,9 @@ def core_merge_logic(
     column_names: list[str],
     update_join_type: Literal["inner", "left"],
 ) -> sql.DataFrame:
-    column_names_no_pk_sig = [*column_names]
-    if primary_key in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove(primary_key)
-    if "signature" in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove("signature")
+    column_names_no_pk = [*column_names]
+    if primary_key in column_names_no_pk:
+        column_names_no_pk.remove(primary_key)
 
     # Updates - inner join master + silver
     new_master = master.alias("master").join(
@@ -56,18 +54,18 @@ def core_merge_logic(
     new_master = new_master.withColumns(
         {
             f"resolved_{c}": f.coalesce(f.col(f"updates.{c}"), f.col(f"master.{c}"))
-            for c in column_names_no_pk_sig
+            for c in column_names_no_pk
         }
     )
 
     # Select only the resolved columns
     new_master = new_master.select(
-        *[primary_key, *[f"resolved_{c}" for c in column_names_no_pk_sig]]
+        *[primary_key, *[f"resolved_{c}" for c in column_names_no_pk]]
     )
 
     # Rename the resolved columns to the original column names
     new_master = new_master.withColumnsRenamed(
-        {f"resolved_{c}": c for c in column_names_no_pk_sig}
+        {f"resolved_{c}": c for c in column_names_no_pk}
     )
 
     # Yeet the deletes
@@ -94,11 +92,12 @@ def partial_cdf_in_cluster_merge(
 ):
     logger = get_context_with_fallback_logger(context)
 
-    column_names_no_pk_sig = [*column_names]
-    if primary_key in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove(primary_key)
-    if "signature" in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove("signature")
+    master = master.drop("signature")
+    incoming = incoming.drop("signature")
+
+    column_names_no_pk = [*column_names]
+    if primary_key in column_names_no_pk:
+        column_names_no_pk.remove(primary_key)
 
     # Extract operations; likely these will be partial tables.
     # Select only update_postimage since this is the only one we show in
@@ -132,11 +131,12 @@ def partial_in_cluster_merge(
     """
     Inserts and deletes become ambiguous in a partial merge, so deletes will not be handled here.
     """
-    column_names_no_pk_sig = [*column_names]
-    if primary_key in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove(primary_key)
-    if "signature" in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove("signature")
+    master = master.drop("signature")
+    new = new.drop("signature")
+
+    column_names_no_pk = [*column_names]
+    if primary_key in column_names_no_pk:
+        column_names_no_pk.remove(primary_key)
 
     inserts = new.join(master, primary_key, "left_anti")
     updates = master.join(new.alias("new"), primary_key, "inner").select("new.*")
@@ -166,11 +166,12 @@ def full_in_cluster_merge(
                    school master. It just needs to be the current version of a Delta Table.
     :param new: The full table of incoming changes whose schema already conforms to `master`.
     """
-    column_names_no_pk_sig = [*column_names]
-    if primary_key in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove(primary_key)
-    if "signature" in column_names_no_pk_sig:
-        column_names_no_pk_sig.remove("signature")
+    master = master.drop("signature")
+    new = new.drop("signature")
+
+    column_names_no_pk = [*column_names]
+    if primary_key in column_names_no_pk:
+        column_names_no_pk.remove(primary_key)
 
     inserts = new.join(master, primary_key, "left_anti")
     updates = master.join(new.alias("new"), primary_key, "inner").select("new.*")
