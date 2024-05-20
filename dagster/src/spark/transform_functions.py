@@ -16,7 +16,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    TimestampNTZType,
     TimestampType,
 )
 
@@ -439,11 +438,9 @@ def connectivity_rt_dataset(spark: SparkSession):
     df_all_rt = df_all_rt.withColumn(
         "connectivity_rt_ingestion_timestamp",
         f.to_timestamp(
-            f.col("connectivity_rt_ingestion_timestamp"),
+            f.col("connectivity_rt_ingestion_timestamp").cast(TimestampType()),
             "yyyy-MM-dd HH:mm:ss.SSSSSS",
-        )
-        .cast(TimestampNTZType())
-        .cast(TimestampType()),
+        ),
     )
     df_mlab = df_mlab.withColumn(
         "mlab_created_date",
