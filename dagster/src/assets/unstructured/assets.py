@@ -4,6 +4,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emitter,
     define_dataset_properties,
 )
+from src.utils.metadata import get_output_metadata
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
 
@@ -21,7 +22,11 @@ def unstructured_raw(context: OpExecutionContext, config: FileConfig):
             aspect=dataset_properties,
         )
         context.log.info("EMITTING DATASET METADATA")
+        context.log.info(dataset_metadata_event)
         datahub_emitter.emit(dataset_metadata_event)
+        context.log.info(
+            f"Metadata has been successfully emitted to Datahub with dataset URN {config.datahub_destination_dataset_urn}.",
+        )
 
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
@@ -29,4 +34,4 @@ def unstructured_raw(context: OpExecutionContext, config: FileConfig):
         sentry_sdk.capture_exception(error=error)
         pass
 
-    return Output(None)
+    return Output(None, metadata={**get_output_metadata(config)})
