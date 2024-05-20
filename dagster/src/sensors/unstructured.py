@@ -5,7 +5,7 @@ from src.constants import DataTier, constants
 from src.jobs.unstructured import unstructured__emit_metadata_to_datahub_job
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_school_master_filename_components
+from src.utils.filename import deconstruct_unstructured_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "unstructured"
@@ -34,7 +34,7 @@ def unstructured__emit_metadata_to_datahub_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         try:
-            filename_components = deconstruct_school_master_filename_components(
+            filename_components = deconstruct_unstructured_filename_components(
                 adls_filepath
             )
         except Exception as e:
