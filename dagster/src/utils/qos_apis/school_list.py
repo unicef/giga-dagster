@@ -5,7 +5,7 @@ import requests
 from models.qos_apis import SchoolList
 from sqlalchemy import update
 from sqlalchemy.orm import Session
-from src.exceptions import ExternalApiException
+from src.exceptions import EndOfPaginationException, ExternalApiException
 from src.utils.qos_apis.common import (
     _generate_auth_parameters,
     _generate_pagination_parameters,
@@ -51,6 +51,7 @@ def query_school_list_data(
                 )
             )
             database_session.execute(update_statement)
+            database_session.commit()
             raise e
         else:
             update_statement = (
@@ -59,14 +60,17 @@ def query_school_list_data(
                 .values(
                     {
                         "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                        "date_last_succesfully_ingested": datetime.now(
+                        "date_last_successfully_ingested": datetime.now(
                             tz=ZoneInfo("UTC")
                         ),
                         "error_message": None,
-                    },
+                    }
                 )
             )
             database_session.execute(update_statement)
+            database_session.commit()
+
+        return data
 
     else:
         page = (
@@ -91,11 +95,11 @@ def query_school_list_data(
                     total_response_count = len(run_response) + offset
 
                 else:
-                    raise ValueError(
+                    raise EndOfPaginationException(
                         f"{row_data['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response) if len(run_response) else 0})",
                     )
 
-            except ValueError as e:
+            except EndOfPaginationException as e:
                 context.log.info(e)
                 break
             except Exception as e:
@@ -113,7 +117,9 @@ def query_school_list_data(
                     )
                 )
                 database_session.execute(update_statement)
+                database_session.commit()
                 raise ExternalApiException(error_message) from e
+
             else:
                 offset += len(run_response)
                 page += 1
@@ -121,16 +127,17 @@ def query_school_list_data(
                     f"Next run: {row_data['name']} run # {page}, offset # {offset}",
                 )
 
-    update_statement = (
-        update(SchoolList)
-        .where(SchoolList.id == row_data["id"])
-        .values(
-            {
-                "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                "date_last_successfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                "error_message": None,
-            },
+        update_statement = (
+            update(SchoolList)
+            .where(SchoolList.id == row_data["id"])
+            .values(
+                {
+                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "date_last_successfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "error_message": None,
+                },
+            )
         )
-    )
-    database_session.execute(update_statement)
+        database_session.execute(update_statement)
+        database_session.commit()
     return data

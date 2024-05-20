@@ -5,7 +5,7 @@ import requests
 from models.qos_apis import SchoolConnectivity
 from sqlalchemy import update
 from sqlalchemy.orm import Session
-from src.exceptions import ExternalApiException
+from src.exceptions import EndOfPaginationException, ExternalApiException
 from src.utils.qos_apis.common import (
     _generate_auth_parameters,
     _generate_pagination_parameters,
@@ -39,10 +39,6 @@ def query_school_connectivity_data(
     _generate_school_id_query_parameters(row_data, school_id)
     _generate_date_query_parameters(row_data)
 
-    context.log.info(
-        f"schoolidq: {row_data['query_parameters']}, {row_data['request_body']}"
-    )
-
     if auth_headers is not None:
         session.headers.update(auth_headers)
 
@@ -65,6 +61,7 @@ def query_school_connectivity_data(
                 )
             )
             database_session.execute(update_statement)
+            database_session.commit()
             raise e
         else:
             update_statement = (
@@ -81,6 +78,7 @@ def query_school_connectivity_data(
                 )
             )
             database_session.execute(update_statement)
+            database_session.commit()
 
         return data
 
@@ -111,11 +109,11 @@ def query_school_connectivity_data(
                     total_response_count = len(run_response) + offset
 
                 else:
-                    raise ValueError(
+                    raise EndOfPaginationException(
                         f"{row_data['school_list']['name']} run # {page}, offset # {total_response_count} failed: array length is {len(run_response)})"
                     )
 
-            except ValueError as e:
+            except EndOfPaginationException as e:
                 context.log.info(e)
                 break
             except Exception as e:
@@ -133,6 +131,7 @@ def query_school_connectivity_data(
                     )
                 )
                 database_session.execute(update_statement)
+                database_session.commit()
                 raise ExternalApiException(error_message) from e
 
             else:
@@ -142,18 +141,19 @@ def query_school_connectivity_data(
                     f"Next run: {row_data['school_list']['name']} run # {page}, offset # {offset}"
                 )
 
-    update_statement = (
-        update(SchoolConnectivity)
-        .where(SchoolConnectivity.id == row_data["id"])
-        .values(
-            {
-                "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                "date_last_successfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                "error_message": None,
-            }
+        update_statement = (
+            update(SchoolConnectivity)
+            .where(SchoolConnectivity.id == row_data["id"])
+            .values(
+                {
+                    "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "date_last_successfully_ingested": datetime.now(tz=ZoneInfo("UTC")),
+                    "error_message": None,
+                }
+            )
         )
-    )
-    database_session.execute(update_statement)
+        database_session.execute(update_statement)
+        database_session.commit()
     return data
 
 

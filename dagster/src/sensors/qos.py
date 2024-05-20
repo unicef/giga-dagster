@@ -160,12 +160,6 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             next_execution_date = croniter(
                 api.ingestion_frequency, api.date_last_ingested
             ).get_next(datetime)
-            context.log.info(
-                f">>> next exec!!last: {api.date_last_ingested}, {next_execution_date}, {datetime.now(UTC)}"
-            )
-            context.log.info(
-                f">>> next execyes?!!: {api.ingestion_frequency}, {next_execution_date > datetime.now(UTC)}"
-            )
             if next_execution_date > datetime.now(UTC):
                 continue
 
@@ -177,7 +171,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
 
         country_code = row_data.school_list.country
         metastore_schema = "qos"
-        stem = f"{row_data.school_list.name.replace(' ', '-')}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
+        stem = f"{row_data.school_list.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
             " ", ""
         )
 
@@ -192,7 +186,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
                 source_filepath=f"{constants.raw_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 destination_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 metastore_schema=metastore_schema,
-                tier=DataTier.RAW,
+                tier=DataTier.BRONZE,
             ),
             "qos_school_connectivity_data_quality_results": OpDestinationMapping(
                 source_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
@@ -222,7 +216,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
                 source_filepath=f"{constants.dq_results_folder}/{DOMAIN}/{DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}_gold.db/{country_code.lower()}",
                 metastore_schema=metastore_schema,
-                tier=DataTier.DATA_QUALITY_CHECKS,
+                tier=DataTier.GOLD,
             ),
         }
 
