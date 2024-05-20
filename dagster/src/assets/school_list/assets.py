@@ -52,7 +52,6 @@ def qos_school_list_raw(
         config=config,
     )
 
-    context.log.info(f">>>> count: {df.count()}")
     return Output(
         df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
     )
@@ -81,7 +80,12 @@ def qos_school_list_bronze(
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
 
-    columns_to_fill = ["education_level_govt", "school_id_govt_type"]
+    columns_to_fill = [
+        "education_level_govt",
+        "school_id_govt_type",
+        "admin1",
+        "admin2",
+    ]
     df = add_missing_values(
         df, [c for c in schema_columns if c.name in columns_to_fill]
     )
@@ -96,7 +100,6 @@ def qos_school_list_bronze(
     )
 
     df_pandas = df.toPandas()
-    context.log.info(f">>>> count: {df.count()}")
     return Output(
         df_pandas,
         metadata={
