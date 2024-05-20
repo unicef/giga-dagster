@@ -165,9 +165,11 @@ def add_missing_values(
     df: sql.DataFrame, schema_columns: list[StructField]
 ) -> sql.DataFrame:
     columns_to_fill = [col.name for col in schema_columns]
+    column_actions = {}
 
-    for column in columns_to_fill:
-        df = df.withColumn(column, f.coalesce(f.col(column), f.lit("Unknown")))
+    column_actions = {c: f.when(f.col(c).isNull(), "Unknown") for c in columns_to_fill}
+
+    df = df.withColumns(column_actions)
     return df
 
 

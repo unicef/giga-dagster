@@ -105,7 +105,7 @@ class Config(BaseSettings):
         },
     ]
 
-    DATA_TYPES: set[tuple[str, str]] = {
+    DATA_TYPES: set[tuple[str, str]] = {  ## @RENZ are we not pulling this from schema?
         ("cellular_coverage_availability", "STRING"),
         ("cellular_coverage_type", "STRING"),
         ("fiber_node_distance", "DOUBLE"),
