@@ -373,8 +373,7 @@ def adhoc__publish_silver_geolocation(
         "education_level_govt",
     ]
     column_actions = {
-        c: f.when(f.col(c).isNull() | (f.col(c) == ""), f.lit("Unknown"))
-        for c in columns_non_nullable
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
@@ -437,8 +436,7 @@ def adhoc__publish_silver_coverage(
         "cellular_coverage_type",
     ]
     column_actions = {
-        c: f.when(f.col(c).isNull() | (f.col(c) == ""), f.lit("Unknown"))
-        for c in columns_non_nullable
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
