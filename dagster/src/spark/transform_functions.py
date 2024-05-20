@@ -510,10 +510,11 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
     # select relevant columns
     realtime_columns = [
         "school_id_giga",
-        "country",
-        "school_id_govt",
+        # "country",
+        # "school_id_govt",
         "connectivity_RT_ingestion_timestamp",
         "connectivity_RT_datasource",
+        "connectivity_RT",
     ]
     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
 
