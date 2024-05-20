@@ -17,7 +17,7 @@ from src.internal.merge import (
 )
 from src.resources import ResourceKey
 from src.settings import settings
-from src.spark.transform_functions import add_missing_columns
+from src.spark.transform_functions import add_missing_columns, connectivity_rt_dataset
 from src.utils.adls import (
     ADLSFileClient,
 )
@@ -294,6 +294,24 @@ def master(
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
+
+    # QoS Columns
+    silver = silver.join(
+        connectivity_rt_dataset(spark), on="school_id_giga", how="left"
+    )
+    silver = silver.withColumn(
+        "connectivity",
+        f.when(
+            (f.lower(f.col("connectivity_RT")) == "yes")
+            | (f.lower(f.col("connectivity_govt")) == "yes"),
+            "Yes",
+        )
+        .when(
+            f.col("connectivity_RT").isNull() & f.col("connectivity_govt").isNull(),
+            "Unknown",
+        )
+        .otherwise("No"),
+    )
 
     # Conform to master schema and fill in missing values with NULL
     silver = add_missing_columns(silver, schema_columns)
