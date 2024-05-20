@@ -6,6 +6,7 @@ from pyspark.sql.window import Window
 
 from dagster import OpExecutionContext
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.spark import compute_row_hash
 
 
 def manual_review_dedupe_strat(df: sql.DataFrame):
@@ -92,9 +93,6 @@ def partial_cdf_in_cluster_merge(
 ):
     logger = get_context_with_fallback_logger(context)
 
-    master = master.drop("signature")
-    incoming = incoming.drop("signature")
-
     column_names_no_pk = [*column_names]
     if primary_key in column_names_no_pk:
         column_names_no_pk.remove(primary_key)
@@ -131,9 +129,6 @@ def partial_in_cluster_merge(
     """
     Inserts and deletes become ambiguous in a partial merge, so deletes will not be handled here.
     """
-    master = master.drop("signature")
-    new = new.drop("signature")
-
     column_names_no_pk = [*column_names]
     if primary_key in column_names_no_pk:
         column_names_no_pk.remove(primary_key)
@@ -166,15 +161,13 @@ def full_in_cluster_merge(
                    school master. It just needs to be the current version of a Delta Table.
     :param new: The full table of incoming changes whose schema already conforms to `master`.
     """
-    master = master.drop("signature")
-    new = new.drop("signature")
-
     column_names_no_pk = [*column_names]
     if primary_key in column_names_no_pk:
         column_names_no_pk.remove(primary_key)
 
     inserts = new.join(master, primary_key, "left_anti")
     updates = master.join(new.alias("new"), primary_key, "inner").select("new.*")
+    updates = compute_row_hash(updates)
     deletes = master.join(new, primary_key, "left_anti")
 
     new_master = core_merge_logic(
