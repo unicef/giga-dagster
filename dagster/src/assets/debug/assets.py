@@ -1,4 +1,5 @@
 from dagster_pyspark import PySparkResource
+from pydantic import Field
 from pyspark.sql import SparkSession
 from src.utils.metadata import get_table_preview
 
@@ -11,6 +12,15 @@ class DropSchemaConfig(Config):
 
 class DropTableConfig(DropSchemaConfig):
     table_name: str
+
+
+class ExternalDbQueryConfig(Config):
+    country_code: str = Field(
+        ...,
+        min_length=3,
+        max_length=3,
+        description="ISO-2 country code",
+    )
 
 
 @asset
@@ -36,18 +46,22 @@ def debug__drop_table(
 
 
 @asset
-def debug__test_mlab_db_connection(_: OpExecutionContext):
+def debug__test_mlab_db_connection(
+    _: OpExecutionContext, config: ExternalDbQueryConfig
+):
     from src.internal.connectivity_queries import get_mlab_schools
 
-    res = get_mlab_schools()
+    res = get_mlab_schools(config.country_code)
     return Output(None, metadata={"mlab_schools": MetadataValue.md(res.to_markdown())})
 
 
 @asset
-def debug__test_proco_db_connection(_: OpExecutionContext):
+def debug__test_proco_db_connection(
+    _: OpExecutionContext, config: ExternalDbQueryConfig
+):
     from src.internal.connectivity_queries import get_giga_meter_schools, get_rt_schools
 
-    rt_schools = get_rt_schools()
+    rt_schools = get_rt_schools(config.country_code)
     giga_meter_schools = get_giga_meter_schools()
 
     return Output(
@@ -63,10 +77,11 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
 def debug__test_connectivity_merge(
     _: OpExecutionContext,
     spark: PySparkResource,
+    config: ExternalDbQueryConfig,
 ):
     from src.spark.transform_functions import connectivity_rt_dataset
 
-    connectivity = connectivity_rt_dataset(spark.spark_session)
+    connectivity = connectivity_rt_dataset(spark.spark_session, config.country_code)
 
     return Output(
         None,
