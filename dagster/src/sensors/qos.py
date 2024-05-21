@@ -58,7 +58,10 @@ def qos_school_list__new_apis_sensor(
 
             country_code = row_data.country
             metastore_schema = "school_geolocation"
-            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
+            formatted_date_stem = (
+                scheduled_date.replace(" ", "_").replace(":", "").replace("-", "")
+            )
+            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{formatted_date_stem}".replace(
                 " ", ""
             )
 
@@ -171,7 +174,10 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
 
         country_code = row_data.school_list.country
         metastore_schema = "qos"
-        stem = f"{row_data.school_list.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{scheduled_date.replace(' ', '_').replace(':', '').replace('-', '')}".replace(
+        formatted_date_stem = (
+            scheduled_date.replace(" ", "_").replace(":", "").replace("-", "")
+        )
+        stem = f"{row_data.school_list.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{formatted_date_stem}".replace(
             " ", ""
         )
 
