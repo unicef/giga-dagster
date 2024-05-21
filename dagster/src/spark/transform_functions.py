@@ -167,7 +167,9 @@ def add_missing_values(
     columns_to_fill = [col.name for col in schema_columns]
     column_actions = {}
 
-    column_actions = {c: f.when(f.col(c).isNull(), "Unknown") for c in columns_to_fill}
+    column_actions = {
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_to_fill
+    }
 
     df = df.withColumns(column_actions)
     return df

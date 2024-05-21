@@ -71,11 +71,7 @@ def qos_school_list_bronze(
         qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
 
-    columns_to_drop = [
-        x for x in df.columns if x not in [c.name for c in schema_columns]
-    ]
-
-    df = df.drop(*columns_to_drop)
+    df = df.select(*[c.name for c in schema_columns])
 
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
