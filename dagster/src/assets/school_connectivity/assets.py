@@ -57,7 +57,7 @@ def qos_school_connectivity_raw(
 
     df = pd.DataFrame()
 
-    ## If the connectivity API requires school IDs to be passed as part of the request, get the list of unique school IDs from the silver geolocation table
+    ## If the connectivity API requires school IDs to be passed as part of the request, get the list of unique school IDs from the gold geolocation table
     if complete_school_id_parameters:
         schema_name = "school_geolocation"
         gold_tier_schema_name = construct_schema_name_for_tier(
