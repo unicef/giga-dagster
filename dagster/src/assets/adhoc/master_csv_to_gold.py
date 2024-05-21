@@ -214,7 +214,13 @@ def adhoc__reference_data_quality_checks(
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 
+    columns_non_nullable = ["education_level_govt", "school_id_govt_type"]
+    column_actions = {
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
+    }
+
     sdf = sdf.withColumns(columns_to_add)
+    sdf = sdf.withColumns(column_actions)
     sdf = sdf.select([col.name for col in columns])
     context.log.info(f"Renamed {len(columns_to_add)} columns")
 
