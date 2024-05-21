@@ -145,7 +145,7 @@ jobs:
                       HMS_POSTGRESQL_DATABASE: "metastore_db"
 
             - task: Kubernetes@1
-              displayName: Create Dagster webserver PDB/HPA
+              displayName: Create PDB/HPA rules
               condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
               inputs:
                 namespace: $(kubernetesNamespace)
