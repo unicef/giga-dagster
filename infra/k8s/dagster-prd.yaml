@@ -20,12 +20,12 @@ spec:
         target:
           type: Utilization
           averageUtilization: 80
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+#    - type: Resource
+#      resource:
+#        name: memory
+#        target:
+#          type: Utilization
+#          averageUtilization: 80
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
