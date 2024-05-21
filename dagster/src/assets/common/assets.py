@@ -1,3 +1,4 @@
+from country_converter import CountryConverter
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
@@ -16,8 +17,12 @@ from src.internal.merge import (
     partial_cdf_in_cluster_merge,
 )
 from src.resources import ResourceKey
-from src.settings import settings
-from src.spark.transform_functions import add_missing_columns, connectivity_rt_dataset
+from src.settings import DeploymentEnvironment, settings
+from src.spark.transform_functions import (
+    add_missing_columns,
+    connectivity_rt_dataset,
+    merge_connectivity_to_master,
+)
 from src.utils.adls import (
     ADLSFileClient,
 )
@@ -295,23 +300,12 @@ def master(
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
 
-    # QoS Columns
-    silver = silver.join(
-        connectivity_rt_dataset(spark), on="school_id_giga", how="left"
-    )
-    silver = silver.withColumn(
-        "connectivity",
-        f.when(
-            (f.lower(f.col("connectivity_RT")) == "yes")
-            | (f.lower(f.col("connectivity_govt")) == "yes"),
-            "Yes",
-        )
-        .when(
-            f.col("connectivity_RT").isNull() & f.col("connectivity_govt").isNull(),
-            "Unknown",
-        )
-        .otherwise("No"),
-    )
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        # QoS Columns
+        coco = CountryConverter()
+        country_code_2 = coco.convert(country_code, to="ISO2")
+        connectivity = connectivity_rt_dataset(s, country_code_2)
+        silver = merge_connectivity_to_master(silver, connectivity)
 
     # Conform to master schema and fill in missing values with NULL
     silver = add_missing_columns(silver, schema_columns)

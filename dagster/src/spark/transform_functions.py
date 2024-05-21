@@ -16,7 +16,6 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
-    TimestampType,
 )
 
 from azure.storage.blob import BlobServiceClient
@@ -457,8 +456,8 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
     df_all_rt = df_all_rt.withColumn(
         "connectivity_rt_ingestion_timestamp",
         f.to_timestamp(
-            f.col("connectivity_rt_ingestion_timestamp").cast(TimestampType()),
-            "yyyy-MM-dd HH:mm:ss.SSSSSS",
+            f.col("connectivity_rt_ingestion_timestamp"),
+            "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
         ),
     )
     df_mlab = df_mlab.withColumn(
@@ -521,6 +520,23 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
     out = all_rt_schools.select(*realtime_columns)
     out.show()
     return out
+
+
+def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFrame):
+    master = master.join(connectivity, on="school_id_giga", how="left")
+    return master.withColumn(
+        "connectivity",
+        f.when(
+            (f.lower(f.col("connectivity_RT")) == "yes")
+            | (f.lower(f.col("connectivity_govt")) == "yes"),
+            "Yes",
+        )
+        .when(
+            f.col("connectivity_RT").isNull() & f.col("connectivity_govt").isNull(),
+            "Unknown",
+        )
+        .otherwise("No"),
+    )
 
 
 if __name__ == "__main__":
