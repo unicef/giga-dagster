@@ -406,7 +406,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
-def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
+def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test=False):
     from src.internal.connectivity_queries import (
         get_giga_meter_schools,
         get_mlab_schools,
@@ -414,9 +414,9 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
     )
 
     # get raw datasets
-    rt_data = get_rt_schools(iso2_country_code)
-    mlab_data = get_mlab_schools(iso2_country_code)
-    dca_data = get_giga_meter_schools()
+    rt_data = get_rt_schools(iso2_country_code, is_test=is_test)
+    mlab_data = get_mlab_schools(iso2_country_code, is_test=is_test)
+    dca_data = get_giga_meter_schools(is_test=is_test)
 
     # Assert schemas
     all_rt_schema = StructType(
@@ -429,6 +429,9 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
         ]
     )
     # Create the DataFrame
+    if rt_data.empty:
+        rt_data = []
+
     df_all_rt = spark.createDataFrame(rt_data, all_rt_schema)
 
     mlab_schema = StructType(
@@ -440,6 +443,9 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
         ]
     )
     # Create the DataFrame
+    if mlab_data.empty:
+        mlab_data = []
+
     df_mlab = spark.createDataFrame(mlab_data, mlab_schema)
 
     dca_schema = StructType(
@@ -449,6 +455,10 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
             StructField("source", StringType(), True),
         ]
     )
+
+    if dca_data.empty:
+        dca_data = []
+
     df_dca = spark.createDataFrame(dca_data, dca_schema)
 
     # transforms
@@ -518,6 +528,7 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str):
     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
 
     out = all_rt_schools.select(*realtime_columns)
+    out.printSchema()
     out.show()
     return out
 
@@ -530,12 +541,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             (f.lower(f.col("connectivity_RT")) == "yes")
             | (f.lower(f.col("connectivity_govt")) == "yes"),
             "Yes",
-        )
-        .when(
-            f.col("connectivity_RT").isNull() & f.col("connectivity_govt").isNull(),
-            "Unknown",
-        )
-        .otherwise("No"),
+        ).otherwise("No"),
     )
 
 
@@ -767,5 +773,5 @@ if __name__ == "__main__":
 
     #     return all_rt_schools.select(*realtime_columns)
 
-    test = connectivity_rt_dataset(spark, "BR")
+    test = connectivity_rt_dataset(spark, "BR", is_test=True)
     test.show()
