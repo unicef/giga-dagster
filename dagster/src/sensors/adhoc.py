@@ -49,10 +49,11 @@ def school_master__gold_csv_to_deltatable_sensor(
         adls_filepath: str = file_data.name
         path = Path(adls_filepath)
 
-        parent = path.parent
+        reference_parent = "updated_master_schema/reference"
+        reference_parent = Path(reference_parent)
         path_name_country_code = path.name.split("_")[0]
         reference_name = f"{path_name_country_code}_master_reference.csv"
-        reference_path = parent / reference_name
+        reference_path = reference_parent / reference_name
         reference_stem = reference_path.stem
 
         stem = path.stem
