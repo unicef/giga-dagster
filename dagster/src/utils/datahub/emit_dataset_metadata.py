@@ -62,7 +62,6 @@ def define_dataset_properties(
     step = context.asset_key.to_user_string()
     config = FileConfig(**context.get_step_execution_context().op_config)
 
-    domain = config.domain
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
 
@@ -92,11 +91,14 @@ def define_dataset_properties(
         "Dagster Sensor Name": context.run_tags.get("dagster/sensor_name"),
         "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
-        "Domain": domain,
         "Data Format": data_format,
         "Data Size": f"{file_size_MB} MB",
         "Country": country_name,
     }
+
+    if config.domain:
+        domain = config.domain
+        custom_metadata = custom_metadata | {"Domain": domain}
 
     formatted_metadata = {}
     for k, v in metadata.items():
@@ -188,6 +190,21 @@ def add_tag_query(tag_key: str, dataset_urn: str) -> str:
     """
 
 
+datahub_emitter = DatahubRestEmitter(
+    gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+    token=settings.DATAHUB_ACCESS_TOKEN,
+    retry_max_times=5,
+    retry_status_codes=[
+        403,
+        429,
+        500,
+        502,
+        503,
+        504,
+    ],
+)
+
+
 def emit_metadata_to_datahub(
     context: OpExecutionContext,
     country_code: str,
@@ -195,20 +212,6 @@ def emit_metadata_to_datahub(
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:
-    datahub_emitter = DatahubRestEmitter(
-        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-        token=settings.DATAHUB_ACCESS_TOKEN,
-        retry_max_times=5,
-        retry_status_codes=[
-            403,
-            429,
-            500,
-            502,
-            503,
-            504,
-        ],
-    )
-
     dataset_properties = define_dataset_properties(context, country_code=country_code)
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
