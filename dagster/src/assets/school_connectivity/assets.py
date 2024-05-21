@@ -57,27 +57,25 @@ def qos_school_connectivity_raw(
 
     df = pd.DataFrame()
 
-    ## If the connectivity API requires school IDs to be passed as part of the request, get the list of unique school IDs from the silver geolocation table
+    ## If the connectivity API requires school IDs to be passed as part of the request, get the list of unique school IDs from the gold geolocation table
     if complete_school_id_parameters:
         schema_name = "school_geolocation"
-        silver_tier_schema_name = construct_schema_name_for_tier(
-            schema_name, DataTier.SILVER
+        gold_tier_schema_name = construct_schema_name_for_tier(
+            schema_name, DataTier.GOLD
         )
-        silver_table_name = construct_full_table_name(
-            silver_tier_schema_name, config.country_code
+        gold_table_name = construct_full_table_name(
+            gold_tier_schema_name, config.country_code
         )
 
-        if s.catalog.tableExists(silver_table_name):
-            silver = DeltaTable.forName(s, silver_table_name).toDF()
+        if s.catalog.tableExists(gold_table_name):
+            gold = DeltaTable.forName(s, gold_table_name).toDF()
             field_to_query = database_data["school_list"]["school_id_key"]
-            silver_column_to_query = database_data["school_list"][
+            gold_column_to_query = database_data["school_list"][
                 "column_to_schema_mapping"
             ][field_to_query]
 
             unique_school_ids = (
-                (silver.select(silver_column_to_query))
-                .rdd.flatMap(lambda x: x)
-                .collect()
+                (gold.select(gold_column_to_query)).rdd.flatMap(lambda x: x).collect()
             )
 
             with get_db_context() as database_session:
@@ -102,7 +100,13 @@ def qos_school_connectivity_raw(
         config=config,
     )
 
-    return Output(df, metadata=get_output_metadata(config))
+    return Output(
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df),
+        },
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -116,41 +120,48 @@ def qos_school_connectivity_bronze(
     database_data = config.row_data_dict
 
     schema_name = "school_geolocation"
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        schema_name, DataTier.SILVER
-    )
-    silver_table_name = construct_full_table_name(
-        silver_tier_schema_name, config.country_code
+    gold_tier_schema_name = construct_schema_name_for_tier(schema_name, DataTier.GOLD)
+    gold_table_name = construct_full_table_name(
+        gold_tier_schema_name, config.country_code
     )
 
     schema_columns = get_schema_columns(s, "qos")
     schema = StructType(schema_columns)
-    bronze = s.createDataFrame([], schema=schema)
+    bronze = (
+        s.createDataFrame([], schema=schema)
+        if s.catalog.tableExists(gold_table_name)
+        else qos_school_connectivity_raw
+    )
 
-    ## Filter out school connectivity data for schools not in the school geolocation silver table. Add school_id_giga to school_connectivity if it does not exist yet
-    if s.catalog.tableExists(silver_table_name):
+    # Filter out school connectivity data for schools not in the school geolocation gold table. Add school_id_giga to school_connectivity if it does not exist yet
+    if s.catalog.tableExists(gold_table_name):
         if database_data["has_school_id_giga"]:
-            silver_ids = (
-                DeltaTable.forName(s, silver_table_name).toDF().select("school_id_giga")
+            gold_ids = (
+                DeltaTable.forName(s, gold_table_name).toDF().select("school_id_giga")
             ).collect()
             bronze = qos_school_connectivity_raw.filter(
-                f.col(database_data["school_id_giga_govt_key"]).isin(silver_ids)
+                f.col(database_data["school_id_giga_govt_key"]).isin(gold_ids)
             )
         else:
-            silver_ids = (
-                DeltaTable.forName(s, silver_table_name)
+            gold_ids = (
+                DeltaTable.forName(s, gold_table_name)
                 .toDF()
                 .select("school_id_govt", "school_id_giga")
             )
             bronze = qos_school_connectivity_raw.filter(
                 f.col(database_data["school_id_giga_govt_key"]).isin(
-                    silver_ids.select("school_id_govt").collect()
+                    gold_ids.select("school_id_govt").collect()
                 )
             )
-            bronze = bronze.join(silver_ids, "school_id_govt", "left")
+            bronze = bronze.join(gold_ids, "school_id_govt", "left")
 
-        context.log.info(
-            f"qos raw: {qos_school_connectivity_raw.count()}, qos bronze: {qos_school_connectivity_bronze.count()}"
+    if database_data["has_school_id_giga"]:
+        bronze = bronze.withColumnRenamed(
+            database_data["school_id_giga_govt_key"], "school_id_giga"
+        )
+    else:
+        bronze = bronze.withColumnRenamed(
+            database_data["school_id_giga_govt_key"], "school_id_govt"
         )
 
     @udf
@@ -159,15 +170,13 @@ def qos_school_connectivity_bronze(
             value, database_data["response_date_format"]
         ).isoformat()
 
-    if not bronze.isEmpty:
+    if not bronze.isEmpty():
         ## Transform the time partition column to the correct format
         if database_data["response_date_format"] == "ISO8601":
             # no transform needed actually, this is what we expect
             if database_data["response_date_key"] != "timestamp":
-                bronze = (
-                    bronze.withColumn(
-                        "timestamp", f.col(database_data["response_date_key"])
-                    ),
+                bronze = bronze.withColumn(
+                    "timestamp", f.col(database_data["response_date_key"])
                 )
         elif database_data["response_date_format"] == "timestamp":
             bronze = bronze.withColumn(

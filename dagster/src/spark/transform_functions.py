@@ -39,6 +39,11 @@ generate_uuid_udf = f.udf(generate_uuid)
 
 
 def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
+    if (
+        "school_id_giga" in df.columns
+        and df.filter(df["school_id_giga"].isNull()).count() == 0
+    ):
+        return df
     school_id_giga_prereqs = [
         "school_id_govt",
         "school_name",
@@ -153,6 +158,20 @@ def add_missing_columns(
         if col.name not in df.columns
     }
     return df.withColumns(columns_to_add)
+
+
+def add_missing_values(
+    df: sql.DataFrame, schema_columns: list[StructField]
+) -> sql.DataFrame:
+    columns_to_fill = [col.name for col in schema_columns]
+    column_actions = {}
+
+    column_actions = {
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_to_fill
+    }
+
+    df = df.withColumns(column_actions)
+    return df
 
 
 def bronze_prereq_columns(df, schema_columns: list[StructField]) -> sql.DataFrame:

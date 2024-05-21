@@ -16,3 +16,7 @@ class MutexException(Exception):
 
 class ExternalApiException(Exception):
     pass
+
+
+class EndOfPaginationException(Exception):
+    pass

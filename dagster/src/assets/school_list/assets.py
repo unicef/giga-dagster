@@ -12,6 +12,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
+    add_missing_values,
     column_mapping_rename,
     create_bronze_layer_columns,
 )
@@ -38,7 +39,7 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_raw(
-    context: OpExecutionContext, config: FileConfig, spark: PySparkResource
+    context: OpExecutionContext, config: FileConfig
 ) -> Output[pd.DataFrame]:
     context.log.info(f"Database row: {config.row_data_dict}")
     with get_db_context() as database_session:
@@ -50,7 +51,10 @@ def qos_school_list_raw(
         context=context,
         config=config,
     )
-    return Output(df, metadata=get_output_metadata(config))
+
+    return Output(
+        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -67,11 +71,22 @@ def qos_school_list_bronze(
         qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
 
-    columns_to_drop = [x for x in df.columns if x not in schema_columns]
-    df = df.drop(*columns_to_drop)
+    column_names = [c.name for c in schema_columns]
+    valid_column_names = [c for c in column_names if c in df.columns]
+    df = df.select(*valid_column_names)
 
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
+
+    columns_to_fill = [
+        "education_level_govt",
+        "school_id_govt_type",
+        "admin1",
+        "admin2",
+    ]
+    df = add_missing_values(
+        df, [c for c in schema_columns if c.name in columns_to_fill]
+    )
 
     config.metadata.update({"column_mapping": column_mapping})
 
@@ -100,11 +115,10 @@ def qos_school_list_data_quality_results(
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
-    country_code = config.country_code
     dq_results = row_level_checks(
         qos_school_list_bronze,
         "geolocation",
-        country_code,
+        config.country_code,
         context,
     )
 
@@ -227,6 +241,10 @@ def qos_school_list_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if qos_school_list_dq_passed_rows.count() == 0:
+        context.log.warning("Skipping staging as there are no rows passing DQ checks")
+        return Output(None)
+
     staging_step = StagingStep(
         context,
         config,
