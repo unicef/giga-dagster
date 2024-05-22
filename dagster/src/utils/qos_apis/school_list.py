@@ -46,7 +46,7 @@ def query_school_list_data(
                 .values(
                     {
                         "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                        "error_message": e,
+                        "error_message": str(e),
                     }
                 )
             )
@@ -112,7 +112,7 @@ def query_school_list_data(
                     .values(
                         {
                             "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                            "error_message": e,
+                            "error_message": str(e),
                         }
                     )
                 )
