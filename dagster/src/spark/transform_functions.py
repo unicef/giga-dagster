@@ -16,6 +16,7 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    TimestampType,
 )
 
 from azure.storage.blob import BlobServiceClient
@@ -432,7 +433,7 @@ def connectivity_rt_dataset(
         [
             StructField("school_id_giga", StringType(), True),
             StructField("school_id_govt", StringType(), True),
-            StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
+            StructField("connectivity_rt_ingestion_timestamp", TimestampType(), True),
             StructField("country_code", StringType(), True),
             StructField("country", StringType(), True),
         ]
@@ -479,10 +480,10 @@ def connectivity_rt_dataset(
     #         "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
     #     ),
     # )
-    df_mlab = df_mlab.withColumn(
-        "mlab_created_date",
-        f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd").cast(StringType()),
-    )
+    # df_mlab = df_mlab.withColumn(
+    #     "mlab_created_date",
+    #     f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd").cast(StringType()),
+    # )
 
     # dataset prefixes
     column_renames = {col: f"{col}_mlab" for col in df_mlab.schema.fieldNames()}
