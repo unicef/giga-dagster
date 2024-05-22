@@ -2,22 +2,24 @@ from datetime import timedelta
 from typing import Any
 
 import requests
+from httpx import AsyncClient
 from requests import HTTPError, JSONDecodeError
 
-from azure.communication.email import EmailClient
 from dagster import OpExecutionContext
+from src.schemas.email import GenericEmailRequest
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
 
-def send_email_base(
+async def send_email_base(
     endpoint: str,
     props: dict[str, Any],
     subject: str,
     recipients: list[str],
     context: OpExecutionContext = None,
 ):
-    client = EmailClient.from_connection_string(settings.AZURE_EMAIL_CONNECTION_STRING)
+    logger = get_context_with_fallback_logger(context)
+
     res = requests.post(
         f"{settings.EMAIL_RENDERER_SERVICE_URL}/{endpoint}",
         headers={
@@ -35,17 +37,22 @@ def send_email_base(
 
     data = res.json()
 
-    message = {
-        "senderAddress": settings.AZURE_EMAIL_SENDER,
-        "recipients": {
-            "bcc": [{"address": recipient} for recipient in recipients],
-        },
-        "content": {
-            "subject": subject,
-            "html": data.get("html"),
-            "plainText": data.get("text"),
-        },
-    }
-    poller = client.begin_send(message)
-    result = poller.result()
-    get_context_with_fallback_logger(context).info(result)
+    html = data.get("html")
+    text = data.get("text")
+
+    async with AsyncClient(base_url=settings.GIGASYNC_API_URL) as client:
+        res = await client.post(
+            "/api/email/send-email",
+            headers={"Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}"},
+            json=GenericEmailRequest(
+                recipients=recipients,
+                subject=subject,
+                html_part=html,
+                text_part=text,
+            ).dict(),
+        )
+        if res.is_error:
+            context.log.error(res.json())
+            res.raise_for_status()
+
+    logger.info("")

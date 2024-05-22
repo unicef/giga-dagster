@@ -1,6 +1,8 @@
 from dagster_pyspark import PySparkResource
+from httpx import AsyncClient
 from pydantic import Field
 from pyspark.sql import SparkSession
+from src.settings import settings
 from src.utils.metadata import get_table_preview
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
@@ -21,6 +23,13 @@ class ExternalDbQueryConfig(Config):
         max_length=2,
         description="ISO-2 country code",
     )
+
+
+class GenericEmailRequestConfig(Config):
+    recipients: list[str]
+    subject: str
+    html_part: str | None
+    text_part: str | None
 
 
 @asset
@@ -90,3 +99,20 @@ def debug__test_connectivity_merge(
             "row_count": connectivity.count(),
         },
     )
+
+
+@asset
+async def debug__send_test_email(
+    context: OpExecutionContext, config: GenericEmailRequestConfig
+):
+    async with AsyncClient(base_url=settings.GIGASYNC_API_URL) as client:
+        res = await client.post(
+            "/api/email/send-email",
+            headers={"Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}"},
+            json=config.dict(),
+        )
+        if res.is_error:
+            context.log.error(res.json())
+            res.raise_for_status()
+
+    return Output(None, metadata=config.dict())

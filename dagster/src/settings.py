@@ -88,6 +88,14 @@ class Settings(BaseSettings):
         )
 
     @property
+    def GIGASYNC_API_URL(self) -> str:
+        return (
+            f"http://ingestion-portal-data-ingestion.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local:3000"
+            if self.IN_PRODUCTION
+            else "http://api:8000"
+        )
+
+    @property
     def ADLS_ENVIRONMENT(self) -> DeploymentEnvironment:
         return (
             DeploymentEnvironment.DEVELOPMENT

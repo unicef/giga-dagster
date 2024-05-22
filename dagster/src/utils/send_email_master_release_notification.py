@@ -24,7 +24,7 @@ async def send_email_master_release_notification(
         logger.warning("No recipients found, skipping email.")
         return
 
-    send_email_base(
+    await send_email_base(
         endpoint="email/master-data-release-notification",
         props=props.dict(),
         recipients=recipients,

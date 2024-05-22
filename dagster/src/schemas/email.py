@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 DataT = TypeVar("DataT")
 
@@ -18,3 +18,10 @@ class MasterDataReleaseNotificationRenderRequest(BaseModel):
     updateDate: datetime
     version: str
     rows: int
+
+
+class GenericEmailRequest(BaseModel):
+    recipients: list[str]
+    subject: str
+    html_part: str | None = Field(None)
+    text_part: str | None = Field(None)
