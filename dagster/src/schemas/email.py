@@ -23,5 +23,5 @@ class MasterDataReleaseNotificationRenderRequest(BaseModel):
 class GenericEmailRequest(BaseModel):
     recipients: list[str]
     subject: str
-    html_part: str
+    html_part: str | None = Field(None)
     text_part: str | None = Field(None)
