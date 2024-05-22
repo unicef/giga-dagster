@@ -431,11 +431,11 @@ def connectivity_rt_dataset(
     # Assert schemas
     all_rt_schema = StructType(
         [
+            StructField("connectivity_rt_ingestion_timestamp", TimestampType(), True),
+            StructField("country", StringType(), True),
+            StructField("country_code", StringType(), True),
             StructField("school_id_giga", StringType(), True),
             StructField("school_id_govt", StringType(), True),
-            StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
-            StructField("country_code", StringType(), True),
-            StructField("country", StringType(), True),
         ]
     )
     # Create the DataFrame
@@ -446,10 +446,10 @@ def connectivity_rt_dataset(
 
     mlab_schema = StructType(
         [
+            StructField("country_code", StringType(), True),
             StructField("mlab_created_date", StringType(), True),
             StructField("school_id_govt", StringType(), True),
             StructField("source", StringType(), True),
-            StructField("country_code", StringType(), True),
         ]
     )
     # Create the DataFrame

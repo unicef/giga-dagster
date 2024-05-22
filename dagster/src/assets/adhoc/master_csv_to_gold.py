@@ -490,7 +490,7 @@ def adhoc__publish_master_to_gold(
         connectivity = connectivity_rt_dataset(
             spark.spark_session, country_code_2, is_test=False
         )
-        # gold = merge_connectivity_to_master(gold, connectivity)
+        gold = merge_connectivity_to_master(gold, connectivity)
 
     gold = transform_types(
         gold,
@@ -514,7 +514,7 @@ def adhoc__publish_master_to_gold(
         gold,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(connectivity), ##test
+            "preview": get_table_preview(gold),
         },
     )
 
