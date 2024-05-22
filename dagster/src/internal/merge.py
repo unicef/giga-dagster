@@ -6,6 +6,7 @@ from pyspark.sql.window import Window
 
 from dagster import OpExecutionContext
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.spark import compute_row_hash
 
 
 def manual_review_dedupe_strat(df: sql.DataFrame):
@@ -166,6 +167,7 @@ def full_in_cluster_merge(
 
     inserts = new.join(master, primary_key, "left_anti")
     updates = master.join(new.alias("new"), primary_key, "inner").select("new.*")
+    updates = compute_row_hash(updates)
     deletes = master.join(new, primary_key, "left_anti")
 
     new_master = core_merge_logic(

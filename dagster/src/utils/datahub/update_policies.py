@@ -138,7 +138,12 @@ def update_policy_for_group(
     country_code = config.country_code
     country_name = identify_country_name(country_code=country_code)
     domain = config.domain
-    dataset_type = config.dataset_type
+    dataset_type = (
+        "QoS"
+        if (config.dataset_type).lower()
+        in ["school-connectivity", "school-list", "qos"]
+        else config.dataset_type
+    )
     group_urn = build_group_urn(
         country_name=country_name, dataset_type=dataset_type, domain=domain
     )
@@ -176,41 +181,65 @@ def update_policy_base(
 
 if __name__ == "__main__":
 
-    def test_update_policies(context: OpExecutionContext = None) -> None:
+    def test_update_policy_for_group(
+        dataset_type: str,
+        country_code: str,
+        domain="School",
+    ):
+        context = None
         logger = get_context_with_fallback_logger(context)
-        queries = ""
-        for i, group_urn in enumerate(group_urns_iterator()):
-            country_name = parse.unquote(
-                group_urn.split("urn:li:corpGroup:")[1]
-            ).rsplit("-", 1)[0]
-            logger.info(country_name)
-            if is_valid_country_name(country_name):
-                base_query = update_policy_base_query(group_urn=group_urn)
-                queries = queries + " " + f"update{i}: {base_query}"
-            else:
-                warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
-                logger.warning(warning_message)
-                # log_op_context(context)
-                # sentry_sdk.capture_message(warning_message)
-            if i == 5:
-                break
+        country_name = identify_country_name(country_code=country_code)
+        dataset_type = (
+            "QoS"
+            if (dataset_type).lower() in ["school-connectivity", "school-list", "qos"]
+            else dataset_type
+        )
+        group_urn = build_group_urn(
+            country_name=country_name, dataset_type=dataset_type, domain=domain
+        )
+        logger.info(f"policy group urn: {group_urn}")
+        update_policy_base(group_urn=group_urn, context=context)
 
-        batch_mutation_query = f"""
-            mutation {{
-                {queries}
-            }}
-            """
-        try:
-            logger.info("UPDATING DATAHUB POLICIES...")
-            logger.info(batch_mutation_query)
-            graphql_execution = datahub_graph_client.execute_graphql(
-                query=batch_mutation_query
-            )
-            logger.info(graphql_execution)
-            logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-        except Exception as error:
-            logger.error(error)
-            log_op_context(context)
-            sentry_sdk.capture_exception(error=error)
+    test_update_policy_for_group(dataset_type="coverage", country_code="RWA")
+    test_update_policy_for_group(dataset_type="school-connectivity", country_code="RWA")
+    test_update_policy_for_group(dataset_type="school-list", country_code="RWA")
+    test_update_policy_for_group(dataset_type="qos", country_code="RWA")
 
-    test_update_policies()
+    # def test_update_policies(context: OpExecutionContext = None) -> None:
+    #     logger = get_context_with_fallback_logger(context)
+    #     queries = ""
+    #     for i, group_urn in enumerate(group_urns_iterator()):
+    #         country_name = parse.unquote(
+    #             group_urn.split("urn:li:corpGroup:")[1]
+    #         ).rsplit("-", 1)[0]
+    #         logger.info(country_name)
+    #         if is_valid_country_name(country_name):
+    #             base_query = update_policy_base_query(group_urn=group_urn)
+    #             queries = queries + " " + f"update{i}: {base_query}"
+    #         else:
+    #             warning_message = f"INVALID COUNTRY NAME: {country_name}. No Datahub Policy is created/updated for this role."
+    #             logger.warning(warning_message)
+    #             # log_op_context(context)
+    #             # sentry_sdk.capture_message(warning_message)
+    #         if i == 5:
+    #             break
+
+    #     batch_mutation_query = f"""
+    #         mutation {{
+    #             {queries}
+    #         }}
+    #         """
+    #     try:
+    #         logger.info("UPDATING DATAHUB POLICIES...")
+    #         logger.info(batch_mutation_query)
+    #         graphql_execution = datahub_graph_client.execute_graphql(
+    #             query=batch_mutation_query
+    #         )
+    #         logger.info(graphql_execution)
+    #         logger.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
+    #     except Exception as error:
+    #         logger.error(error)
+    #         log_op_context(context)
+    #         sentry_sdk.capture_exception(error=error)
+
+    # test_update_policies()

@@ -148,6 +148,8 @@ def school_master_geolocation__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
+            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+            metadata = properties.metadata
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -197,7 +199,7 @@ def school_master_geolocation__post_manual_checks_sensor(
             run_ops = generate_run_ops(
                 ops_destination_mapping,
                 dataset_type=DATASET_TYPE,
-                metadata={},
+                metadata=metadata,
                 file_size_bytes=0,
                 domain=DOMAIN,
                 country_code=country_code,
@@ -243,6 +245,8 @@ def school_master_geolocation__admin_delete_rows_sensor(
             continue
         else:
             country_code = filename_components.country_code
+            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+            metadata = properties.metadata
 
             ops_destination_mapping = {
                 "geolocation_delete_staging": OpDestinationMapping(
@@ -256,7 +260,7 @@ def school_master_geolocation__admin_delete_rows_sensor(
             run_ops = generate_run_ops(
                 ops_destination_mapping,
                 dataset_type=DATASET_TYPE,
-                metadata={},
+                metadata=metadata,
                 file_size_bytes=0,
                 domain=DOMAIN,
                 country_code=country_code,

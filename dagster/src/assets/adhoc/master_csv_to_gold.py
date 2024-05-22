@@ -3,6 +3,7 @@ from io import BytesIO
 
 import numpy as np
 import pandas as pd
+from country_converter import CountryConverter
 from dagster_pyspark import PySparkResource
 from pyspark import sql
 from pyspark.sql import (
@@ -22,7 +23,12 @@ from src.internal.common_assets.master_release_notes import (
     send_master_release_notes,
 )
 from src.resources import ResourceKey
-from src.spark.transform_functions import add_missing_columns
+from src.settings import DeploymentEnvironment, settings
+from src.spark.transform_functions import (
+    add_missing_columns,
+    connectivity_rt_dataset,
+    merge_connectivity_to_master,
+)
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
@@ -214,7 +220,13 @@ def adhoc__reference_data_quality_checks(
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 
+    columns_non_nullable = ["education_level_govt", "school_id_govt_type"]
+    column_actions = {
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
+    }
+
     sdf = sdf.withColumns(columns_to_add)
+    sdf = sdf.withColumns(column_actions)
     sdf = sdf.select([col.name for col in columns])
     context.log.info(f"Renamed {len(columns_to_add)} columns")
 
@@ -373,7 +385,7 @@ def adhoc__publish_silver_geolocation(
         "education_level_govt",
     ]
     column_actions = {
-        c: f.when(f.col(c).isNull(), "Unknown") for c in columns_non_nullable
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
@@ -436,7 +448,7 @@ def adhoc__publish_silver_coverage(
         "cellular_coverage_type",
     ]
     column_actions = {
-        c: f.when(f.col(c).isNull(), "Unknown") for c in columns_non_nullable
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
@@ -469,8 +481,19 @@ def adhoc__publish_master_to_gold(
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
+    gold = adhoc__master_dq_checks_passed
+
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        # Connectivity db has IP blocks so doesn't work locally
+        coco = CountryConverter()
+        country_code_2 = coco.convert(config.country_code, to="ISO2")
+        connectivity = connectivity_rt_dataset(
+            spark.spark_session, country_code_2, is_test=False
+        )
+        gold = merge_connectivity_to_master(gold, connectivity)
+
     gold = transform_types(
-        adhoc__master_dq_checks_passed,
+        gold,
         config.metastore_schema,
         context,
     )

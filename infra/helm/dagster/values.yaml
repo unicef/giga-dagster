@@ -21,6 +21,19 @@ global:
 
 x-dagster-version: &dagster-version "1.6.13"
 
+x-pod-antiAffinity: &pod-antiAffinity
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - dagster
+
 nameOverride: ""
 fullnameOverride: ""
 rbacEnabled: true
@@ -160,7 +173,7 @@ dagsterWebserver:
   # https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
   annotations: { }
   nodeSelector: { }
-  affinity: { }
+  affinity: *pod-antiAffinity
   tolerations: [ ]
   podSecurityContext: { }
   securityContext: { }
@@ -395,7 +408,7 @@ dagster-user-deployments:
 
       annotations: { }
       nodeSelector: { }
-      affinity: { }
+      affinity: *pod-antiAffinity
       tolerations: [ ]
       podSecurityContext: { }
       securityContext: { }
@@ -1218,7 +1231,7 @@ dagsterDaemon:
 
   annotations: { }
   nodeSelector: { }
-  affinity: { }
+  affinity: *pod-antiAffinity
   tolerations: [ ]
   podSecurityContext: { }
   securityContext: { }

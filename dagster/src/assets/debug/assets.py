@@ -1,5 +1,8 @@
 from dagster_pyspark import PySparkResource
+from httpx import AsyncClient
+from pydantic import Field
 from pyspark.sql import SparkSession
+from src.settings import settings
 from src.utils.metadata import get_table_preview
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
@@ -11,6 +14,22 @@ class DropSchemaConfig(Config):
 
 class DropTableConfig(DropSchemaConfig):
     table_name: str
+
+
+class ExternalDbQueryConfig(Config):
+    country_code: str = Field(
+        ...,
+        min_length=2,
+        max_length=2,
+        description="ISO-2 country code",
+    )
+
+
+class GenericEmailRequestConfig(Config):
+    recipients: list[str]
+    subject: str
+    html_part: str | None
+    text_part: str | None
 
 
 @asset
@@ -36,19 +55,23 @@ def debug__drop_table(
 
 
 @asset
-def debug__test_mlab_db_connection(_: OpExecutionContext):
+def debug__test_mlab_db_connection(
+    _: OpExecutionContext, config: ExternalDbQueryConfig
+):
     from src.internal.connectivity_queries import get_mlab_schools
 
-    res = get_mlab_schools()
+    res = get_mlab_schools(config.country_code, is_test=True)
     return Output(None, metadata={"mlab_schools": MetadataValue.md(res.to_markdown())})
 
 
 @asset
-def debug__test_proco_db_connection(_: OpExecutionContext):
+def debug__test_proco_db_connection(
+    _: OpExecutionContext, config: ExternalDbQueryConfig
+):
     from src.internal.connectivity_queries import get_giga_meter_schools, get_rt_schools
 
-    rt_schools = get_rt_schools()
-    giga_meter_schools = get_giga_meter_schools()
+    rt_schools = get_rt_schools(config.country_code, is_test=True)
+    giga_meter_schools = get_giga_meter_schools(is_test=True)
 
     return Output(
         None,
@@ -60,10 +83,14 @@ def debug__test_proco_db_connection(_: OpExecutionContext):
 
 
 @asset
-def debug__test_connectivity_merge(_: OpExecutionContext, spark: PySparkResource):
+def debug__test_connectivity_merge(
+    _: OpExecutionContext,
+    spark: PySparkResource,
+    config: ExternalDbQueryConfig,
+):
     from src.spark.transform_functions import connectivity_rt_dataset
 
-    connectivity = connectivity_rt_dataset(spark.spark_session)
+    connectivity = connectivity_rt_dataset(spark.spark_session, config.country_code)
 
     return Output(
         None,
@@ -72,3 +99,20 @@ def debug__test_connectivity_merge(_: OpExecutionContext, spark: PySparkResource
             "row_count": connectivity.count(),
         },
     )
+
+
+@asset
+async def debug__send_test_email(
+    context: OpExecutionContext, config: GenericEmailRequestConfig
+):
+    async with AsyncClient(base_url=settings.GIGASYNC_API_URL) as client:
+        res = await client.post(
+            "/api/email/send-email",
+            headers={"Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}"},
+            json=config.dict(),
+        )
+        if res.is_error:
+            context.log.error(res.json())
+            res.raise_for_status()
+
+    return Output(None, metadata=config.dict())

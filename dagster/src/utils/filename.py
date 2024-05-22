@@ -99,3 +99,28 @@ def deconstruct_adhoc_filename_components(filepath: str) -> FilenameComponents |
             return None
 
     return FilenameComponents(country_code=country_code)
+
+
+def deconstruct_unstructured_filename_components(
+    filepath: str,
+) -> FilenameComponents | None:
+    """Deconstruct and validate filename components for unstructured files"""
+
+    path = Path(filepath)
+    splits = path.stem.split("_")
+    expected_timestamp_format = "%Y%m%d-%H%M%S"
+
+    id, country_code, dataset_type = splits[0:3]
+    timestamp = splits[-1]
+
+    return FilenameComponents(
+        id=id,
+        dataset_type=dataset_type,
+        timestamp=datetime.strptime(timestamp, expected_timestamp_format),
+        country_code=country_code,
+    )
+
+
+if __name__ == "__main__":
+    filepath = "raw/uploads/unstructured/PHL/mrm67tmhy5fhuh34q9bc81pr_PHL_unstructured_20240516-090023.png"
+    print(deconstruct_unstructured_filename_components(filepath))

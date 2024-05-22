@@ -49,17 +49,14 @@ def school_master__gold_csv_to_deltatable_sensor(
         adls_filepath: str = file_data.name
         path = Path(adls_filepath)
 
-        if "/master_updates/" in adls_filepath:
-            reference_path = adls_filepath.replace("/master_updates/", "/reference/")
-        else:
-            reference_path = adls_filepath.replace("/master/", "/reference/")
-
-        reference_path = reference_path.replace(
-            "school_geolocation_coverage_master.", "master_reference."
-        )
-        reference_path = Path(reference_path)
-        stem = path.stem
+        reference_parent = "updated_master_schema/reference"
+        reference_parent = Path(reference_parent)
+        path_name_country_code = path.name.split("_")[0]
+        reference_name = f"{path_name_country_code}_master_reference.csv"
+        reference_path = reference_parent / reference_name
         reference_stem = reference_path.stem
+
+        stem = path.stem
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
