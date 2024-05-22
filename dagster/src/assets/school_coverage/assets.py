@@ -48,7 +48,7 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -370,7 +370,14 @@ def coverage_delete_staging(
             metadata={
                 **get_output_metadata(config),
                 "preview": get_table_preview(staging),
+                "delete_row_ids": MetadataValue.json(delete_row_ids),
             },
         )
 
-    return Output(None, metadata={**get_output_metadata(config)})
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "delete_row_ids": MetadataValue.json(delete_row_ids),
+        },
+    )
