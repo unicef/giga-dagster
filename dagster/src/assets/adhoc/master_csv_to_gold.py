@@ -481,19 +481,22 @@ def adhoc__publish_master_to_gold(
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
-    gold = transform_types(
-        adhoc__master_dq_checks_passed,
-        config.metastore_schema,
-        context,
-    )
+    gold = adhoc__master_dq_checks_passed
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         # Connectivity db has IP blocks so doesn't work locally
         coco = CountryConverter()
         country_code_2 = coco.convert(config.country_code, to="ISO2")
-        connectivity = connectivity_rt_dataset(spark.spark_session, country_code_2)
+        connectivity = connectivity_rt_dataset(
+            spark.spark_session, country_code_2, is_test=False
+        )
         gold = merge_connectivity_to_master(gold, connectivity)
 
+    gold = transform_types(
+        gold,
+        config.metastore_schema,
+        context,
+    )
     gold = compute_row_hash(gold)
 
     schema_reference = get_schema_columns_datahub(

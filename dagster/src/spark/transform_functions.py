@@ -463,13 +463,13 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test
 
     # transforms
     # cast to proper format
-    df_all_rt = df_all_rt.withColumn(
-        "connectivity_rt_ingestion_timestamp",
-        f.to_timestamp(
-            f.col("connectivity_rt_ingestion_timestamp"),
-            "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
-        ),
-    )
+    # df_all_rt = df_all_rt.withColumn(
+    #     "connectivity_rt_ingestion_timestamp",
+    #     f.to_timestamp(
+    #         f.col("connectivity_rt_ingestion_timestamp"),
+    #         "yyyy-MM-dd HH:mm:ss.SSSSSSXXX",
+    #     ),
+    # )
     df_mlab = df_mlab.withColumn(
         "mlab_created_date",
         f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd").cast(StringType()),
