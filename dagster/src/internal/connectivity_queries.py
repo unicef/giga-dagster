@@ -20,10 +20,8 @@ def get_rt_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
                 LEFT JOIN locations_country c ON c.id = sch.country_id
                 WHERE c.code = :country_code
                 LIMIT :limit
-                """).bindparams(
-                    country_code=iso2_country_code,
-                    limit=10 if is_test else None,
-                )
+                """),
+                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
             )
             .mappings()
             .all()
@@ -46,9 +44,10 @@ def get_giga_meter_schools(is_test=False) -> pd.DataFrame:
                 FROM dailycheckapp_measurements dca
                 WHERE dca.giga_id_school !=''
                 LIMIT :limit
-                """)
+                """),
+                {"limit": 10 if is_test else None},
             )
-            .mappings(limit=10 if is_test else None)
+            .mappings()
             .all()
         )
 
@@ -70,10 +69,8 @@ def get_mlab_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
                 FROM public.measurements mlab
                 WHERE client_info::JSON ->> 'Country' = :country_code
                 LIMIT :limit
-                """).bindparams(
-                    country_code=iso2_country_code,
-                    limit=10 if is_test else None,
-                )
+                """),
+                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
             )
             .mappings()
             .all()
