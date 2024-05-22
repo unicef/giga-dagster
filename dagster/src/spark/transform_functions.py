@@ -406,7 +406,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
-def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test=False):
+def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test=True):
     from src.internal.connectivity_queries import (
         get_giga_meter_schools,
         get_mlab_schools,
