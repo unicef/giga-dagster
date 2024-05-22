@@ -433,7 +433,7 @@ def connectivity_rt_dataset(
         [
             StructField("school_id_giga", StringType(), True),
             StructField("school_id_govt", StringType(), True),
-            StructField("connectivity_rt_ingestion_timestamp", TimestampType(), True),
+            StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
             StructField("country_code", StringType(), True),
             StructField("country", StringType(), True),
         ]
