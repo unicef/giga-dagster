@@ -19,9 +19,11 @@ from pyspark.sql.types import (
 )
 
 from azure.storage.blob import BlobServiceClient
+from dagster import OpExecutionContext
 from src.settings import settings
 from src.spark.config_expectations import config
 from src.spark.udf_dependencies import get_point
+from src.utils.logger import get_context_with_fallback_logger
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -406,12 +408,19 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
-def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test=True):
+def connectivity_rt_dataset(
+    spark: SparkSession,
+    iso2_country_code: str,
+    is_test=True,
+    context: OpExecutionContext = None,
+):
     from src.internal.connectivity_queries import (
         get_giga_meter_schools,
         get_mlab_schools,
         get_rt_schools,
     )
+
+    logger = get_context_with_fallback_logger(context)
 
     # get raw datasets
     rt_data = get_rt_schools(iso2_country_code, is_test=is_test)
@@ -528,8 +537,7 @@ def connectivity_rt_dataset(spark: SparkSession, iso2_country_code: str, is_test
     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
 
     out = all_rt_schools.select(*realtime_columns)
-    out.printSchema()
-    out.show()
+    logger.info(out.schema)
     return out
 
 
