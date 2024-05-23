@@ -52,7 +52,5 @@ async def send_email_base(
             ).dict(),
         )
         if res.is_error:
-            context.log.error(res.json())
+            logger.error(res.json())
             res.raise_for_status()
-
-    logger.info("")

@@ -372,6 +372,7 @@ def adhoc__publish_silver_geolocation(
             c
             for c in column_names
             if c in adhoc__reference_dq_checks_passed.schema.fieldNames()
+            and c != "signature"
         ]
         df_one_gold = df_one_gold.join(
             adhoc__reference_dq_checks_passed.select(*reference_columns),
@@ -435,6 +436,7 @@ def adhoc__publish_silver_coverage(
             c
             for c in column_names
             if c in adhoc__reference_dq_checks_passed.schema.fieldNames()
+            and c != "signature"
         ]
         df_one_gold = df_one_gold.join(
             adhoc__reference_dq_checks_passed.select(*reference_columns),
