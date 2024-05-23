@@ -14,8 +14,6 @@ variables:
   azureSasTokenEscaped: $(AZURE_SAS_TOKEN_ESCAPED)
   azureBlobContainerName: $(AZURE_BLOB_CONTAINER_NAME)
   azureStorageAccountName: $(AZURE_STORAGE_ACCOUNT_NAME)
-  azureEmailConnectionString: $(AZURE_EMAIL_CONNECTION_STRING)
-  azureEmailSender: $(AZURE_EMAIL_SENDER)
   azureAdTenantId: $(AZURE_TENANT_ID)
   aadAzureTenantId: $(AAD_AZURE_TENANT_ID)
   aadAzureClientId: $(AAD_AZURE_CLIENT_ID)

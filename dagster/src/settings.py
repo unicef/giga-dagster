@@ -39,9 +39,7 @@ class Settings(BaseSettings):
     DATAHUB_OIDC_TENANT_ID: str
     DATAHUB_OIDC_CLIENT_SECRET: str
     HIVE_METASTORE_URI: str
-    AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
-    AZURE_EMAIL_SENDER: str
     INGESTION_POSTGRESQL_USERNAME: str
     INGESTION_POSTGRESQL_PASSWORD: str
     INGESTION_POSTGRESQL_DATABASE: str
@@ -60,7 +58,7 @@ class Settings(BaseSettings):
     INGESTION_DB_PORT: int = 5432
     SPARK_DRIVER_CORES: int = 2
     SPARK_DRIVER_MEMORY_MB: int = 1365
-    LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
+    LICENSE_LIST: list[str] = ["Open Source", "Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
     MLAB_DB_CONNECTION_STRING: str = ""
