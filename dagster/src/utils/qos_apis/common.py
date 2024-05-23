@@ -1,3 +1,4 @@
+import json
 from base64 import b64encode
 
 import requests
@@ -27,7 +28,7 @@ def _make_api_request(
             response = session.post(
                 row_data["api_endpoint"],
                 params=row_data["query_parameters"],
-                data=row_data["request_body"],
+                data=json.dumps(row_data["request_body"]),
             )
             response.raise_for_status()
 
@@ -40,11 +41,21 @@ def _make_api_request(
         context.log.info(error_message)
         raise ExternalApiException(error_message) from e
     else:
-        return (
+        response_data = (
             response.json()
             if not row_data["data_key"]
             else response.json()[row_data["data_key"]]
         )
+        if isinstance(response_data, dict) and len(response_data) == 1:
+            nested_value = list(response_data.values())[0]
+            if isinstance(nested_value, dict):
+                response_data = _flatten_nested_dict(nested_value)
+
+        response_data = (
+            response_data if isinstance(response_data, list) else [response_data]
+        )
+        context.log.info(f"Data: {response_data}")
+        return response_data
 
 
 def _generate_auth_parameters(
@@ -93,3 +104,14 @@ def _update_parameters(
             row_data["request_body"].update(parameters)
         elif row_data[parameter_send_key] == "QUERY_PARAMETERS":
             row_data["query_parameters"].update(parameters)
+
+
+def _flatten_nested_dict(nested_dict):
+    flat_dict = {}
+    for key, value in nested_dict.items():
+        if isinstance(value, dict):
+            for sub_key, sub_value in value.items():
+                flat_dict[sub_key] = sub_value
+        else:
+            flat_dict[key] = value
+    return flat_dict

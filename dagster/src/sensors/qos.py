@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from string import punctuation
 
 from croniter import croniter
 from models.qos_apis import SchoolConnectivity, SchoolList
@@ -58,12 +59,13 @@ def qos_school_list__new_apis_sensor(
 
             country_code = row_data.country
             metastore_schema = "school_geolocation"
-            formatted_date_stem = (
+            sanitized_api_name = row_data.name.translate(
+                str.maketrans("", "", punctuation + " " + "-")
+            )
+            sanitized_date = (
                 scheduled_date.replace(" ", "_").replace(":", "").replace("-", "")
             )
-            stem = f"{row_data.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{formatted_date_stem}".replace(
-                " ", ""
-            )
+            stem = f"{sanitized_api_name}_{country_code}_{DOMAIN_DATASET_TYPE}_{sanitized_date}"
 
             ops_destination_mapping = {
                 "qos_school_list_raw": OpDestinationMapping(
@@ -121,10 +123,7 @@ def qos_school_list__new_apis_sensor(
                 database_data=row_data.json(),
             )
 
-            formatted_date = (
-                scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
-            )
-            run_key = f"{row_data.name.replace(' ', '')}_{formatted_date}"
+            run_key = f"{sanitized_api_name}_{sanitized_date}"
 
             yield RunRequest(
                 run_key=run_key,
@@ -174,10 +173,14 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
 
         country_code = row_data.school_list.country
         metastore_schema = "qos"
-        formatted_date_stem = (
+
+        sanitized_api_name = row_data.school_list.name.translate(
+            str.maketrans("", "", punctuation + " " + "-")
+        )
+        sanitized_date = (
             scheduled_date.replace(" ", "_").replace(":", "").replace("-", "")
         )
-        stem = f"{row_data.school_list.name}_{country_code}_{DOMAIN_DATASET_TYPE}_{formatted_date_stem}".replace(
+        stem = f"{sanitized_api_name}_{country_code}_{DOMAIN_DATASET_TYPE}_{sanitized_date}".replace(
             " ", ""
         )
 
@@ -220,7 +223,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             ),
             "qos_school_connectivity_gold": OpDestinationMapping(
                 source_filepath=f"{constants.dq_results_folder}/{DOMAIN}/{DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}_gold.db/{country_code.lower()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code.lower()}/{sanitized_api_name.lower()}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
             ),
@@ -237,10 +240,7 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             database_data=row_data.json(),
         )
 
-        formatted_date = (
-            scheduled_date.replace(" ", "").replace("-", "_").replace(":", "_")
-        )
-        run_key = f"{row_data.school_list.name.replace(' ', '')}_{formatted_date}"
+        run_key = f"{sanitized_api_name}_{sanitized_date}"
 
         yield RunRequest(
             run_key=run_key,

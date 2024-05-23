@@ -56,7 +56,7 @@ def query_school_connectivity_data(
                 .values(
                     {
                         "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                        "error_message": e,
+                        "error_message": str(e),
                     }
                 )
             )
@@ -126,7 +126,7 @@ def query_school_connectivity_data(
                     .values(
                         {
                             "date_last_ingested": datetime.now(tz=ZoneInfo("UTC")),
-                            "error_message": e,
+                            "error_message": str(e),
                         }
                     )
                 )
@@ -175,11 +175,11 @@ def _generate_date_query_parameters(row_data: SchoolConnectivity) -> None:
     if (
         row_data["date_key"]
         and row_data["date_format"]
-        and row_data["date_send_query_in"] != "NONE"
+        and row_data["send_date_in"] != "NONE"
     ):
         date_parameters = {}
         date_parameters[row_data["date_key"]] = datetime.now().strftime(
             row_data["date_format"]
         )
 
-        _update_parameters(row_data, date_parameters, "date_send_query_in")
+        _update_parameters(row_data, date_parameters, "send_date_in")
