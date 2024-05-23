@@ -51,7 +51,11 @@ def _make_api_request(
             if isinstance(nested_value, dict):
                 response_data = _flatten_nested_dict(nested_value)
 
-        return response_data if isinstance(response_data, list) else [response_data]
+        response_data = (
+            response_data if isinstance(response_data, list) else [response_data]
+        )
+        context.log.info(f"Data: {response_data}")
+        return response_data
 
 
 def _generate_auth_parameters(
