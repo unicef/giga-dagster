@@ -80,7 +80,6 @@ def qos_school_list_bronze(
 
     columns_to_fill = [
         "education_level_govt",
-        "education_level",
         "school_id_govt_type",
         "admin1",
         "admin2",
