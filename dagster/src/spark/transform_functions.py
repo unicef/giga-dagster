@@ -576,7 +576,7 @@ def connectivity_rt_dataset(
     # select relevant columns
     realtime_columns = [
         "school_id_giga",
-        # "country",
+        "country",
         # "school_id_govt",
         "connectivity_RT_ingestion_timestamp",
         "connectivity_RT_datasource",
@@ -666,7 +666,15 @@ if __name__ == "__main__":
     )
     geolocation.show()
 
-    create_education_level(geolocation).show()
+    grouped_df = (
+        geolocation.groupBy("education_level_govt")
+        .agg(f.count("*").alias("count"))
+        .orderBy("count", ascending=False)
+    )
+    grouped_df.show()
+    education_level_count_dict = grouped_df.rdd.collectAsMap()
+    print(education_level_count_dict)
+    # create_education_level(geolocation).show()
     # df = df.withColumn("latitude", f.lit(32.618))
     # df = df.withColumn("longitude", f.lit(78.576))
     # df = df.withColumn("latitude", f.col("latitude").cast("double"))
