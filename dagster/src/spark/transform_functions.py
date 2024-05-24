@@ -1,5 +1,6 @@
 import io
 import uuid
+from itertools import chain
 
 import geopandas as gpd
 import h3
@@ -25,7 +26,6 @@ from src.settings import settings
 from src.spark.config_expectations import config
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
-from itertools import chain
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -84,36 +84,46 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def create_education_level(df: sql.DataFrame) -> sql.DataFrame:
-    education_level_govt_mapping = { 
+    education_level_govt_mapping = {
         # None : "Unknown",
-        "Other" : "Unknown",    
-        "Unknown" : "Unknown",    
+        "Other": "Unknown",
+        "Unknown": "Unknown",
         "Pre-Primary And Primary And Secondary": "Pre-Primary, Primary and Secondary",
-        "Primary, Secondary And Post-Secondary":"Primary, Secondary and Post-Secondary",
-        "Pre-Primary, Primary, And Secondary":"Pre-Primary, Primary and Secondary",
-        "Basic":"Primary",
-        "Basic And Secondary":"Primary and Secondary",
-        "Pre-Primary":"Pre-Primary",
+        "Primary, Secondary And Post-Secondary": "Primary, Secondary and Post-Secondary",
+        "Pre-Primary, Primary, And Secondary": "Pre-Primary, Primary and Secondary",
+        "Basic": "Primary",
+        "Basic And Secondary": "Primary and Secondary",
+        "Pre-Primary": "Pre-Primary",
         "Primary": "Primary",
-        "Secondary":"Secondary",
-        "Post-Secondary":"Post-Secondary",
-        "Pre-Primary And Primary":"Pre-Primary and Primary",
-        "Primary And Secondary":"Primary and Secondary",
-        "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary" 
-          }
-    
-    mapped_column = f.create_map([f.lit(x) for x in chain(*education_level_govt_mapping.items())])
+        "Secondary": "Secondary",
+        "Post-Secondary": "Post-Secondary",
+        "Pre-Primary And Primary": "Pre-Primary and Primary",
+        "Primary And Secondary": "Primary and Secondary",
+        "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary",
+    }
 
-    
+    mapped_column = f.create_map(
+        [f.lit(x) for x in chain(*education_level_govt_mapping.items())]
+    )
+
     if "education_level" in df.columns:
-        df = df.withColumn("mapped_column", mapped_column[f.col("education_level_govt")])
-        df = df.withColumn("education_level", f.coalesce(f.col("education_level"), f.col("mapped_column")))
+        df = df.withColumn(
+            "mapped_column", mapped_column[f.col("education_level_govt")]
+        )
+        df = df.withColumn(
+            "education_level",
+            f.coalesce(f.col("education_level"), f.col("mapped_column")),
+        )
         df = df.drop("mapped_column")
     else:
-        df = df.withColumn("education_level", mapped_column[f.col("education_level_govt")])
-    
+        df = df.withColumn(
+            "education_level", mapped_column[f.col("education_level_govt")]
+        )
+
     # fill nulls with "Unknown"
-    return df.withColumn("education_level", f.coalesce(f.col("education_level"), f.lit("Unknown")))
+    return df.withColumn(
+        "education_level", f.coalesce(f.col("education_level"), f.lit("Unknown"))
+    )
 
 
 def create_uzbekistan_school_name(df: sql.DataFrame) -> sql.DataFrame:
@@ -651,7 +661,9 @@ if __name__ == "__main__":
     #     ],
     # )
     # df = master.join(reference, how='left', on='school_id_giga')
-    geolocation = geolocation.withColumnRenamed("education_level", "education_level_govt")
+    geolocation = geolocation.withColumnRenamed(
+        "education_level", "education_level_govt"
+    )
     geolocation.show()
 
     create_education_level(geolocation).show()
@@ -845,4 +857,3 @@ if __name__ == "__main__":
 
     # test = connectivity_rt_dataset(spark, "BR", is_test=True)
     # test.show()
-
