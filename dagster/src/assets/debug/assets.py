@@ -97,7 +97,7 @@ def debug__test_proco_db_connection(
     )
 
     # if we merge schools from QoS we probably do not need this line specific to Brazil
-    rt_schools["connectivity_RT_datasource"] = np.where(
+    rt_schools["connectivity_rt_datasource"] = np.where(
         (rt_schools["source"] == "") & (rt_schools["country"] == "Brazil"),
         "nic_br",
         rt_schools["source"],
@@ -108,25 +108,25 @@ def debug__test_proco_db_connection(
         "school_id_giga",
         "country",
         "school_id_govt",
-        "connectivity_RT_ingestion_timestamp",
-        "connectivity_RT_datasource",
+        "connectivity_rt_ingestion_timestamp",
+        "connectivity_rt_datasource",
     ]
     rt_schools_original = rt_schools.loc[rt_schools["source"] != "", realtime_columns]
-    rt_schools_original["connectivity_RT"] = "Yes"
+    rt_schools_original["connectivity_rt"] = "Yes"
 
     rt_schools_refined = rt_schools.loc[
-        rt_schools["connectivity_RT_datasource"] != "", realtime_columns
+        rt_schools["connectivity_rt_datasource"] != "", realtime_columns
     ]
-    rt_schools_refined["connectivity_RT"] = "Yes"
+    rt_schools_refined["connectivity_rt"] = "Yes"
 
     rt_schools = rt_schools.loc[:, realtime_columns]
-    rt_schools["connectivity_RT"] = "Yes"
+    rt_schools["connectivity_rt"] = "Yes"
 
     describe_stats_original = rt_schools_original.describe().to_markdown()
     summary_stats_original = (
-        rt_schools_original.groupby(["connectivity_RT_datasource", "country"])
+        rt_schools_original.groupby(["connectivity_rt_datasource", "country"])
         .agg(
-            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
+            total_rows=("connectivity_rt_ingestion_timestamp", "count"),
             distinct_schools=("school_id_giga", "nunique"),
         )
         .reset_index()
@@ -135,9 +135,9 @@ def debug__test_proco_db_connection(
 
     describe_stats_refined = rt_schools_original.describe().to_markdown()
     summary_stats_refined = (
-        rt_schools_original.groupby(["connectivity_RT_datasource", "country"])
+        rt_schools_original.groupby(["connectivity_rt_datasource", "country"])
         .agg(
-            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
+            total_rows=("connectivity_rt_ingestion_timestamp", "count"),
             distinct_schools=("school_id_giga", "nunique"),
         )
         .reset_index()
@@ -145,9 +145,9 @@ def debug__test_proco_db_connection(
     )
 
     summary_stats = (
-        rt_schools.groupby(["connectivity_RT_datasource", "country"])
+        rt_schools.groupby(["connectivity_rt_datasource", "country"])
         .agg(
-            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
+            total_rows=("connectivity_rt_ingestion_timestamp", "count"),
             distinct_schools=("school_id_giga", "nunique"),
         )
         .reset_index()
