@@ -576,7 +576,7 @@ def connectivity_rt_dataset(
     # select relevant columns
     realtime_columns = [
         "school_id_giga",
-        "country",
+        # "country",
         # "school_id_govt",
         "connectivity_RT_ingestion_timestamp",
         "connectivity_RT_datasource",
