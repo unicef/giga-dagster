@@ -95,7 +95,7 @@ def debug__test_connectivity_merge(
     from src.spark.transform_functions import connectivity_rt_dataset
 
     coco = CountryConverter()
-    country_code_2 = coco.convert(config.country_code, to="ISO2")
+    country_code_2 = coco.convert("BRA", to="ISO2")
     connectivity = connectivity_rt_dataset(
         spark.spark_session, country_code_2, is_test=False
     )
