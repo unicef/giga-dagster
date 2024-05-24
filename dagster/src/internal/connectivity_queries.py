@@ -18,13 +18,10 @@ def get_rt_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
                 FROM connection_statistics_schooldailystatus stat
                 LEFT JOIN schools_school sch ON sch.id = stat.school_id
                 LEFT JOIN locations_country c ON c.id = sch.country_id
+                WHERE c.code = :country_code
                 LIMIT :limit
                 """),
-                # WHERE c.code = :country_code
-                {
-                    # "country_code": iso2_country_code,
-                    "limit": 10 if is_test else None
-                },
+                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
             )
             .mappings()
             .all()
@@ -70,13 +67,10 @@ def get_mlab_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
                     client_info::JSON ->> 'Country' country_code,
                     'mlab' source
                 FROM public.measurements mlab
+                WHERE client_info::JSON ->> 'Country' = :country_code
                 LIMIT :limit
                 """),
-                # WHERE client_info::JSON ->> 'Country' = :country_code
-                {
-                    # "country_code": iso2_country_code,
-                    "limit": 10 if is_test else None
-                },
+                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
             )
             .mappings()
             .all()

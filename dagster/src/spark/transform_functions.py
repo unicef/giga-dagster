@@ -583,6 +583,7 @@ def connectivity_rt_dataset(
         "connectivity_RT",
     ]
     all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
+    all_rt_schools = all_rt_schools.filter(f.col("connectivity_RT_datasource") != "")  #
 
     out = all_rt_schools.select(*realtime_columns)
     logger.info(out.schema)
