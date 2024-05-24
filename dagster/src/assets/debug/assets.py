@@ -1,7 +1,10 @@
 from dagster_pyspark import PySparkResource
 from httpx import AsyncClient
 from pydantic import Field
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from src.settings import settings
 from src.utils.metadata import get_table_preview
 
@@ -88,15 +91,29 @@ def debug__test_connectivity_merge(
     spark: PySparkResource,
     config: ExternalDbQueryConfig,
 ):
+    from country_converter import CountryConverter
     from src.spark.transform_functions import connectivity_rt_dataset
 
-    connectivity = connectivity_rt_dataset(spark.spark_session, config.country_code)
+    coco = CountryConverter()
+    country_code_2 = coco.convert(config.country_code, to="ISO2")
+    connectivity = connectivity_rt_dataset(
+        spark.spark_session, country_code_2, is_test=False
+    )
+
+    stats = (
+        connectivity.groupBy("country")
+        .agg(f.count("*").alias("count"))
+        .orderBy("count", ascending=False)
+    )
+    stats_dict = stats.rdd.collectAsMap()
 
     return Output(
         None,
         metadata={
             "preview": get_table_preview(connectivity),
+            "stats_preview": get_table_preview(stats),
             "row_count": connectivity.count(),
+            "stats_dict": stats_dict,
         },
     )
 
