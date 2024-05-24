@@ -63,7 +63,7 @@ def debug__test_mlab_db_connection(
 ):
     from src.internal.connectivity_queries import get_mlab_schools
 
-    res = get_mlab_schools(config.country_code, is_test=True)
+    res = get_mlab_schools(config.country_code, is_test=False)
     return Output(None, metadata={"mlab_schools": MetadataValue.md(res.to_markdown())})
 
 
@@ -73,8 +73,8 @@ def debug__test_proco_db_connection(
 ):
     from src.internal.connectivity_queries import get_giga_meter_schools, get_rt_schools
 
-    rt_schools = get_rt_schools(config.country_code, is_test=True)
-    giga_meter_schools = get_giga_meter_schools(is_test=True)
+    rt_schools = get_rt_schools(config.country_code, is_test=False)
+    giga_meter_schools = get_giga_meter_schools(is_test=False)
 
     return Output(
         None,
