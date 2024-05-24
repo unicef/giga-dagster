@@ -1,12 +1,8 @@
 from dagster_pyspark import PySparkResource
 from httpx import AsyncClient
 from pydantic import Field
-from pyspark.sql import (
-    SparkSession,
-    functions as f,
-)
+from pyspark.sql import SparkSession
 from src.settings import settings
-from src.utils.metadata import get_table_preview
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
@@ -63,12 +59,29 @@ def debug__test_mlab_db_connection(
 ):
     from src.internal.connectivity_queries import get_mlab_schools
 
-    res = get_mlab_schools(config.country_code, is_test=False)
+    res = get_mlab_schools(config.country_code, is_test=True)
     return Output(None, metadata={"mlab_schools": MetadataValue.md(res.to_markdown())})
 
 
-@asset
 def debug__test_proco_db_connection(
+    _: OpExecutionContext, config: ExternalDbQueryConfig
+):
+    from src.internal.connectivity_queries import get_giga_meter_schools, get_rt_schools
+
+    rt_schools = get_rt_schools(config.country_code, is_test=True)
+    giga_meter_schools = get_giga_meter_schools(is_test=True)
+
+    return Output(
+        None,
+        metadata={
+            "giga_meter_schools": MetadataValue.md(giga_meter_schools.to_markdown()),
+            "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
+        },
+    )
+
+
+@asset
+def debug__test_connectivity_merge(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
     import numpy as np
@@ -168,35 +181,35 @@ def debug__test_proco_db_connection(
     )
 
 
-@asset
-def debug__test_connectivity_merge(
-    _: OpExecutionContext,
-    spark: PySparkResource,
-    # config: ExternalDbQueryConfig,
-):
-    # from country_converter import CountryConverter
-    from src.spark.transform_functions import connectivity_rt_dataset
+# @asset
+# def debug__test_connectivity_merge(
+#     _: OpExecutionContext,
+#     spark: PySparkResource,
+#     # config: ExternalDbQueryConfig,
+# ):
+#     # from country_converter import CountryConverter
+#     from src.spark.transform_functions import connectivity_rt_dataset
 
-    # coco = CountryConverter()
-    # country_code_2 = coco.convert("BRA", to="ISO2")
-    connectivity = connectivity_rt_dataset(spark.spark_session, "BR", is_test=False)
+#     # coco = CountryConverter()
+#     # country_code_2 = coco.convert("BRA", to="ISO2")
+#     connectivity = connectivity_rt_dataset(spark.spark_session, "BR", is_test=False)
 
-    stats = (
-        connectivity.groupBy("country")
-        .agg(f.count("*").alias("count"))
-        .orderBy("count", ascending=False)
-    )
-    stats_dict = stats.rdd.collectAsMap()
+#     stats = (
+#         connectivity.groupBy("country")
+#         .agg(f.count("*").alias("count"))
+#         .orderBy("count", ascending=False)
+#     )
+#     stats_dict = stats.rdd.collectAsMap()
 
-    return Output(
-        None,
-        metadata={
-            "preview": get_table_preview(connectivity),
-            "stats_preview": get_table_preview(stats),
-            "row_count": connectivity.count(),
-            "stats_dict": stats_dict,
-        },
-    )
+#     return Output(
+#         None,
+#         metadata={
+#             "preview": get_table_preview(connectivity),
+#             "stats_preview": get_table_preview(stats),
+#             "row_count": connectivity.count(),
+#             "stats_dict": stats_dict,
+#         },
+#     )
 
 
 @asset
