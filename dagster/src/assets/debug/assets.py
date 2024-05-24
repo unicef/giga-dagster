@@ -71,15 +71,83 @@ def debug__test_mlab_db_connection(
 def debug__test_proco_db_connection(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
-    from src.internal.connectivity_queries import get_rt_schools
+    import numpy as np
+    from src.internal.connectivity_queries import (
+        get_giga_meter_schools,
+        get_mlab_schools,
+        get_rt_schools,
+    )
 
     rt_schools = get_rt_schools(config.country_code, is_test=False)
-    # giga_meter_schools = get_giga_meter_schools(is_test=False)
-    describe_stats = rt_schools.describe().to_markdown()
-    summary_stats = (
-        rt_schools.groupby(["country", "country_code"])
+    giga_meter_schools = get_giga_meter_schools(is_test=False)
+    mlab_schs = get_mlab_schools(config.country_code, is_test=False)
+
+    # merge datasets (here we should merge schools from QoS too as part of the pipeline )
+    rt_schools = rt_schools.merge(
+        mlab_schs, on=["school_id_govt", "country_code"], how="left"
+    ).merge(giga_meter_schools, on="school_id_giga", how="left", suffixes=("", "_pcdc"))
+
+    # determine the data source(s)
+    rt_schools["source"] = (
+        rt_schools[["source_pcdc", "source"]]
+        .fillna("")
+        .apply(lambda r: ", ".join(r), axis="columns")
+        .str.strip(" ")
+        .str.strip(",")
+    )
+
+    # if we merge schools from QoS we probably do not need this line specific to Brazil
+    rt_schools["connectivity_RT_datasource"] = np.where(
+        (rt_schools["source"] == "") & (rt_schools["country"] == "Brazil"),
+        "nic_br",
+        rt_schools["source"],
+    )
+
+    # retain only necessay columns
+    realtime_columns = [
+        "school_id_giga",
+        "country",
+        "school_id_govt",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_RT_datasource",
+    ]
+    rt_schools_original = rt_schools.loc[rt_schools["source"] != "", realtime_columns]
+    rt_schools_original["connectivity_RT"] = "Yes"
+
+    rt_schools_refined = rt_schools.loc[
+        rt_schools["connectivity_RT_datasource"] != "", realtime_columns
+    ]
+    rt_schools_refined["connectivity_RT"] = "Yes"
+
+    rt_schools = rt_schools.loc[:, realtime_columns]
+    rt_schools["connectivity_RT"] = "Yes"
+
+    describe_stats_original = rt_schools_original.describe().to_markdown()
+    summary_stats_original = (
+        rt_schools_original.groupby(["connectivity_RT_datasource", "country"])
         .agg(
-            total_rows=("connectivity_rt_ingestion_timestamp", "count"),
+            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
+            distinct_schools=("school_id_giga", "nunique"),
+        )
+        .reset_index()
+        .to_markdown()
+    )
+
+    describe_stats_refined = rt_schools_original.describe().to_markdown()
+    summary_stats_refined = (
+        rt_schools_original.groupby(["connectivity_RT_datasource", "country"])
+        .agg(
+            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
+            distinct_schools=("school_id_giga", "nunique"),
+        )
+        .reset_index()
+        .to_markdown()
+    )
+
+    summary_stats = (
+        rt_schools.groupby(["connectivity_RT_datasource", "country"])
+        .agg(
+            total_rows=("connectivity_RT_ingestion_timestamp", "count"),
             distinct_schools=("school_id_giga", "nunique"),
         )
         .reset_index()
@@ -91,7 +159,10 @@ def debug__test_proco_db_connection(
         metadata={
             # "giga_meter_schools": MetadataValue.md(giga_meter_schools.to_markdown()),
             # "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
-            "rt_schools_describe": MetadataValue.md(describe_stats),
+            "rt_schools_original_describe": MetadataValue.md(describe_stats_original),
+            "rt_schools_original_summary": MetadataValue.md(summary_stats_original),
+            "rt_schools_refined_describe": MetadataValue.md(describe_stats_refined),
+            "rt_schools_refined_summary": MetadataValue.md(summary_stats_refined),
             "rt_schools_summary": MetadataValue.md(summary_stats),
         },
     )
