@@ -71,16 +71,28 @@ def debug__test_mlab_db_connection(
 def debug__test_proco_db_connection(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
-    from src.internal.connectivity_queries import get_giga_meter_schools, get_rt_schools
+    from src.internal.connectivity_queries import get_rt_schools
 
     rt_schools = get_rt_schools(config.country_code, is_test=False)
-    giga_meter_schools = get_giga_meter_schools(is_test=False)
+    # giga_meter_schools = get_giga_meter_schools(is_test=False)
+    describe_stats = rt_schools.describe().to_markdown()
+    summary_stats = (
+        rt_schools.groupby(["country", "country_code"])
+        .agg(
+            total_rows=("connectivity_rt_ingestion_timestamp", "count"),
+            distinct_schools=("school_id_giga", "nunique"),
+        )
+        .reset_index()
+        .to_markdown()
+    )
 
     return Output(
         None,
         metadata={
-            "giga_meter_schools": MetadataValue.md(giga_meter_schools.to_markdown()),
-            "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
+            # "giga_meter_schools": MetadataValue.md(giga_meter_schools.to_markdown()),
+            # "rt_schools": MetadataValue.md(rt_schools.to_markdown()),
+            "rt_schools_describe": MetadataValue.md(describe_stats),
+            "rt_schools_summary": MetadataValue.md(summary_stats),
         },
     )
 
@@ -89,16 +101,14 @@ def debug__test_proco_db_connection(
 def debug__test_connectivity_merge(
     _: OpExecutionContext,
     spark: PySparkResource,
-    config: ExternalDbQueryConfig,
+    # config: ExternalDbQueryConfig,
 ):
-    from country_converter import CountryConverter
+    # from country_converter import CountryConverter
     from src.spark.transform_functions import connectivity_rt_dataset
 
-    coco = CountryConverter()
-    country_code_2 = coco.convert("BRA", to="ISO2")
-    connectivity = connectivity_rt_dataset(
-        spark.spark_session, country_code_2, is_test=False
-    )
+    # coco = CountryConverter()
+    # country_code_2 = coco.convert("BRA", to="ISO2")
+    connectivity = connectivity_rt_dataset(spark.spark_session, "BR", is_test=False)
 
     stats = (
         connectivity.groupBy("country")
