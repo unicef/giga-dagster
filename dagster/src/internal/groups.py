@@ -37,13 +37,19 @@ class GroupsApi:
             select=[
                 "id",
                 "mail",
+                "mailNickname",
                 "displayName",
                 "userPrincipalName",
                 "accountEnabled",
                 "externalUserState",
+                "givenName",
+                "surname",
+                "otherMails",
+                "identities",
             ],
             orderby=["displayName", "mail", "userPrincipalName"],
             count=True,
+            top=999,
         )
     )
     user_request_config = (
@@ -51,6 +57,26 @@ class GroupsApi:
             query_parameters=get_user_query_parameters,
         )
     )
+
+    @staticmethod
+    def get_user_email_from_api(user: GraphUser) -> str | None:
+        if user.mail is not None:
+            return user.mail
+
+        if "#EXT#" in user.user_principal_name:
+            if user.other_mails is not None and len(user.other_mails) > 0:
+                return user.other_mails[0]
+            else:
+                escaped_email_part = user.user_principal_name.split("#EXT#")[0]
+                return "@".join(escaped_email_part.rsplit("_", 1))
+
+        if user.identities is not None and len(user.identities) > 0:
+            email_identity = next(
+                (id for id in user.identities if id.sign_in_type == "emailAddress"),
+                None,
+            )
+            if email_identity is not None:
+                return email_identity.issuer_assigned_id
 
     @classmethod
     async def list_country_members(cls, country_code: str) -> dict[str, GraphUser]:
@@ -81,7 +107,10 @@ class GroupsApi:
                     ).members.get(request_configuration=updated_request_configuration)
 
                     for user in users.value:
-                        members[user.id] = user
+                        u = GraphUser.from_orm(user)
+                        if u.mail is None:
+                            u.mail = cls.get_user_email_from_api(u)
+                        members[user.id] = u
 
                 except ODataError as err:
                     raise Exception(err.error.message) from err
@@ -106,6 +135,8 @@ class GroupsApi:
         except ODataError as err:
             raise Exception(err.error.message) from err
 
+        users_list = []
+
         if group is not None:
             try:
                 updated_request_configuration = cls.user_request_config.headers.add(
@@ -114,7 +145,13 @@ class GroupsApi:
                 users = await graph_client.groups.by_group_id(group).members.get(
                     request_configuration=updated_request_configuration
                 )
-                return [GraphUser.from_orm(u) for u in users.value]
+                for user in users.value:
+                    u = GraphUser.from_orm(user)
+                    if u.mail is None:
+                        u.mail = cls.get_user_email_from_api(u)
+                    users_list.append(u)
+
+                return users_list
             except ODataError as err:
                 raise Exception(err.error.message) from err
 
