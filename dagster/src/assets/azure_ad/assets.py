@@ -1,4 +1,5 @@
 import json
+import re
 from http import HTTPStatus
 from itertools import product
 
@@ -26,17 +27,30 @@ def create_country_dataset_roles(context: OpExecutionContext):
             for country, dataset in product(country_names, datasets)
         ],
     ]
-    role_requests = [
-        {
-            "description": role,
-            "displayName": role,
-            "mailEnabled": False,
-            "mailNickname": unidecode(role.replace(" ", "_").lower()),
-            "securityEnabled": True,
-            "groupTypes": [],
-        }
-        for role in roles
-    ]
+    context.log.info(f"{len(roles)=}, {roles[:10]=}")
+
+    role_requests = []
+    for role in roles:
+        mail_nickname = unidecode(
+            re.sub(
+                r"[.,()]+",
+                "",
+                re.sub(r"[\s'-]+", "_", role),
+            ).lower()
+        )
+        if mail_nickname == "admin":
+            mail_nickname = "giga_admin"
+
+        role_requests.append(
+            {
+                "description": role,
+                "displayName": role,
+                "mailEnabled": False,
+                "mailNickname": mail_nickname,
+                "securityEnabled": True,
+                "groupTypes": [],
+            }
+        )
 
     access_token = graph_credentials.get_token(graph_scopes[0])
     headers = {"Content-Type": "application/json"}
@@ -46,6 +60,9 @@ def create_country_dataset_roles(context: OpExecutionContext):
     count_error = 0
 
     for i in range(0, len(role_requests), batch_size):
+        batch_number = i // batch_size + 1
+        context.log.info(f"Processing batch #{batch_number} ({batch_size=})...")
+
         payload = {
             "requests": [
                 {
@@ -72,13 +89,24 @@ def create_country_dataset_roles(context: OpExecutionContext):
         data = res.json()
 
         if res.ok:
+            context.log.info(f"Batch #{batch_number} POST request ok")
             for d in data["responses"]:
                 if d["status"] == HTTPStatus.CREATED:
                     count_created += 1
                     context.log.info(f"Created {d['body']['displayName']}")
                 elif d["status"] == HTTPStatus.NO_CONTENT:
                     count_updated += 1
+                else:
+                    context.log.warning(f"Unexpected status: {d['status']}\n{d}")
+                    context.log.info(
+                        next(
+                            (p for p in payload["requests"] if p["id"] == d["id"]),
+                            "No matched ID",
+                        )
+                    )
+                    count_error += 1
         else:
+            context.log.info(f"Batch #{batch_number} POST request with errors")
             count_error += 1
             context.log.info(json.dumps(data, indent=2))
 
