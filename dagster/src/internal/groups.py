@@ -1,4 +1,6 @@
 import country_converter as coco
+import requests
+from loguru import logger
 from msgraph import GraphServiceClient
 from msgraph.generated.groups.groups_request_builder import (
     GroupsRequestBuilder,
@@ -9,6 +11,7 @@ from msgraph.generated.users.users_request_builder import UsersRequestBuilder
 from azure.identity import ClientSecretCredential
 from src.schemas.user import GraphUser
 from src.settings import settings
+from src.utils.string import to_snake_case
 
 graph_scopes = ["https://graph.microsoft.com/.default"]
 graph_credentials = ClientSecretCredential(
@@ -32,21 +35,23 @@ class GroupsApi:
             query_parameters=get_group_query_parameters,
         )
     )
+
+    get_user_query_select_fields = [
+        "id",
+        "mail",
+        "mailNickname",
+        "displayName",
+        "userPrincipalName",
+        "accountEnabled",
+        "externalUserState",
+        "givenName",
+        "surname",
+        "otherMails",
+        "identities",
+    ]
     get_user_query_parameters = (
         UsersRequestBuilder.UsersRequestBuilderGetQueryParameters(
-            select=[
-                "id",
-                "mail",
-                "mailNickname",
-                "displayName",
-                "userPrincipalName",
-                "accountEnabled",
-                "externalUserState",
-                "givenName",
-                "surname",
-                "otherMails",
-                "identities",
-            ],
+            select=get_user_query_select_fields,
             orderby=["displayName", "mail", "userPrincipalName"],
             count=True,
             top=999,
@@ -77,6 +82,54 @@ class GroupsApi:
             )
             if email_identity is not None:
                 return email_identity.issuer_assigned_id
+
+    @classmethod
+    def batch_get_user_details(cls, users: list[GraphUser]) -> list[GraphUser]:
+        access_token = graph_credentials.get_token(
+            "https://graph.microsoft.com/.default"
+        )
+        graph_api_endpoint = "https://graph.microsoft.com/v1.0"
+        batch_size = 20
+        headers = {
+            "Authorization": f"Bearer {access_token[0]}",
+            "Content-Type": "application/json",
+        }
+        select_params = ",".join(cls.get_user_query_select_fields)
+
+        all_responses = []
+
+        for i in range(0, len(users), batch_size):
+            payload = [
+                {
+                    "id": f"{i}-{j}",
+                    "method": "GET",
+                    "url": f"/users/{user.id}?$select={select_params}",
+                }
+                for j, user in enumerate(users[i : i + batch_size])
+            ]
+
+            response = requests.post(
+                url=f"{graph_api_endpoint}/$batch",
+                headers=headers,
+                json={"requests": payload},
+            )
+            if response.ok:
+                data = response.json()
+                if data.get("responses") is not None:
+                    all_responses.extend(data["responses"])
+            else:
+                logger.error(response.json())
+
+        users_details = []
+        for r in all_responses:
+            if r.get("body") is not None:
+                transformed_body = to_snake_case(r["body"])
+                graph_user = GraphUser(**transformed_body)
+                if graph_user.mail is None:
+                    graph_user.mail = cls.get_user_email_from_api(graph_user)
+                users_details.append(graph_user)
+
+        return users_details
 
     @classmethod
     async def list_country_members(cls, country_code: str) -> dict[str, GraphUser]:
@@ -115,7 +168,8 @@ class GroupsApi:
                 except ODataError as err:
                     raise Exception(err.error.message) from err
 
-        return members
+        detailed_members = cls.batch_get_user_details(list(members.values()))
+        return {str(d.id): d for d in detailed_members}
 
     @classmethod
     async def list_group_members(cls, group_name: str) -> list[GraphUser]:
@@ -151,7 +205,7 @@ class GroupsApi:
                         u.mail = cls.get_user_email_from_api(u)
                     users_list.append(u)
 
-                return users_list
+                return cls.batch_get_user_details(users_list)
             except ODataError as err:
                 raise Exception(err.error.message) from err
 
