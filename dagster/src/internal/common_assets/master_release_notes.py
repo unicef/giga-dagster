@@ -74,7 +74,10 @@ async def send_master_release_notes(
 
     if settings.DEPLOY_ENV == DeploymentEnvironment.LOCAL:
         recipients = [settings.ADMIN_EMAIL]
-    elif settings.DEPLOY_ENV == DeploymentEnvironment.PRODUCTION:
+    elif settings.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
+        members = await GroupsApi.list_group_members(group_name="Developer")
+        recipients = list({m.mail for m in members if m.mail is not None})
+    else:
         members = await GroupsApi.list_country_members(country_code=country_code)
         admins = await GroupsApi.list_group_members(group_name="Admin")
         recipients = {item.mail for item in members.values() if item.mail is not None}
@@ -82,9 +85,6 @@ async def send_master_release_notes(
             if admin.mail is not None:
                 recipients.add(admin.mail)
         recipients = list(recipients)
-    else:
-        members = await GroupsApi.list_group_members(group_name="Developer")
-        recipients = list({m.mail for m in members if m.mail is not None})
 
     if len(recipients) == 0:
         context.log.warning(
