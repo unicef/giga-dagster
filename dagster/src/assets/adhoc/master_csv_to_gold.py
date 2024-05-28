@@ -120,6 +120,13 @@ def adhoc__master_data_transforms(
         "Added row number transforms",
     )
 
+    sdf = sdf.withColumns(
+        {
+            "admin1": f.coalesce(f.col("admin1"), f.lit("Unknown")),
+            "admin2": f.coalesce(f.col("admin2"), f.lit("Unknown")),
+        }
+    )
+
     df_pandas = sdf.toPandas()
     return Output(
         df_pandas,

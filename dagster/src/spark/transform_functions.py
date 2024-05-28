@@ -413,8 +413,15 @@ def add_admin_columns(  # noqa: C901
         f"{admin_level}",
         f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
     )
-    df = df.drop(f"{admin_level}_en")
-    return df.drop(f"{admin_level}_native")
+    df = df.drop(f"{admin_level}_en", f"{admin_level}_native")
+
+    df = df.withColumns(
+        {
+            "admin1": f.coalesce(f.col("admin1"), f.lit("Unknown")),
+            "admin2": f.coalesce(f.col("admin2"), f.lit("Unknown")),
+        }
+    )
+    return df
 
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
