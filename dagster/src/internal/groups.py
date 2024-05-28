@@ -160,15 +160,15 @@ class GroupsApi:
                     ).members.get(request_configuration=updated_request_configuration)
 
                     for user in users.value:
-                        u = GraphUser.from_orm(user)
-                        if u.mail is None:
-                            u.mail = cls.get_user_email_from_api(u)
-                        members[user.id] = u
+                        members[user.id] = GraphUser.from_orm(user)
 
                 except ODataError as err:
                     raise Exception(err.error.message) from err
 
         detailed_members = cls.batch_get_user_details(list(members.values()))
+        for member in detailed_members:
+            if member.mail is None:
+                member.mail = cls.get_user_email_from_api(member)
         return {str(d.id): d for d in detailed_members}
 
     @classmethod
