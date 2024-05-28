@@ -94,7 +94,13 @@ def qos_school_connectivity_raw(
                             df = pd.concat([df, data], ignore_index=True)
         else:
             context.log.warning("Cannot query the API without a source of school IDs")
-            return df
+            return Output(
+                df,
+                metadata={
+                    **get_output_metadata(config),
+                    "preview": get_table_preview(df),
+                },
+            )
 
     else:
         with get_db_context() as database_session:
