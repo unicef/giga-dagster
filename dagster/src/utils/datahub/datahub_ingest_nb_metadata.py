@@ -39,7 +39,7 @@ class NotebookIngestionAction:
         self.dataset_urn = builder.make_dataset_urn(
             platform="github",
             name=self.notebook_name,
-            env=settings.ADLS_ENVIRONMENT,
+            env=settings.DATAHUB_ENVIRONMENT,
         )
         logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 

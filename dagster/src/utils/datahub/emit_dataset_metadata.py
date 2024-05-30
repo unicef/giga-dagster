@@ -48,7 +48,7 @@ def create_dataset_urn(
         return builder.make_dataset_urn(
             platform=platform,
             name=upstream_urn_name,
-            env=settings.ADLS_ENVIRONMENT,
+            env=settings.DATAHUB_ENVIRONMENT,
         )
 
     dataset_urn_name = config.datahub_destination_dataset_urn
