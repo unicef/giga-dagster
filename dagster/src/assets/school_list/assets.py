@@ -19,21 +19,22 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.datahub.create_validation_tab import (
-    datahub_emit_assertions_with_exception_catcher,
-)
-from src.utils.datahub.emit_dataset_metadata import (
-    datahub_emit_metadata_with_exception_catcher,
-)
+
+# from src.utils.datahub.create_validation_tab import (
+#     datahub_emit_assertions_with_exception_catcher,
+# )
+# from src.utils.datahub.emit_dataset_metadata import (
+#     datahub_emit_metadata_with_exception_catcher,
+# )
 from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.qos_apis.school_list import query_school_list_data
 from src.utils.schema import (
     get_schema_columns,
-    get_schema_columns_datahub,
 )
 
+# get_schema_columns_datahub,
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -47,10 +48,10 @@ def qos_school_list_raw(
             query_school_list_data(context, database_session, config.row_data_dict),
         )
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-    )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    # )
 
     return Output(
         df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
@@ -90,12 +91,12 @@ def qos_school_list_bronze(
 
     config.metadata.update({"column_mapping": column_mapping})
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=df,
-    )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    #     schema_reference=df,
+    # )
 
     df_pandas = df.toPandas()
     return Output(
@@ -123,11 +124,11 @@ def qos_school_list_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    # )
 
     return Output(
         dq_pandas,
@@ -154,14 +155,14 @@ def qos_school_list_data_quality_results_summary(
         qos_school_list_bronze,
     )
 
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=dq_summary_statistics
-    )
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
+    # datahub_emit_assertions_with_exception_catcher(
+    #     context=context, dq_summary_statistics=dq_summary_statistics
+    # )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    # )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
@@ -178,16 +179,16 @@ def qos_school_list_dq_passed_rows(
         "geolocation",
     )
 
-    schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
-        config.metastore_schema,
-    )
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=schema_reference,
-    )
+    # schema_reference = get_schema_columns_datahub(
+    #     spark.spark_session,
+    #     config.metastore_schema,
+    # )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    #     schema_reference=schema_reference,
+    # )
 
     df_pandas = df_passed.toPandas()
     return Output(
@@ -211,17 +212,17 @@ def qos_school_list_dq_failed_rows(
         "geolocation",
     )
 
-    schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
-        config.metastore_schema,
-    )
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=schema_reference,
-        df_failed=df_failed,
-    )
+    # schema_reference = get_schema_columns_datahub(
+    #     spark.spark_session,
+    #     config.metastore_schema,
+    # )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    #     schema_reference=schema_reference,
+    #     df_failed=df_failed,
+    # )
 
     df_pandas = df_failed.toPandas()
     return Output(
@@ -254,16 +255,16 @@ def qos_school_list_staging(
     )
     staging = staging_step(upstream_df=qos_school_list_dq_passed_rows)
 
-    schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
-        config.metastore_schema,
-    )
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=schema_reference,
-    )
+    # schema_reference = get_schema_columns_datahub(
+    #     spark.spark_session,
+    #     config.metastore_schema,
+    # )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    #     spark=spark,
+    #     schema_reference=schema_reference,
+    # )
 
     return Output(
         None,
