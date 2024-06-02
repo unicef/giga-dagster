@@ -1,4 +1,5 @@
 from dagster_pyspark import PySparkResource
+from datahub.specific.dataset import DatasetPatchBuilder
 from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
 from pyspark import sql
@@ -26,6 +27,7 @@ from src.utils.adls import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
 from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -433,5 +435,26 @@ async def broadcast_master_release_notes(
     metadata = await send_master_release_notes(context, config, spark, master)
     if metadata is None:
         return Output(None)
+
+    with get_rest_emitter() as emitter:
+        context.log.info(f"{config.datahub_destination_dataset_urn=}")
+
+        for patch_mcp in (
+            DatasetPatchBuilder(config.datahub_destination_dataset_urn)
+            .add_custom_properties(
+                {
+                    "Dataset Version": str(metadata["version"]),
+                    "Row Count": f'{metadata["rows"]:,}',
+                    "Rows Added": f'{metadata["added"]:,}',
+                    "Rows Updated": f'{metadata["modified"]:,}',
+                    "Rows Deleted": f'{metadata["deleted"]:,}',
+                }
+            )
+            .build()
+        ):
+            try:
+                emitter.emit(patch_mcp, lambda e, s: context.log.info(f"{e=}\n{s=}"))
+            except Exception as e:
+                context.log.error(str(e))
 
     return Output(None, metadata=metadata)

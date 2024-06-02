@@ -92,9 +92,11 @@ def define_dataset_properties(
         "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
         "Data Format": data_format,
-        "Data Size": f"{file_size_MB} MB",
         "Country": country_name,
     }
+
+    if data_format != "deltaTable":
+        custom_metadata["Data Size"] = f"{file_size_MB:.2f} MB"
 
     if config.domain:
         domain = config.domain

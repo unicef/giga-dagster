@@ -12,6 +12,7 @@ from pyspark.sql import (
 from dagster import OpExecutionContext
 from src.internal.groups import GroupsApi
 from src.settings import DeploymentEnvironment, settings
+from src.utils.delta import get_change_operation_counts
 from src.utils.op_config import FileConfig
 from src.utils.send_email_master_release_notification import (
     EmailProps,
@@ -51,9 +52,7 @@ async def send_master_release_notes(
         context.log.warning("No changes to master, skipping email.")
         return None
 
-    added = cdf.filter(f.col("_change_type") == "insert").count()
-    modified = cdf.filter(f.col("_change_type") == "update_postimage").count()
-    deleted = cdf.filter(f.col("_change_type") == "delete").count()
+    counts = get_change_operation_counts(cdf)
     country = coco.convert(country_code, to="name_short")
 
     detail = dt.detail().first()
@@ -64,9 +63,9 @@ async def send_master_release_notes(
 
     props = EmailProps(
         country=country,
-        added=added,
-        modified=modified,
-        deleted=deleted,
+        added=counts["added"],
+        modified=counts["modified"],
+        deleted=counts["deleted"],
         updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
         version=latest_version,
         rows=rows,
