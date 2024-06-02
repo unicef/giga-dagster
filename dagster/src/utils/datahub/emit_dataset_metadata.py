@@ -109,8 +109,7 @@ def define_dataset_properties(
         formatted_metadata[friendly_name] = v
 
     return DatasetPropertiesClass(
-        description=step,
-        customProperties={**formatted_metadata, **custom_metadata},
+        customProperties={**formatted_metadata, **custom_metadata}
     )
 
 
