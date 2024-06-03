@@ -22,7 +22,7 @@ jobs:
                 configurationType: configuration
                 command: apply
                 useConfigurationFile: true
-                configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
+                configuration: infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
               displayName: Create Dagster secrets

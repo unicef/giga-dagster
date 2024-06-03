@@ -119,7 +119,8 @@ dagsterWebserver:
   #
   # envConfigMaps:
   #   - name: config-map
-  envConfigMaps: [ ]
+  envConfigMaps:
+    - name: giga-dagster-configmap
 
   # Additional environment variables can be retrieved and set from Secrets. See:
   # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
@@ -497,7 +498,8 @@ runLauncher:
       #
       # envConfigMaps:
       #   - name: config-map
-      envConfigMaps: [ ]
+      envConfigMaps:
+        - name: giga-dagster-configmap
 
       # Additional environment variables can be retrieved and set from Secrets for the Job. See:
       # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
@@ -668,7 +670,8 @@ runLauncher:
       #
       # envConfigMaps:
       #   - name: config-map
-      envConfigMaps: [ ]
+      envConfigMaps:
+        - name: giga-dagster-configmap
 
       # Additional environment variables can be retrieved and set from Secrets. See:
       # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
@@ -1181,7 +1184,8 @@ dagsterDaemon:
   #
   # envConfigMaps:
   #   - name: config-map
-  envConfigMaps: [ ]
+  envConfigMaps:
+    - name: giga-dagster-configmap
 
   # Additional environment variables can be retrieved and set from Secrets. See:
   # https://kubernetes.io/docs/concepts/configuration/secret/#use-case-as-container-environment-variables
