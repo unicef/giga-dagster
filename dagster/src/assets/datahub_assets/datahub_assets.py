@@ -99,9 +99,27 @@ def datahub_platform_metadata(context: OpExecutionContext):
 @asset
 def list_qos_datasets_to_delete(context: OpExecutionContext):
     context.log.info("LISTING QOS DATASETS FROM DATAHUB...")
+
     qos_list = list_datasets_by_filter("qos")
+    context.log.info("COMPLETE QOS DATASETS LIST:")
     context.log.info(qos_list)
-    yield Output(qos_list, metadata={"qos_datasets_count": len(qos_list)})
+
+    qos_delta_list = [urn for urn in qos_list if "deltaLake" in urn]
+    context.log.info("QOS DELTA TABLES:")
+    context.log.info(qos_delta_list)
+
+    qos_list_minus_delta = [urn for urn in qos_list if "deltaLake" not in urn]
+    context.log.info("QOS DATASETS MINUS DELTA TABLES:")
+    context.log.info(qos_list_minus_delta)
+
+    yield Output(
+        qos_list_minus_delta,
+        metadata={
+            "qos_datasets_count": len(qos_list),
+            "qos_delta_count": len(qos_delta_list),
+            "qos_datasets_minus_qos_delta_count": len(qos_list_minus_delta),
+        },
+    )
 
 
 @asset
