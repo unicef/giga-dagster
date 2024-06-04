@@ -7,9 +7,11 @@ from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
+from src.utils.datahub.graphql import datahub_graph_client as emitter
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
+from src.utils.datahub.list_datasets import list_datasets_by_filter
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 
@@ -93,6 +95,104 @@ def datahub_platform_metadata(context: OpExecutionContext):
     )
     context.log.info("PLATFORM METADATA ADDED TO DATAHUB")
     yield Output(None)
+
+
+@asset
+def list_qos_datasets_to_delete(context: OpExecutionContext):
+    context.log.info("LISTING QOS DATASETS FROM DATAHUB...")
+
+    qos_list = list_datasets_by_filter("qos")
+    context.log.info("COMPLETE QOS DATASETS LIST:")
+    context.log.info(qos_list)
+
+    qos_delta_list = [urn for urn in qos_list if "deltaLake" in urn]
+    context.log.info("QOS DELTA TABLES:")
+    context.log.info(qos_delta_list)
+
+    qos_list_minus_delta = [urn for urn in qos_list if "deltaLake" not in urn]
+    context.log.info("QOS DATASETS MINUS DELTA TABLES:")
+    context.log.info(qos_list_minus_delta)
+
+    yield Output(
+        qos_list_minus_delta,
+        metadata={
+            "qos_datasets_count": len(qos_list),
+            "qos_delta_count": len(qos_delta_list),
+            "qos_datasets_minus_qos_delta_count": len(qos_list_minus_delta),
+        },
+    )
+
+
+@asset
+def delete_references_to_qos_dry_run(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.info("DRY RUN OF DELETING QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=True)
+        i += 1
+        context.log.info(f"{i} of {count}: {qos_dataset}")
+        context.log.info(f"Count of references: {references_info[0]}")
+        context.log.info(f"List of related aspects: {references_info[1]}")
+
+    context.log.info(f"DRY RUN COMPLETE FOR {count} QOS DATASETS.")
+    yield Output(None, metadata={"qos_datasets_count": count})
+
+
+@asset
+def delete_references_to_qos(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.warn("DELETING REFERENCES TO QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=False)
+        i += 1
+        context.log.info(f"{i} of {count}: {qos_dataset}")
+        context.log.info(f"Count of references: {references_info[0]}")
+        context.log.info(f"List of related aspects: {references_info[1]}")
+
+    context.log.info("DELETE QOS REFERENCES COMPLETED.")
+    yield Output(None, metadata={"qos_datasets_count": count})
+
+
+@asset(deps=[delete_references_to_qos_dry_run])
+def soft_delete_qos_datasets(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.warn("SOFT DELETING QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        emitter.soft_delete_entity(qos_dataset)
+        i += 1
+        context.log.info(f"SOFT DELETED {i} of {count}: {qos_dataset}")
+
+    context.log.info(f"SOFT DELETED {count} QOS DATASETS FROM DATAHUB.")
+    yield Output(None, metadata={"qos_datasets_soft_deleted_count": count})
+
+
+@asset(deps=[delete_references_to_qos])
+def hard_delete_qos_datasets(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.warn("HARD DELETING QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        emitter.hard_delete_entity(qos_dataset)
+        i += 1
+        context.log.info(f"HARD DELETED {i} of {count}: {qos_dataset}")
+
+    context.log.info(f"HARD DELETED {count} QOS DATASETS FROM DATAHUB.")
+    yield Output(None, metadata={"qos_datasets_hard_deleted_count": count})
 
 
 @asset
