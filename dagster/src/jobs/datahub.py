@@ -53,3 +53,8 @@ datahub__add_platform_metadata_job = define_asset_job(
     name="datahub__add_platform_metadata_job",
     selection=["datahub_platform_metadata"],
 )
+
+datahub__add_business_glossary_job = define_asset_job(
+    name="datahub__add_business_glossary_job",
+    selection=["datahub_add_business_glossary"],
+)
