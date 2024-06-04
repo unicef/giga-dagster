@@ -53,3 +53,19 @@ datahub__add_platform_metadata_job = define_asset_job(
     name="datahub__add_platform_metadata_job",
     selection=["datahub_platform_metadata"],
 )
+
+datahub__soft_delete_qos_job = define_asset_job(
+    name="datahub__soft_delete_qos_job",
+    selection=[
+        "list_qos_datasets_to_delete",
+        "soft_delete_qos_datasets",
+    ],
+)
+
+datahub__hard_delete_qos_job = define_asset_job(
+    name="datahub__hard_delete_qos_job",
+    selection=[
+        "list_qos_datasets_to_delete",
+        "hard_delete_qos_datasets",
+    ],
+)
