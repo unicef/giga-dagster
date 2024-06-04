@@ -2,6 +2,7 @@ import json
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from src.settings import settings
+from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
@@ -91,4 +92,11 @@ def datahub_platform_metadata(context: OpExecutionContext):
         filepath_delimiter="/",
     )
     context.log.info("PLATFORM METADATA ADDED TO DATAHUB")
+    yield Output(None)
+
+
+@asset
+def datahub_add_business_glossary(context: OpExecutionContext):
+    context.log.info("ADDING BUSINESS GLOSSARY TO DATAHUB...")
+    add_business_glossary()
     yield Output(None)
