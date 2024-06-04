@@ -3,7 +3,7 @@ source: DataHub
 owners:                                                 # owners contains two nested fields
   users:                                                # (optional) a list of user IDs
   groups:                                               # (optional) a list of group IDs
-url: "https://github.com/unicef/giga-dagster/dagster/src/utils/datahub/datahub_business_glossary.yaml"
+url: "https://github.com/unicef/giga-dagster/blob/main/dagster/src/utils/datahub/datahub_business_glossary.yaml"
 nodes:
   - name: Dataset Types
     description: ""
