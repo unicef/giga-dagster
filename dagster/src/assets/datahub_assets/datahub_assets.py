@@ -105,6 +105,44 @@ def list_qos_datasets_to_delete(context: OpExecutionContext):
 
 
 @asset
+def delete_references_to_qos_dry_run(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.info("DRY RUN OF DELETING QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=True)
+        i += 1
+        context.log.info(f"{i} of {count}: {qos_dataset}")
+        context.log.info(f"Count of references: {references_info[0]}")
+        context.log.info(f"List of related aspects: {references_info[1]}")
+
+    context.log.info(f"DRY RUN COMPLETE FOR {count} QOS DATASETS.")
+    yield Output(None, metadata={"qos_datasets_count": count})
+
+
+@asset
+def delete_references_to_qos(
+    context: OpExecutionContext,
+    list_qos_datasets_to_delete: list[str],
+):
+    context.log.warn("DELETING REFERENCES TO QOS DATASETS FROM DATAHUB...")
+    count = len(list_qos_datasets_to_delete)
+    i = 0
+    for qos_dataset in list_qos_datasets_to_delete:
+        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=False)
+        i += 1
+        context.log.info(f"{i} of {count}: {qos_dataset}")
+        context.log.info(f"Count of references: {references_info[0]}")
+        context.log.info(f"List of related aspects: {references_info[1]}")
+
+    context.log.info("DELETE QOS REFERENCES COMPLETED.")
+    yield Output(None, metadata={"qos_datasets_count": count})
+
+
+@asset(deps=[delete_references_to_qos_dry_run])
 def soft_delete_qos_datasets(
     context: OpExecutionContext,
     list_qos_datasets_to_delete: list[str],
@@ -121,7 +159,7 @@ def soft_delete_qos_datasets(
     yield Output(None, metadata={"qos_datasets_soft_deleted_count": count})
 
 
-@asset
+@asset(deps=[delete_references_to_qos])
 def hard_delete_qos_datasets(
     context: OpExecutionContext,
     list_qos_datasets_to_delete: list[str],
