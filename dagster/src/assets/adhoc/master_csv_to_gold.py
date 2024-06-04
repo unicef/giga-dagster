@@ -4,6 +4,7 @@ from io import BytesIO
 import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from datahub.specific.dataset import DatasetPatchBuilder
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -32,6 +33,7 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -571,5 +573,26 @@ async def adhoc__broadcast_master_release_notes(
     )
     if metadata is None:
         return Output(None)
+
+    with get_rest_emitter() as emitter:
+        context.log.info(f"{config.datahub_destination_dataset_urn=}")
+
+        for patch_mcp in (
+            DatasetPatchBuilder(config.datahub_destination_dataset_urn)
+            .add_custom_properties(
+                {
+                    "Dataset Version": str(metadata["version"]),
+                    "Row Count": f'{metadata["rows"]:,}',
+                    "Rows Added": f'{metadata["added"]:,}',
+                    "Rows Updated": f'{metadata["modified"]:,}',
+                    "Rows Deleted": f'{metadata["deleted"]:,}',
+                }
+            )
+            .build()
+        ):
+            try:
+                emitter.emit(patch_mcp, lambda e, s: context.log.info(f"{e=}\n{s=}"))
+            except Exception as e:
+                context.log.error(str(e))
 
     return Output(None, metadata=metadata)

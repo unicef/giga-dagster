@@ -83,12 +83,13 @@ def add_column_metadata(
         for column in datahub_column_names:
             if column in column_descriptions.keys():
                 description = column_descriptions[column]
-                base_query = column_description_query(
-                    column=column,
-                    dataset_urn=dataset_urn,
-                    description=description,
-                )
-                queries = queries + " " + f"update_{column}: {base_query}"
+                if description is not None:
+                    base_query = column_description_query(
+                        column=column,
+                        dataset_urn=dataset_urn,
+                        description=description,
+                    )
+                    queries = queries + " " + f"update_{column}: {base_query}"
         execute_batch_mutation(queries, context)
     else:
         context.log.warning("No column descriptions to emit.")

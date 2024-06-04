@@ -7,7 +7,7 @@ metadata:
 data:
   DAGSTER_WEBSERVER_URL: "http://dagster-dagster-webserver:3002"
   DAGSTER_WEBSERVER_READONLY_URL: "http://dagster-dagster-webserver-read-only:3002"
-  DAGSTER_SENSOR_GRPC_TIMEOUT_SECONDS: "300"
+  DAGSTER_SENSOR_GRPC_TIMEOUT_SECONDS: "600"
   DATAHUB_METADATA_SERVER_URL: "datahub-gms-external:8080"
   SPARK_UI_URL: "http://spark-master-svc:8080"
   SPARK_MASTER_HOST: "spark-master-svc"

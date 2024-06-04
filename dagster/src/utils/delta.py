@@ -195,3 +195,16 @@ def build_deduped_delete_query(
         query = query.whenMatchedDelete()
 
     return query
+
+
+def get_change_operation_counts(df: sql.DataFrame):
+    counts = df.groupBy("_change_type").agg(f.count("*").alias("count")).collect()
+
+    def get_count_by_change_type(change_type: str):
+        return next((c["count"] for c in counts if c["_change_type"] == change_type), 0)
+
+    return {
+        "added": get_count_by_change_type("insert"),
+        "modified": get_count_by_change_type("update_postimage"),
+        "deleted": get_count_by_change_type("delete"),
+    }
