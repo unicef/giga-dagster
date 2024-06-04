@@ -2,6 +2,7 @@ import json
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from src.settings import settings
+from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
@@ -192,3 +193,10 @@ def hard_delete_qos_datasets(
 
     context.log.info(f"HARD DELETED {count} QOS DATASETS FROM DATAHUB.")
     yield Output(None, metadata={"qos_datasets_hard_deleted_count": count})
+
+
+@asset
+def datahub_add_business_glossary(context: OpExecutionContext):
+    context.log.info("ADDING BUSINESS GLOSSARY TO DATAHUB...")
+    add_business_glossary()
+    yield Output(None)

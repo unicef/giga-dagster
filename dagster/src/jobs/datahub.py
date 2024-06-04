@@ -71,3 +71,8 @@ datahub__hard_delete_qos_job = define_asset_job(
         "hard_delete_qos_datasets",
     ],
 )
+
+datahub__add_business_glossary_job = define_asset_job(
+    name="datahub__add_business_glossary_job",
+    selection=["datahub_add_business_glossary"],
+)
