@@ -299,7 +299,6 @@ class Config(BaseSettings):
             *self.NONEMPTY_COLUMNS_REFERENCE,
             *self.NONEMPTY_COLUMNS_GEOLOCATION,
             *self.NONEMPTY_COLUMNS_COVERAGE,
-            *self.NONEMPTY_COLUMNS_CRITICAL,
             *self.NONEMPTY_COLUMNS_QOS,
         ]
 
