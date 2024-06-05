@@ -3,7 +3,6 @@ import uuid
 from itertools import chain
 
 import geopandas as gpd
-import h3
 import pandas as pd
 from loguru import logger
 from pyspark import sql
@@ -12,7 +11,6 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import (
-    ArrayType,
     FloatType,
     StringType,
     StructField,
@@ -23,7 +21,6 @@ from pyspark.sql.types import (
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.settings import settings
-from src.spark.config_expectations import config
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
 
@@ -175,16 +172,6 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def h3_geo_to_h3(latitude, longitude) -> str:
-    if latitude is None or longitude is None:
-        return "0"
-
-    return h3.geo_to_h3(latitude, longitude, resolution=8)
-
-
-h3_geo_to_h3_udf = f.udf(h3_geo_to_h3)
-
-
 def column_mapping_rename(
     df: sql.DataFrame,
     column_mapping: dict[str, str],
@@ -277,61 +264,6 @@ def create_bronze_layer_columns(
             f.current_timestamp(),
         ),
     )
-
-
-def get_critical_errors_empty_column(*args) -> list[str]:
-    empty_errors = []
-
-    # Only critical null errors
-    for column, value in zip(config.NONEMPTY_COLUMNS_CRITICAL, args, strict=False):
-        if value is None:  # If empty (None in PySpark)
-            empty_errors.append(column)
-
-    return empty_errors
-
-
-get_critical_errors_empty_column_udf = f.udf(
-    get_critical_errors_empty_column,
-    ArrayType(StringType()),
-)
-
-
-def has_critical_error(df: sql.DataFrame) -> sql.DataFrame:
-    # Check if there is any critical error flagged for the row
-    return df.withColumn(
-        "has_critical_error",
-        f.expr(
-            "CASE "
-            "WHEN duplicate_school_id = true "
-            "   OR duplicate_school_id_giga = true "
-            "   OR size(critical_error_empty_column) > 0 "  # schoolname, lat, long, educ level
-            "   OR is_valid_location_values = false "
-            "   OR is_within_country != true "
-            "   THEN true "
-            "ELSE false END",  # schoolname, lat, long, educ level
-        ),
-    )
-
-
-def coordinates_comp(coordinates_list: list[list], row_coords: list) -> list[list]:
-    # coordinates_list = [coords for coords in coordinates_list if coords != row_coords]
-    for sublist in coordinates_list:
-        if sublist == row_coords:
-            coordinates_list.remove(sublist)
-            break
-    return coordinates_list
-
-
-coordinates_comp_udf = f.udf(coordinates_comp)
-
-
-def point_110(column) -> float | None:
-    if column is None:
-        return None
-    return int(1000 * float(column)) / 1000
-
-
-point_110_udf = f.udf(point_110)
 
 
 def get_admin_boundaries(

@@ -9,17 +9,6 @@ from src.utils.schema import get_schema_columns
 # General Transform Components
 
 
-def rename_raw_columns(df: sql.DataFrame):
-    # Iterate over mapping set and perform actions
-    for raw_col, delta_col in config.COV_COLUMN_RENAME:
-        # Check if the raw column exists in the DataFrame
-        if raw_col in df.columns:
-            # If it exists in raw, rename it to the delta column
-            df = df.withColumnRenamed(raw_col, delta_col)
-
-    return df
-
-
 def coverage_column_filter(df: sql.DataFrame, config_columns_to_keep: list[str]):
     df = df.select(*config_columns_to_keep)
     return df
@@ -250,7 +239,7 @@ if __name__ == "__main__":
         # itu.show()
         ## CONFORM TEST FILES TO PROPER SCHEMA
         # fb = rename_raw_columns(fb)
-        itu = rename_raw_columns(itu)
+        # itu = rename_raw_columns(itu)
         itu = itu.withColumn("nearest_NR_id", f.lit(None))
         itu = itu.withColumn("nearest_NR_distance", f.lit(None))
         # cov = rename_raw_columns(cov)

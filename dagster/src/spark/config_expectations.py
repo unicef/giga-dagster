@@ -5,7 +5,8 @@ from pydantic import BaseSettings
 
 class Config(BaseSettings):
     SIMILARITY_RATIO_CUTOFF: float = 0.7
-    SIMILARITY_CUTOFF: int = 70
+    date_today: date = date.today()
+    current_year: int = date_today.year
 
     DATA_QUALITY_CHECKS_DESCRIPTIONS: list[dict[str, str]] = [
         {
@@ -94,7 +95,7 @@ class Config(BaseSettings):
             "type": "custom_coverage_fb_check",
         },
         {
-            "assertion": "is_string_less_than_255_characters",
+            "assertion": "is_string_more_than_255_characters",
             "description": "Checks if column {} is less than 255 characters.",
             "type": "format_validation_checks",
         },
@@ -198,9 +199,6 @@ class Config(BaseSettings):
         ("agent_id", "STRING"),
     }
 
-    date_today: date = date.today()
-    current_year: int = date_today.year
-
     UNIQUE_COLUMNS_MASTER: list[str] = ["school_id_govt", "school_id_giga"]
 
     UNIQUE_COLUMNS_REFERENCE: list[str] = ["school_id_giga"]
@@ -214,8 +212,6 @@ class Config(BaseSettings):
     UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
     UNIQUE_COLUMNS_QOS: list[str] = ["school_id_giga"]
-
-    UNIQUE_COLUMNS_CRITICAL: list[str] = ["school_id_govt", "school_id_giga"]
 
     NONEMPTY_COLUMNS_MASTER: list[str] = [
         "school_id_giga",
@@ -296,12 +292,6 @@ class Config(BaseSettings):
         # "provider",
     ]
 
-    NONEMPTY_COLUMNS_CRITICAL: list[str] = [
-        "school_name",
-        "longitude",
-        "latitude",
-    ]
-
     @property
     def NONEMPTY_COLUMNS_ALL(self) -> list[str]:
         return [
@@ -309,7 +299,6 @@ class Config(BaseSettings):
             *self.NONEMPTY_COLUMNS_REFERENCE,
             *self.NONEMPTY_COLUMNS_GEOLOCATION,
             *self.NONEMPTY_COLUMNS_COVERAGE,
-            *self.NONEMPTY_COLUMNS_CRITICAL,
             *self.NONEMPTY_COLUMNS_QOS,
         ]
 
@@ -498,121 +487,12 @@ class Config(BaseSettings):
         ["school_id_govt", "school_name", "education_level", "location_id"],
         ["school_name", "education_level", "location_id"],
         ["education_level", "location_id"],
-        # school name educ lat 110 lon 110
-        # similar school name educ lat 110 lon 110
-    ]
-
-    NOT_SIMILAR_COLUMN: list[str] = ["school_name"]
-
-    FIVE_DECIMAL_PLACES: list[str] = ["latitude", "longitude"]
-
-    COLUMN_SUM: list[list[str]] = [
-        ["student_count_girls", "student_count_boys", "student_count_others"],
-    ]
-
-    VALUES_RANGE_PRIO: dict[str, dict[str, int]] = {
-        "download_speed_govt": {"min": 1, "max": 200},
-        # "school_density": {"min": 0, "max": 5},
-    }
-
-    VALUES_TYPE: list[dict[str, str]] = [{"column": "school_id_govt", "type": "int64"}]
-
-    PAIR_AVAILABILITY: list[dict[str, str]] = [
-        {
-            "availability_column": "internet_availability",
-            "value_column": "internet_type",
-        },
-        {
-            "availability_column": "internet_availability",
-            "value_column": "download_speed_govt",
-        },
     ]
 
     PRECISION: dict[str, dict[str, int]] = {
         "latitude": {"min": 5},
         "longitude": {"min": 5},
     }
-
-    # Geolocation Column Configs
-    COLUMN_RENAME_GEOLOCATION: set[tuple[str, str]] = {
-        # raw, delta_col
-        ("school_id", "school_id_govt"),
-        ("school_name", "school_name"),
-        ("school_id_gov_type", "school_id_govt_type"),
-        ("school_establishment_year", "school_establishment_year"),
-        ("latitude", "latitude"),
-        ("longitude", "longitude"),
-        ("education_level", "education_level"),
-        ("education_level_govt", "education_level_govt"),
-        ("internet_availability", "connectivity_govt"),
-        (
-            "connectivity_govt_ingestion_timestamp",
-            "connectivity_govt_ingestion_timestamp",
-        ),
-        ("connectivity_govt_collection_year", "connectivity_govt_collection_year"),
-        ("internet_speed_mbps", "download_speed_govt"),
-        ("download_speed_contracted", "download_speed_contracted"),
-        ("internet_type", "connectivity_type_govt"),
-        ("admin1", "admin1"),
-        ("admin2", "admin2"),
-        ("school_region", "school_area_type"),
-        ("school_funding_type", "school_funding_type"),
-        ("computer_count", "num_computers"),
-        ("desired_computer_count", "num_computers_desired"),
-        ("teacher_count", "num_teachers"),
-        ("adm_personnel_count", "num_adm_personnel"),
-        ("student_count", "num_students"),
-        ("classroom_count", "num_classrooms"),
-        ("num_latrines", "num_latrines"),
-        ("computer_lab", "computer_lab"),
-        ("electricity", "electricity_availability"),
-        ("electricity_type", "electricity_type"),
-        ("water", "water_availability"),
-        ("school_data_source", "school_data_source"),
-        ("school_data_collection_year", "school_data_collection_year"),
-        ("school_data_collection_modality", "school_data_collection_modality"),
-        ("address", "school_address"),
-        ("is_open", "is_school_open"),
-        ("school_location_ingestion_timestamp", "school_location_ingestion_timestamp"),
-    }
-
-    GEOLOCATION_COLUMNS: list[str] = [
-        "school_id_govt",
-        "school_name",
-        "school_id_govt_type",
-        "school_establishment_year",
-        "latitude",
-        "longitude",
-        "education_level",
-        "education_level_govt",
-        "connectivity_govt",
-        "connectivity_govt_ingestion_timestamp",
-        "connectivity_govt_collection_year",
-        "download_speed_govt",
-        "download_speed_contracted",
-        "connectivity_type_govt",
-        "admin1",
-        "admin2",
-        "school_area_type",
-        "school_funding_type",
-        "num_computers",
-        "num_computers_desired",
-        "num_teachers",
-        "num_adm_personnel",
-        "num_students",
-        "num_classrooms",
-        "num_latrines",
-        "computer_lab",
-        "electricity_availability",
-        "electricity_type",
-        "water_availability",
-        "school_data_source",
-        "school_data_collection_year",
-        "school_data_collection_modality",
-        "school_address",
-        "is_school_open",
-        "school_location_ingestion_timestamp",
-    ]
 
     # Coverage Column Configs
 
@@ -657,56 +537,6 @@ class Config(BaseSettings):
         "pop_within_3km",
         "pop_within_10km",
     ]
-
-    COV_COLUMNS: list[str] = [
-        "school_id_giga",
-        "cellular_coverage_availability",
-        "cellular_coverage_type",
-        "fiber_node_distance",
-        "microwave_node_distance",
-        "nearest_school_distance",
-        "schools_within_1km",
-        "schools_within_2km",
-        "schools_within_3km",
-        "schools_within_10km",
-        "nearest_NR_id",
-        "nearest_NR_distance",
-        "nearest_LTE_id",
-        "nearest_LTE_distance",
-        "nearest_UMTS_id",
-        "nearest_UMTS_distance",
-        "nearest_GSM_id",
-        "nearest_GSM_distance",
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "pop_within_10km",
-    ]
-
-    COV_COLUMN_RENAME: set[tuple[str, str]] = {
-        ("giga_id_school", "school_id_giga"),
-        ("coverage_availability", "cellular_coverage_availability"),
-        ("coverage_type", "cellular_coverage_type"),
-        ("fiber_node_distance", "fiber_node_distance"),
-        ("microwave_node_distance", "microwave_node_distance"),
-        ("nearest_school_distance", "nearest_school_distance"),
-        ("schools_within_1km", "schools_within_1km"),
-        ("schools_within_2km", "schools_within_2km"),
-        ("schools_within_3km", "schools_within_3km"),
-        ("schools_within_10km", "schools_within_10km"),
-        ("nearest_NR_id", "nearest_NR_id"),
-        ("nearest_NR_distance", "nearest_NR_distance"),
-        ("nearest_LTE_id", "nearest_LTE_id"),
-        ("nearest_LTE_distance", "nearest_LTE_distance"),
-        ("nearest_UMTS_id", "nearest_UMTS_id"),
-        ("nearest_UMTS_distance", "nearest_UMTS_distance"),
-        ("nearest_GSM_id", "nearest_GSM_id"),
-        ("nearest_GSM_distance", "nearest_GSM_distance"),
-        ("pop_within_1km", "pop_within_1km"),
-        ("pop_within_2km", "pop_within_2km"),
-        ("pop_within_3km", "pop_within_3km"),
-        ("pop_within_10km", "pop_within_10km"),
-    }
 
     COV_COLUMN_MERGE_LOGIC: list[str] = [
         "cellular_coverage_availability",
@@ -779,9 +609,9 @@ class Config(BaseSettings):
         "download_speed_contracted",
         "connectivity_type_govt",
         "admin1",
-        # "admin1_id_giga",
+        "admin1_id_giga",
         "admin2",
-        # "admin2_id_giga",
+        "admin2_id_giga",
         "school_area_type",
         "school_funding_type",
         "num_computers",
@@ -808,6 +638,7 @@ class Config(BaseSettings):
     ]
 
 
+config = Config()
 # notes
 # admin 1 admin 2 connectivity_RT nonnullable
 # admin 1 admin 2 connectivity_RT required
@@ -852,5 +683,3 @@ class Config(BaseSettings):
 # transforms for school type
 # public_labels = ['Estadual','Municipal','Federal', 'Government', 'Public', 'Pubic', 'public']
 # private_labels = ['Private', 'Private ']
-
-config = Config()

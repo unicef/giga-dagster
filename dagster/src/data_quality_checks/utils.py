@@ -365,9 +365,9 @@ if __name__ == "__main__":
     # _json = aggregate_report_json(df, reference)
     # print(_json)
 
-    # qos
-    df = row_level_checks(qos, "qos", "BRA")
-    df.show()
+    # # qos
+    # df = row_level_checks(qos, "qos", "BRA")
+    # df.show()
 
     # df = aggregate_report_spark_df(spark=spark, df=df)
     # df.show()
@@ -375,13 +375,13 @@ if __name__ == "__main__":
     # _json = aggregate_report_json(df, qos)
     # print(_json)
 
-    pas = dq_split_passed_rows(df, "qos")
-    fail = dq_split_failed_rows(df, "qos")
+    # pas = dq_split_passed_rows(df, "qos")
+    # fail = dq_split_failed_rows(df, "qos")
 
-    print(pas.count())
-    print(fail.count())
-    pas.show()
-    fail.show()
+    # print(pas.count())
+    # print(fail.count())
+    # pas.show()
+    # fail.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
     # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
