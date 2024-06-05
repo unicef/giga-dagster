@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pandas as pd
@@ -13,7 +14,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import staging_step
+from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
@@ -29,17 +30,19 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
+    construct_full_table_name,
     get_schema_columns,
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -82,11 +85,11 @@ def geolocation_bronze(
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
-    schema_columns = get_schema_columns(spark.spark_session, config.metastore_schema)
+    schema_columns = get_schema_columns(s, config.metastore_schema)
 
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
 
     config.metadata.update({"column_mapping": column_mapping})
@@ -116,19 +119,44 @@ def geolocation_data_quality_results(
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
+    s: SparkSession = spark.spark_session
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
         spark=spark,
     )
 
-    country_code = config.filename_components.country_code
+    country_code = config.country_code
+    schema_name = config.metastore_schema
+    id = config.filename_components.id
+    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+
     dq_results = row_level_checks(
         geolocation_bronze,
         "geolocation",
         country_code,
         context,
     )
+
+    dq_results_schema_name = f"{schema_name}_dq_results"
+    table_name = f"{id}_{country_code}_{current_timestamp}"
+    schema_columns = dq_results.schema.fields
+    dq_results_table_name = construct_full_table_name(
+        dq_results_schema_name,
+        table_name,
+    )
+
+    create_schema(s, dq_results_schema_name)
+    create_delta_table(
+        s,
+        dq_results_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     dq_pandas = dq_results.toPandas()
     return Output(
@@ -241,7 +269,7 @@ def geolocation_dq_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 def geolocation_staging(
     context: OpExecutionContext,
     geolocation_dq_passed_rows: sql.DataFrame,
@@ -249,13 +277,10 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    staging = staging_step(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        upstream_df=geolocation_dq_passed_rows,
-    )
+    if geolocation_dq_passed_rows.count() == 0:
+        context.log.warning("Skipping staging as there are no rows passing DQ checks")
+        return Output(None)
+
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
@@ -266,11 +291,64 @@ def geolocation_staging(
         spark=spark,
         schema_reference=schema_reference,
     )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.UPDATE,
+    )
+    staging = staging_step(geolocation_dq_passed_rows)
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(staging),
+        },
+    )
+
+
+@asset
+def geolocation_delete_staging(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    delete_row_ids = adls_file_client.download_json(config.filepath)
+    if isinstance(delete_row_ids, list):
+        # dedupe change IDs
+        delete_row_ids = list(set(delete_row_ids))
+
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.DELETE,
+    )
+    staging = staging_step(delete_row_ids)
+
+    if staging is not None:
+        datahub_emit_metadata_with_exception_catcher(
+            context=context,
+            config=config,
+            spark=spark,
+        )
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "preview": get_table_preview(staging),
+                "delete_row_ids": MetadataValue.json(delete_row_ids),
+            },
+        )
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

@@ -19,6 +19,15 @@ def add_platform_metadata(
     emitter = DatahubRestEmitter(
         gms_server=settings.DATAHUB_METADATA_SERVER_URL,
         token=settings.DATAHUB_ACCESS_TOKEN,
+        retry_max_times=5,
+        retry_status_codes=[
+            403,
+            429,
+            500,
+            502,
+            503,
+            504,
+        ],
     )
 
     data_platform_urn = builder.make_data_platform_urn(platform=platform)

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from io import BytesIO
 
 import pandas as pd
@@ -15,7 +16,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import staging_step
+from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
@@ -35,14 +36,19 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.schema import (
+    construct_full_table_name,
+    get_schema_columns,
+    get_schema_columns_datahub,
+)
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -68,7 +74,7 @@ def coverage_data_quality_results(
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
-) -> pd.DataFrame:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
     with get_db_context() as db:
@@ -87,6 +93,10 @@ def coverage_data_quality_results(
         pdf = pandas_loader(buffer, config.filepath)
 
     source = config.filename_components.source
+    schema_name = config.metastore_schema
+    id = config.filename_components.id
+    country_code = config.country_code
+    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
@@ -98,11 +108,30 @@ def coverage_data_quality_results(
     dq_results = row_level_checks(
         df,
         f"coverage_{source}",
-        config.filename_components.country_code,
+        config.country_code,
         context,
     )
 
     config.metadata.update({"column_mapping": column_mapping})
+
+    dq_results_schema_name = f"{schema_name}_{source}_dq_results"
+    table_name = f"{id}_{country_code}_{current_timestamp}"
+    schema_columns = dq_results.schema.fields
+    dq_results_table_name = construct_full_table_name(
+        dq_results_schema_name,
+        table_name,
+    )
+
+    create_schema(s, dq_results_schema_name)
+    create_delta_table(
+        s,
+        dq_results_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -111,7 +140,7 @@ def coverage_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
-    yield Output(
+    return Output(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
@@ -128,7 +157,7 @@ def coverage_data_quality_results_summary(
     coverage_raw: bytes,
     coverage_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
-) -> dict | list[dict]:
+) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
     with BytesIO(coverage_raw) as buffer:
@@ -137,7 +166,7 @@ def coverage_data_quality_results_summary(
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(spark.spark_session, coverage_data_quality_results),
+        aggregate_report_spark_df(s, coverage_data_quality_results),
         df_raw,
     )
 
@@ -156,7 +185,7 @@ def coverage_data_quality_results_summary(
         context=context,
     )
 
-    yield Output(dq_summary_statistics, metadata=get_output_metadata(config))
+    return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -165,7 +194,7 @@ def coverage_dq_passed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -180,7 +209,7 @@ def coverage_dq_passed_rows(
     )
 
     df_pandas = df_passed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -195,7 +224,7 @@ def coverage_dq_failed_rows(
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> sql.DataFrame:
+) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -211,7 +240,7 @@ def coverage_dq_failed_rows(
     )
 
     df_pandas = df_failed.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -226,10 +255,10 @@ def coverage_bronze(
     coverage_dq_passed_rows: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> sql.DataFrame:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.filename_components.country_code.lower()
+    silver_table_name = config.country_code.lower()
     full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
 
     if source == "fb":
@@ -242,14 +271,14 @@ def coverage_bronze(
         df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
-        silver = DeltaTable.forName(spark.spark_session, full_silver_table_name).toDF()
+        silver = DeltaTable.forName(s, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
     schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
+        s,
         config.metastore_schema,
     )
     datahub_emit_metadata_with_exception_catcher(
@@ -260,7 +289,7 @@ def coverage_bronze(
     )
 
     df_pandas = df.toPandas()
-    yield Output(
+    return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
@@ -269,7 +298,7 @@ def coverage_bronze(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 def coverage_staging(
     context: OpExecutionContext,
     coverage_bronze: sql.DataFrame,
@@ -277,13 +306,9 @@ def coverage_staging(
     spark: PySparkResource,
     config: FileConfig,
 ):
-    staging = staging_step(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        upstream_df=coverage_bronze,
-    )
+    if coverage_bronze.count() == 0:
+        context.log.warning("Skipping staging as there are no passing bronze rows")
+        return Output(None)
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
@@ -295,11 +320,64 @@ def coverage_staging(
         spark=spark,
         schema_reference=schema_reference,
     )
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.UPDATE,
+    )
+    staging = staging_step(coverage_bronze)
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(staging),
+        },
+    )
+
+
+@asset
+def coverage_delete_staging(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[None]:
+    delete_row_ids = adls_file_client.download_json(config.filepath)
+    if isinstance(delete_row_ids, list):
+        # dedupe change IDs
+        delete_row_ids = list(set(delete_row_ids))
+
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.DELETE,
+    )
+    staging = staging_step(delete_row_ids)
+
+    if staging is not None:
+        datahub_emit_metadata_with_exception_catcher(
+            context=context,
+            config=config,
+            spark=spark,
+        )
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "preview": get_table_preview(staging),
+                "delete_row_ids": MetadataValue.json(delete_row_ids),
+            },
+        )
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

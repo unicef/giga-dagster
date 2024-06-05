@@ -1,7 +1,6 @@
 from io import BytesIO
 
 import pandas as pd
-import sentry_sdk
 from dagster_pyspark import PySparkResource
 from numpy import nan
 from pyspark import sql
@@ -11,11 +10,14 @@ from pyspark.sql import (
 )
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
-from src.utils.datahub.emit_dataset_metadata import emit_metadata_to_datahub
+
+# from src.utils.datahub.emit_dataset_metadata import (
+#     datahub_emit_metadata_with_exception_catcher,
+# )
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_schema_columns_datahub
-from src.utils.sentry import log_op_context
+
+# from src.utils.schema import get_schema_columns_datahub
 from src.utils.spark import transform_types
 
 from dagster import (
@@ -32,11 +34,10 @@ def adhoc__load_qos_csv(
     config: FileConfig,
 ) -> Output[bytes]:
     raw = adls_file_client.download_raw(config.filepath)
-    emit_metadata_to_datahub(
-        context,
-        country_code=config.filename_components.country_code,
-        dataset_urn=config.datahub_source_dataset_urn,
-    )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context,
+    #     config=config,
+    # )
     return Output(raw, metadata=get_output_metadata(config))
 
 
@@ -92,21 +93,13 @@ def adhoc__publish_qos_to_gold(
         context,
     )
 
-    schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
-        config.metastore_schema,
-    )
-    try:
-        emit_metadata_to_datahub(
-            context,
-            schema_reference=schema_reference,
-            country_code=config.filename_components.country_code,
-            dataset_urn=config.datahub_source_dataset_urn,
-        )
-    except Exception as error:
-        context.log.error(f"Error on Datahub Emit Metadata: {error}")
-        log_op_context(context)
-        sentry_sdk.capture_exception(error=error)
+    # schema_reference = get_schema_columns_datahub(
+    #     spark.spark_session,
+    #     config.metastore_schema,
+    # )
+    # datahub_emit_metadata_with_exception_catcher(
+    #     context=context, config=config, spark=spark, schema_reference=schema_reference
+    # )
 
     return Output(
         df_transformed,

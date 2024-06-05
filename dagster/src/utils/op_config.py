@@ -1,13 +1,19 @@
+import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from dagster import Config
-from src.constants import DataTier
+from src.constants import DataTier, constants
 from src.schemas.filename_components import FilenameComponents
+from src.schemas.qos import SchoolConnectivityConfig, SchoolListConfig
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.filename import deconstruct_filename_components
+from src.utils.filename import (
+    deconstruct_adhoc_filename_components,
+    deconstruct_qos_filename_components,
+    deconstruct_school_master_filename_components,
+)
 
 
 class FileConfig(Config):
@@ -17,10 +23,19 @@ class FileConfig(Config):
     dataset_type: str = Field(
         description="The type of the dataset, e.g. geolocation, coverage, qos",
     )
+    country_code: str = Field(
+        description="The ISO country code of the dataset, e.g. PHL, BRA, SWE"
+    )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="""
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
+        """,
+    )
+    database_data: str = Field(
+        default=None,
+        description="""
+        The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
         """,
     )
     file_size_bytes: int
@@ -71,15 +86,23 @@ class FileConfig(Config):
 
     @property
     def filename_components(self) -> FilenameComponents:
-        return deconstruct_filename_components(self.filepath)
+        if "qos" in self.filepath:
+            return deconstruct_qos_filename_components(self.filepath)
+        elif self.filepath.startswith("gold"):
+            return deconstruct_adhoc_filename_components(self.filepath)
+        else:
+            return deconstruct_school_master_filename_components(self.filepath)
 
     @property
     def destination_filename_components(self) -> FilenameComponents:
-        return deconstruct_filename_components(self.destination_filepath)
-
-    @property
-    def country_code(self) -> str:
-        return self.filename_components.country_code
+        if "qos" in self.filepath:
+            return deconstruct_qos_filename_components(self.destination_filepath)
+        elif self.filepath.startswith(constants.gold_source_folder):
+            return deconstruct_adhoc_filename_components(self.destination_filepath)
+        else:
+            return deconstruct_school_master_filename_components(
+                self.destination_filepath
+            )
 
     @property
     def datahub_source_dataset_urn(self) -> str:
@@ -92,6 +115,10 @@ class FileConfig(Config):
         if not self.destination_filepath_object.suffix:
             return build_dataset_urn(self.destination_filepath, platform="deltaLake")
         return build_dataset_urn(self.destination_filepath)
+
+    @property
+    def row_data_dict(self) -> SchoolListConfig | SchoolConnectivityConfig:
+        return json.loads(self.database_data)
 
 
 class OpDestinationMapping(BaseModel):
@@ -107,7 +134,9 @@ def generate_run_ops(
     metadata: dict,
     file_size_bytes: int,
     domain: str,
+    country_code: str,
     dq_target_filepath: str = None,
+    database_data: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
 
@@ -122,6 +151,8 @@ def generate_run_ops(
             file_size_bytes=file_size_bytes,
             dq_target_filepath=dq_target_filepath,
             domain=domain,
+            country_code=country_code,
+            database_data=database_data,
         )
         run_ops[asset_key] = file_config
 

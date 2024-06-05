@@ -41,6 +41,15 @@ class EmitDatasetAssertionResults:
         self.emitter = DatahubRestEmitter(
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
         self.context = context
         self.dataset_urn = dataset_urn
@@ -114,9 +123,14 @@ class EmitDatasetAssertionResults:
                 dq_check_result=dq_check_result,
                 dataset_urn=self.dataset_urn,
             )
-            assertion_urn = builder.make_assertion_urn(
-                f"{dq_check_result['assertion']}_desc_{dq_check_result['description']}",
+            assertion_id = (
+                dq_check_result["assertion"]
+                + "_"
+                + dq_check_result["column"]
+                + "_"
+                + self.dataset_urn
             )
+            assertion_urn = builder.make_assertion_urn(assertion_id=assertion_id)
             assertion_data_platform_instance = DataPlatformInstance(
                 platform=builder.make_data_platform_urn("spark"),
             )

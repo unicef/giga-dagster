@@ -3,6 +3,7 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
+from datahub.metadata.schema_classes import FabricTypeClass
 from pydantic import BaseSettings, PostgresDsn
 
 
@@ -38,10 +39,7 @@ class Settings(BaseSettings):
     DATAHUB_OIDC_TENANT_ID: str
     DATAHUB_OIDC_CLIENT_SECRET: str
     HIVE_METASTORE_URI: str
-    AZURE_EMAIL_CONNECTION_STRING: str
     EMAIL_RENDERER_BEARER_TOKEN: str
-    EMAIL_TEST_RECIPIENTS: list[str]
-    AZURE_EMAIL_SENDER: str
     INGESTION_POSTGRESQL_USERNAME: str
     INGESTION_POSTGRESQL_PASSWORD: str
     INGESTION_POSTGRESQL_DATABASE: str
@@ -58,11 +56,13 @@ class Settings(BaseSettings):
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
-    SPARK_DRIVER_CORES: str = "2"
-    SPARK_DRIVER_MEMORY: str = "2g"
-    LICENSE_LIST: list[str] = ["Giga Analysis", "CC-BY-4.0"]
+    SPARK_DRIVER_CORES: int = 2
+    SPARK_DRIVER_MEMORY_MB: int = 1365
+    LICENSE_LIST: list[str] = ["Open Source", "Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
+    MLAB_DB_CONNECTION_STRING: str = ""
+    PROCO_DB_CONNECTION_STRING: str = ""
 
     # Derived settings
     @property
@@ -86,12 +86,29 @@ class Settings(BaseSettings):
         )
 
     @property
+    def GIGASYNC_API_URL(self) -> str:
+        return (
+            f"http://ingestion-portal-data-ingestion.ictd-ooi-ingestionportal-{self.DEPLOY_ENV.value}.svc.cluster.local:3000"
+            if self.IN_PRODUCTION
+            else "http://api:8000"
+        )
+
+    @property
     def ADLS_ENVIRONMENT(self) -> DeploymentEnvironment:
         return (
             DeploymentEnvironment.DEVELOPMENT
             if self.DEPLOY_ENV == DeploymentEnvironment.LOCAL
             else self.DEPLOY_ENV
         )
+
+    @property
+    def DATAHUB_ENVIRONMENT(self) -> FabricTypeClass:
+        if self.DEPLOY_ENV == DeploymentEnvironment.STAGING:
+            return FabricTypeClass.STG
+        elif self.DEPLOY_ENV == DeploymentEnvironment.PRODUCTION:
+            return FabricTypeClass.PROD
+        else:
+            return FabricTypeClass.DEV
 
     @property
     def AZURE_BLOB_SAS_HOST(self) -> str:
@@ -107,7 +124,7 @@ class Settings(BaseSettings):
 
     @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
-        return int(timedelta(minutes=5).total_seconds()) if self.IN_PRODUCTION else 30
+        return int(timedelta(minutes=2).total_seconds()) if self.IN_PRODUCTION else 30
 
     @property
     def DEFAULT_SCHEDULE_CRON(self) -> str:

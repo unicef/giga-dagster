@@ -2,14 +2,12 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import country_converter as cc
 import datahub.emitter.mce_builder as builder
 import sentry_sdk
 from dagster_pyspark import PySparkResource
 from datahub.emitter.mce_builder import make_data_platform_urn, make_domain_urn
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
-from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 from datahub.metadata.schema_classes import (
     DatasetPropertiesClass,
     NullTypeClass,
@@ -26,16 +24,12 @@ from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
-from src.utils.datahub.update_policies import update_policies
+from src.utils.datahub.graphql import datahub_graph_client
+from src.utils.datahub.identify_country_name import identify_country_name
+from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_column_descriptions
 from src.utils.sentry import log_op_context
-
-
-def identify_country_name(country_code: str) -> str:
-    coco = cc.CountryConverter()
-    data = coco.data
-    return data[data["ISO3"] == country_code]["name_short"].to_list()[0]
 
 
 def create_dataset_urn(
@@ -54,7 +48,7 @@ def create_dataset_urn(
         return builder.make_dataset_urn(
             platform=platform,
             name=upstream_urn_name,
-            env=settings.ADLS_ENVIRONMENT,
+            env=settings.DATAHUB_ENVIRONMENT,
         )
 
     dataset_urn_name = config.datahub_destination_dataset_urn
@@ -68,7 +62,6 @@ def define_dataset_properties(
     step = context.asset_key.to_user_string()
     config = FileConfig(**context.get_step_execution_context().op_config)
 
-    domain = config.domain
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
 
@@ -98,11 +91,16 @@ def define_dataset_properties(
         "Dagster Sensor Name": context.run_tags.get("dagster/sensor_name"),
         "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
-        "Domain": domain,
         "Data Format": data_format,
-        "Data Size": f"{file_size_MB} MB",
         "Country": country_name,
     }
+
+    if data_format != "deltaTable":
+        custom_metadata["Data Size"] = f"{file_size_MB:.2f} MB"
+
+    if config.domain:
+        domain = config.domain
+        custom_metadata = custom_metadata | {"Domain": domain}
 
     formatted_metadata = {}
     for k, v in metadata.items():
@@ -113,8 +111,7 @@ def define_dataset_properties(
         formatted_metadata[friendly_name] = v
 
     return DatasetPropertiesClass(
-        description=step,
-        customProperties={**formatted_metadata, **custom_metadata},
+        customProperties={**formatted_metadata, **custom_metadata}
     )
 
 
@@ -194,6 +191,21 @@ def add_tag_query(tag_key: str, dataset_urn: str) -> str:
     """
 
 
+datahub_emitter = DatahubRestEmitter(
+    gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+    token=settings.DATAHUB_ACCESS_TOKEN,
+    retry_max_times=5,
+    retry_status_codes=[
+        403,
+        429,
+        500,
+        502,
+        503,
+        504,
+    ],
+)
+
+
 def emit_metadata_to_datahub(
     context: OpExecutionContext,
     country_code: str,
@@ -201,11 +213,6 @@ def emit_metadata_to_datahub(
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:
-    datahub_emitter = DatahubRestEmitter(
-        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-        token=settings.DATAHUB_ACCESS_TOKEN,
-    )
-
     dataset_properties = define_dataset_properties(context, country_code=country_code)
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,
@@ -229,13 +236,6 @@ def emit_metadata_to_datahub(
         context.log.info(schema_metadata_event)
         datahub_emitter.emit(schema_metadata_event)
 
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-        ),
-    )
-
     domain_urn = set_domain(context)
     domain_query = f"""
     mutation setDomain {{
@@ -254,14 +254,6 @@ def emit_metadata_to_datahub(
     context.log.info("EMITTING TAG METADATA")
     datahub_graph_client.execute_graphql(query=tag_query)
 
-    # context.log.info("UPDATE DATAHUB USERS AND GROUPS...")
-    # ingest_azure_ad_to_datahub_pipeline()
-    # context.log.info("DATAHUB USERS AND GROUPS UPDATED SUCCESSFULLY.")
-
-    context.log.info("UPDATING POLICIES IN DATAHUB...")
-    update_policies()
-    context.log.info("DATAHUB POLICIES UPDATED SUCCESSFULLY.")
-
     context.log.info(
         f"Metadata has been successfully emitted to Datahub with dataset URN {dataset_urn}.",
     )
@@ -270,14 +262,14 @@ def emit_metadata_to_datahub(
 def datahub_emit_metadata_with_exception_catcher(
     context: OpExecutionContext,
     config: FileConfig,
-    spark: PySparkResource,
+    spark: PySparkResource = None,
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:
     try:
         emit_metadata_to_datahub(
             context=context,
-            country_code=config.filename_components.country_code,
+            country_code=config.country_code,
             dataset_urn=config.datahub_destination_dataset_urn,
             schema_reference=schema_reference,
             df_failed=df_failed,
@@ -289,19 +281,38 @@ def datahub_emit_metadata_with_exception_catcher(
                 spark.spark_session,
                 config.metastore_schema,
             )
-            column_licenses = get_column_licenses(config=config)
-            context.log.info(column_licenses)
+            try:
+                column_licenses = get_column_licenses(config=config)
+                context.log.info(column_licenses)
+            except Exception as e:
+                context.log.warning(f"Cannot retrieve licenses: {e}")
+                context.log.warning(
+                    "No column licenses defined for datasets after staging."
+                )
+                column_licenses = None
+                pass
             add_column_metadata(
                 dataset_urn=config.datahub_destination_dataset_urn,
                 column_licenses=column_licenses,
                 column_descriptions=column_descriptions,
+                context=context,
             )
         else:
             context.log.info("NO SCHEMA TO EMIT for this step.")
+
+        try:
+            context.log.info("DATAHUB UPDATE POLICIES...")
+            update_policy_for_group(config=config, context=context)
+        except Exception as error:
+            context.log.error(f"Error on Datahub Update Policies: {error}")
+            log_op_context(context)
+            sentry_sdk.capture_exception(error=error)
+            pass
     except Exception as error:
         context.log.error(f"Error on Datahub Emit Metadata: {error}")
         log_op_context(context)
         sentry_sdk.capture_exception(error=error)
+        pass
 
 
 if __name__ == "__main__":

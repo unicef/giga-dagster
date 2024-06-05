@@ -23,6 +23,15 @@ class NotebookIngestionAction:
         self.emitter = DatahubRestEmitter(
             gms_server=settings.DATAHUB_METADATA_SERVER_URL,
             token=settings.DATAHUB_ACCESS_TOKEN,
+            retry_max_times=5,
+            retry_status_codes=[
+                403,
+                429,
+                500,
+                502,
+                503,
+                504,
+            ],
         )
         self.data_platform_urn = builder.make_data_platform_urn(platform="github")
         self.notebook_metadata = notebook_metadata
@@ -30,7 +39,7 @@ class NotebookIngestionAction:
         self.dataset_urn = builder.make_dataset_urn(
             platform="github",
             name=self.notebook_name,
-            env=settings.ADLS_ENVIRONMENT,
+            env=settings.DATAHUB_ENVIRONMENT,
         )
         logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 

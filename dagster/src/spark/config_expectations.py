@@ -106,7 +106,7 @@ class Config(BaseSettings):
         },
     ]
 
-    DATA_TYPES: set[tuple[str, str]] = {
+    DATA_TYPES: set[tuple[str, str]] = {  ## @RENZ are we not pulling this from schema?
         ("cellular_coverage_availability", "STRING"),
         ("cellular_coverage_type", "STRING"),
         ("fiber_node_distance", "DOUBLE"),
@@ -211,7 +211,7 @@ class Config(BaseSettings):
 
     UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
-    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_giga"]
 
     NONEMPTY_COLUMNS_MASTER: list[str] = [
         "school_id_giga",
@@ -283,13 +283,13 @@ class Config(BaseSettings):
     ]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
-        "timestamp",
-        "country_id",
         "school_id_giga",
-        "school_id_govt",
-        "speed_upload",
-        "speed_download",
-        "provider",
+        # "school_id_govt",
+        # "timestamp",
+        # "country_id",
+        # "speed_upload",
+        # "speed_download",
+        # "provider",
     ]
 
     @property

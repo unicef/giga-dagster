@@ -1,8 +1,8 @@
 from country_converter import CountryConverter
-from datahub.ingestion.graph.client import DatahubClientConfig, DataHubGraph
 
 from dagster import OpExecutionContext
 from src.settings import settings
+from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -44,12 +44,6 @@ def tag_mutation_with_exception(
     description: str = "",
     context: OpExecutionContext = None,
 ) -> None:
-    datahub_graph_client = DataHubGraph(
-        DatahubClientConfig(
-            server=settings.DATAHUB_METADATA_SERVER_URL,
-            token=settings.DATAHUB_ACCESS_TOKEN,
-        ),
-    )
     try:
         query = update_tag_query(
             tag_key=tag_key,

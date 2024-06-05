@@ -8,7 +8,7 @@ from sqlalchemy import select
 from dagster import OpExecutionContext
 from src.schemas.file_upload import FileUploadConfig
 from src.utils.adls import ADLSFileClient
-from src.utils.db import get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.email.send_email_base import send_email_base
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig

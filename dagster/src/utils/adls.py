@@ -17,15 +17,9 @@ from azure.storage.filedatalake import (
     FileProperties,
     PathProperties,
 )
-from dagster import ConfigurableResource, OpExecutionContext, OutputContext
-from src.constants import constants
+from dagster import ConfigurableResource, OutputContext
 from src.settings import settings
-from src.utils.delta import (
-    create_delta_table,
-    create_schema,
-)
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_primary_key, get_schema_columns
 
 _client = DataLakeServiceClient(
     account_url=f"https://{settings.AZURE_DFS_SAS_HOST}",
@@ -119,35 +113,6 @@ class ADLSFileClient(ConfigurableResource):
             buffer.seek(0)
             file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
-    def upload_spark_dataframe_as_file(
-        self, data: sql.DataFrame, filepath: str
-    ) -> None:
-        if not (extension := Path(filepath).suffix):
-            raise RuntimeError(f"Cannot infer format of file {filepath}")
-
-        full_remote_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
-
-        match extension:
-            case ".csv":
-                data.write.csv(
-                    full_remote_path,
-                    mode="overwrite",
-                    quote='"',
-                    escapeQuotes=True,
-                    header=True,
-                )
-            case ".json":
-                data.write.json(full_remote_path, mode="overwrite")
-            case _:
-                raise OSError(f"Unsupported format for file {filepath}")
-
-    def download_delta_table_as_delta_table(
-        self,
-        table_name: str,
-        spark: SparkSession,
-    ) -> DeltaTable:
-        return DeltaTable.forName(spark, table_name)
-
     def download_delta_table_as_spark_dataframe(
         self,
         table_name: str,
@@ -155,43 +120,7 @@ class ADLSFileClient(ConfigurableResource):
     ) -> sql.DataFrame:
         return DeltaTable.forName(spark, table_name).toDF()
 
-    def upload_spark_dataframe_as_delta_table(
-        self,
-        data: sql.DataFrame,
-        schema_name: str,
-        table_name: str,
-        spark: SparkSession,
-        context: OutputContext,
-    ) -> None:
-        full_table_name = f"{schema_name}.{table_name}"
-        columns = get_schema_columns(spark, schema_name)
-        primary_key = get_primary_key(spark, schema_name)
-
-        create_schema(spark, schema_name)
-        create_delta_table(
-            spark,
-            schema_name,
-            table_name,
-            columns,
-            context,
-            if_not_exists=True,
-        )
-
-        # TODO: Apply logic for preventing unnecessary updates
-        # `master` and `updates` tables must both have a column containing the row hash
-        (
-            DeltaTable.forName(spark, full_table_name)
-            .alias("master")
-            .merge(
-                data.alias("updates"),
-                f"master.{primary_key} = updates.{primary_key}",
-            )
-            .whenMatchedUpdateAll()
-            .whenNotMatchedInsertAll()
-            .execute()
-        )
-
-    def download_json(self, filepath: str) -> dict:
+    def download_json(self, filepath: str) -> dict | list:
         file_client = _adls.get_file_client(filepath)
 
         with BytesIO() as buffer:
@@ -230,47 +159,7 @@ class ADLSFileClient(ConfigurableResource):
         print(f"File {old_filepath} renamed to {new_path}")
         return renamed_file_client
 
-
-def get_filepath(source_path: str, dataset_type: str, step: str) -> str:
-    if "dq_summary" in step:
-        filename = source_path.split("/")[-1].replace(".csv", ".json")
-    elif step in [
-        # "geolocation_dq_passed_rows",
-        # "geolocation_dq_failed_rows",
-        "geolocation_staging",
-        # "coverage_dq_passed_rows",
-        # "coverage_dq_failed_rows",
-        "coverage_staging",
-        # "manual_review_passed_rows",
-        # "manual_review_failed_rows",
-        "silver",
-        "gold",
-    ]:
-        filename = source_path.split("/")[-1].split("_")[1]
-    else:
-        filename = source_path.split("/")[-1]
-
-    destination_folder = constants.step_folder_map(dataset_type)[step]
-
-    if not destination_folder:
-        raise ValueError(f"Unknown filepath: {source_path}")
-
-    return f"{destination_folder}/{filename}"
-
-
-def get_output_filepath(context: OpExecutionContext, output_name: str = None) -> str:
-    step = output_name if output_name else context.asset_key.to_user_string()
-
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    source_path = context.get_step_execution_context().op_config["filepath"]
-
-    return get_filepath(source_path, dataset_type, step)
-
-
-def get_input_filepath(context: OpExecutionContext) -> str:
-    dataset_type = context.get_step_execution_context().op_config["dataset_type"]
-    source_path = context.get_step_execution_context().op_config["filepath"]
-    step = context.asset_key.to_user_string()
-    origin_step = constants.step_origin_map[step]
-
-    return get_filepath(source_path, dataset_type, origin_step)
+    @staticmethod
+    def delete(filepath: str, *, is_directory=False):
+        file_client = _adls.get_file_client(file_path=filepath)
+        file_client.delete_file(recursive=is_directory)

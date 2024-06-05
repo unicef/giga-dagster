@@ -6,10 +6,13 @@ from src.assets import (
     azure_ad,
     common,
     datahub_assets,
+    debug,
     migrations,
+    school_connectivity,
     school_coverage,
     school_geolocation,
     school_list,
+    unstructured,
 )
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
@@ -37,8 +40,11 @@ defs = Definitions(
             group_name=school_list.GROUP_NAME,
         ),
         *load_assets_from_package_module(
-            package_module=common,
-            group_name=common.GROUP_NAME,
+            package_module=school_connectivity,
+            group_name=school_connectivity.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=common, group_name=common.GROUP_NAME
         ),
         *load_assets_from_package_module(
             package_module=datahub_assets,
@@ -57,8 +63,16 @@ defs = Definitions(
             group_name=admin.GROUP_NAME,
         ),
         *load_assets_from_package_module(
+            package_module=debug,
+            group_name=debug.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
             package_module=azure_ad,
             group_name=azure_ad.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=unstructured,
+            group_name=unstructured.GROUP_NAME,
         ),
     ],
     resources=RESOURCE_DEFINITIONS,

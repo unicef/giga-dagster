@@ -9,21 +9,19 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from src.settings import settings
 
-engine = create_engine(
-    settings.INGESTION_DATABASE_URL,
-    echo=not settings.IN_PRODUCTION,
-    future=True,
-)
 
-session_maker = sessionmaker(
-    bind=engine,
-    autoflush=True,
-    autocommit=False,
-    expire_on_commit=False,
-)
-
-
-def get_db() -> Generator[Session, Any, Any]:
+def get_db(connection_string: str) -> Generator[Session, Any, Any]:
+    engine = create_engine(
+        connection_string,
+        echo=not settings.IN_PRODUCTION,
+        future=True,
+    )
+    session_maker = sessionmaker(
+        bind=engine,
+        autoflush=True,
+        autocommit=False,
+        expire_on_commit=False,
+    )
     session = session_maker()
     try:
         yield session
@@ -35,7 +33,18 @@ def get_db() -> Generator[Session, Any, Any]:
 
 
 @contextmanager
-def get_db_context() -> AbstractContextManager[Session]:
+def get_db_context(connection_string: str) -> AbstractContextManager[Session]:
+    engine = create_engine(
+        connection_string,
+        echo=not settings.IN_PRODUCTION,
+        future=True,
+    )
+    session_maker = sessionmaker(
+        bind=engine,
+        autoflush=True,
+        autocommit=False,
+        expire_on_commit=False,
+    )
     session = session_maker()
     try:
         yield session

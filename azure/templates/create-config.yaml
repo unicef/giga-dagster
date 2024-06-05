@@ -13,7 +13,7 @@ jobs:
               inputs:
                 namespace: $(kubernetesNamespace)
                 command: get
-                arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml
+                arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml --ignore-not-found
 
             - task: Kubernetes@1
               displayName: Create configmap
@@ -22,7 +22,7 @@ jobs:
                 configurationType: configuration
                 command: apply
                 useConfigurationFile: true
-                configuration: $(Build.SourcesDirectory)/infra/k8s/configmap.yaml
+                configuration: infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
               displayName: Create Dagster secrets
@@ -59,14 +59,16 @@ jobs:
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
                     SENTRY_DSN: "$(sentryDsn)"
-                    AZURE_EMAIL_CONNECTION_STRING: "$(azureEmailConnectionString)"
-                    AZURE_EMAIL_SENDER: "$(azureEmailSender)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
-                    EMAIL_TEST_RECIPIENTS: '$(emailTestRecipients)'
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
+                    PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
+                    SPARK_DRIVER_CORES: "$(sparkDriverCores)"
+                    SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
+                    GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets
@@ -89,7 +91,7 @@ jobs:
                     AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
                     AZURE_TENANT_ID: "$(azureAdTenantId)"
                     cookie-secret: "$(cookieSecret)"
-                    OAUTH2_PROXY_REDIRECT_URL: "https://$(appDomain)/auth/callback"
+                    OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
                     OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
             - task: Kubernetes@1
@@ -141,8 +143,8 @@ jobs:
                       HMS_POSTGRESQL_DATABASE: "metastore_db"
 
             - task: Kubernetes@1
-              displayName: Create Dagster webserver PDB/HPA
-              condition: or(eq(variables.deployEnv, 'stg'), eq(variables.deployEnv, 'prd'))
+              displayName: Create PDB/HPA rules
+              condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
               inputs:
                 namespace: $(kubernetesNamespace)
                 configurationType: configuration

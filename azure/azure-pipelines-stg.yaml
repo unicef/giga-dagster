@@ -10,6 +10,8 @@ pool:
   vmImage: ubuntu-latest
 
 variables:
+  - name: environment
+    value: stg
   - template: templates/variables.yaml
 
 stages:

@@ -41,10 +41,12 @@ spark_common_config = {
     "spark.sql.warehouse.dir": settings.SPARK_WAREHOUSE_DIR,
     "spark.sql.catalogImplementation": "hive",
     "hive.metastore.uris": settings.HIVE_METASTORE_URI,
-    "spark.driver.cores": settings.SPARK_DRIVER_CORES,
-    "spark.driver.memory": settings.SPARK_DRIVER_MEMORY,
-    "spark.executor.cores": settings.SPARK_DRIVER_CORES,
-    "spark.executor.memory": settings.SPARK_DRIVER_MEMORY,
+    "spark.driver.cores": str(settings.SPARK_DRIVER_CORES),
+    "spark.driver.memory": f"{settings.SPARK_DRIVER_MEMORY_MB}m",
+    "spark.executor.cores": str(settings.SPARK_DRIVER_CORES),
+    "spark.executor.memory": f"{settings.SPARK_DRIVER_MEMORY_MB}m",
+    "spark.cores.max": str(settings.SPARK_DRIVER_CORES),
+    "spark.scheduler.mode": "FAIR",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,
     "spark.authenticate.enableSaslEncryption": "true",
@@ -281,5 +283,17 @@ def transform_qos_bra_types(
     return df
 
 
-def compute_row_hash(df: sql.DataFrame) -> sql.DataFrame:
-    return df.withColumn("signature", sha2(concat_ws("|", *sorted(df.columns)), 256))
+def compute_row_hash(
+    df: sql.DataFrame,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    logger = get_context_with_fallback_logger(context)
+
+    # Exclude previous row hash if it is present
+    columns = df.columns
+    if "signature" in columns:
+        columns.remove("signature")
+
+    out = df.withColumn("signature", sha2(concat_ws("|", *sorted(columns)), 256))
+    logger.info(f"Calculated SHA256 signature for {out.count()} rows")
+    return out

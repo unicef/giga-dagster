@@ -8,9 +8,10 @@ from src.utils.email.send_email_base import send_email_base
 
 
 class EmailProps(BaseModel):
-    added: int
     country: str
+    added: int
     modified: int
+    deleted: int
     updateDate: str
     version: int
     rows: int
@@ -23,9 +24,9 @@ async def send_email_master_release_notification(
         logger.warning("No recipients found, skipping email.")
         return
 
-    send_email_base(
+    await send_email_base(
         endpoint="email/master-data-release-notification",
-        props=props,
+        props=props.dict(),
         recipients=recipients,
         subject="Master Data Update Notification",
     )
@@ -39,6 +40,7 @@ if __name__ == "__main__":
             props=EmailProps(
                 added=10,
                 modified=50,
+                deleted=3,
                 country="PHL",
                 updateDate=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 version=7,
