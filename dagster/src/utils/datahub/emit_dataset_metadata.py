@@ -274,7 +274,18 @@ def datahub_emit_metadata_with_exception_catcher(
             schema_reference=schema_reference,
             df_failed=df_failed,
         )
-        emit_lineage(context=context)
+        try:
+            emit_lineage(context=context)
+        except Exception as error:
+            context.log.warning(f"Cannot emit lineage: {error}")
+            expected_error_info = (
+                "Expected error if QoS since we do not ingest QoS upstream datasets."
+            )
+            context.log.warning(expected_error_info)
+            log_op_context(context)
+            sentry_sdk.capture_exception(error=error)
+            sentry_sdk.capture_message(expected_error_info)
+            pass
         if schema_reference is not None:
             context.log.info("EMITTING COLUMN METADATA...")
             column_descriptions = get_schema_column_descriptions(

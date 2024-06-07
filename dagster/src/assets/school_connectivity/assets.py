@@ -18,13 +18,9 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.resources import ResourceKey
-
-# from src.utils.datahub.create_validation_tab import (
-#     datahub_emit_assertions_with_exception_catcher,
-# )
-# from src.utils.datahub.emit_dataset_metadata import (
-#     datahub_emit_metadata_with_exception_catcher,
-# )
+from src.utils.datahub.emit_dataset_metadata import (
+    datahub_emit_metadata_with_exception_catcher,
+)
 from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -32,9 +28,9 @@ from src.utils.qos_apis.school_connectivity import query_school_connectivity_dat
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
+    get_schema_columns_datahub,
 )
 
-# get_schema_columns_datahub,
 from dagster import OpExecutionContext, Output, asset
 
 
@@ -110,11 +106,6 @@ def qos_school_connectivity_raw(
                     context, database_session, database_data
                 ),
             )
-
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    # )
 
     return Output(
         df,
@@ -220,13 +211,6 @@ def qos_school_connectivity_bronze(
         bronze = bronze.withColumns(column_actions).dropDuplicates(["gigasync_id"])
         context.log.info(f"Calculated SHA256 signature for {bronze.count()} rows")
 
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    #     spark=spark,
-    #     schema_reference=bronze,
-    # )
-
     return Output(
         bronze.toPandas(),
         metadata={
@@ -251,10 +235,6 @@ def qos_school_connectivity_data_quality_results(
     )
 
     dq_pandas = dq_results.toPandas()
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    # )
     return Output(
         dq_pandas,
         metadata={
@@ -280,14 +260,6 @@ def qos_school_connectivity_data_quality_results_summary(
         qos_school_connectivity_raw,
     )
 
-    # datahub_emit_assertions_with_exception_catcher(
-    #     context=context, dq_summary_statistics=dq_summary_statistics
-    # )
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    # )
-
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
@@ -302,17 +274,6 @@ def qos_school_connectivity_dq_passed_rows(
         qos_school_connectivity_data_quality_results,
         "qos",
     )
-
-    # schema_reference = get_schema_columns_datahub(
-    #     spark.spark_session,
-    #     config.metastore_schema,
-    # )
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    #     spark=spark,
-    #     schema_reference=schema_reference,
-    # )
 
     df_pandas = df_passed.toPandas()
     return Output(
@@ -336,18 +297,6 @@ def qos_school_connectivity_dq_failed_rows(
         "qos",
     )
 
-    # schema_reference = get_schema_columns_datahub(
-    #     spark.spark_session,
-    #     config.metastore_schema,
-    # )
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    #     spark=spark,
-    #     schema_reference=schema_reference,
-    #     df_failed=df_failed,
-    # )
-
     df_pandas = df_failed.toPandas()
     return Output(
         df_pandas,
@@ -365,15 +314,15 @@ def qos_school_connectivity_gold(
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[sql.DataFrame]:
-    # schema_reference = get_schema_columns_datahub(
-    #     spark.spark_session, config.metastore_schema
-    # )
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    #     spark=spark,
-    #     schema_reference=schema_reference,
-    # )
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session, config.metastore_schema
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
     return Output(
         qos_school_connectivity_dq_passed_rows,
         metadata={

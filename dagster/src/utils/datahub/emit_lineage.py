@@ -44,6 +44,9 @@ def emit_lineage_base(
             )
         except Exception as error:
             logger.warning(f"Datahub Lineage Exception: {error}")
+            logger.warning(
+                "If upstream is QoS, expected error since we don't save QoS files that are not Delta Tables to Datahub."
+            )
             sentry_sdk.capture_exception(error=error)
             if context is not None:
                 log_op_context(context)

@@ -153,13 +153,11 @@ class StagingStep:
             )
             upstream_filepaths = [f.upload_path for f in files_for_review]
 
-        step = self.context.asset_key.to_user_string()
-        if "qos" not in step:
-            emit_lineage_base(
-                upstream_datasets=upstream_filepaths,
-                dataset_urn=self.config.datahub_destination_dataset_urn,
-                context=self.context,
-            )
+        emit_lineage_base(
+            upstream_datasets=upstream_filepaths,
+            dataset_urn=self.config.datahub_destination_dataset_urn,
+            context=self.context,
+        )
 
         return staging
 
