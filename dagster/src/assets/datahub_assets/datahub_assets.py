@@ -105,20 +105,24 @@ def list_qos_datasets_to_delete(context: OpExecutionContext):
     context.log.info("COMPLETE QOS DATASETS LIST:")
     context.log.info(qos_list)
 
-    qos_delta_list = [urn for urn in qos_list if "deltaLake" in urn]
+    qos_not_dq_delta_list = [
+        urn for urn in qos_list if not ("deltaLake" not in urn or "dq-results" in urn)
+    ]
     context.log.info("QOS DELTA TABLES:")
-    context.log.info(qos_delta_list)
+    context.log.info(qos_not_dq_delta_list)
 
-    qos_list_minus_delta = [urn for urn in qos_list if "deltaLake" not in urn]
+    qos_list_minus_not_dq_delta = [
+        urn for urn in qos_list if ("deltaLake" not in urn or "dq-results" in urn)
+    ]
     context.log.info("QOS DATASETS MINUS DELTA TABLES:")
-    context.log.info(qos_list_minus_delta)
+    context.log.info(qos_list_minus_not_dq_delta)
 
     yield Output(
-        qos_list_minus_delta,
+        qos_list_minus_not_dq_delta,
         metadata={
             "qos_datasets_count": len(qos_list),
-            "qos_delta_count": len(qos_delta_list),
-            "qos_datasets_minus_qos_delta_count": len(qos_list_minus_delta),
+            "qos_not_dq_delta_count": len(qos_not_dq_delta_list),
+            "qos_list_minus_not_dq_delta_count": len(qos_list_minus_not_dq_delta),
         },
     )
 
