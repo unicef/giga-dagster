@@ -12,7 +12,7 @@ from dagster import OpExecutionContext, Output, asset
 
 
 @asset
-def unstructured_raw(context: OpExecutionContext, config: FileConfig):
+def raw(context: OpExecutionContext, config: FileConfig):
     try:
         dataset_properties = define_dataset_properties(
             context, country_code=config.country_code
