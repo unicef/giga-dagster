@@ -69,7 +69,10 @@ def define_dataset_properties(
     output_file_extension = Path(output_filepath).suffix.lstrip(".")
     data_format = "deltaTable" if output_file_extension == "" else output_file_extension
 
-    country_name = identify_country_name(country_code=country_code)
+    country_name = None
+    if country_code:
+        country_name = identify_country_name(country_code=country_code)
+
     file_size_MB = file_size_bytes / (2 ** (10 * 2))  # noqa:N806  bytes to MB
     run_tags = str.join(", ", [f"{k}={v}" for k, v in context.run_tags.items()])
     run_stats = context.instance.get_run_stats(context.run_id)
@@ -92,8 +95,10 @@ def define_dataset_properties(
         "Code Version": settings.COMMIT_SHA,
         "Metadata Last Ingested": datetime.now(tz=ZoneInfo("UTC")).isoformat(),
         "Data Format": data_format,
-        "Country": country_name,
     }
+
+    if country_name:
+        custom_metadata["Country"] = country_name
 
     if data_format != "deltaTable":
         custom_metadata["Data Size"] = f"{file_size_MB:.2f} MB"

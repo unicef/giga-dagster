@@ -18,9 +18,3 @@ school_master__generate_mock_table_cdf_job = define_asset_job(
     name="school_master__generate_mock_table_cdf_job",
     selection="*adhoc__generate_v3",
 )
-
-
-emit_metadata_to_datahub_job = define_asset_job(
-    name="emit_metadata_to_datahub_job",
-    selection="raw",
-)

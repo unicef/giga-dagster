@@ -1,7 +1,11 @@
-from dagster import AssetSelection, define_asset_job
-from src.assets.unstructured import GROUP_NAME as UNSTRUCTURED_DATA_GROUP_NAME
+from dagster import define_asset_job
 
 unstructured__emit_metadata_to_datahub_job = define_asset_job(
     name="unstructured__emit_metadata_to_datahub_job",
-    selection=AssetSelection.groups(UNSTRUCTURED_DATA_GROUP_NAME),
+    selection="unstructured_raw",
+)
+
+generalized_unstructured__emit_metadata_to_datahub_job = define_asset_job(
+    name="generalized_unstructured__emit_metadata_to_datahub_job",
+    selection="generalized_unstructured_raw",
 )

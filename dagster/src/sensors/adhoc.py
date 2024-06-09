@@ -11,7 +11,6 @@ from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
     school_qos__convert_csv_to_deltatable_job,
-    emit_metadata_to_datahub_job
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -270,56 +269,3 @@ def school_qos__gold_csv_to_deltatable_sensor(
         yield SkipReason("No files found to process.")
     else:
         yield from run_requests
-
-
-@sensor(
-    job=emit_metadata_to_datahub_job,
-    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
-)
-def emit_metadata_to_datahub_sensor(
-    context: SensorEvaluationContext,
-    adls_file_client: ADLSFileClient,
-):
-    count = 0
-    source_directory = f"{constants.gold_folder}/source"
-
-    for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
-    ):
-        if file_data.is_directory:
-            continue
-
-        adls_filepath = file_data.name
-        path = Path(adls_filepath)
-
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
-
-        ops_destination_mapping = {
-            "raw": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=str(path),
-                metastore_schema="",
-                tier=DataTier.RAW,
-            ),
-        }
-
-        run_ops = generate_run_ops(
-            ops_destination_mapping,
-            dataset_type="",
-            metadata=metadata,
-            file_size_bytes=size,
-            domain=DOMAIN,
-            country_code="",
-        )
-
-        context.log.info(f"FILE: {path}")
-        yield RunRequest(
-            run_key=str(path),
-            run_config=RunConfig(ops=run_ops),
-        )
-        count += 1
-
-    if count == 0:
-        yield SkipReason(f"No uploads detected in {source_directory}")
