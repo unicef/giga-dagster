@@ -39,11 +39,11 @@ generate_uuid_udf = f.udf(generate_uuid)
 
 
 def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
-    if (
-        "school_id_giga" in df.columns
-        and df.filter(df["school_id_giga"].isNull()).count() == 0
-    ):
-        return df
+    # Create school_id_giga column if not exists, otherwise use provided values
+    df = df.withColumn(
+        "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
+    )
+
     school_id_giga_prereqs = [
         "school_id_govt",
         "school_name",
@@ -65,16 +65,21 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
             f.col("longitude").cast(StringType()),
         ),
     )
+
+    # Use existing school_id_giga if provided, otherwise use system-generated value
     df = df.withColumn(
         "school_id_giga",
-        f.when(
-            (f.col("school_id_govt").isNull())
-            | (f.col("school_name").isNull())
-            | (f.col("education_level").isNull())
-            | (f.col("latitude").isNull())
-            | (f.col("longitude").isNull()),
-            f.lit(None),
-        ).otherwise(generate_uuid_udf(f.col("identifier_concat"))),
+        f.coalesce(
+            f.col("school_id_giga"),
+            f.when(
+                (f.col("school_id_govt").isNull())
+                | (f.col("school_name").isNull())
+                | (f.col("education_level").isNull())
+                | (f.col("latitude").isNull())
+                | (f.col("longitude").isNull()),
+                f.lit(None),
+            ).otherwise(generate_uuid_udf(f.col("identifier_concat"))),
+        ),
     )
 
     return df.drop("identifier_concat")
