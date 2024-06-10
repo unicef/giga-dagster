@@ -72,7 +72,10 @@ def add_column_metadata(
                     dataset_urn=dataset_urn,
                 )
                 queries = queries + " " + f"update_{column}: {base_query}"
-        execute_batch_mutation(queries, context)
+        if queries:
+            execute_batch_mutation(queries, context)
+        else:
+            context.log.warning("No column licenses to emit.")
     else:
         context.log.warning("No column licenses to emit.")
 
@@ -90,7 +93,10 @@ def add_column_metadata(
                         description=description,
                     )
                     queries = queries + " " + f"update_{column}: {base_query}"
-        execute_batch_mutation(queries, context)
+        if queries:
+            execute_batch_mutation(queries, context)
+        else:
+            context.log.warning("No column descriptions to emit.")
     else:
         context.log.warning("No column descriptions to emit.")
 
