@@ -73,7 +73,10 @@ async def send_master_release_notes(
 
     if settings.DEPLOY_ENV == DeploymentEnvironment.LOCAL:
         recipients = [settings.ADMIN_EMAIL]
-    elif settings.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
+    elif settings.DEPLOY_ENV in [
+        DeploymentEnvironment.DEVELOPMENT,
+        DeploymentEnvironment.STAGING,
+    ]:
         members = await GroupsApi.list_group_members(group_name="Developer")
         recipients = list({m.mail for m in members if m.mail is not None})
     else:
