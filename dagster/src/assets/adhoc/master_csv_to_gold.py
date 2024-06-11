@@ -382,9 +382,6 @@ def adhoc__master_dq_checks_summary(
         ),
         adhoc__master_data_quality_checks,
     )
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=df_summary
-    )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
 
@@ -523,6 +520,7 @@ def adhoc__publish_master_to_gold(
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
+    adhoc__master_dq_checks_summary: sql.DataFrame,
 ) -> Output[sql.DataFrame]:
     gold = adhoc__master_dq_checks_passed
 
@@ -551,6 +549,9 @@ def adhoc__publish_master_to_gold(
         config=config,
         spark=spark,
         schema_reference=schema_reference,
+    )
+    datahub_emit_assertions_with_exception_catcher(
+        context=context, dq_summary_statistics=adhoc__master_dq_checks_summary
     )
 
     return Output(

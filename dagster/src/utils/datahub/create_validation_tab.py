@@ -183,7 +183,13 @@ def datahub_emit_assertions_with_exception_catcher(
 ) -> None:
     try:
         config = FileConfig(**context.get_step_execution_context().op_config)
-        dq_target_dataset_urn = build_dataset_urn(filepath=config.dq_target_filepath)
+        dq_target_dataset_urn = (
+            build_dataset_urn(filepath=config.dq_target_filepath)
+            if config.dq_target_filepath.suffix
+            else build_dataset_urn(
+                filepath=config.dq_target_filepath, platform="deltaLake"
+            )
+        )
 
         context.log.info("EMITTING ASSERTIONS TO DATAHUB...")
         emit_assertions = EmitDatasetAssertionResults(
