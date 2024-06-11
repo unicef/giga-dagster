@@ -520,7 +520,7 @@ def adhoc__publish_master_to_gold(
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
-    adhoc__master_dq_checks_summary: sql.DataFrame,
+    adhoc__master_dq_checks_summary: dict,
 ) -> Output[sql.DataFrame]:
     gold = adhoc__master_dq_checks_passed
 
