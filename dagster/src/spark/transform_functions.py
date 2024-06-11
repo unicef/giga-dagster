@@ -560,7 +560,8 @@ if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
     #
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation/SEN/wwx7232jufo9htsuq595zy07_SEN_geolocation_20240610-163027.csv"
     # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
     # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BRA_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
@@ -606,19 +607,25 @@ if __name__ == "__main__":
     #     ],
     # )
     # df = master.join(reference, how='left', on='school_id_giga')
-    geolocation = geolocation.withColumnRenamed(
-        "education_level", "education_level_govt"
-    )
+    # geolocation = geolocation.withColumnRenamed(
+    #     "education_level", "education_level_govt"
+    # )
     geolocation.show()
+    from src.data_quality_checks.utils import row_level_checks
 
-    grouped_df = (
-        geolocation.groupBy("education_level_govt")
-        .agg(f.count("*").alias("count"))
-        .orderBy("count", ascending=False)
+    dq = row_level_checks(
+        df=geolocation, dataset_type="geolocation", _country_code_iso3="SEN"
     )
-    grouped_df.show()
-    education_level_count_dict = grouped_df.rdd.collectAsMap()
-    print(education_level_count_dict)
+    dq.show()
+
+    # grouped_df = (
+    #     geolocation.groupBy("education_level_govt")
+    #     .agg(f.count("*").alias("count"))
+    #     .orderBy("count", ascending=False)
+    # )
+    # grouped_df.show()
+    # education_level_count_dict = grouped_df.rdd.collectAsMap()
+    # print(education_level_count_dict)
     # create_education_level(geolocation).show()
     # df = df.withColumn("latitude", f.lit(32.618))
     # df = df.withColumn("longitude", f.lit(78.576))

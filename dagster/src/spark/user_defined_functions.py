@@ -32,6 +32,10 @@ def get_decimal_places_udf_factory(precision: int) -> callable:
 def point_110_udf(value) -> float | None:
     if value is None:
         return None
+    try:
+        float(value)
+    except ValueError:
+        return None
 
     return int(1000 * float(value)) / 1000
 

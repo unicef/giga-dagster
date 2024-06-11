@@ -45,7 +45,10 @@ def is_within_country_geopy(
     if latitude is None or longitude is None:
         out = False
     else:
-        location = geolocator.reverse(coords, timeout=10)
+        try:
+            location = geolocator.reverse(coords, timeout=10)
+        except ValueError:
+            return False
         geopy_country_code_iso2 = location.raw.get("address", {}).get(
             "country_code",
             "",
@@ -68,6 +71,12 @@ def is_within_boundary_distance(
     if dq_is_not_within_country == 0:
         return True
 
+    try:
+        float(latitude)
+        float(longitude)
+    except (ValueError, TypeError):
+        return False
+
     point = get_point(longitude, latitude)
     if point is not None and geometry is not None:
         p1, _ = nearest_points(geometry, point)
@@ -76,7 +85,10 @@ def is_within_boundary_distance(
         point1 = p1.coords[0]
         point1 = (point1[1], point1[0])
         point2 = (latitude, longitude)
-        distance = geodesic(point1, point2).km
+        try:
+            distance = geodesic(point1, point2).km
+        except ValueError:
+            return False
 
         return distance <= BOUNDARY_DISTANCE_THRESHOLD_KM
 
@@ -90,6 +102,12 @@ def boundary_distance(
 ) -> bool:
     point = get_point(longitude, latitude)
 
+    try:
+        float(latitude)
+        float(longitude)
+    except (ValueError, TypeError):
+        return 1000  # arbitrary large boundary distance
+
     if point is not None and geometry is not None:
         p1, _ = nearest_points(geometry, point)
 
@@ -97,10 +115,13 @@ def boundary_distance(
         point1 = p1.coords[0]
         point1 = (point1[1], point1[0])
         point2 = (latitude, longitude)
-        distance = geodesic(point1, point2).km
+        try:
+            distance = geodesic(point1, point2).km
+        except ValueError:
+            return False
 
     else:
-        distance = None
+        distance = 1000
 
     return distance
 
