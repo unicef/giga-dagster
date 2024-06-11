@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import sentry_sdk
 
 from dagster import OpExecutionContext
@@ -24,8 +26,15 @@ def emit_lineage_query(
             }})
         }}"""
     logger.info(query)
-    datahub_graph_client.execute_graphql(query=query)
-    logger.info("LINEAGE EMITTED.")
+    try:
+        datahub_graph_client.execute_graphql(query=query)
+        logger.info("LINEAGE EMITTED.")
+    except Exception as error:
+        logger.error(f"LINEAGE EMIT ERROR: {error}")
+        sentry_sdk.capture_exception(error=error)
+        if context is not None:
+            log_op_context(context)
+        pass
 
 
 def emit_lineage_base(
@@ -38,7 +47,11 @@ def emit_lineage_base(
             if dataset.startswith("urn"):
                 upstream_urn = dataset
             else:
-                upstream_urn = build_dataset_urn(filepath=dataset)
+                upstream_urn = (
+                    build_dataset_urn(filepath=dataset)
+                    if Path(dataset).suffix
+                    else build_dataset_urn(filepath=dataset, platform="deltaLake")
+                )
             emit_lineage_query(
                 upstream_urn=upstream_urn, downstream_urn=dataset_urn, context=context
             )

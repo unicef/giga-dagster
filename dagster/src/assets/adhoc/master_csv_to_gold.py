@@ -23,6 +23,7 @@ from src.internal.common_assets.master_release_notes import (
     send_master_release_notes,
 )
 from src.resources import ResourceKey
+from src.settings import settings
 from src.spark.transform_functions import (
     add_missing_columns,
 )
@@ -33,6 +34,7 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -130,6 +132,10 @@ def adhoc__master_data_transforms(
     )
 
     df_pandas = sdf.toPandas()
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+    )
     return Output(
         df_pandas,
         metadata={
@@ -186,6 +192,10 @@ def adhoc__master_data_quality_checks(
     )
 
     df_pandas = dq_checked.toPandas()
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+    )
     return Output(
         df_pandas,
         metadata={
@@ -237,6 +247,10 @@ def adhoc__reference_data_quality_checks(
 
     dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+    )
     return Output(
         dq_checked.toPandas(),
         metadata={
@@ -251,12 +265,23 @@ def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     dq_passed = extract_dq_passed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
         f"Extract passing rows: {len(dq_passed.columns)=}, {dq_passed.count()=}",
     )
     df_pandas = dq_passed.toPandas()
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
     return Output(
         df_pandas,
         metadata={
@@ -271,6 +296,7 @@ def adhoc__reference_dq_checks_passed(
     _: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
+    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     if adhoc__reference_data_quality_checks.isEmpty():
         return Output(pd.DataFrame())
@@ -280,6 +306,16 @@ def adhoc__reference_dq_checks_passed(
         "reference",
     )
     df_pandas = dq_passed.toPandas()
+    schema_reference = get_schema_columns_datahub(
+        spark.spark_session,
+        config.metastore_schema,
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=_,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
     return Output(
         df_pandas,
         metadata={
@@ -294,6 +330,7 @@ def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     config: FileConfig,
+    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
@@ -315,6 +352,7 @@ def adhoc__reference_dq_checks_failed(
     _: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
+    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     if adhoc__reference_data_quality_checks.isEmpty():
         return Output(pd.DataFrame())
@@ -345,9 +383,6 @@ def adhoc__master_dq_checks_summary(
             adhoc__master_data_quality_checks,
         ),
         adhoc__master_data_quality_checks,
-    )
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=df_summary
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
@@ -487,6 +522,7 @@ def adhoc__publish_master_to_gold(
     config: FileConfig,
     adhoc__master_dq_checks_passed: sql.DataFrame,
     spark: PySparkResource,
+    adhoc__master_dq_checks_summary: dict,
 ) -> Output[sql.DataFrame]:
     gold = adhoc__master_dq_checks_passed
 
@@ -515,6 +551,18 @@ def adhoc__publish_master_to_gold(
         config=config,
         spark=spark,
         schema_reference=schema_reference,
+    )
+    datahub_emit_assertions_with_exception_catcher(
+        context=context, dq_summary_statistics=adhoc__master_dq_checks_summary
+    )
+    upstream_filepaths = [
+        f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{config.country_code.lower()}",
+        f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{config.country_code.lower()}",
+    ]
+    emit_lineage_base(
+        upstream_datasets=upstream_filepaths,
+        dataset_urn=config.datahub_destination_dataset_urn,
+        context=context,
     )
 
     return Output(

@@ -156,7 +156,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_reference_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-reference/passed/{reference_stem}.csv",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{master_metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{reference_metastore_schema}.db/{country_code}",
                 metastore_schema=reference_metastore_schema,
                 tier=DataTier.GOLD,
             ),
