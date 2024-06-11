@@ -116,7 +116,11 @@ def coverage_data_quality_results(
 
     dq_results_schema_name = f"{schema_name}_{source}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
+
     schema_columns = dq_results.schema.fields
+    for col in schema_columns:
+        col.nullable = True
+
     dq_results_table_name = construct_full_table_name(
         dq_results_schema_name,
         table_name,
