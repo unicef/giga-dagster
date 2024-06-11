@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import sentry_sdk
 
 from dagster import OpExecutionContext
@@ -45,7 +47,11 @@ def emit_lineage_base(
             if dataset.startswith("urn"):
                 upstream_urn = dataset
             else:
-                upstream_urn = build_dataset_urn(filepath=dataset)
+                upstream_urn = (
+                    build_dataset_urn(filepath=dataset)
+                    if Path(dataset).suffix
+                    else build_dataset_urn(filepath=dataset, platform="deltaLake")
+                )
             emit_lineage_query(
                 upstream_urn=upstream_urn, downstream_urn=dataset_urn, context=context
             )
