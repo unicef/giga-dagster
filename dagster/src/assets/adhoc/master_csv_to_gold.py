@@ -23,6 +23,7 @@ from src.internal.common_assets.master_release_notes import (
     send_master_release_notes,
 )
 from src.resources import ResourceKey
+from src.settings import settings
 from src.spark.transform_functions import (
     add_missing_columns,
 )
@@ -33,6 +34,7 @@ from src.utils.datahub.create_validation_tab import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -552,6 +554,15 @@ def adhoc__publish_master_to_gold(
     )
     datahub_emit_assertions_with_exception_catcher(
         context=context, dq_summary_statistics=adhoc__master_dq_checks_summary
+    )
+    upstream_filepaths = [
+        f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{config.country_code.lower()}",
+        f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{config.country_code.lower()}",
+    ]
+    emit_lineage_base(
+        upstream_datasets=upstream_filepaths,
+        dataset_urn=config.datahub_destination_dataset_urn,
+        context=context,
     )
 
     return Output(
