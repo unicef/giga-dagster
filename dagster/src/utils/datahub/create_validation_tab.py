@@ -2,6 +2,7 @@ import json
 import uuid
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import loguru
@@ -185,7 +186,7 @@ def datahub_emit_assertions_with_exception_catcher(
         config = FileConfig(**context.get_step_execution_context().op_config)
         dq_target_dataset_urn = (
             build_dataset_urn(filepath=config.dq_target_filepath)
-            if config.dq_target_filepath.suffix
+            if Path(config.dq_target_filepath).suffix
             else build_dataset_urn(
                 filepath=config.dq_target_filepath, platform="deltaLake"
             )
