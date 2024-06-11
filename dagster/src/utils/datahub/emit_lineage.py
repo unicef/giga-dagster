@@ -24,8 +24,15 @@ def emit_lineage_query(
             }})
         }}"""
     logger.info(query)
-    datahub_graph_client.execute_graphql(query=query)
-    logger.info("LINEAGE EMITTED.")
+    try:
+        datahub_graph_client.execute_graphql(query=query)
+        logger.info("LINEAGE EMITTED.")
+    except Exception as error:
+        logger.error(f"LINEAGE EMIT ERROR: {error}")
+        sentry_sdk.capture_exception(error=error)
+        if context is not None:
+            log_op_context(context)
+        pass
 
 
 def emit_lineage_base(
