@@ -1,5 +1,6 @@
 from models.file_upload import DQStatusEnum, FileUpload
 from sqlalchemy import update
+from sqlalchemy.orm import Session
 
 from dagster import HookContext, failure_hook, success_hook
 from src.utils.db.primary import get_db_context
@@ -64,9 +65,11 @@ def school_ingest_error_db_update_hook(context: HookContext):
     context.log.info("Running database update hook for failed DQ results status...")
     config = FileConfig(**context.op_config)
 
+    db: Session
     with get_db_context() as db:
-        db.execute(
-            update(FileUpload)
-            .where(FileUpload.id == config.filename_components.id)
-            .values({FileUpload.dq_status: DQStatusEnum.ERROR})
-        )
+        with db.begin():
+            db.execute(
+                update(FileUpload)
+                .where(FileUpload.id == config.filename_components.id)
+                .values({FileUpload.dq_status: DQStatusEnum.ERROR})
+            )
