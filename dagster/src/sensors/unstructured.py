@@ -88,7 +88,7 @@ def generalized_unstructured__emit_metadata_to_datahub_sensor(
     adls_file_client: ADLSFileClient,
 ):
     count = 0
-    source_directory = f"{constants.gold_folder}/source"
+    source_directory = "legacy_data"
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
