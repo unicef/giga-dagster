@@ -111,6 +111,7 @@ def deconstruct_unstructured_filename_components(
     expected_timestamp_format = "%Y%m%d-%H%M%S"
 
     id, country_code, dataset_type = splits[0:3]
+    country_code = "N/A" if country_code == "N-A" else country_code
     timestamp = splits[-1]
 
     return FilenameComponents(

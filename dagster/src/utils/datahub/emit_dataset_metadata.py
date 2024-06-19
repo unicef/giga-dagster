@@ -57,7 +57,7 @@ def create_dataset_urn(
 
 
 def define_dataset_properties(
-    context: OpExecutionContext, country_code: str
+    context: OpExecutionContext, country_code: str | None
 ) -> DatasetPropertiesClass:
     step = context.asset_key.to_user_string()
     config = FileConfig(**context.get_step_execution_context().op_config)

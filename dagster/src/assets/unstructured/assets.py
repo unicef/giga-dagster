@@ -13,9 +13,11 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset
 def unstructured_raw(context: OpExecutionContext, config: FileConfig):
+    country_code = None if config.country_code == "N/A" else config.country_code
+
     try:
         dataset_properties = define_dataset_properties(
-            context, country_code=config.country_code
+            context, country_code=country_code
         )
         dataset_metadata_event = MetadataChangeProposalWrapper(
             entityUrn=config.datahub_destination_dataset_urn,
