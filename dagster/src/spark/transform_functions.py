@@ -162,12 +162,12 @@ def create_uzbekistan_school_name(df: sql.DataFrame) -> sql.DataFrame:
 
 def standardize_school_name(df: sql.DataFrame) -> sql.DataFrame:
     # filter
-    df = df.filter(df.country_code == "UZB")
-    silver = df.filter(df.country_code != "UZB")
+    df1 = df.filter(df.country_code == "UZB")
+    df2 = df.filter(df.country_code != "UZB")
 
     # uzb transform
-    df = create_uzbekistan_school_name(df)
-    return silver.union(df)
+    df1 = create_uzbekistan_school_name(df1)
+    return df2.union(df1)
 
 
 def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
@@ -221,7 +221,6 @@ def bronze_prereq_columns(df, schema_columns: list[StructField]) -> sql.DataFram
 def create_bronze_layer_columns(
     df: sql.DataFrame,
     silver: sql.DataFrame,
-    # schema_columns: list[StructField],
     country_code_iso3: str,
 ) -> sql.DataFrame:
     # merge with silver first to check with updates
