@@ -12,6 +12,7 @@ def critical_error_checks(
     df: sql.DataFrame,
     dataset_type: str,
     config_column_list: list[str],
+    mode=None,
     context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
@@ -33,6 +34,18 @@ def critical_error_checks(
                 f.col("dq_is_not_within_country"),
             ]
         )
+        if mode == "create":
+            critial_column_dq_checks.extend(
+                [
+                    f.col("dq_is_not_create"),
+                ]
+            )
+        elif mode == "update":
+            critial_column_dq_checks.extend(
+                [
+                    f.col("dq_is_not_update"),
+                ]
+            )
     elif dataset_type in ["reference", "coverage", "coverage_fb", "coverage_itu"]:
         critial_column_dq_checks.extend([f.col("dq_duplicate-school_id_giga")])
     elif dataset_type == "qos":
