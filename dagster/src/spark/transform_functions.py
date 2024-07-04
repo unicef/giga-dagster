@@ -622,6 +622,7 @@ if __name__ == "__main__":
         "school_location_ingestion_timestamp",
     ]
     silver = gold.select(*geolocation_columns)
+    silver = silver.withColumnRenamed("download_speed_govt1", "download_speed_govt")
     silver.show()
 
     # df = spark.read.csv(file_url, header=True)
@@ -683,7 +684,7 @@ if __name__ == "__main__":
         # ("11000023", "EEEE ABNAEL MACHADO DE LIMA - CENE", "Unknown", -8.758459, -63.85401),
         ("11000023", None, None, 69.1, None),  # update
         # ("11000040", "EMEIEF PEQUENOS TALENTOS", "Unknown", -8.79373, -63.88392)
-        ("11000041", None, "Unknown", -8.79373, -63.88392),  # new
+        ("11000041", "test", "Unknown", -8.79373, -63.88392),  # new
     ]
 
     # Create DataFrame
@@ -694,6 +695,28 @@ if __name__ == "__main__":
 
     df = create_bronze_layer_columns(df=df, silver=silver, country_code_iso3="BRA")
     df.show()
+
+    from src.data_quality_checks.utils import (
+        aggregate_report_spark_df,
+        row_level_checks,
+    )
+
+    # df = update_checks(bronze=df, silver=silver)
+    # df = create_checks(bronze=df, silver=silver)
+    # df.show()
+
+    df = row_level_checks(
+        df=df,
+        silver=silver,
+        mode="update",
+        dataset_type="geolocation",
+        _country_code_iso3="BRA",
+    )
+    df.show()
+
+    df = aggregate_report_spark_df(spark=df.sparkSession, df=df)
+    df.show(500)
+
     # test = add_admin_columns(df=df,country_code_iso3="BRA", admin_level="admin1")
     # test.show()
 
