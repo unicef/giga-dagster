@@ -222,6 +222,7 @@ def create_bronze_layer_columns(
     df: sql.DataFrame,
     silver: sql.DataFrame,
     country_code_iso3: str,
+    mode: str,  # create or update
 ) -> sql.DataFrame:
     # merge with silver first to check with updates
     joined_df = df.alias("df").join(
@@ -237,6 +238,10 @@ def create_bronze_layer_columns(
     select_expr.extend([f.col(f"silver.{col}") for col in additional_columns])
     df = joined_df.select(*select_expr)
 
+    if mode == "update":
+        return df
+
+    # CREATE FLOW
     # standardize education level
     df = create_education_level(df)
 
@@ -692,7 +697,9 @@ if __name__ == "__main__":
     # Show DataFrame
     df.show()
 
-    df = create_bronze_layer_columns(df=df, silver=silver, country_code_iso3="BRA")
+    df = create_bronze_layer_columns(
+        df=df, silver=silver, country_code_iso3="BRA", mode="update"
+    )
     df.show()
     # test = add_admin_columns(df=df,country_code_iso3="BRA", admin_level="admin1")
     # test.show()
