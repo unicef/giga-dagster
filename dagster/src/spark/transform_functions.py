@@ -567,7 +567,6 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
-    #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation/SEN/wwx7232jufo9htsuq595zy07_SEN_geolocation_20240610-163027.csv"
     file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
@@ -622,46 +621,9 @@ if __name__ == "__main__":
         "school_location_ingestion_timestamp",
     ]
     silver = gold.select(*geolocation_columns)
+    silver = silver.withColumnRenamed("download_speed_govt1", "download_speed_govt")
     silver.show()
 
-    # df = spark.read.csv(file_url, header=True)
-    # df = create_bronze_layer_columns(df)
-    # df.show()
-
-    # df = master.filter(master["admin1"] == "Rondônia")
-    # df = master.filter(master["admin1"] == "São Paulo")
-    # master = master.select(
-    #     [
-    #         "school_id_giga",
-    #         # "school_id_govt",
-    #         # "school_name",
-    #         # "education_level",
-    #         # "education_level_govt",
-    #         # "latitude",
-    #         # "longitude",
-    #         # "connectivity_RT",
-    #         # "connectivity_RT_datasource",
-    #         # "connectivity_govt",
-    #     ],
-    # )
-    # reference = reference.select(
-    #     [
-    #         "school_id_giga",
-    #         # "school_id_govt",
-    #         # "school_name",
-    #         # "education_level",
-    #         "education_level_govt",
-    #         # "latitude",
-    #         # "longitude",
-    #         # "connectivity_RT",
-    #         # "connectivity_RT_datasource",
-    #         # "connectivity_govt",
-    #     ],
-    # )
-    # df = master.join(reference, how='left', on='school_id_giga')
-    # geolocation = geolocation.withColumnRenamed(
-    #     "education_level", "education_level_govt"
-    # )
     from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
     # Initialize Spark session
@@ -683,7 +645,7 @@ if __name__ == "__main__":
         # ("11000023", "EEEE ABNAEL MACHADO DE LIMA - CENE", "Unknown", -8.758459, -63.85401),
         ("11000023", None, None, 69.1, None),  # update
         # ("11000040", "EMEIEF PEQUENOS TALENTOS", "Unknown", -8.79373, -63.88392)
-        ("11000041", None, "Unknown", -8.79373, -63.88392),  # new
+        ("11000041", "test", "Unknown", -8.79373, -63.88392),  # new
     ]
 
     # Create DataFrame
@@ -694,36 +656,24 @@ if __name__ == "__main__":
 
     df = create_bronze_layer_columns(df=df, silver=silver, country_code_iso3="BRA")
     df.show()
-    # test = add_admin_columns(df=df,country_code_iso3="BRA", admin_level="admin1")
-    # test.show()
 
-    # joined_df = df.alias("df").join(silver.alias("silver"), on="school_id_govt", how="left")
-    # common_columns = [col for col in df.columns if col in silver.columns]
-    # additional_columns = [col for col in silver.columns if col not in df.columns]
+    from src.data_quality_checks.utils import (
+        aggregate_report_spark_df,
+        row_level_checks,
+    )
 
-    # select_expr = [
-    #     f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col) for col in common_columns
-    # ]
-    # select_expr.extend([f.col(f"silver.{col}") for col in additional_columns])
-    # result_df = joined_df.select(*select_expr)
-    # result_df.show()
+    # df = update_checks(bronze=df, silver=silver)
+    # df = create_checks(bronze=df, silver=silver)
+    # df.show()
 
-    # for col in df_bronze.columns:
-    #     if col != "school_id_govt" and col in silver.columns:
-    #         silver = silver.withColumnRenamed(col, col + "_silver")
+    df = row_level_checks(
+        df=df,
+        silver=silver,
+        mode="update",
+        dataset_type="geolocation",
+        _country_code_iso3="BRA",
+    )
+    df.show()
 
-    # silver_columns = silver.columns
-    # for col in silver_columns:
-    #     if col != "school_id_govt":  # add suffix except join key
-    #         silver = silver.withColumnRenamed(col, col + "_silver")
-    # silver.show()
-    # # left join
-    # df_bronze = df_bronze.join(silver, on="school_id_govt", how="left")
-
-    # # coalesce with updated values
-    # for col in silver_columns:
-    #     if col != "school_id_govt":
-    #         df_bronze = df_bronze.withColumn(col, f.coalesce(col, col + "_silver"))
-    #         df_bronze = df_bronze.drop(col + "_silver")
-
-    # df_bronze.show()
+    df = aggregate_report_spark_df(spark=df.sparkSession, df=df)
+    df.show(500)

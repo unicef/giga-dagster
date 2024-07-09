@@ -104,6 +104,16 @@ class Config(BaseSettings):
             "description": "Checks if column relationship between the following columns {} is as expected.",
             "type": "column_relation_checks",
         },
+        {
+            "assertion": "is_not_create",
+            "description": "Checks if the school entered is already in the system. If it is already in the system, it cannot be recreated.",
+            "type": "is_not_create",
+        },
+        {
+            "assertion": "is_not_update",
+            "description": "Checks if the school entered is not yet in the system. If it is not yet in the system, it cannot be updated.",
+            "type": "is_not_update",
+        },
     ]
 
     DATA_TYPES: set[tuple[str, str]] = {  ## @RENZ are we not pulling this from schema?
@@ -222,20 +232,10 @@ class Config(BaseSettings):
     NONEMPTY_COLUMNS_REFERENCE: list[str] = [
         "school_id_giga",
         "education_level_govt",
-        "school_id_govt_type",
     ]
 
     NONEMPTY_COLUMNS_GEOLOCATION: list[str] = [
-        "school_id_giga",
         "school_id_govt",
-        "school_name",
-        "longitude",
-        "latitude",
-        "education_level",
-        "education_level_govt",
-        "school_id_govt_type",
-        "admin1",
-        "admin2",
     ]
 
     NONEMPTY_COLUMNS_COVERAGE: list[str] = [

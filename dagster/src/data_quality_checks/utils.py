@@ -21,6 +21,10 @@ from src.data_quality_checks.config import (
     CONFIG_NONEMPTY_COLUMNS,
 )
 from src.data_quality_checks.coverage import fb_percent_sum_to_100_check
+from src.data_quality_checks.create_update import (
+    create_checks,
+    update_checks,
+)
 from src.data_quality_checks.critical import critical_error_checks
 from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
@@ -235,14 +239,16 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
 
 def row_level_checks(
     df: sql.DataFrame,
+    silver: sql.DataFrame,
     dataset_type: str,
     _country_code_iso3: str,
+    mode=None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
     logger.info("Starting row level checks...")
 
-    if dataset_type in ["master", "geolocation"]:
+    if dataset_type == "master":
         df = is_not_within_country(df, _country_code_iso3, context)
         df = similar_name_level_within_110_check(df, context)
         df = school_density_check(df, context)
@@ -259,6 +265,31 @@ def row_level_checks(
             df,
             dataset_type,
             CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            context,
+        )
+        df = column_relation_checks(df, dataset_type, context)
+    elif dataset_type == "geolocation":
+        if mode == "create":
+            df = create_checks(bronze=df, silver=silver)
+        elif mode == "update":
+            df = update_checks(bronze=df, silver=silver)
+        df = is_not_within_country(df, _country_code_iso3, context)
+        df = similar_name_level_within_110_check(df, context)
+        df = school_density_check(df, context)
+        df = standard_checks(df, dataset_type, context)
+        df = duplicate_all_except_checks(
+            df,
+            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type],
+            context,
+        )
+        df = precision_check(df, config.PRECISION, context)
+        df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
+        df = duplicate_name_level_110_check(df, context)
+        df = critical_error_checks(
+            df,
+            dataset_type,
+            CONFIG_NONEMPTY_COLUMNS[dataset_type],
+            mode,
             context,
         )
         df = column_relation_checks(df, dataset_type, context)
