@@ -220,23 +220,31 @@ def bronze_prereq_columns(df, schema_columns: list[StructField]) -> sql.DataFram
 # Note: Temporary function for transforming raw files to standardized columns.
 def create_bronze_layer_columns(
     df: sql.DataFrame,
-    schema_columns: list[StructField],
+    silver: sql.DataFrame,
     country_code_iso3: str,
 ) -> sql.DataFrame:
-    # Create education level before imputing
+    # merge with silver first to check with updates
+    joined_df = df.alias("df").join(
+        silver.alias("silver"), on="school_id_govt", how="left"
+    )
+    common_columns = [col for col in df.columns if col in silver.columns]
+    additional_columns = [col for col in silver.columns if col not in df.columns]
+
+    select_expr = [
+        f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
+        for col in common_columns
+    ]
+    select_expr.extend([f.col(f"silver.{col}") for col in additional_columns])
+    df = joined_df.select(*select_expr)
+
+    # standardize education level
     df = create_education_level(df)
-
-    # Impute missing cols with null
-    df = add_missing_columns(df, schema_columns)
-
-    # Select required columns for bronze
-    df = bronze_prereq_columns(df, schema_columns)
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
 
     # Admin mapbox columns
-    # drop imputed admin cols
+    # drop imputed admin cols to recompute
     df = df.drop("admin1")
     df = df.drop("admin1_id_giga")
     df = df.drop("admin2")
@@ -354,8 +362,8 @@ def add_admin_columns(  # noqa: C901
 
     df = df.withColumns(
         {
-            "admin1": f.coalesce(f.col("admin1"), f.lit("Unknown")),
-            "admin2": f.coalesce(f.col("admin2"), f.lit("Unknown")),
+            f"{admin_level}": f.coalesce(f.col(f"{admin_level}"), f.lit("Unknown")),
+            # f"{admin_level}": f.coalesce(f.col("admin2"), f.lit("Unknown")),
         }
     )
     return df
@@ -561,16 +569,60 @@ if __name__ == "__main__":
 
     #
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation/SEN/wwx7232jufo9htsuq595zy07_SEN_geolocation_20240610-163027.csv"
-    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
-    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BRA_master_reference.csv"
+    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation/SEN/wwx7232jufo9htsuq595zy07_SEN_geolocation_20240610-163027.csv"
+    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BRA_master_reference.csv"
     # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
 
     spark = get_spark_session()
-    # master = spark.read.csv(file_url_master, header=True)
-    # reference = spark.read.csv(file_url_reference, header=True)
-    geolocation = spark.read.csv(file_url, header=True)
-    # df_bronze = master.join(reference, how="left", on="school_id_giga")s\
+    master = spark.read.csv(file_url_master, header=True)
+    reference = spark.read.csv(file_url_reference, header=True)
+    # geolocation = spark.read.csv(file_url, header=True)
+    # df_bronze = spark.read.csv(file_url, header=True)
+    gold = master.join(reference, how="left", on="school_id_giga")
+    geolocation_columns = [
+        "school_id_giga",
+        "school_id_govt",
+        "school_name",
+        "school_establishment_year",
+        "latitude",
+        "longitude",
+        "education_level",
+        "education_level_govt",
+        "connectivity_govt",
+        "connectivity_govt_ingestion_timestamp",
+        "connectivity_govt_collection_year",
+        "download_speed_govt1",
+        "download_speed_contracted",
+        "connectivity_type_govt",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+        "disputed_region",
+        "school_area_type",
+        "school_funding_type",
+        "num_computers",
+        "num_computers_desired",
+        "num_teachers",
+        "num_adm_personnel",
+        "num_students",
+        "num_classrooms",
+        "num_latrines",
+        "computer_lab",
+        "electricity_availability",
+        "electricity_type",
+        "water_availability",
+        "school_data_source",
+        "school_data_collection_year",
+        "school_data_collection_modality",
+        "school_id_govt_type",
+        "school_address",
+        "is_school_open",
+        "school_location_ingestion_timestamp",
+    ]
+    silver = gold.select(*geolocation_columns)
+    silver.show()
 
     # df = spark.read.csv(file_url, header=True)
     # df = create_bronze_layer_columns(df)
@@ -610,210 +662,68 @@ if __name__ == "__main__":
     # geolocation = geolocation.withColumnRenamed(
     #     "education_level", "education_level_govt"
     # )
-    geolocation.show()
-    from src.data_quality_checks.utils import row_level_checks
+    from pyspark.sql.types import DoubleType, StringType, StructField, StructType
 
-    dq = row_level_checks(
-        df=geolocation, dataset_type="geolocation", _country_code_iso3="SEN"
+    # Initialize Spark session
+    spark = SparkSession.builder.appName("CreateDataFrame").getOrCreate()
+
+    # Define the schema
+    schema = StructType(
+        [
+            StructField("school_id_govt", StringType(), True),
+            StructField("school_name", StringType(), True),
+            StructField("education_level", StringType(), True),
+            StructField("latitude", DoubleType(), True),
+            StructField("longitude", DoubleType(), True),
+        ]
     )
-    dq.show()
 
-    # grouped_df = (
-    #     geolocation.groupBy("education_level_govt")
-    #     .agg(f.count("*").alias("count"))
-    #     .orderBy("count", ascending=False)
-    # )
-    # grouped_df.show()
-    # education_level_count_dict = grouped_df.rdd.collectAsMap()
-    # print(education_level_count_dict)
-    # create_education_level(geolocation).show()
-    # df = df.withColumn("latitude", f.lit(32.618))
-    # df = df.withColumn("longitude", f.lit(78.576))
-    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # Create the data
+    data = [
+        # ("11000023", "EEEE ABNAEL MACHADO DE LIMA - CENE", "Unknown", -8.758459, -63.85401),
+        ("11000023", None, None, 69.1, None),  # update
+        # ("11000040", "EMEIEF PEQUENOS TALENTOS", "Unknown", -8.79373, -63.88392)
+        ("11000041", None, "Unknown", -8.79373, -63.88392),  # new
+    ]
 
-    # df = df.withColumn("school_name", f.trim(f.col("school_name")))
-    # df = df.withColumn("latitude", f.lit(17.5066649))
-    # df = create_school_id_giga(df)
-    # df = df.filter(f.col("school_id_giga") == f.col("school_id_giga_test"))
-    # df = is_not_within_country(df=df, country_code_iso3="GIN")
+    # Create DataFrame
+    df = spark.createDataFrame(data, schema)
 
-    # df = df.withColumn("country_code_iso3", f.lit("BRA"))
-    # df = df.withColumn("admin1_test", get_admin1(f.col("latitude"), f.col("longitude"), f.col("country_code_iso3")))
+    # Show DataFrame
+    df.show()
 
-    # grouped_df = df.groupBy("admin1").agg(f.count("*").alias("row_count"))
-    # grouped_df.orderBy(grouped_df["row_count"].desc()).show()
-    # df.show(truncate=False)
-    # print(df.count())
-
-    # test = add_admin_columns(df=df, country_code_iso3="BRA", admin_level="admin1")
-    # test = add_admin_columns(df=test, country_code_iso3="BRA", admin_level="admin2")
-    # test = add_disputed_region_column(df=df)
+    df = create_bronze_layer_columns(df=df, silver=silver, country_code_iso3="BRA")
+    df.show()
+    # test = add_admin_columns(df=df,country_code_iso3="BRA", admin_level="admin1")
     # test.show()
 
-    # test = test.filter(test["admin2"] != test["admin21"])
-    # test.show()
+    # joined_df = df.alias("df").join(silver.alias("silver"), on="school_id_govt", how="left")
+    # common_columns = [col for col in df.columns if col in silver.columns]
+    # additional_columns = [col for col in silver.columns if col not in df.columns]
 
-    # admin1_boundaries = get_admin1_boundaries(country_code_iso3="BRA")
-    # latitude = -8.758459
-    # longitude = -63.85401
-    # print(get_admin1_columns(latitude=latitude, longitude=longitude, admin1_boundaries=admin1_boundaries))
-
-    # print(get_admin1_columns(-8.758459, -63.85401, get_admin1_boundaries("BRA")))
-    # create_admin1_columns(-8.758459, -63.85401, "BRA")
-    # create_admin1_columns(8.758459, -63.85401, "BRA")
-    # create_admin1_columns(8.758459, -63.85401, "BRI")
-
-    # import json
-
-    # json_file_path =  "src/spark/ABLZ_school-geolocation_gov_20230207_test.json"
-    # # # json_file_path =  'C:/Users/RenzTogonon/Downloads/ABLZ_school-geolocation_gov_20230207_test (4).json'
-
-    # with open(json_file_path, 'r') as file:
-    #     data = json.load(file)
-
-    # dq_passed_rows(df, data).show()
-
-    # rt_data = [
-    #     {
-    #         "school_id_giga": "82679ff0-f358-33d0-b3ce-4fc4c2740b7e",
-    #         "school_id_govt": 11000023,
-    #         "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
-    #         "country_code": "BRA",
-    #         "country": "Brazil",
-    #     },
-    #     {
-    #         "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
-    #         "school_id_govt": 17959,
-    #         "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
-    #         "country_code": "Test",
-    #         "country": "Brazil",
-    #     },
-    #     {
-    #         "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
-    #         "school_id_govt": 17959,
-    #         "connectivity_rt_ingestion_timestamp": "2023-09-05 20:06:56.895267+00:00",
-    #         "country_code": "Test",
-    #         "country": "Brazil",
-    #     },
+    # select_expr = [
+    #     f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col) for col in common_columns
     # ]
+    # select_expr.extend([f.col(f"silver.{col}") for col in additional_columns])
+    # result_df = joined_df.select(*select_expr)
+    # result_df.show()
 
-    # mlab_data = [
-    #     {
-    #         "mlab_created_date": "2024-05-16",
-    #         "school_id_govt": "11000023",
-    #         "source": "mlab",
-    #         "country_code": "BRA",
-    #     },
-    # ]
+    # for col in df_bronze.columns:
+    #     if col != "school_id_govt" and col in silver.columns:
+    #         silver = silver.withColumnRenamed(col, col + "_silver")
 
-    # dca_data = [
-    #     {
-    #         "school_id_giga": "82679ff0-f358-33d0-b3ce-4fc4c2740b7e",
-    #         "school_id_govt": "11000023",
-    #         "source": "daily_checkapp",
-    #     },
-    #     {
-    #         "school_id_giga": "000e8acf-80dd-30b0-98a2-8b0b05e09fa3",
-    #         "school_id_govt": 17959,
-    #         "source": "daily_checkapp",
-    #     },
-    # ]
+    # silver_columns = silver.columns
+    # for col in silver_columns:
+    #     if col != "school_id_govt":  # add suffix except join key
+    #         silver = silver.withColumnRenamed(col, col + "_silver")
+    # silver.show()
+    # # left join
+    # df_bronze = df_bronze.join(silver, on="school_id_govt", how="left")
 
-    # all_rt_schema = StructType(
-    #     [
-    #         StructField("school_id_giga", StringType(), True),
-    #         StructField("school_id_govt", StringType(), True),
-    #         StructField("connectivity_rt_ingestion_timestamp", StringType(), True),
-    #         StructField("country_code", StringType(), True),
-    #         StructField("country", StringType(), True),
-    #     ]
-    # )
+    # # coalesce with updated values
+    # for col in silver_columns:
+    #     if col != "school_id_govt":
+    #         df_bronze = df_bronze.withColumn(col, f.coalesce(col, col + "_silver"))
+    #         df_bronze = df_bronze.drop(col + "_silver")
 
-    # df_all_rt = spark.createDataFrame(rt_data, all_rt_schema)
-
-    # mlab_schema = StructType(
-    #     [
-    #         StructField("mlab_created_date", StringType(), True),
-    #         StructField("school_id_govt", StringType(), True),
-    #         StructField("source", StringType(), True),
-    #         StructField("country_code", StringType(), True),
-    #     ]
-    # )
-
-    # df_mlab = spark.createDataFrame(mlab_data, mlab_schema)
-
-    # dca_schema = StructType(
-    #     [
-    #         StructField("school_id_giga", StringType(), True),
-    #         StructField("school_id_govt", StringType(), True),
-    #         StructField("source", StringType(), True),
-    #     ]
-    # )
-
-    # df_dca = spark.createDataFrame(dca_data, dca_schema)
-
-    # df_mlab = df_mlab.withColumn(
-    #     "mlab_created_date",
-    #     f.to_date(f.col("mlab_created_date"), "yyyy-MM-dd").cast(StringType()),
-    # )
-
-    # # dataset prefixes
-    # column_renames = {col: f"{col}_mlab" for col in df_mlab.schema.fieldNames()}
-    # df_mlab = df_mlab.withColumnsRenamed(column_renames)
-    # # df_mlab.show()
-
-    # column_renames = {col: f"{col}_pcdc" for col in df_dca.schema.fieldNames()}
-    # df_dca = df_dca.withColumnsRenamed(column_renames)
-    # # df_dca.show()
-    # # df_all_rt.show()
-
-    # # merge three datasets
-    # all_rt_schools = df_all_rt.join(
-    #     df_mlab,
-    #     how="left",
-    #     on=[
-    #         df_all_rt.school_id_govt == df_mlab.school_id_govt_mlab,
-    #         df_all_rt.country_code == df_mlab.country_code_mlab,
-    #     ],
-    # ).join(
-    #     df_dca, how="left", on=df_all_rt.school_id_giga == df_dca.school_id_giga_pcdc
-    # )
-
-    # # create source column
-    # all_rt_schools = all_rt_schools.withColumn(
-    #     "source",
-    #     f.regexp_replace(
-    #         f.concat_ws(
-    #             ", ", f.trim(f.col("source_pcdc")), f.trim(f.col("source_mlab"))
-    #         ),
-    #         "^, |, $",
-    #         "",
-    #     ),
-    # )
-
-    # all_rt_schools = all_rt_schools.withColumn(
-    #     "connectivity_RT_datasource",
-    #     f.when(
-    #         (f.col("source") == "") & (f.col("country") == "Brazil"), "nic_br"
-    #     ).otherwise(f.col("source")),
-    # )
-
-    # # select relevant columns
-    # realtime_columns = [
-    #     "school_id_giga",
-    #     # "country",
-    #     # "school_id_govt",
-    #     "connectivity_RT_ingestion_timestamp",
-    #     "connectivity_RT_datasource",
-    #     "connectivity_RT",
-    # ]
-    # all_rt_schools = all_rt_schools.withColumn("connectivity_RT", f.lit("Yes"))
-
-    # out = all_rt_schools.select(*realtime_columns)
-    # out.show()
-
-    # merge_connectivity_to_master(df, out).show()
-
-    # test = connectivity_rt_dataset(spark, "BR", is_test=True)
-    # test.show()
+    # df_bronze.show()
