@@ -3,10 +3,12 @@ from io import BytesIO
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from delta import DeltaTable
 from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -37,6 +39,7 @@ from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
+    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -132,11 +135,19 @@ def geolocation_data_quality_results(
     id = config.filename_components.id
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        "school_geolocation", DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+
     dq_results = row_level_checks(
-        geolocation_bronze,
-        "geolocation",
-        country_code,
-        context,
+        df=geolocation_bronze,
+        silver=silver,
+        dataset_type="geolocation",
+        country_code=country_code,
+        mode=config.metadata["mode"],
+        context=context,
     )
 
     dq_results_schema_name = f"{schema_name}_dq_results"
