@@ -33,7 +33,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
-from src.utils.delta import create_delta_table, create_schema
+from src.utils.delta import create_delta_table, create_schema, check_table_exists
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
@@ -46,6 +46,8 @@ from src.utils.schema import (
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
+from pyspark.sql.types import StructType
+
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -73,6 +75,7 @@ def geolocation_bronze(
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
+    schema_name = config.metastore_schema
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -92,11 +95,19 @@ def geolocation_bronze(
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
 
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        "school_geolocation", DataTier.SILVER
+    columns = get_schema_columns(s, schema_name)
+    schema = StructType(columns)
+
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    else:
+        silver = s.createDataFrame(
+        s.sparkContext.emptyRDD(), schema=schema
     )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
 
     df = create_bronze_layer_columns(df, silver, country_code)
 
@@ -128,23 +139,26 @@ def geolocation_data_quality_results(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
-
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-    )
-
     country_code = config.country_code
     schema_name = config.metastore_schema
     id = config.filename_components.id
+
+    
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        "school_geolocation", DataTier.SILVER
+    columns = get_schema_columns(s, schema_name)
+    schema = StructType(columns)
+
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    else:
+        silver = s.createDataFrame(
+        s.sparkContext.emptyRDD(), schema=schema
     )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
 
     dq_results = row_level_checks(
         df=geolocation_bronze,
@@ -179,6 +193,13 @@ def geolocation_data_quality_results(
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     dq_pandas = dq_results.toPandas()
+
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
+
     return Output(
         dq_pandas,
         metadata={
