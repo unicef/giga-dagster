@@ -22,6 +22,7 @@ from src.utils.delta import (
     create_delta_table,
     create_schema,
     execute_query_with_error_handler,
+    check_table_exists
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -89,8 +90,6 @@ class StagingStep:
             self.staging_tier_schema_name,
             self.country_code,
         )
-        self.silver_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.silver_tier_schema_name}.db/{self.country_code.lower()}"
-        self.staging_table_path = f"{settings.SPARK_WAREHOUSE_DIR}/{self.staging_tier_schema_name}.db/{self.country_code.lower()}"
 
     def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
         if self.silver_table_exists:
@@ -164,17 +163,13 @@ class StagingStep:
     @property
     def silver_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return ic(
-            self.spark.catalog.tableExists(self.silver_table_name)
-            and DeltaTable.isDeltaTable(self.spark, self.silver_table_path)
+        return check_table_exists(self.spark, self.schema_name, self.silver_table_name, DataTier.SILVER
         )
 
     @property
     def staging_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return ic(
-            self.spark.catalog.tableExists(self.staging_table_name)
-            and DeltaTable.isDeltaTable(self.spark, self.staging_table_path)
+        return check_table_exists(self.spark, self.schema_name, self.staging_table_name, DataTier.STAGING
         )
 
     def create_staging_table_from_silver(self):
