@@ -72,6 +72,7 @@ def geolocation_bronze(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
+    country_code = config.country_code
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -88,12 +89,16 @@ def geolocation_bronze(
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath)
 
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
-    country_code = config.country_code
-    df = create_bronze_layer_columns(df, schema_columns, country_code)
+
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        "school_geolocation", DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+
+    df = create_bronze_layer_columns(df, silver, country_code)
 
     config.metadata.update({"column_mapping": column_mapping})
 
