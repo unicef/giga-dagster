@@ -269,9 +269,9 @@ def row_level_checks(
         )
         df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "geolocation":
-        if mode == "create":
+        if mode == "Create":
             df = create_checks(bronze=df, silver=silver)
-        elif mode == "update":
+        elif mode == "Update":
             df = update_checks(bronze=df, silver=silver)
         df = is_not_within_country(df, _country_code_iso3, context)
         df = similar_name_level_within_110_check(df, context)
