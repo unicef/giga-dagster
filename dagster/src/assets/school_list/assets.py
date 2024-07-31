@@ -79,16 +79,6 @@ def qos_school_list_bronze(
     country_code = config.country_code
     df = create_bronze_layer_columns(df, schema_columns, country_code)
 
-    columns_to_fill = [
-        "education_level_govt",
-        "school_id_govt_type",
-        "admin1",
-        "admin2",
-    ]
-    df = add_missing_values(
-        df, [c for c in schema_columns if c.name in columns_to_fill]
-    )
-
     config.metadata.update({"column_mapping": column_mapping})
 
     # datahub_emit_metadata_with_exception_catcher(
