@@ -1,7 +1,10 @@
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -12,7 +15,6 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
-    add_missing_values,
     column_mapping_rename,
     create_bronze_layer_columns,
 )
@@ -27,10 +29,13 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
+from src.utils.delta import check_table_exists
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.qos_apis.school_list import query_school_list_data
 from src.utils.schema import (
+    construct_full_table_name,
+    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -66,18 +71,29 @@ def qos_school_list_bronze(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
+    country_code = config.country_code
+    schema_name = config.metastore_schema
+
     database_data = config.row_data_dict
-    schema_columns = get_schema_columns(s, config.metastore_schema)
     df, column_mapping = column_mapping_rename(
         qos_school_list_raw, database_data["column_to_schema_mapping"]
     )
 
-    column_names = [c.name for c in schema_columns]
-    valid_column_names = [c for c in column_names if c in df.columns]
-    df = df.select(*valid_column_names)
+    columns = get_schema_columns(s, schema_name)
+    schema = StructType(columns)
 
-    country_code = config.country_code
-    df = create_bronze_layer_columns(df, schema_columns, country_code)
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(
+            silver_tier_schema_name, country_code
+        )
+        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    else:
+        silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
+
+    df = create_bronze_layer_columns(df, silver, country_code)
 
     config.metadata.update({"column_mapping": column_mapping})
 
@@ -106,11 +122,30 @@ def qos_school_list_data_quality_results(
     qos_school_list_bronze: sql.DataFrame,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
+    s: SparkSession = spark.spark_session
+    country_code = config.country_code
+    schema_name = config.metastore_schema
+
+    columns = get_schema_columns(s, schema_name)
+    schema = StructType(columns)
+
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(
+            silver_tier_schema_name, country_code
+        )
+        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    else:
+        silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
+
     dq_results = row_level_checks(
-        qos_school_list_bronze,
-        "geolocation",
-        config.country_code,
-        context,
+        df=qos_school_list_bronze,
+        dataset_type="geolocation",
+        country_code=config.country_code,
+        silver=silver,
+        context=context,
     )
 
     dq_pandas = dq_results.toPandas()

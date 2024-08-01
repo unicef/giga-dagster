@@ -239,9 +239,9 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
 
 def row_level_checks(
     df: sql.DataFrame,
-    silver: sql.DataFrame,
     dataset_type: str,
     _country_code_iso3: str,
+    silver: sql.DataFrame = None,
     mode=None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
