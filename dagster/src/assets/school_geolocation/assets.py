@@ -162,7 +162,7 @@ def geolocation_data_quality_results(
         df=geolocation_bronze,
         silver=silver,
         dataset_type="geolocation",
-        country_code=country_code,
+        _country_code_iso3=country_code,
         mode=config.metadata["mode"],
         context=context,
     )

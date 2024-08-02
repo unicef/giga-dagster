@@ -143,7 +143,7 @@ def qos_school_list_data_quality_results(
     dq_results = row_level_checks(
         df=qos_school_list_bronze,
         dataset_type="geolocation",
-        country_code=config.country_code,
+        _country_code_iso3=config.country_code,
         silver=silver,
         context=context,
     )
