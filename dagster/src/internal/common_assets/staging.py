@@ -1,7 +1,6 @@
 import enum
 
 from delta import DeltaTable
-from icecream import ic
 from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
@@ -12,17 +11,16 @@ from sqlalchemy import select, update
 from dagster import OpExecutionContext
 from src.constants import DataTier
 from src.internal.merge import partial_in_cluster_merge
-from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
 from src.utils.delta import (
     build_deduped_delete_query,
     build_deduped_merge_query,
+    check_table_exists,
     create_delta_table,
     create_schema,
     execute_query_with_error_handler,
-    check_table_exists
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -163,13 +161,15 @@ class StagingStep:
     @property
     def silver_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return check_table_exists(self.spark, self.schema_name, self.silver_table_name, DataTier.SILVER
+        return check_table_exists(
+            self.spark, self.schema_name, self.silver_table_name, DataTier.SILVER
         )
 
     @property
     def staging_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
-        return check_table_exists(self.spark, self.schema_name, self.staging_table_name, DataTier.STAGING
+        return check_table_exists(
+            self.spark, self.schema_name, self.staging_table_name, DataTier.STAGING
         )
 
     def create_staging_table_from_silver(self):
