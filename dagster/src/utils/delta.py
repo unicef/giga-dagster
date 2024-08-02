@@ -10,8 +10,10 @@ from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
+from src.constants import DataTier
 from src.exceptions import MutexException
-from src.utils.schema import construct_full_table_name
+from src.settings import settings
+from src.utils.schema import construct_full_table_name, construct_schema_name_for_tier
 
 
 def execute_query_with_error_handler(
@@ -208,3 +210,20 @@ def get_change_operation_counts(df: sql.DataFrame):
         "modified": get_count_by_change_type("update_postimage"),
         "deleted": get_count_by_change_type("delete"),
     }
+
+
+def check_table_exists(
+    spark: SparkSession, schema_name: str, table_name: str, data_tier: DataTier = None
+) -> bool:
+    tiered_schema_name = construct_schema_name_for_tier(
+        schema_name,
+        data_tier,
+    )
+    table_path = (
+        f"{settings.SPARK_WAREHOUSE_DIR}/{tiered_schema_name}.db/{table_name.lower()}"
+    )
+
+    return ic(
+        spark.catalog.tableExists(table_name)
+        and DeltaTable.isDeltaTable(spark, table_path)
+    )
