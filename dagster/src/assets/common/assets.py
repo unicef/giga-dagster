@@ -109,10 +109,15 @@ def manual_review_failed_rows(
         ),
     )
 
-    bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
-    df_failed = staging_cdf.filter(
-        ~f.col("change_id").isin(bc_passing_rows_change_ids.value)
-    )
+    if len(passing_rows_change_ids) == 0:
+        df_failed = staging_cdf
+    elif len(passing_rows_change_ids) == 1 and passing_rows_change_ids[0] == "__all__":
+        df_failed = staging_cdf.limit(0)
+    else:
+        bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
+        df_failed = staging_cdf.filter(
+            ~f.col("change_id").isin(bc_passing_rows_change_ids.value)
+        )
 
     # Check if a rejects table already exists
     # If yes, do an in-cluster merge
@@ -189,10 +194,15 @@ def silver(
         ),
     )
 
-    bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
-    df_passed = staging_cdf.filter(
-        f.col("change_id").isin(bc_passing_rows_change_ids.value)
-    )
+    if len(passing_rows_change_ids) == 0:
+        df_passed = staging_cdf.limit(0)
+    elif len(passing_rows_change_ids) == 1 and passing_rows_change_ids[0] == "__all__":
+        df_passed = staging_cdf
+    else:
+        bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
+        df_passed = staging_cdf.filter(
+            f.col("change_id").isin(bc_passing_rows_change_ids.value)
+        )
     context.log.info(f"{df_passed.count()=}")
 
     df_passed = manual_review_dedupe_strat(df_passed)
