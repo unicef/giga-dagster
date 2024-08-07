@@ -216,13 +216,13 @@ class GroupsApi:
 
     @classmethod
     async def list_role_members(cls, role: str) -> list[str]:
-        db = await get_db
-        users = await db.scalars(
-            select(User).join(UserRoleAssociation).join(Role).where(Role.name == role)
-        )
+        with get_db_context() as db:
+            users = await db.scalars(
+                select(User).join(UserRoleAssociation).join(Role).where(Role.name == role)
+            )
 
-        emails = [user.email for user in users]
-        return emails
+            emails = [user.email for user in users]
+            return emails
 
     @classmethod
     async def list_country_role_members(cls, country_code: str) -> list[str]:
