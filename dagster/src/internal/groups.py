@@ -7,10 +7,13 @@ from msgraph.generated.groups.groups_request_builder import (
 )
 from msgraph.generated.models.o_data_errors.o_data_error import ODataError
 from msgraph.generated.users.users_request_builder import UsersRequestBuilder
+from sqlalchemy import select
 
 from azure.identity import ClientSecretCredential
+from dagster.models.users import Role, User, UserRoleAssociation
 from src.schemas.user import GraphUser
 from src.settings import settings
+from src.utils.db.primary import get_db
 from src.utils.string import to_snake_case
 
 graph_scopes = ["https://graph.microsoft.com/.default"]
@@ -210,3 +213,13 @@ class GroupsApi:
                 raise Exception(err.error.message) from err
 
         return []
+
+    @classmethod
+    async def list_role_members(cls, role: str) -> list[str]:
+        db = await get_db
+        users = await db.scalars(
+            select(User).join(UserRoleAssociation).join(Role).where(Role.name == role)
+        )
+
+        emails = [user.email for user in users]
+        return emails
