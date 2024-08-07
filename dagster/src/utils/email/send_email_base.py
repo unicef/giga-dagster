@@ -36,6 +36,7 @@ async def send_email_base(
             raise HTTPError(res.text) from None
 
     data = res.json()
+    logger.info(f"Email renderer response: {res.status_code}")
 
     html = data.get("html")
     text = data.get("text")
@@ -55,4 +56,4 @@ async def send_email_base(
             logger.error(res.json())
             res.raise_for_status()
         else:
-            logger.info(res.text)
+            logger.info(f"Send email response: {res.status_code} {res.text}")
