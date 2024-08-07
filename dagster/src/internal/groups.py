@@ -1,6 +1,7 @@
 import country_converter as coco
 import requests
 from loguru import logger
+from models.users import Role, User, UserRoleAssociation
 from msgraph import GraphServiceClient
 from msgraph.generated.groups.groups_request_builder import (
     GroupsRequestBuilder,
@@ -10,10 +11,9 @@ from msgraph.generated.users.users_request_builder import UsersRequestBuilder
 from sqlalchemy import select
 
 from azure.identity import ClientSecretCredential
-from dagster.models.users import Role, User, UserRoleAssociation
 from src.schemas.user import GraphUser
 from src.settings import settings
-from src.utils.db.primary import get_db
+from src.utils.db.primary import get_db, get_db_context
 from src.utils.string import to_snake_case
 
 graph_scopes = ["https://graph.microsoft.com/.default"]
@@ -223,3 +223,15 @@ class GroupsApi:
 
         emails = [user.email for user in users]
         return emails
+
+    @classmethod
+    async def list_country_role_members(cls, country_code: str) -> list[str]:
+        with get_db_context() as db:
+            full_country_name = coco.convert(names=[country_code], to="name_short")
+            users = await db.scalars(
+                select(User.email.distinct())
+                .join(UserRoleAssociation)
+                .join(Role)
+                .where(Role.name.like(f"{full_country_name}-%"))
+            )
+            return [user.email for user in users]
