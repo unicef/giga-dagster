@@ -115,16 +115,20 @@ def create_education_level(df: sql.DataFrame) -> sql.DataFrame:
         df = df.withColumn(
             "education_level",
             f.coalesce(f.col("education_level"), f.col("mapped_column")),
-        )
-        df = df.drop("mapped_column")
+        ).drop("mapped_column")
     else:
         df = df.withColumn(
             "education_level", mapped_column[f.col("education_level_govt")]
         )
 
     # fill nulls with "Unknown"
-    return df.withColumn(
-        "education_level", f.coalesce(f.col("education_level"), f.lit("Unknown"))
+    return df.withColumns(
+        {
+            "education_level_govt": f.coalesce(
+                f.col("education_level_govt"), f.lit("Unknown")
+            ),
+            "education_level": f.coalesce(f.col("education_level"), f.lit("Unknown")),
+        }
     )
 
 
