@@ -54,3 +54,5 @@ async def send_email_base(
         if res.is_error:
             logger.error(res.json())
             res.raise_for_status()
+        else:
+            logger.info(res.text)

@@ -38,6 +38,7 @@ def send_email_dq_report(
         props=metadata,
         subject="Giga Data Quality Report",
         recipients=[uploader_email],
+        context=context,
     )
 
 

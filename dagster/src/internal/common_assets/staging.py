@@ -211,7 +211,28 @@ class StagingStep:
         existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
         existing_columns = sorted(existing_df.schema.fieldNames())
 
-        if updated_columns != existing_columns:
+        # Sync changes in nullability flags
+        alter_sql = f"ALTER TABLE {self.staging_table_name}"
+        alter_stmts = []
+        for column in existing_df.schema:
+            if (
+                match_ := next(
+                    (c for c in updated_schema if c.name == column.name), None
+                )
+            ) is not None:
+                if match_.nullable != column.nullable:
+                    if match_.nullable:
+                        alter_stmts.append(
+                            f'ALTER COLUMN "{column.name}" DROP NOT NULL'
+                        )
+                    else:
+                        alter_stmts.append(f'ALTER COLUMN "{column.name}" SET NOT NULL')
+
+        has_nullability_changed = len(alter_stmts) > 0
+        has_schema_changed = updated_columns != existing_columns
+
+        # Sync changes in columns & data types
+        if has_schema_changed:
             self.context.log.info("Updating schema...")
             empty_data = self.spark.sparkContext.emptyRDD()
             updated_schema_df = self.spark.createDataFrame(
@@ -224,6 +245,12 @@ class StagingStep:
                 .mode("append")
                 .saveAsTable(self.staging_table_name)
             )
+
+        if has_nullability_changed:
+            alter_sql = f"{alter_sql} {', '.join(alter_stmts)};"
+            self.spark.sql(alter_sql).show()
+
+        if has_schema_changed or has_nullability_changed:
             self.reload_schema()
 
     def reload_schema(self):

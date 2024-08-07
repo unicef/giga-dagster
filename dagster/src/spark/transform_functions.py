@@ -246,6 +246,10 @@ def create_bronze_layer_columns(
 
     # ID
     df = create_school_id_giga(df)  # school_id_giga
+    df = df.withColumn(
+        "school_id_govt_type",
+        f.coalesce(f.col("school_id_govt_type"), f.lit("Unknown")),
+    )
 
     # Admin mapbox columns
     # drop imputed admin cols to recompute
