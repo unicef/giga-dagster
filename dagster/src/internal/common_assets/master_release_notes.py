@@ -78,8 +78,7 @@ async def send_master_release_notes(
     #     DeploymentEnvironment.STAGING,
     # ]:
     else:
-        members = await GroupsApi.list_group_members(group_name="Developer")
-        recipients = list({m.mail for m in members if m.mail is not None})
+        recipients = await GroupsApi.list_role_members(role="Developer")
     # else:
     #     members = await GroupsApi.list_country_members(country_code=country_code)
     #     admins = await GroupsApi.list_group_members(group_name="Admin")
