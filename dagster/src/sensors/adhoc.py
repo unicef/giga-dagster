@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from dagster_pyspark import PySparkResource
+from pyspark.sql import SparkSession
+
 from dagster import (
     RunConfig,
     RunRequest,
@@ -10,6 +13,7 @@ from dagster import (
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
+    school_master__generate_silver_tables_job,
     school_qos__convert_csv_to_deltatable_job,
 )
 from src.settings import settings
@@ -17,7 +21,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
 )
-from src.utils.op_config import OpDestinationMapping, generate_run_ops
+from src.utils.op_config import DatasetConfig, OpDestinationMapping, generate_run_ops
 
 DOMAIN = "school"
 
@@ -269,3 +273,32 @@ def school_qos__gold_csv_to_deltatable_sensor(
         yield SkipReason("No files found to process.")
     else:
         yield from run_requests
+
+
+@sensor(
+    job=school_master__generate_silver_tables_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def school_master__generate_silver_tables_sensor(
+    context: SensorEvaluationContext, spark: PySparkResource
+):
+    s: SparkSession = spark.spark_session
+    gold_master_tables = s.catalog.listTables("school_master")
+
+    for table in gold_master_tables:
+        context.log.info(f"TABLE: {table.name}")
+
+        yield RunRequest(
+            run_key=table.name,
+            run_config=RunConfig(
+                ops={
+                    "adhoc__generate_silver_geolocation_from_gold": DatasetConfig(
+                        country_code=table.name.lower()
+                    ),
+                    "adhoc__generate_silver_coverage_from_gold": DatasetConfig(
+                        country_code=table.name.lower()
+                    ),
+                }
+            ),
+            tags={"country": table.name.upper()},
+        )

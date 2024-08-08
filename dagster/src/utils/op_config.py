@@ -16,6 +16,10 @@ from src.utils.filename import (
 )
 
 
+class DatasetConfig(Config):
+    country_code: str
+
+
 class FileConfig(Config):
     filepath: str = Field(
         description="The path of the file inside the ADLS container relative to the root.",
