@@ -6,6 +6,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StructType
 from src.constants import DataTier, constants
+from src.spark.transform_functions import add_missing_columns
 from src.utils.delta import check_table_exists, execute_query_with_error_handler
 from src.utils.metadata import get_table_preview
 from src.utils.op_config import DatasetConfig
@@ -55,6 +56,7 @@ def adhoc__generate_silver_geolocation_from_gold(
             ),
         }
     )
+    silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, "school_geolocation", context)
     silver = compute_row_hash(silver, context)
 
@@ -135,6 +137,7 @@ def adhoc__generate_silver_coverage_from_gold(
             ),
         }
     )
+    silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, "school_coverage", context)
     silver = compute_row_hash(silver, context)
 
