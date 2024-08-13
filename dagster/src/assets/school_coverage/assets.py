@@ -155,7 +155,7 @@ def coverage_data_quality_results(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
-def coverage_data_quality_results_summary(
+async def coverage_data_quality_results_summary(
     context,
     config: FileConfig,
     coverage_raw: bytes,
@@ -183,7 +183,7 @@ def coverage_data_quality_results_summary(
         spark=spark,
     )
 
-    send_email_dq_report_with_config(
+    await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
         context=context,

@@ -15,7 +15,7 @@ from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
 
 
-def send_email_dq_report(
+async def send_email_dq_report(
     dq_results: dict[str, Any],
     dataset_type: str,
     upload_date: str,
@@ -33,7 +33,7 @@ def send_email_dq_report(
     get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
     get_context_with_fallback_logger(context).info(metadata)
 
-    send_email_base(
+    await send_email_base(
         endpoint="email/dq-report",
         props=metadata,
         subject="Giga Data Quality Report",
@@ -42,7 +42,7 @@ def send_email_dq_report(
     )
 
 
-def send_email_dq_report_with_config(
+async def send_email_dq_report_with_config(
     dq_results: dict[str, Any],
     config: FileConfig,
     context: OpExecutionContext = None,
@@ -69,7 +69,7 @@ def send_email_dq_report_with_config(
         upload_id = file_upload.id
         uploader_email = file_upload.uploader_email
 
-        send_email_dq_report(
+        await send_email_dq_report(
             dq_results=dq_results,
             dataset_type=dataset_type,
             upload_date=upload_date,
@@ -84,6 +84,8 @@ def send_email_dq_report_with_config(
 
 
 if __name__ == "__main__":
+    import asyncio
+
     adls = ADLSFileClient()
     dq_results_filepath = "data-quality-results/school-coverage/dq-summary/AIA/cys5pwept28vrjsgu2bct7lg_AIA_coverage_fb_20240411-074343.json"
     dq_results = adls.download_json(dq_results_filepath)
@@ -94,10 +96,12 @@ if __name__ == "__main__":
     upload_id = "cys5pwept28vrjsgu2bct7lg"
     uploader_email = "sofia.pineda@thinkingmachin.es"
 
-    send_email_dq_report(
-        dq_results=dq_results,
-        dataset_type=dataset_type,
-        upload_date=upload_date,
-        upload_id=upload_id,
-        uploader_email=uploader_email,
+    asyncio.run(
+        send_email_dq_report(
+            dq_results=dq_results,
+            dataset_type=dataset_type,
+            upload_date=str(upload_date),
+            upload_id=upload_id,
+            uploader_email=uploader_email,
+        )
     )
