@@ -17,7 +17,6 @@ from src.internal.merge import (
     partial_cdf_in_cluster_merge,
 )
 from src.resources import ResourceKey
-from src.settings import settings
 from src.spark.transform_functions import (
     add_missing_columns,
 )
@@ -29,7 +28,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
-from src.utils.delta import create_delta_table, create_schema
+from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -122,10 +121,7 @@ def manual_review_failed_rows(
     # Check if a rejects table already exists
     # If yes, do an in-cluster merge
     # Else, the current df_failed is the initial rejects table
-    rejected_full_path = f"{settings.SPARK_WAREHOUSE_DIR}/{rejected_tier_schema_name}.db/{country_code.lower()}"
-    if DeltaTable.isDeltaTable(s, rejected_full_path) and s.catalog.tableExists(
-        construct_full_table_name(rejected_tier_schema_name, country_code)
-    ):
+    if check_table_exists(s, schema_name, country_code, DataTier.MANUAL_REJECTED):
         rejected = DeltaTable.forName(s, rejected_table_name).toDF()
         new_rejected = partial_cdf_in_cluster_merge(
             rejected, df_failed, column_names, primary_key, context
@@ -206,10 +202,14 @@ def silver(
     context.log.info(f"{df_passed.count()=}")
 
     df_passed = manual_review_dedupe_strat(df_passed)
-    current_silver = DeltaTable.forName(s, silver_table_name).toDF()
-    new_silver = partial_cdf_in_cluster_merge(
-        current_silver, df_passed, column_names, primary_key, context
-    )
+
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        current_silver = DeltaTable.forName(s, silver_table_name).toDF()
+        new_silver = partial_cdf_in_cluster_merge(
+            current_silver, df_passed, column_names, primary_key, context
+        )
+    else:
+        new_silver = df_passed
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -321,13 +321,16 @@ def master(
     silver = transform_types(silver, schema_name, context)
     silver = silver.select([c.name for c in schema_columns])
 
-    current_master = DeltaTable.forName(
-        s, construct_full_table_name("school_master", country_code)
-    ).toDF()
+    if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        current_master = DeltaTable.forName(
+            s, construct_full_table_name("school_master", country_code)
+        ).toDF()
+        new_master = full_in_cluster_merge(
+            current_master, silver, primary_key, column_names
+        )
+    else:
+        new_master = silver
 
-    new_master = full_in_cluster_merge(
-        current_master, silver, primary_key, column_names
-    )
     column_actions = {}
     for col in schema_columns:
         # If the column value is NULL, add a placeholder value if the following
@@ -389,13 +392,7 @@ def reference(
     silver = transform_types(silver, schema_name, context)
     silver = silver.select([c.name for c in schema_columns])
 
-    reference_full_path = (
-        f"{settings.SPARK_WAREHOUSE_DIR}/school_reference.db/{country_code.lower()}"
-    )
-
-    if DeltaTable.isDeltaTable(s, reference_full_path) and s.catalog.tableExists(
-        construct_full_table_name("school_reference", country_code)
-    ):
+    if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
         current_reference = DeltaTable.forName(
             s, construct_full_table_name("school_reference", country_code)
         ).toDF()
