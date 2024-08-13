@@ -316,6 +316,14 @@ def add_admin_columns(  # noqa: C901
         admin_level=admin_level,
     )
 
+    if admin_boundaries is None:
+        return df.withColumns(
+            {
+                admin_level: f.lit("Unknown"),
+                f"{admin_level}_id_giga": f.lit(None),
+            }
+        )
+
     spark = df.sparkSession
     broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
 
@@ -346,34 +354,28 @@ def add_admin_columns(  # noqa: C901
 
     get_admin_id_giga_udf = f.udf(get_admin_id_giga, StringType())
 
-    if admin_boundaries is None:
-        df = df.withColumn(f"{admin_level}", f.lit(None))
-        return df.withColumn(f"{admin_level}_id_giga", f.lit(None))
-
-    df = df.withColumn(
-        f"{admin_level}_en",
-        get_admin_en_udf(df["latitude"], df["longitude"]),
-    )
-    df = df.withColumn(
-        f"{admin_level}_native",
-        get_admin_native_udf(df["latitude"], df["longitude"]),
-    )
-    df = df.withColumn(
-        f"{admin_level}_id_giga",
-        get_admin_id_giga_udf(df["latitude"], df["longitude"]),
-    )
-    df = df.withColumn(
-        f"{admin_level}",
-        f.coalesce(f.col(f"{admin_level}_en"), f.col(f"{admin_level}_native")),
-    )
-    df = df.drop(f"{admin_level}_en", f"{admin_level}_native")
-
     df = df.withColumns(
         {
-            f"{admin_level}": f.coalesce(f.col(f"{admin_level}"), f.lit("Unknown")),
-            # f"{admin_level}": f.coalesce(f.col("admin2"), f.lit("Unknown")),
+            f"{admin_level}_en": get_admin_en_udf(df["latitude"], df["longitude"]),
+            f"{admin_level}_native": get_admin_native_udf(
+                df["latitude"], df["longitude"]
+            ),
+            f"{admin_level}_id_giga": get_admin_id_giga_udf(
+                df["latitude"], df["longitude"]
+            ),
         }
     )
+    df = df.withColumn(
+        admin_level,
+        f.coalesce(
+            f.col(f"{admin_level}_en"),
+            f.col(f"{admin_level}_native"),
+            f.col("Unknown"),
+        ),
+    ).drop(f"{admin_level}_en", f"{admin_level}_native")
+
+    df.select(admin_level).show()
+
     return df
 
 
