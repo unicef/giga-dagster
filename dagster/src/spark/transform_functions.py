@@ -227,7 +227,15 @@ def create_bronze_layer_columns(
     silver: sql.DataFrame,
     country_code_iso3: str,
 ) -> sql.DataFrame:
-    # merge with silver first to check with updates
+    # Merge with silver first to check with updates.
+    df = df.withColumns(
+        {
+            col.name: f.col(col.name).cast(TimestampType())
+            for col in df.schema
+            if col.name.endswith("_timestamp")
+        }
+    )
+
     joined_df = df.alias("df").join(
         silver.alias("silver"), on="school_id_govt", how="left"
     )
