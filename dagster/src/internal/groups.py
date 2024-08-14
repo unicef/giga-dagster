@@ -13,7 +13,7 @@ from sqlalchemy import select
 from azure.identity import ClientSecretCredential
 from src.schemas.user import GraphUser
 from src.settings import settings
-from src.utils.db.primary import get_db, get_db_context
+from src.utils.db.primary import get_db_context
 from src.utils.string import to_snake_case
 
 graph_scopes = ["https://graph.microsoft.com/.default"]
@@ -218,7 +218,10 @@ class GroupsApi:
     async def list_role_members(cls, role: str) -> list[str]:
         with get_db_context() as db:
             users = await db.scalars(
-                select(User).join(UserRoleAssociation).join(Role).where(Role.name == role)
+                select(User)
+                .join(UserRoleAssociation)
+                .join(Role)
+                .where(Role.name == role)
             )
 
             emails = [user.email for user in users]
