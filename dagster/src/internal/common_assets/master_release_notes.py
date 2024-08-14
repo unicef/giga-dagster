@@ -74,10 +74,10 @@ async def send_master_release_notes(
     if settings.DEPLOY_ENV == DeploymentEnvironment.LOCAL:
         recipients = [settings.ADMIN_EMAIL]
     elif settings.DEPLOY_ENV == DeploymentEnvironment.DEVELOPMENT:
-        recipients = await GroupsApi.list_role_members(role="Developer")
+        recipients = GroupsApi.list_role_members(role="Developer")
     else:
-        members = await GroupsApi.list_country_role_members(country_code)
-        admins = await GroupsApi.list_role_members("Admin")
+        members = GroupsApi.list_country_role_members(country_code)
+        admins = GroupsApi.list_role_members("Admin")
         recipients = list({*members, *admins})
 
     if len(recipients) == 0:

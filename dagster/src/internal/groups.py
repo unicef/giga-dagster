@@ -215,9 +215,9 @@ class GroupsApi:
         return []
 
     @classmethod
-    async def list_role_members(cls, role: str) -> list[str]:
+    def list_role_members(cls, role: str) -> list[str]:
         with get_db_context() as db:
-            users = await db.scalars(
+            users = db.scalars(
                 select(User)
                 .join(UserRoleAssociation)
                 .join(Role)
@@ -228,10 +228,10 @@ class GroupsApi:
             return emails
 
     @classmethod
-    async def list_country_role_members(cls, country_code: str) -> list[str]:
+    def list_country_role_members(cls, country_code: str) -> list[str]:
         with get_db_context() as db:
             full_country_name = coco.convert(names=[country_code], to="name_short")
-            users = await db.scalars(
+            users = db.scalars(
                 select(User.email.distinct())
                 .join(UserRoleAssociation)
                 .join(Role)
