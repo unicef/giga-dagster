@@ -102,3 +102,5 @@ def has_similar_name_check_udf(school_name, school_name_2) -> int:
         return 1
 
     return 0
+
+
