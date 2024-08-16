@@ -179,7 +179,6 @@ def aggregate_report_spark_df(
         "percent_failed",
         "percent_passed",
         "dq_remarks",
-        "is_critical",
     )
     report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
 
