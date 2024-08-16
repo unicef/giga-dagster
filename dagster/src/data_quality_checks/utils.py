@@ -261,13 +261,13 @@ def row_level_checks(
         df = precision_check(df, config.PRECISION, context)
         df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
+        df = column_relation_checks(df, dataset_type, context)
         df = critical_error_checks(
             df,
             dataset_type,
             CONFIG_NONEMPTY_COLUMNS[dataset_type],
             context,
         )
-        df = column_relation_checks(df, dataset_type, context)
     elif dataset_type == "geolocation":
         if mode == "Create":
             df = create_checks(bronze=df, silver=silver)
