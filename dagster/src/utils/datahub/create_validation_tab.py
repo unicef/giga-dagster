@@ -22,7 +22,6 @@ from datahub.metadata.com.linkedin.pegasus2avro.assertion import (
     DatasetAssertionInfo,
     DatasetAssertionScope,
 )
-from datahub.metadata.com.linkedin.pegasus2avro.common import DataPlatformInstance
 
 from dagster import DagsterLogManager, OpExecutionContext
 from src.settings import settings
@@ -104,10 +103,11 @@ class EmitDatasetAssertionResults:
             }
 
         info = {
+            **dynamic_info,
             "operator": AssertionStdOperator._NATIVE_,  # noqa:SLF001
             "dataset": dataset_urn,
             "nativeType": dq_check_result["assertion"],
-        } | dynamic_info
+        }
 
         return AssertionInfo(
             type=AssertionType.DATASET,
@@ -132,9 +132,9 @@ class EmitDatasetAssertionResults:
                 + self.dataset_urn
             )
             assertion_urn = builder.make_assertion_urn(assertion_id=assertion_id)
-            assertion_data_platform_instance = DataPlatformInstance(
-                platform=builder.make_data_platform_urn("spark"),
-            )
+            # assertion_data_platform_instance = DataPlatformInstance(
+            #     platform=builder.make_data_platform_urn("spark"),
+            # )
             assertion_result = (
                 AssertionResultType.SUCCESS
                 if dq_check_result["dq_remarks"] == "pass"
@@ -166,14 +166,14 @@ class EmitDatasetAssertionResults:
                 entityUrn=assertion_urn,
                 aspect=assertion_run,
             )
-            assertion_data_platform_mcp = MetadataChangeProposalWrapper(
-                entityUrn=assertion_urn,
-                aspect=assertion_data_platform_instance,
-            )
+            # assertion_data_platform_mcp = MetadataChangeProposalWrapper(
+            #     entityUrn=assertion_urn,
+            #     aspect=assertion_data_platform_instance,
+            # )
             try:
                 self.emitter.emit_mcp(assertion_mcp)
                 self.emitter.emit_mcp(assertion_run_mcp)
-                self.emitter.emit_mcp(assertion_data_platform_mcp)
+                # self.emitter.emit_mcp(assertion_data_platform_mcp)
             except Exception as error:
                 self.context.log.error(f"ERROR on Assertion Run: {error}")
         self.logger.info(f"Dataset URN: {self.dataset_urn}")
