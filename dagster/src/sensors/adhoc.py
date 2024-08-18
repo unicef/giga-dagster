@@ -13,6 +13,7 @@ from dagster import (
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     school_master__convert_gold_csv_to_deltatable_job,
+    school_master__dq_checks_job,
     school_master__generate_silver_tables_job,
     school_qos__convert_csv_to_deltatable_job,
 )
@@ -21,7 +22,12 @@ from src.utils.adls import ADLSFileClient
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
 )
-from src.utils.op_config import DatasetConfig, OpDestinationMapping, generate_run_ops
+from src.utils.op_config import (
+    DatasetConfig,
+    FileConfig,
+    OpDestinationMapping,
+    generate_run_ops,
+)
 
 DOMAIN = "school"
 
@@ -298,6 +304,40 @@ def school_master__generate_silver_tables_sensor(
                     "adhoc__generate_silver_coverage_from_gold": DatasetConfig(
                         country_code=table.name.lower()
                     ),
+                }
+            ),
+            tags={"country": table.name.upper()},
+        )
+
+
+@sensor(
+    job=school_master__dq_checks_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def school_master__dq_checks_sensor(
+    context: SensorEvaluationContext, spark: PySparkResource
+):
+    s: SparkSession = spark.spark_session
+    gold_master_tables = s.catalog.listTables("school_master")
+
+    for table in gold_master_tables:
+        context.log.info(f"TABLE: {table.name}")
+
+        yield RunRequest(
+            run_key=table.name,
+            run_config=RunConfig(
+                ops={
+                    "adhoc__standalone_master_data_quality_checks": FileConfig(
+                        country_code=table.name.upper(),
+                        dataset_type="master",
+                        filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
+                        destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
+                        dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
+                        domain=DOMAIN,
+                        file_size_bytes=0,
+                        metastore_schema="school_master",
+                        tier=DataTier.GOLD,
+                    )
                 }
             ),
             tags={"country": table.name.upper()},

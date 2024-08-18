@@ -27,7 +27,7 @@ container_name = azure_blob_container_name
 def get_country_geometry(country_code_iso3: str):
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
-        filename = f"{country_code_iso3}.gpkg"
+        filename = f"{country_code_iso3.upper()}.gpkg"
         file = f"{DIRECTORY_LOCATION}{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:

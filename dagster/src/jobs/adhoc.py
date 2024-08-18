@@ -26,3 +26,8 @@ school_master__generate_silver_tables_job = define_asset_job(
         "adhoc__generate_silver_coverage_from_gold",
     ],
 )
+
+school_master__dq_checks_job = define_asset_job(
+    name="school_master__dq_checks_job",
+    selection="adhoc__standalone_master_data_quality_checks",
+)
