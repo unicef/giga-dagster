@@ -178,19 +178,19 @@ def school_master_coverage__post_manual_checks_sensor(
                 ),
                 "master": OpDestinationMapping(
                     source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
                 "reference": OpDestinationMapping(
                     source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_reference.db/{country_code.lower()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_reference.db/{country_code.upper()}",
                     metastore_schema="school_reference",
                     tier=DataTier.GOLD,
                 ),
                 "broadcast_master_release_notes": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
+                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),

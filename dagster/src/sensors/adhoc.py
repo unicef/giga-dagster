@@ -330,9 +330,9 @@ def school_master__dq_checks_sensor(
                     "adhoc__standalone_master_data_quality_checks": FileConfig(
                         country_code=table.name.upper(),
                         dataset_type="master",
-                        filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
-                        destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
-                        dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.lower()}",
+                        filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.upper()}",
+                        destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.upper()}",
+                        dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{table.name.upper()}",
                         domain=DOMAIN,
                         file_size_bytes=0,
                         metastore_schema="school_master",
