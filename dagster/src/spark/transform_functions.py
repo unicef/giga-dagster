@@ -20,6 +20,7 @@ from pyspark.sql.types import (
 
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
+from src.constants import UploadMode
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
@@ -687,7 +688,7 @@ if __name__ == "__main__":
     df = row_level_checks(
         df=df,
         silver=silver,
-        mode="update",
+        mode=UploadMode.UPDATE.value,
         dataset_type="geolocation",
         _country_code_iso3="BRA",
     )

@@ -15,6 +15,7 @@ from pyspark.sql.types import (
 )
 
 from dagster import OpExecutionContext
+from src.constants import UploadMode
 from src.data_quality_checks.column_relation import column_relation_checks
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
@@ -269,10 +270,11 @@ def row_level_checks(
             context,
         )
     elif dataset_type == "geolocation":
-        if mode == "Create":
-            df = create_checks(bronze=df, silver=silver)
-        elif mode == "Update":
-            df = update_checks(bronze=df, silver=silver)
+        if mode == UploadMode.CREATE.value:
+            df = create_checks(bronze=df, silver=silver, context=context)
+        elif mode == UploadMode.UPDATE.value:
+            df = update_checks(bronze=df, silver=silver, context=context)
+
         df = is_not_within_country(df, _country_code_iso3, context)
         df = similar_name_level_within_110_check(df, context)
         df = school_density_check(df, context)
