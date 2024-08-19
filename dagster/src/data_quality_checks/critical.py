@@ -85,12 +85,12 @@ def critical_error_checks(
     ordered_columns = []
     order_by_columns = []
 
-    if dataset_has_school_id_giga:
-        ordered_columns.append("school_id_giga")
-        order_by_columns.append("school_id_giga")
     if dataset_has_school_id_govt:
         ordered_columns.append("school_id_govt")
         order_by_columns.append("school_id_govt")
+    if dataset_has_school_id_giga:
+        ordered_columns.append("school_id_giga")
+        order_by_columns.append("school_id_giga")
 
     ordered_columns.extend(
         [
