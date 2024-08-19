@@ -219,11 +219,10 @@ def check_table_exists(
         schema_name,
         data_tier,
     )
-    table_path = (
+    table_path = ic(
         f"{settings.SPARK_WAREHOUSE_DIR}/{tiered_schema_name}.db/{table_name.lower()}"
     )
 
-    return ic(
-        spark.catalog.tableExists(table_name)
-        and DeltaTable.isDeltaTable(spark, table_path)
+    return ic(spark.catalog.tableExists(table_name, tiered_schema_name)) and ic(
+        DeltaTable.isDeltaTable(spark, table_path)
     )
