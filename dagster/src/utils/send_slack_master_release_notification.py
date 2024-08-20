@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 from src.settings import settings
 from src.utils.slack.send_slack_base import send_slack_base
 
+
 class SlackProps(BaseModel):
     country: str
     added: int
@@ -20,7 +21,8 @@ async def send_slack_master_release_notification(
     props: SlackProps
 ):
 
-    text = f"Country: {props.country}\n"
+    text = f"Environment: {settings.DEPLOY_ENV}\n"
+    text += f"Country: {props.country}\n"
 
     if props.added > 0:
         text += f"Added: {props.added}\n"
