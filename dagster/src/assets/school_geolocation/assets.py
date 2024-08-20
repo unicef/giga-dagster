@@ -6,9 +6,10 @@ from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import functions as f
-
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from pyspark.sql.types import StructType
 from sqlalchemy import select
 from src.constants import DataTier
@@ -110,8 +111,12 @@ def geolocation_bronze(
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
-    casted_silver = silver.withColumn('school_id_govt', f.col("school_id_govt").cast("long").cast("string"))
-    casted_bronze = df.withColumn('school_id_govt', f.col("school_id_govt").cast("long").cast("string"))
+    casted_silver = silver.withColumn(
+        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+    )
+    casted_bronze = df.withColumn(
+        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+    )
 
     df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
 
@@ -163,8 +168,12 @@ def geolocation_data_quality_results(
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
-    casted_silver = silver.withColumn('school_id_govt', f.col("school_id_govt").cast("long").cast("string"))
-    casted_bronze = geolocation_bronze.withColumn('school_id_govt', f.col("school_id_govt").cast("long").cast("string"))
+    casted_silver = silver.withColumn(
+        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+    )
+    casted_bronze = geolocation_bronze.withColumn(
+        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+    )
 
     dq_results = row_level_checks(
         df=casted_bronze,
