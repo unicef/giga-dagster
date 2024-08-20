@@ -14,18 +14,20 @@ class SlackProps(BaseModel):
     updateDate: str
     version: int
     rows: int
+
+
 async def send_slack_master_release_notification(
     props: SlackProps
 ):
 
-    text = f"Country: {props.country}"
+    text = f"Country: {props.country}\n"
 
     if props.added > 0:
-        text += f" Added: {props.added}"
+        text += f"Added: {props.added}\n"
     if props.modified > 0:
-        text += f" Modified: {props.modified}"
+        text += f" Modified: {props.modified}\n"
     if props.deleted > 0:
-        text += f" Deleted: {props.deleted}"
+        text += f" Deleted: {props.deleted}\n"
 
     text += f" Updated: {props.updateDate}"
     text += f" Version: {props.version}"

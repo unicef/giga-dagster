@@ -16,18 +16,6 @@ async def send_slack_base(
 ):
     logger = get_context_with_fallback_logger(context)
 
-    # response = requests.post(
-    #     settings.SLACK_WEBHOOK,
-    #     headers={
-    #         "Content-Type": "application/json",
-    #     },
-    #     json=props,
-    #     timeout=int(timedelta(minutes=2).total_seconds()),
-    # )
-    #
-    # if response.code//100 != 2:
-    #     logger.error(response.text)
-
     async with AsyncClient() as client:
         res = await client.post(
             settings.SLACK_WEBHOOK,

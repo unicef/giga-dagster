@@ -133,24 +133,6 @@ def create_education_level(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def create_connectivity_type(df: sql.DataFrame) -> sql.DataFrame:
-    connectivity_type_patterns = {'fibre': 'fiber|fibre|fibra|ftt|fttx|ftth|fttp|gpon|epon|fo|Фибер|optic|птички',
-                                  'copper': 'adsl|dsl|copper|hdsl|vdsl',
-                                  'coaxial': 'coax|coaxial',
-                                  'cellular': 'cell|cellular|celular|2g|3g|4g|5g|lte|gsm|umts|cdma|mobile|mobie',
-                                  'p2p wireless': 'p2p|radio|microwave|ptmp|micro.wave|wimax',
-                                  'p2mp wireless': 'p2mp',
-                                  'satellite': 'satellite|satelite|vsat|geo|leo',
-                                  'xdsl': 'xdsl',
-                                  'wired': 'wired|ethernet|kablovski',
-                                  'other': 'TVWS|other|ethernet',
-                                  'unknown': 'unknown|null|nan|n/a'
-                                  }
-
-
-
-
-
 def create_uzbekistan_school_name(df: sql.DataFrame) -> sql.DataFrame:
     school_name_col = "school_name"
     district_col = "district"
