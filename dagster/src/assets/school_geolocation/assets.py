@@ -10,7 +10,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StructType
+from pyspark.sql.types import LongType, StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -112,10 +112,18 @@ def geolocation_bronze(
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
     casted_bronze = df.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
 
     df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
@@ -169,10 +177,18 @@ def geolocation_data_quality_results(
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
     casted_bronze = geolocation_bronze.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast("long").cast("string")
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
 
     dq_results = row_level_checks(
