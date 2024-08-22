@@ -49,6 +49,17 @@ def critical_error_checks(
             ]
         )
 
+    human_readeable_mapping = {
+        "dq_is_null_mandatory-school_id_govt": "Non-nullable column school_id_govt is null",
+        "dq_duplicate-school_id_govt": "Column school_id_govt has a duplicate",
+        "dq_duplicate-school_id_giga": "Column school_id_giga has a duplicate",
+        "dq_is_invalid_range-latitude": "Column latitude is not between -90 and 90",
+        "dq_is_invalid_range-longitude": "Column longitude is not between -180 and 180",
+        "dq_is_not_within_country": "Coordinates is not within the country",
+        "dq_is_not_create": "Tried creating a new school_id_giga that already exists - must use UPDATE instead",
+        "dq_is_not_update": "Tried updating a school_id_giga that does not exist - must use CREATE instead",
+    }
+
     df = df.withColumns(
         {
             "dq_has_critical_error": f.when(
@@ -60,14 +71,13 @@ def critical_error_checks(
                 *[
                     f.when(
                         f.col(c) == 1,
-                        f.lit(c[3:]),  # remove `dq_` prefix
+                        f.lit(human_readeable_mapping.get(c, c[3:])),
                     )
                     for c in critial_column_dq_checks
                 ],
             ),
         }
     )
-
     rest_columns = df.columns
     dataset_has_school_id_giga = "school_id_giga" in rest_columns
     dataset_has_school_id_govt = "school_id_govt" in rest_columns
@@ -84,7 +94,6 @@ def critical_error_checks(
 
     ordered_columns = []
     order_by_columns = []
-
     if dataset_has_school_id_govt:
         ordered_columns.append("school_id_govt")
         order_by_columns.append("school_id_govt")
