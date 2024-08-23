@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import country_converter as coco
+from dagster import OpExecutionContext
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark import sql
@@ -9,7 +10,6 @@ from pyspark.sql import (
     functions as f,
 )
 
-from dagster import OpExecutionContext
 from src.internal.groups import GroupsApi
 from src.settings import DeploymentEnvironment, settings
 from src.utils.delta import get_change_operation_counts
@@ -18,10 +18,9 @@ from src.utils.send_email_master_release_notification import (
     EmailProps,
     send_email_master_release_notification,
 )
-
-from dagster.src.utils.send_slack_master_release_notification import (
+from src.utils.send_slack_master_release_notification import (
     SlackProps,
-    send_slack_master_release_notification
+    send_slack_master_release_notification,
 )
 
 

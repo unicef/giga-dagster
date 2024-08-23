@@ -1,7 +1,4 @@
-from datetime import datetime
-
-from loguru import logger
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from src.settings import settings
 from src.utils.slack.send_slack_base import send_slack_base
@@ -17,10 +14,7 @@ class SlackProps(BaseModel):
     rows: int
 
 
-async def send_slack_master_release_notification(
-    props: SlackProps
-):
-
+async def send_slack_master_release_notification(props: SlackProps):
     text = f"Environment: {settings.DEPLOY_ENV}\n"
     text += f"Country: {props.country}\n"
 

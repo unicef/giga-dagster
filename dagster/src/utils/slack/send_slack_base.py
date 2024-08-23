@@ -1,11 +1,6 @@
-from datetime import timedelta
-from typing import Any
-
-import requests
-from httpx import AsyncClient
-from requests import HTTPError, JSONDecodeError
-
 from dagster import OpExecutionContext
+from httpx import AsyncClient
+
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
@@ -19,7 +14,7 @@ async def send_slack_base(
     async with AsyncClient() as client:
         res = await client.post(
             settings.SLACK_WEBHOOK,
-            json={'text': text},
+            json={"text": text},
         )
         if res.is_error:
             logger.error(res.json())
