@@ -17,7 +17,7 @@ from azure.storage.filedatalake import (
     FileProperties,
     PathProperties,
 )
-from dagster import ConfigurableResource, OutputContext
+from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
@@ -83,6 +83,35 @@ class ADLSFileClient(ConfigurableResource):
             return spark.read.csv(**reader_params)
 
         return spark.read.csv(**reader_params, schema=schema)
+
+    def upload_pandas_dataframe_as_file_from_asset(
+        self,
+        context: OpExecutionContext,
+        data: pd.DataFrame,
+        filepath: str,
+    ) -> None:
+        ext = Path(filepath).suffix
+        if not ext:
+            raise RuntimeError(f"Cannot infer format of file {filepath}")
+
+        file_client = _adls.get_file_client(filepath)
+        match ext:
+            case ".csv" | ".xls" | ".xlsx":
+                bytes_data = data.to_csv(index=False).encode("utf-8-sig")
+            case ".json":
+                bytes_data = data.to_json(index=False, indent=2).encode()
+            case ".parquet":
+                bytes_data = data.to_parquet(index=False)
+            case _:
+                raise OSError(f"Unsupported format for file {filepath}")
+
+        config = FileConfig(**context._step_execution_context.op_config)
+        metadata = config.metadata
+        metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
+
+        with BytesIO(bytes_data) as buffer:
+            buffer.seek(0)
+            file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
     def upload_pandas_dataframe_as_file(
         self,
