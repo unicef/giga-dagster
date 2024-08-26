@@ -111,7 +111,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
         "dq_duplicate-school_id_govt": "Does column school_id_govt have a duplicate",
         "dq_duplicate-school_id_giga": "Does column school_id_giga have a duplicate",
         "dq_is_invalid_range-latitude": "Are columns latitude not between -90 and 90",
-        "dq_is_invalid_range-longitude": "ARe columns longitude not between -180 and 180",
+        "dq_is_invalid_range-longitude": "Are columns longitude not between -180 and 180",
         "dq_is_not_within_country": "Are coordinates not within the country",
         "dq_is_not_create": "Did the user try to update a record even when selecting the create function",
         "dq_is_not_update": "Did the user try to create a record even when selecting the update function",
