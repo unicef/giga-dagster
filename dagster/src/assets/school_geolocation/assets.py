@@ -258,11 +258,12 @@ async def geolocation_data_quality_results_summary(
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             geolocation_data_quality_results,
         ),
-        geolocation_bronze,
+        df_bronze=geolocation_bronze,
+        df_data_quality_checks=geolocation_data_quality_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
