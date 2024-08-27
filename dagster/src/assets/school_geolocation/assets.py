@@ -33,6 +33,9 @@ from src.utils.adls import (
 from src.utils.dataframe import (
     convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
+from src.utils.datahub.create_validation_tab import (
+    datahub_emit_assertions_with_exception_catcher,
+)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -47,6 +50,7 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.send_email_dq_report import send_email_dq_report_with_config
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
@@ -259,20 +263,20 @@ async def geolocation_data_quality_results_summary(
         geolocation_bronze,
     )
 
-    # datahub_emit_assertions_with_exception_catcher(
-    #     context=context, dq_summary_statistics=dq_summary_statistics
-    # )
-    # datahub_emit_metadata_with_exception_catcher(
-    #     context=context,
-    #     config=config,
-    #     spark=spark,
-    # )
+    datahub_emit_assertions_with_exception_catcher(
+        context=context, dq_summary_statistics=dq_summary_statistics
+    )
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+    )
 
-    # await send_email_dq_report_with_config(
-    #     dq_results=dq_summary_statistics,
-    #     config=config,
-    #     context=context,
-    # )
+    await send_email_dq_report_with_config(
+        dq_results=dq_summary_statistics,
+        config=config,
+        context=context,
+    )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
