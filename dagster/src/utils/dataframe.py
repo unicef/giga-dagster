@@ -13,7 +13,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     bronze: sql.DataFrame,
     config: FileConfig,
     context: OpExecutionContext,
-) -> sql.DataFrame:
+):
     config_expectations_instance = Config()
     adls_client = ADLSFileClient()
 
