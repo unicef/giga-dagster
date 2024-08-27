@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from pyspark import sql
+from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
 from src.spark.config_expectations import Config
@@ -18,14 +19,14 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     adls_client = ADLSFileClient()
 
     columns_to_rename = {
-        "dq_is_not_within_country": "Are the coordinates not within the country",
-        "dq_duplicate_similar_name_same_level_within_110m_radius": "Are there duplicates across educational_level, lat_110, long_110 that has similar names as well",
-        "dq_is_school_density_greater_than_5": "Is the the school density within the area is greater than 5.",
+        "dq_is_not_within_country": "Are the coordinates within the country",
+        "dq_duplicate_similar_name_same_level_within_110m_radius": "Does the check pass with no duplicates across educational_level, lat_110, long_110 that has similar names as well",
+        "dq_is_school_density_greater_than_5": "Is the school density within the area less than 5.",
     }
 
     duplicate_columns = ["school_id_govt", "school_id_giga"]
     duplicate_desc = {
-        f"dq_duplicate-{column}": f"Does column {column} have a duplicate"
+        f"dq_duplicate-{column}": f"Is the column {column} unique"
         for column in duplicate_columns
     }
 
@@ -71,12 +72,12 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     }
 
     string_length_desc = {
-        f"dq_is_string_more_than_255_characters-{column}": f"Is {column} more than 255 characters long"
+        f"dq_is_string_more_than_255_characters-{column}": f"Is {column} less than 255 characters long"
         for column in bronze.columns
     }
 
     duplicate_all_except_checks_desc = {
-        "dq_duplicate_all_except_school_code": "Are there duplicates across all columns except for School ID",
+        "dq_duplicate_all_except_school_code": "Does the check pass with no duplicates across all columns except for School ID",
     }
 
     precision_check_desc = {
@@ -85,12 +86,12 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     }
 
     duplicate_set_checks_desc = {
-        f"dq_duplicate_set-{'_'.join(column)}": f"Are there duplicates across these columns [{column}]"
+        f"dq_duplicate_set-{'_'.join(column)}": f"Does the check pass with no duplicates across these columns [{column}]"
         for column in config_expectations_instance.UNIQUE_SET_COLUMNS
     }
 
     duplicate_name_level_110_check_desc = {
-        "dq_duplicate_name_level_within_110m_radius": "Are there duplicates across name, level, lat_110, and long_110",
+        "dq_duplicate_name_level_within_110m_radius": "Does the check pass with no duplicates across name, level, lat_110, and long_110",
     }
 
     column_relation_checks_desc = {
@@ -108,17 +109,17 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
 
     critical_error_checks_desc = {
         "dq_is_null_mandatory-school_id_govt": "Is the Non-nullable column school_id_govt null",
-        "dq_duplicate-school_id_govt": "Does column school_id_govt have a duplicate",
-        "dq_duplicate-school_id_giga": "Does column school_id_giga have a duplicate",
-        "dq_is_invalid_range-latitude": "Are columns latitude not between -90 and 90",
-        "dq_is_invalid_range-longitude": "Are columns longitude not between -180 and 180",
-        "dq_is_not_within_country": "Are coordinates not within the country",
-        "dq_is_not_create": "Did the user try to update a record even when selecting the create function",
-        "dq_is_not_update": "Did the user try to create a record even when selecting the update function",
+        "dq_duplicate-school_id_govt": "Does the check pass with no duplicates in the school_id_govt column",
+        "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
+        "dq_is_invalid_range-latitude": "Does the check pass with latitude between -90 and 90",
+        "dq_is_invalid_range-longitude": "Does the check pass with longitude between -180 and 180",
+        "dq_is_not_within_country": "Are the coordinates within the country",
+        "dq_is_not_create": "Did the user correctly use CREATE to add a non existing record",
+        "dq_is_not_update": "Did the user correctly use UPDATE to update an existing record",
     }
 
     fb_percent_sum_to_100_checks_desc = {
-        "dq_is_sum_of_percent_not_equal_100": "Is the sum of percent_2G, percent_3G, and percent_4G not equal to 100"
+        "dq_is_sum_of_percent_not_equal_100": "Does the check pass with  te sum of percent_2G, percent_3G, and percent_4G being equal to 100"
     }
 
     # combine {dq_codes : description} mapping
@@ -142,6 +143,13 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     # create new dataframe with renamed columns
     for existing_col, new_col in columns_to_rename.items():
         if existing_col in dq_results.columns:
+            dq_results = dq_results.withColumn(
+                existing_col,
+                f.when(f.col(existing_col) == 1, "No").otherwise(
+                    f.when(f.col(existing_col) == 0, "Yes")
+                ),
+            )
+
             dq_results = dq_results.withColumnRenamed(existing_col, new_col)
     dq_with_renamed_headers = dq_results
     dq_with_renamed_headers_pandas = dq_with_renamed_headers.toPandas()
