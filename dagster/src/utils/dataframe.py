@@ -152,7 +152,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     country_code = upload_path.parts[3]
     file_name = upload_path.name
 
-    temp_filepath = f"data-quality-results/{dataset}/dq-human-readeable-descriptions/{country_code}/{file_name}"
+    temp_filepath = f"data-quality-results/{dataset}/dq-human-readable-descriptions/{country_code}/{file_name}"
     adls_client.upload_pandas_dataframe_as_file(
         context=context, data=dq_with_renamed_headers_pandas, filepath=temp_filepath
     )
