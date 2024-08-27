@@ -20,13 +20,13 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
 
     columns_to_rename = {
         "dq_is_not_within_country": "Are the coordinates within the country",
-        "dq_duplicate_similar_name_same_level_within_110m_radius": "Does the check pass with no duplicates across educational_level, lat_110, long_110 that has similar names as well",
+        "dq_duplicate_similar_name_same_level_within_110m_radius": "Does the school have no similar name, education_level, lat, and long within a 110m radius",
         "dq_is_school_density_greater_than_5": "Is the school density within the area less than 5.",
     }
 
     duplicate_columns = ["school_id_govt", "school_id_giga"]
     duplicate_desc = {
-        f"dq_duplicate-{column}": f"Is the column {column} unique"
+        f"dq_duplicate-{column}": f"Does the column {column} contain unique values"
         for column in duplicate_columns
     }
 
@@ -91,7 +91,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     }
 
     duplicate_name_level_110_check_desc = {
-        "dq_duplicate_name_level_within_110m_radius": "Does the check pass with no duplicates across name, level, lat_110, and long_110",
+        "dq_duplicate_name_level_within_110m_radius": "Does the school have no duplicate name, level, lat, and long within a 110m radius",
     }
 
     column_relation_checks_desc = {
@@ -111,15 +111,15 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
         "dq_is_null_mandatory-school_id_govt": "Is the Non-nullable column school_id_govt null",
         "dq_duplicate-school_id_govt": "Does the check pass with no duplicates in the school_id_govt column",
         "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
-        "dq_is_invalid_range-latitude": "Does the check pass with latitude between -90 and 90",
-        "dq_is_invalid_range-longitude": "Does the check pass with longitude between -180 and 180",
+        "dq_is_invalid_range-latitude": "Is the school's latitude between -90 and 90",
+        "dq_is_invalid_range-longitude": "Is the school's longitude between -180 and 180",
         "dq_is_not_within_country": "Are the coordinates within the country",
         "dq_is_not_create": "Did the user correctly use CREATE to add a non existing record",
         "dq_is_not_update": "Did the user correctly use UPDATE to update an existing record",
     }
 
     fb_percent_sum_to_100_checks_desc = {
-        "dq_is_sum_of_percent_not_equal_100": "Does the check pass with  te sum of percent_2G, percent_3G, and percent_4G being equal to 100"
+        "dq_is_sum_of_percent_not_equal_100": "Is the sum of percent_2G, percent_3G, and percent_4G columns equal to 100"
     }
 
     # combine {dq_codes : description} mapping
