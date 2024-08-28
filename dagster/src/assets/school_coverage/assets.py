@@ -171,8 +171,9 @@ async def coverage_data_quality_results_summary(
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(s, coverage_data_quality_results),
-        df_raw,
+        df_aggregated=aggregate_report_spark_df(s, coverage_data_quality_results),
+        df_bronze=df_raw,
+        df_data_quality_checks=coverage_data_quality_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(

@@ -70,7 +70,6 @@ def qos_school_list_raw(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_bronze(
-    context: OpExecutionContext,
     qos_school_list_raw: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
@@ -168,18 +167,18 @@ def qos_school_list_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def qos_school_list_data_quality_results_summary(
-    context: OpExecutionContext,
     qos_school_list_bronze: sql.DataFrame,
     qos_school_list_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             qos_school_list_data_quality_results,
         ),
-        qos_school_list_bronze,
+        df_bronze=qos_school_list_bronze,
+        df_data_quality_checks=qos_school_list_data_quality_results,
     )
 
     # datahub_emit_assertions_with_exception_catcher(
@@ -190,10 +189,8 @@ def qos_school_list_data_quality_results_summary(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_passed_rows(
-    context: OpExecutionContext,
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
         qos_school_list_data_quality_results,
@@ -224,10 +221,8 @@ def qos_school_list_dq_passed_rows(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_failed_rows(
-    context: OpExecutionContext,
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_list_data_quality_results,

@@ -47,7 +47,9 @@ def adhoc__standalone_master_data_quality_checks(
         "Row level checks completed",
     )
     dq_summary = aggregate_report_json(
-        aggregate_report_spark_df(s, dq_checked), dq_checked
+        df_aggregated=aggregate_report_spark_df(s, dq_checked),
+        df_bronze=dq_checked,
+        df_data_quality_checks=dq_checked,
     )
 
     latest_version = (dt.history().orderBy(f.col("version").desc()).first()).version

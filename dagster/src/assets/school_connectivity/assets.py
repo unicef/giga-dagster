@@ -231,7 +231,7 @@ def qos_school_connectivity_data_quality_results(
         qos_school_connectivity_bronze,
         "qos",
         country_code,
-        context,
+        context=context,
     )
 
     dq_pandas = dq_results.toPandas()
@@ -246,18 +246,18 @@ def qos_school_connectivity_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def qos_school_connectivity_data_quality_results_summary(
-    context: OpExecutionContext,
     qos_school_connectivity_raw: sql.DataFrame,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             qos_school_connectivity_data_quality_results,
         ),
-        qos_school_connectivity_raw,
+        df_bronze=qos_school_connectivity_raw,
+        df_data_quality_checks=qos_school_connectivity_data_quality_results,
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
@@ -265,10 +265,8 @@ def qos_school_connectivity_data_quality_results_summary(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_connectivity_dq_passed_rows(
-    context: OpExecutionContext,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
         qos_school_connectivity_data_quality_results,
@@ -287,10 +285,8 @@ def qos_school_connectivity_dq_passed_rows(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_connectivity_dq_failed_rows(
-    context: OpExecutionContext,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_connectivity_data_quality_results,

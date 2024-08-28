@@ -372,17 +372,17 @@ def adhoc__reference_dq_checks_failed(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def adhoc__master_dq_checks_summary(
-    context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> dict | list[dict]:
     df_summary = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             adhoc__master_data_quality_checks,
         ),
-        adhoc__master_data_quality_checks,
+        df_bronze=adhoc__master_data_quality_checks,
+        df_data_quality_checks=adhoc__master_data_quality_checks,
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
