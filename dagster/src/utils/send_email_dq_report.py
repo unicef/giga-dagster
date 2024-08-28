@@ -42,7 +42,7 @@ async def send_email_dq_report(
         endpoint="email/dq-report",
         props=metadata,
         subject="Giga Data Quality Report",
-        recipients=[recipients],
+        recipients=recipients,
         context=context,
     )
 
