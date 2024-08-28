@@ -379,7 +379,7 @@ def add_admin_columns(  # noqa: C901
         f.coalesce(
             f.col(f"{admin_level}_en"),
             f.col(f"{admin_level}_native"),
-            f.col("Unknown"),
+            f.lit("Unknown"),
         ),
     ).drop(f"{admin_level}_en", f"{admin_level}_native")
 

@@ -145,6 +145,7 @@ def geolocation_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(df_pandas),
         },
@@ -242,6 +243,7 @@ def geolocation_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "preview": get_table_preview(dq_pandas),
         },
     )
@@ -308,6 +310,7 @@ def geolocation_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -342,6 +345,7 @@ def geolocation_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -377,11 +381,13 @@ def geolocation_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(geolocation_dq_passed_rows)
+    row_count = 0 if staging is None else staging.count()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": MetadataValue.int(row_count),
             "preview": get_table_preview(staging),
         },
     )

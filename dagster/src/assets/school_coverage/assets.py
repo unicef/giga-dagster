@@ -148,6 +148,7 @@ def coverage_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(dq_pandas),
         },
@@ -217,6 +218,7 @@ def coverage_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -248,6 +250,7 @@ def coverage_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -297,6 +300,7 @@ def coverage_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -332,11 +336,13 @@ def coverage_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(coverage_bronze)
+    row_count = 0 if staging is None else staging.count()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": row_count,
             "preview": get_table_preview(staging),
         },
     )
@@ -373,6 +379,7 @@ def coverage_delete_staging(
             None,
             metadata={
                 **get_output_metadata(config),
+                "row_count": staging.count(),
                 "preview": get_table_preview(staging),
                 "delete_row_ids": MetadataValue.json(delete_row_ids),
             },
@@ -382,6 +389,7 @@ def coverage_delete_staging(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": 0,
             "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

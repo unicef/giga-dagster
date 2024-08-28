@@ -59,7 +59,12 @@ def qos_school_list_raw(
     # )
 
     return Output(
-        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df),
+            "preview": get_table_preview(df),
+        },
     )
 
 
@@ -109,6 +114,7 @@ def qos_school_list_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(df_pandas),
         },
@@ -154,6 +160,7 @@ def qos_school_list_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "preview": get_table_preview(dq_pandas),
         },
     )
@@ -209,6 +216,7 @@ def qos_school_list_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -231,6 +239,7 @@ def qos_school_list_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -256,6 +265,7 @@ def qos_school_list_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(upstream_df=qos_school_list_dq_passed_rows)
+    row_count = 0 if staging is None else staging.count()
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
@@ -272,6 +282,7 @@ def qos_school_list_staging(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": row_count,
             "preview": get_table_preview(staging),
         },
     )
