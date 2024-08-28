@@ -31,12 +31,12 @@ async def send_email_dq_report(
         "dataQualityCheck": dq_results,
     }
 
+    admins = GroupsApi.list_role_members("Admin")
+    recipients = [uploader_email, *admins]
+
     get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
     get_context_with_fallback_logger(context).info(metadata)
-
-    admins = GroupsApi.list_role_members("Admin")
-
-    recipients = [uploader_email, *admins]
+    get_context_with_fallback_logger(context).info(f"Recipients: {recipients}")
 
     await send_email_base(
         endpoint="email/dq-report",
