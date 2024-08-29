@@ -2,7 +2,6 @@ version: '3'
 
 dotenv:
   - ./dagster/.env
-  - ./oauth2-proxy/.env
   - ./spark/.env
   - ./hive/.env
 
