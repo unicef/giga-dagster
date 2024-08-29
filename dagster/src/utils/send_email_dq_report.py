@@ -32,7 +32,7 @@ async def send_email_dq_report(
     }
 
     admins = GroupsApi.list_role_members("Admin")
-    recipients = [uploader_email, *admins]
+    recipients = list({uploader_email, *admins})
 
     get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
     get_context_with_fallback_logger(context).info(metadata)
