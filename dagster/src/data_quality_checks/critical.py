@@ -6,6 +6,9 @@ from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
 from src.constants import UploadMode
+from src.utils.data_quality_descriptions import (
+    handle_rename_dq_has_critical_error_column,
+)
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -49,16 +52,9 @@ def critical_error_checks(
             ]
         )
 
-    human_readeable_mapping = {
-        "dq_is_null_mandatory-school_id_govt": "Non-nullable column school_id_govt is null",
-        "dq_duplicate-school_id_govt": "Column school_id_govt has a duplicate",
-        "dq_duplicate-school_id_giga": "Column school_id_giga has a duplicate",
-        "dq_is_invalid_range-latitude": "Column latitude is not between -90 and 90",
-        "dq_is_invalid_range-longitude": "Column longitude is not between -180 and 180",
-        "dq_is_not_within_country": "Coordinates is not within the country",
-        "dq_is_not_create": "Tried creating a new school_id_giga that already exists - must use UPDATE instead",
-        "dq_is_not_update": "Tried updating a school_id_giga that does not exist - must use CREATE instead",
-    }
+    full_human_readable_mapping = handle_rename_dq_has_critical_error_column(
+        config_column_list
+    )
 
     df = df.withColumns(
         {
@@ -71,7 +67,7 @@ def critical_error_checks(
                 *[
                     f.when(
                         f.col(c) == 1,
-                        f.lit(human_readeable_mapping.get(c, c[3:])),
+                        f.lit(full_human_readable_mapping.get(c, c[3:])),
                     )
                     for c in critial_column_dq_checks
                 ],
