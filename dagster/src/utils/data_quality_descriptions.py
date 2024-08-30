@@ -207,10 +207,6 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     adls_client = ADLSFileClient()
     columns = bronze.columns
     columns_to_rename = {}
-    print(
-        "➡ dagster/src/utils/data_quality_descriptions.py:207 dataset_type:",
-        dataset_type,
-    )
 
     if dataset_type == "geolocation":
         columns_to_rename = {
