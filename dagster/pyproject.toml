@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "giga-dagster"
-version = "0.1.0"
+version = "1.0.0"
 description = ""
 authors = ["Thinking Machines <hello@thinkingmachin.es>"]
 readme = "../docs/README.md"
