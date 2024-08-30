@@ -486,6 +486,7 @@ class Config(BaseSettings):
             **self.VALUES_RANGE_REFERENCE,
             **self.VALUES_RANGE_GEOLOCATION,
             **self.VALUES_RANGE_COVERAGE,
+            **self.VALUES_RANGE_COVERAGE_ITU,
         }
 
     UNIQUE_SET_COLUMNS: list[list[str]] = [
