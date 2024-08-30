@@ -30,6 +30,9 @@ from src.spark.transform_functions import (
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.data_quality_descriptions import (
+    convert_dq_checks_to_human_readeable_descriptions_and_upload,
+)
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -96,6 +99,7 @@ def coverage_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     country_code = config.country_code
+    dataset_type = f"coverage_{source}"
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
@@ -106,10 +110,10 @@ def coverage_data_quality_results(
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
     dq_results = row_level_checks(
-        df,
-        f"coverage_{source}",
-        config.country_code,
-        context,
+        df=df,
+        dataset_type=dataset_type,
+        _country_code_iso3=country_code,
+        context=context,
     )
 
     config.metadata.update({"column_mapping": column_mapping})
@@ -137,10 +141,12 @@ def coverage_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
+    convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=dq_results,
+        bronze=df,
+        dataset_type=dataset_type,
         config=config,
-        spark=spark,
+        context=context,
     )
 
     dq_pandas = dq_results.toPandas()

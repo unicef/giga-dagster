@@ -30,7 +30,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.dataframe import (
+from src.utils.data_quality_descriptions import (
     convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
 from src.utils.datahub.create_validation_tab import (
@@ -163,6 +163,7 @@ def geolocation_data_quality_results(
     country_code = config.country_code
     schema_name = config.metastore_schema
     id = config.filename_components.id
+    dataset_type = "geolocation"
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
@@ -198,7 +199,7 @@ def geolocation_data_quality_results(
     dq_results = row_level_checks(
         df=casted_bronze,
         silver=casted_silver,
-        dataset_type="geolocation",
+        dataset_type=dataset_type,
         _country_code_iso3=country_code,
         mode=config.metadata["mode"],
         context=context,
@@ -228,7 +229,11 @@ def geolocation_data_quality_results(
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        dq_results=dq_results, bronze=casted_bronze, config=config, context=context
+        dq_results=dq_results,
+        dataset_type=dataset_type,
+        bronze=casted_bronze,
+        config=config,
+        context=context,
     )
 
     dq_pandas = dq_results.toPandas()
