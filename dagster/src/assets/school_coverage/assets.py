@@ -73,7 +73,7 @@ def coverage_raw(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_data_quality_results(
-    context,
+    context: OpExecutionContext,
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
@@ -163,7 +163,7 @@ def coverage_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 async def coverage_data_quality_results_summary(
-    context,
+    context: OpExecutionContext,
     config: FileConfig,
     coverage_raw: bytes,
     coverage_data_quality_results: sql.DataFrame,
