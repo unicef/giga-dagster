@@ -65,9 +65,9 @@ pyarrow-hotfix = "^0.5"
 roapi = "0.9.0"
 
 [tool.poetry.group.notebook.dependencies]
-jupyterlab = "^4.0.8"
+jupyterlab = ">=4.2.5"
 jupyter = "^1.0.0"
-notebook = "^7.0.6"
+notebook = ">=7.2.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.3.4"
