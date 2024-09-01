@@ -76,3 +76,13 @@ datahub__add_business_glossary_job = define_asset_job(
     name="datahub__add_business_glossary_job",
     selection=["datahub__add_business_glossary"],
 )
+
+
+datahub__purge_assertions_job = define_asset_job(
+    name="datahub__purge_assertions_job",
+    selection=[
+        "datahub__list_assertions",
+        "datahub__soft_delete_assertions",
+        "datahub__hard_delete_assertions",
+    ],
+)

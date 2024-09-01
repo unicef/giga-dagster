@@ -1,13 +1,16 @@
 from http import HTTPStatus
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
-from src.utils.datahub.graphql import datahub_graph_client as emitter
+from src.utils.datahub.graphql import (
+    datahub_graph_client as emitter,
+)
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
@@ -15,7 +18,7 @@ from src.utils.datahub.list_datasets import list_datasets_by_filter
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset
@@ -202,3 +205,64 @@ def datahub__hard_delete_qos_datasets(
 def datahub__add_business_glossary(context: OpExecutionContext) -> None:
     context.log.info("ADDING BUSINESS GLOSSARY TO DATAHUB...")
     add_business_glossary()
+
+
+class DeleteAssertionsConfig(Config):
+    hard: bool = Field(False, description="Whether to hard delete assertions.")
+
+
+@asset
+def datahub__list_assertions() -> Output[list[str]]:
+    assertion_urns = list(emitter.get_urns_by_filter(entity_types=["assertion"]))
+    return Output(
+        assertion_urns,
+        metadata={
+            "count": len(assertion_urns),
+            "preview": MetadataValue.json(assertion_urns[:10]),
+        },
+    )
+
+
+@asset
+def datahub__soft_delete_assertions(
+    context: OpExecutionContext,
+    datahub__list_assertions: list[str],
+) -> Output[list[str]]:
+    for i, urn in enumerate(datahub__list_assertions):
+        if (i + 1) % 100 == 0:
+            context.log.info(
+                f"Soft deleting {i + 1} of {len(datahub__list_assertions)} assertions..."
+            )
+        emitter.soft_delete_entity(urn)
+
+    return Output(
+        datahub__list_assertions,
+        metadata={
+            "count": len(datahub__list_assertions),
+        },
+    )
+
+
+@asset
+def datahub__hard_delete_assertions(
+    context: OpExecutionContext,
+    datahub__soft_delete_assertions: list[str],
+    config: DeleteAssertionsConfig,
+) -> Output[None]:
+    if not config.hard:
+        context.log.warning("`hard`=False, skipping hard delete.")
+        return Output(None)
+
+    for i, urn in enumerate(datahub__soft_delete_assertions):
+        if (i + 1) % 100 == 0:
+            context.log.info(
+                f"Soft deleting {i + 1} of {len(datahub__soft_delete_assertions)} assertions..."
+            )
+        emitter.soft_delete_entity(urn)
+
+    return Output(
+        None,
+        metadata={
+            "count": len(datahub__soft_delete_assertions),
+        },
+    )
