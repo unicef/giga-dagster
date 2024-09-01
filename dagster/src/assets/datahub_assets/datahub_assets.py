@@ -231,7 +231,7 @@ def datahub__soft_delete_assertions(
     for i, urn in enumerate(datahub__list_assertions):
         if (i + 1) % 100 == 0:
             context.log.info(
-                f"Soft deleting {i + 1} of {len(datahub__list_assertions)} assertions..."
+                f"Soft deleting {i + 1:,} of {len(datahub__list_assertions):,} assertions..."
             )
         emitter.soft_delete_entity(urn)
 
@@ -256,7 +256,7 @@ def datahub__hard_delete_assertions(
     for i, urn in enumerate(datahub__soft_delete_assertions):
         if (i + 1) % 100 == 0:
             context.log.info(
-                f"Soft deleting {i + 1} of {len(datahub__soft_delete_assertions)} assertions..."
+                f"Hard deleting {i + 1:,} of {len(datahub__soft_delete_assertions):,} assertions..."
             )
         emitter.soft_delete_entity(urn)
 
