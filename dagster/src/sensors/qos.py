@@ -6,7 +6,7 @@ from croniter import croniter
 from models.qos_apis import SchoolConnectivity, SchoolList
 from sqlalchemy.orm import joinedload
 
-from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
+from dagster import RunConfig, RunRequest, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.qos import (
     qos_school_connectivity__automated_data_checks_job,
@@ -40,9 +40,7 @@ def generate_dagster_config(api_data: dict[str, str]) -> dict[str, str]:
     if settings.IN_PRODUCTION
     else 60,
 )
-def qos_school_list__new_apis_sensor(
-    context: SensorEvaluationContext,
-):
+def qos_school_list__new_apis_sensor():
     DATASET_TYPE = "school-list"
     DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
@@ -118,7 +116,6 @@ def qos_school_list__new_apis_sensor(
                 metadata={},
                 file_size_bytes=0,
                 domain=DATAHUB_DOMAIN,
-                # domain=DOMAIN,
                 dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 country_code=country_code,
                 database_data=row_data.json(),
@@ -129,7 +126,10 @@ def qos_school_list__new_apis_sensor(
             yield RunRequest(
                 run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
-                tags={"country": country_code},
+                tags={
+                    "country": country_code,
+                    "api_name": sanitized_api_name,
+                },
             )
 
             count += 1
@@ -144,7 +144,7 @@ def qos_school_list__new_apis_sensor(
     if settings.IN_PRODUCTION
     else 60,
 )
-def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
+def qos_school_connectivity__new_apis_sensor():
     DATASET_TYPE = "school-connectivity"
     DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 
@@ -236,7 +236,6 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
             metadata={},
             file_size_bytes=0,
             domain=DATAHUB_DOMAIN,
-            # domain=DOMAIN,
             dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
             country_code=country_code,
             database_data=row_data.json(),
@@ -247,7 +246,10 @@ def qos_school_connectivity__new_apis_sensor(context: SensorEvaluationContext):
         yield RunRequest(
             run_key=run_key,
             run_config=RunConfig(ops=run_ops),
-            tags={"country": country_code},
+            tags={
+                "country": country_code,
+                "api_name": sanitized_api_name,
+            },
         )
 
         count += 1
