@@ -11,6 +11,7 @@ from sqlalchemy import select, update
 from dagster import OpExecutionContext
 from src.constants import DataTier
 from src.internal.merge import partial_in_cluster_merge
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
@@ -234,11 +235,7 @@ class StagingStep:
         # Sync changes in columns & data types
         if has_schema_changed:
             self.context.log.info("Updating schema...")
-            empty_data = self.spark.sparkContext.emptyRDD()
-            updated_schema_df = self.spark.createDataFrame(
-                data=empty_data, schema=updated_schema
-            )
-
+            updated_schema_df = self.spark.createDataFrame([], schema=updated_schema)
             (
                 updated_schema_df.write.option("mergeSchema", "true")
                 .format("delta")
@@ -258,6 +255,7 @@ class StagingStep:
 
     def standard_transforms(self, df: sql.DataFrame):
         self.context.log.info("Performing standard transforms...")
+        df = add_missing_columns(df, get_schema_columns(self.spark, self.schema_name))
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
 
