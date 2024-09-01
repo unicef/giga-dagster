@@ -13,7 +13,7 @@ from src.settings import settings
 def add_platform_metadata(
     platform: str,
     display_name: str,
-    logo_url: AnyUrl = None,
+    logo_url: AnyUrl | str = None,
     filepath_delimiter: str = "/",
 ) -> None:
     emitter = DatahubRestEmitter(
@@ -35,7 +35,7 @@ def add_platform_metadata(
     data_platform_info = DataPlatformInfo(
         name=platform,
         displayName=display_name,
-        logoUrl=logo_url,
+        logoUrl=str(logo_url),
         datasetNameDelimiter=filepath_delimiter,
         type=PlatformTypeClass.OTHERS,
     )
