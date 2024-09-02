@@ -196,14 +196,18 @@ def geolocation_data_quality_results(
         ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
 
+    renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
+
     dq_results = row_level_checks(
-        df=casted_bronze,
+        df=renamed_bronze,
         silver=casted_silver,
         dataset_type=dataset_type,
         _country_code_iso3=country_code,
         mode=config.metadata["mode"],
         context=context,
     )
+
+    dq_results.withColumnRenamed("dq_signature", "signature")
 
     dq_results_schema_name = f"{schema_name}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
