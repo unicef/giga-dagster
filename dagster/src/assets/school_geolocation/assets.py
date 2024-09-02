@@ -207,7 +207,7 @@ def geolocation_data_quality_results(
         context=context,
     )
 
-    dq_results.withColumnRenamed("dq_signature", "signature")
+    dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
     dq_results_schema_name = f"{schema_name}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
