@@ -29,4 +29,4 @@ class GroupsApi:
                 .join(Role)
                 .where(Role.name.like(f"{full_country_name}-%"))
             )
-            return [user.email for user in users]
+            return list(users)
