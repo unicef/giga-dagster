@@ -1,70 +1,27 @@
-# Project Architecture and Access to Production
+# Architecture
 
-``` @TODO: Summary of Architecture and steps to access each component ```
+![Sub-architecture](./images/subarchitecture.png)
 
-The `giga-dagster` project is meant as a base repository template; it should be
-a basis for other projects.
+The data ingestion component of the platform is collectively referred to as "Dagster",
+though the Dagster namespace architecture consists of several components other than the
+former. Dagster itself serves as the backbone of the platform, orchestrating tasks and
+data assets to materialize. It comprises several subcomponents:
 
-`giga-dagster` is hosted on GitHub, and is available as
-a [Template in Backstage]([url](https://catalog.tm8.dev/create?filters%5Bkind%5D=template&filters%5Buser%5D=all)****)
+- **Webserver**: The user interface allowing users to monitor runs and perform actions
+  such as rerunning failed runs, enabling/disabling sensors and schedules, etc.
+- **Daemon**: Responsible for running sensors and schedules, and scheduling runs.
+- **Run**: Containers that run individual tasks. In the deployed environment, these also
+  correspond to individual Kubernetes jobs.
+- **Postgres**: The database where run metadata are stored.
 
-## Architecture Details
+As of writing, the Dagster OSS webserver does not have native authentication. Thus, we
+deploy [OAuth2 Proxy](https://github.com/oauth2-proxy/oauth2-proxy) in front of the
+webserver so that only authorized users through Entra ID can access it.
 
-```Note: Structure of this document assumes Dev and Prod are in different Cloud Platform projects. You can reduce the sections for architecture if redundant. Just note the datasets, vms, buckets, etc. being used in Dev vs Prod ```
-
-- Provider: Azure
-- Dev Environment: https://io-dagster-dev.unitst.org
-- Staging Environment: TBD
-- Prod Environment: TBD
-- Technology: Python / Dagster / Postgres / Spark
-
-### Implementation Notes
-
-``` @TODO: Note down known limitations, possible issues, or known quirks with the project. The following questions might help: ``` <br>
-``` 1. Which component needs most attention? ie. Usually the first thing that needs tweaks ``` <br>
-``` 2. Are the parts of the project that might break in the future? (eg. Filling up of disk space, memory issues if input data size increases, a web scraper, etc.)``` <br>
-``` 3. What are some known limitations for the project? (eg. Input data schema has to remain the same, etc.)```
-
-## Dev Architecture
-
-``` @TODO: Dev architecture diagram and description. Please include any OAuth or similar Applications.```
-``` @TODO: List out main components being used and their descriptions.```
-
-### Virtual Machines
-
-N/A
-
-### Datasets
-
-#### School Master
-
-- Description: Existing School Geolocation Master Data
-- File Location: `saunigiga` Storage Account / giga-dataops-dev / gold / school-data
-- Retention Policy: Indefinite
-
-### Tokens and Accounts
-
-**Dev Azure DevOps Pipeline Variables**
-
-- Location: Bitwarden - UNICEF GIGA Collection
-- Person in charge: Sofia Pineda (sofia.pineda@thinkingmachin.es)
-- Validity: Indefinite
-- Description: This contains all the variables used in the dev deployment pipeline.
-- How to Refresh:
-    - N/A
-
-## Production Architecture
-
-TBD
-
-## Accessing Cloud Platform Environments
-
-**Get access to Client Azure Portal**
-
-- Person in charge: [Kenneth Domingo](mailto:kenneth@thinkingmachin.es)
-  (TM), [Brian Musisi](mailto:bmusisi@unicef.org) (Giga)
-
-**Access Prod App in UI**
-
-Open web browser and navigate to https://io-dagster-dev.unitst.org. Login with your
-TM/UNICEF email. 
+For running data processing, transformations, and data quality checks, the heavy lifting
+is done in a distributed manner via [Spark](https://spark.apache.org/). This also gives
+us access to the full feature set of Delta Lake. Spark also handles loading/saving of
+Delta Tables, and these tables have to be catalogued somewhere so that they can be
+accessed by external querying applications. [Hive Metastore](https://hive.apache.org/)
+serves as the repository of table metadata and schemas, which is backed by its own
+Postgres database.
