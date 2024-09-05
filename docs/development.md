@@ -195,8 +195,7 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
 2. Install Python
     ```shell
     asdf plugin add python
-    asdf install python 3.11.9
-    asdf global python 3.11.9
+    asdf install python 3.11.7
     ```
 
 #### Poetry
@@ -205,7 +204,6 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
     ```shell
     asdf add plugin poetry
     asdf install poetry 1.7.1
-    asdf global poetry 1.7.1
     ```
 2. Add Poetry path to your shell config:
     ```shell
