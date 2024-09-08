@@ -29,12 +29,16 @@ def adhoc__generate_silver_geolocation_from_gold(
     master = (
         DeltaTable.forName(s, f"school_master.{table_name}").toDF().drop("signature")
     )
+    master = add_missing_columns(master, get_schema_columns(s, "school_master"))
 
     if check_table_exists(s, "school_reference", table_name, DataTier.GOLD):
         reference = (
             DeltaTable.forName(s, f"school_reference.{table_name}")
             .toDF()
             .drop("signature")
+        )
+        reference = add_missing_columns(
+            reference, get_schema_columns(s, "school_reference")
         )
     else:
         reference_schema_columns = get_schema_columns(s, "school_reference")
@@ -110,12 +114,16 @@ def adhoc__generate_silver_coverage_from_gold(
     master = (
         DeltaTable.forName(s, f"school_master.{table_name}").toDF().drop("signature")
     )
+    master = add_missing_columns(master, get_schema_columns(s, "school_master"))
 
     if check_table_exists(s, "school_reference", table_name, DataTier.GOLD):
         reference = (
             DeltaTable.forName(s, f"school_reference.{table_name}")
             .toDF()
             .drop("signature")
+        )
+        reference = add_missing_columns(
+            reference, get_schema_columns(s, "school_reference")
         )
     else:
         reference_schema_columns = get_schema_columns(s, "school_reference")
