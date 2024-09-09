@@ -245,7 +245,11 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
         columns = [col.name for col in schema_columns]
     else:
-        columns = [col for col in df.columns if not col.startswith("dq_")]
+        columns = [
+            col
+            for col in df.columns
+            if not col.startswith("dq_") and col != "failure_reason"
+        ]
 
     df = df.filter(df.dq_has_critical_error == 0)
     df = df.select(*columns)

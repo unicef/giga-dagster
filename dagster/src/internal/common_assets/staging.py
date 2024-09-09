@@ -163,14 +163,14 @@ class StagingStep:
     def silver_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
         return check_table_exists(
-            self.spark, self.schema_name, self.silver_table_name, DataTier.SILVER
+            self.spark, self.schema_name, self.country_code, DataTier.SILVER
         )
 
     @property
     def staging_table_exists(self) -> bool:
         # Metastore entry must be present AND ADLS path must be a valid Delta Table
         return check_table_exists(
-            self.spark, self.schema_name, self.staging_table_name, DataTier.STAGING
+            self.spark, self.schema_name, self.country_code, DataTier.STAGING
         )
 
     def create_staging_table_from_silver(self):
@@ -255,7 +255,7 @@ class StagingStep:
 
     def standard_transforms(self, df: sql.DataFrame):
         self.context.log.info("Performing standard transforms...")
-        df = add_missing_columns(df, get_schema_columns(self.spark, self.schema_name))
+        df = add_missing_columns(df, self.schema_columns)
         df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
 
