@@ -261,13 +261,6 @@ def create_bronze_layer_columns(
     )
 
     # Admin mapbox columns
-    # drop imputed admin cols to recompute
-    df = df.drop("admin1")
-    df = df.drop("admin1_id_giga")
-    df = df.drop("admin2")
-    df = df.drop("admin2_id_giga")
-    df = df.drop("disputed_region")
-
     df = add_admin_columns(
         df=df,
         country_code_iso3=country_code_iso3,
@@ -328,8 +321,10 @@ def add_admin_columns(  # noqa: C901
     if admin_boundaries is None:
         return df.withColumns(
             {
-                admin_level: f.lit("Unknown"),
-                f"{admin_level}_id_giga": f.lit(None),
+                admin_level: f.coalesce(f.col(admin_level), f.lit("Unknown")),
+                f"{admin_level}_id_giga": f.coalesce(
+                    f.col(f"{admin_level}_id_giga"), f.lit(None)
+                ),
             }
         )
 
@@ -374,18 +369,15 @@ def add_admin_columns(  # noqa: C901
             ),
         }
     )
-    df = df.withColumn(
+    return df.withColumn(
         admin_level,
         f.coalesce(
             f.col(f"{admin_level}_en"),
             f.col(f"{admin_level}_native"),
+            f.col(admin_level),
             f.lit("Unknown"),
         ),
     ).drop(f"{admin_level}_en", f"{admin_level}_native")
-
-    df.select(admin_level).show()
-
-    return df
 
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
