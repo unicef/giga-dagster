@@ -30,15 +30,8 @@ class Settings(BaseSettings):
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
-    AAD_AZURE_TENANT_ID: str
-    AAD_AZURE_CLIENT_ID: str
-    AAD_AZURE_CLIENT_SECRET: str
     SLACK_WEBHOOK: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
-    DATAHUB_OIDC_REDIRECT_URL: str
-    DATAHUB_OIDC_CLIENT_ID: str
-    DATAHUB_OIDC_TENANT_ID: str
-    DATAHUB_OIDC_CLIENT_SECRET: str
     HIVE_METASTORE_URI: str
     EMAIL_RENDERER_BEARER_TOKEN: str
     INGESTION_POSTGRESQL_USERNAME: str
@@ -54,6 +47,7 @@ class Settings(BaseSettings):
     SPARK_MASTER_HOST: str = "spark-master"
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
+    DEFAULT_MAX_RUNTIME: int = int(timedelta(hours=1).total_seconds())
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
