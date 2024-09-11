@@ -25,6 +25,13 @@ run_coordinator:
   config:
     max_concurrent_runs: 1
 
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 60
+  cancel_timeout_seconds: 30
+  max_resume_run_attempts: 0
+  poll_interval_seconds: 120
+
 compute_logs:
   module: dagster.core.storage.local_compute_log_manager
   class: LocalComputeLogManager

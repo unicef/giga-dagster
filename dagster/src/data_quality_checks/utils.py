@@ -189,15 +189,34 @@ def aggregate_report_spark_df(
 def aggregate_report_json(
     df_aggregated: sql.DataFrame,
     df_bronze: sql.DataFrame,
+    df_data_quality_checks: sql.DataFrame,
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
-    rows_count = df_bronze.count()
-    columns_count = len([col for col in df_bronze.columns if not col.startswith("dq_")])
+    counts = df_data_quality_checks.select(
+        f.count("*").alias("rows_count"),
+        f.count(f.when(f.col("dq_has_critical_error") == 0, 1)).alias("rows_passed"),
+        f.count(f.when(f.col("dq_has_critical_error") == 1, 1)).alias("rows_failed"),
+    ).first()
+    rows_count = counts.rows_count
+    rows_passed = counts.rows_passed
+    rows_failed = counts.rows_failed
+
+    columns_count = len(
+        [
+            col
+            for col in df_bronze.columns
+            if not col.startswith("dq_")
+            or not col.startswith("_")
+            or col != "failure_reason"
+        ]
+    )
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
 
     # Summary Dictionary
     summary = {
         "rows": rows_count,
+        "rows_passed": rows_passed,
+        "rows_failed": rows_failed,
         "columns": columns_count,
         "timestamp": timestamp,
     }
@@ -226,7 +245,11 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
         columns = [col.name for col in schema_columns]
     else:
-        columns = [col for col in df.columns if not col.startswith("dq_")]
+        columns = [
+            col
+            for col in df.columns
+            if not col.startswith("dq_") and col != "failure_reason"
+        ]
 
     df = df.filter(df.dq_has_critical_error == 0)
     df = df.select(*columns)

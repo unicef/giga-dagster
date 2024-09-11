@@ -90,7 +90,9 @@ async def send_master_release_notes(
         )
         return None
 
-    await send_email_master_release_notification(props=props, recipients=recipients)
+    await send_email_master_release_notification(
+        props=props, recipients=recipients, context=context
+    )
 
     slack_props = SlackProps(
         country=country,

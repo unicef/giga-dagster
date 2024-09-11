@@ -3,7 +3,6 @@ from src import jobs, schedule, sensors
 from src.assets import (
     adhoc,
     admin,
-    azure_ad,
     common,
     datahub_assets,
     debug,
@@ -65,10 +64,6 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=debug,
             group_name=debug.GROUP_NAME,
-        ),
-        *load_assets_from_package_module(
-            package_module=azure_ad,
-            group_name=azure_ad.GROUP_NAME,
         ),
         *load_assets_from_package_module(
             package_module=unstructured,

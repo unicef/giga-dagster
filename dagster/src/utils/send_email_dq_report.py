@@ -6,6 +6,7 @@ from models.file_upload import FileUpload
 from sqlalchemy import select
 
 from dagster import OpExecutionContext
+from src.internal.groups import GroupsApi
 from src.schemas.file_upload import FileUploadConfig
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
@@ -30,14 +31,18 @@ async def send_email_dq_report(
         "dataQualityCheck": dq_results,
     }
 
+    admins = GroupsApi.list_role_members("Admin")
+    recipients = list({uploader_email, *admins})
+
     get_context_with_fallback_logger(context).info("SENDING DQ REPORT VIA EMAIL...")
     get_context_with_fallback_logger(context).info(metadata)
+    get_context_with_fallback_logger(context).info(f"Recipients: {recipients}")
 
     await send_email_base(
         endpoint="email/dq-report",
         props=metadata,
         subject="Giga Data Quality Report",
-        recipients=[uploader_email],
+        recipients=recipients,
         context=context,
     )
 

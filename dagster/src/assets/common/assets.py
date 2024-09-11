@@ -123,6 +123,7 @@ def manual_review_failed_rows(
     # Else, the current df_failed is the initial rejects table
     if check_table_exists(s, schema_name, country_code, DataTier.MANUAL_REJECTED):
         rejected = DeltaTable.forName(s, rejected_table_name).toDF()
+        rejected = add_missing_columns(rejected, schema_columns)
         new_rejected = partial_cdf_in_cluster_merge(
             rejected, df_failed, column_names, primary_key, context
         )
@@ -205,6 +206,7 @@ def silver(
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
+        current_silver = add_missing_columns(current_silver, schema_columns)
         new_silver = partial_cdf_in_cluster_merge(
             current_silver, df_passed, column_names, primary_key, context
         )
@@ -325,6 +327,7 @@ def master(
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
+        current_master = add_missing_columns(current_master, schema_columns)
         new_master = full_in_cluster_merge(
             current_master, silver, primary_key, column_names
         )
@@ -396,6 +399,7 @@ def reference(
         current_reference = DeltaTable.forName(
             s, construct_full_table_name("school_reference", country_code)
         ).toDF()
+        current_reference = add_missing_columns(current_reference, schema_columns)
         new_reference = full_in_cluster_merge(
             current_reference, silver, primary_key, column_names
         )

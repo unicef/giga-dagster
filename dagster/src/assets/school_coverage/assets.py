@@ -30,6 +30,9 @@ from src.spark.transform_functions import (
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.data_quality_descriptions import (
+    convert_dq_checks_to_human_readeable_descriptions_and_upload,
+)
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -70,7 +73,7 @@ def coverage_raw(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def coverage_data_quality_results(
-    context,
+    context: OpExecutionContext,
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
@@ -96,6 +99,7 @@ def coverage_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     country_code = config.country_code
+    dataset_type = f"coverage_{source}"
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
@@ -106,10 +110,10 @@ def coverage_data_quality_results(
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
     dq_results = row_level_checks(
-        df,
-        f"coverage_{source}",
-        config.country_code,
-        context,
+        df=df,
+        dataset_type=dataset_type,
+        _country_code_iso3=country_code,
+        context=context,
     )
 
     config.metadata.update({"column_mapping": column_mapping})
@@ -137,10 +141,12 @@ def coverage_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
+    convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=dq_results,
+        bronze=df,
+        dataset_type=dataset_type,
         config=config,
-        spark=spark,
+        context=context,
     )
 
     dq_pandas = dq_results.toPandas()
@@ -148,6 +154,7 @@ def coverage_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(dq_pandas),
         },
@@ -156,7 +163,7 @@ def coverage_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 async def coverage_data_quality_results_summary(
-    context,
+    context: OpExecutionContext,
     config: FileConfig,
     coverage_raw: bytes,
     coverage_data_quality_results: sql.DataFrame,
@@ -170,8 +177,9 @@ async def coverage_data_quality_results_summary(
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(s, coverage_data_quality_results),
-        df_raw,
+        df_aggregated=aggregate_report_spark_df(s, coverage_data_quality_results),
+        df_bronze=df_raw,
+        df_data_quality_checks=coverage_data_quality_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
@@ -217,6 +225,7 @@ def coverage_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -248,6 +257,7 @@ def coverage_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -297,6 +307,7 @@ def coverage_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -332,11 +343,13 @@ def coverage_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(coverage_bronze)
+    row_count = 0 if staging is None else staging.count()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": row_count,
             "preview": get_table_preview(staging),
         },
     )
@@ -373,6 +386,7 @@ def coverage_delete_staging(
             None,
             metadata={
                 **get_output_metadata(config),
+                "row_count": staging.count(),
                 "preview": get_table_preview(staging),
                 "delete_row_ids": MetadataValue.json(delete_row_ids),
             },
@@ -382,6 +396,7 @@ def coverage_delete_staging(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": 0,
             "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

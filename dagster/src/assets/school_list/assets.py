@@ -59,13 +59,17 @@ def qos_school_list_raw(
     # )
 
     return Output(
-        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df),
+            "preview": get_table_preview(df),
+        },
     )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_bronze(
-    context: OpExecutionContext,
     qos_school_list_raw: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
@@ -109,6 +113,7 @@ def qos_school_list_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(df_pandas),
         },
@@ -154,6 +159,7 @@ def qos_school_list_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "preview": get_table_preview(dq_pandas),
         },
     )
@@ -161,18 +167,18 @@ def qos_school_list_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def qos_school_list_data_quality_results_summary(
-    context: OpExecutionContext,
     qos_school_list_bronze: sql.DataFrame,
     qos_school_list_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             qos_school_list_data_quality_results,
         ),
-        qos_school_list_bronze,
+        df_bronze=qos_school_list_bronze,
+        df_data_quality_checks=qos_school_list_data_quality_results,
     )
 
     # datahub_emit_assertions_with_exception_catcher(
@@ -183,10 +189,8 @@ def qos_school_list_data_quality_results_summary(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_passed_rows(
-    context: OpExecutionContext,
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
         qos_school_list_data_quality_results,
@@ -209,6 +213,7 @@ def qos_school_list_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -216,10 +221,8 @@ def qos_school_list_dq_passed_rows(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_school_list_dq_failed_rows(
-    context: OpExecutionContext,
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_list_data_quality_results,
@@ -231,6 +234,7 @@ def qos_school_list_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -256,6 +260,7 @@ def qos_school_list_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(upstream_df=qos_school_list_dq_passed_rows)
+    row_count = 0 if staging is None else staging.count()
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
@@ -272,6 +277,7 @@ def qos_school_list_staging(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": row_count,
             "preview": get_table_preview(staging),
         },
     )

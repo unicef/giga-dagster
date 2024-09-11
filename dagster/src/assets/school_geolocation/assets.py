@@ -6,8 +6,11 @@ from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
+from pyspark.sql.types import LongType, StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -26,6 +29,9 @@ from src.spark.transform_functions import (
 )
 from src.utils.adls import (
     ADLSFileClient,
+)
+from src.utils.data_quality_descriptions import (
+    convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
@@ -108,7 +114,22 @@ def geolocation_bronze(
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
-    df = create_bronze_layer_columns(df, silver, country_code)
+    casted_silver = silver.withColumn(
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
+    )
+    casted_bronze = df.withColumn(
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
+    )
+
+    df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
 
     config.metadata.update({"column_mapping": column_mapping})
 
@@ -124,6 +145,7 @@ def geolocation_bronze(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "column_mapping": column_mapping,
             "preview": get_table_preview(df_pandas),
         },
@@ -141,6 +163,7 @@ def geolocation_data_quality_results(
     country_code = config.country_code
     schema_name = config.metastore_schema
     id = config.filename_components.id
+    dataset_type = "geolocation"
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
@@ -158,14 +181,33 @@ def geolocation_data_quality_results(
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
+    casted_silver = silver.withColumn(
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
+    )
+    casted_bronze = geolocation_bronze.withColumn(
+        "school_id_govt",
+        f.when(
+            f.col("school_id_govt").cast(LongType()).isNotNull(),
+            f.col("school_id_govt").cast(LongType()).cast(StringType()),
+        ).otherwise(f.col("school_id_govt").cast(StringType())),
+    )
+
+    renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
+
     dq_results = row_level_checks(
-        df=geolocation_bronze,
-        silver=silver,
-        dataset_type="geolocation",
+        df=renamed_bronze,
+        silver=casted_silver,
+        dataset_type=dataset_type,
         _country_code_iso3=country_code,
         mode=config.metadata["mode"],
         context=context,
     )
+
+    dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
     dq_results_schema_name = f"{schema_name}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
@@ -190,6 +232,14 @@ def geolocation_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
+    convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=dq_results,
+        dataset_type=dataset_type,
+        bronze=casted_bronze,
+        config=config,
+        context=context,
+    )
+
     dq_pandas = dq_results.toPandas()
 
     datahub_emit_metadata_with_exception_catcher(
@@ -202,6 +252,7 @@ def geolocation_data_quality_results(
         dq_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(dq_pandas),
             "preview": get_table_preview(dq_pandas),
         },
     )
@@ -216,11 +267,12 @@ async def geolocation_data_quality_results_summary(
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             geolocation_data_quality_results,
         ),
-        geolocation_bronze,
+        df_bronze=geolocation_bronze,
+        df_data_quality_checks=geolocation_data_quality_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
@@ -237,7 +289,6 @@ async def geolocation_data_quality_results_summary(
         config=config,
         context=context,
     )
-
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
@@ -269,6 +320,7 @@ def geolocation_dq_passed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -303,6 +355,7 @@ def geolocation_dq_failed_rows(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -338,11 +391,13 @@ def geolocation_staging(
         StagingChangeTypeEnum.UPDATE,
     )
     staging = staging_step(geolocation_dq_passed_rows)
+    row_count = 0 if staging is None else staging.count()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
+            "row_count": MetadataValue.int(row_count),
             "preview": get_table_preview(staging),
         },
     )

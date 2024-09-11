@@ -140,6 +140,7 @@ def adhoc__master_data_transforms(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -161,6 +162,7 @@ def adhoc__df_duplicates(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -200,6 +202,7 @@ def adhoc__master_data_quality_checks(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -251,11 +254,13 @@ def adhoc__reference_data_quality_checks(
         context=context,
         config=config,
     )
+    df_pandas = dq_checked.toPandas()
     return Output(
-        dq_checked.toPandas(),
+        df_pandas,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(dq_checked),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
         },
     )
 
@@ -286,6 +291,7 @@ def adhoc__master_dq_checks_passed(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -320,6 +326,7 @@ def adhoc__reference_dq_checks_passed(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -330,7 +337,6 @@ def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     dq_failed = extract_dq_failed_rows(adhoc__master_data_quality_checks, "master")
     context.log.info(
@@ -342,6 +348,7 @@ def adhoc__master_dq_checks_failed(
         df_pandas,
         metadata={
             **get_output_metadata(config),
+            "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -352,7 +359,6 @@ def adhoc__reference_dq_checks_failed(
     _: OpExecutionContext,
     config: FileConfig,
     adhoc__reference_data_quality_checks: sql.DataFrame,
-    spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     if adhoc__reference_data_quality_checks.isEmpty():
         return Output(pd.DataFrame())
@@ -361,28 +367,30 @@ def adhoc__reference_dq_checks_failed(
         adhoc__reference_data_quality_checks,
         "reference",
     )
+    df_pandas = dq_failed.toPandas()
     return Output(
-        dq_failed.toPandas(),
+        df_pandas,
         metadata={
             **get_output_metadata(config),
-            "preview": get_table_preview(dq_failed.toPandas()),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
         },
     )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 def adhoc__master_dq_checks_summary(
-    context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> dict | list[dict]:
     df_summary = aggregate_report_json(
-        aggregate_report_spark_df(
+        df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
             adhoc__master_data_quality_checks,
         ),
-        adhoc__master_data_quality_checks,
+        df_bronze=adhoc__master_data_quality_checks,
+        df_data_quality_checks=adhoc__master_data_quality_checks,
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
@@ -447,6 +455,7 @@ def adhoc__publish_silver_geolocation(
         df_silver,
         metadata={
             **get_output_metadata(config),
+            "row_count": df_silver.count(),
             "preview": get_table_preview(df_silver),
         },
     )
@@ -511,6 +520,7 @@ def adhoc__publish_silver_coverage(
         df_silver,
         metadata={
             **get_output_metadata(config),
+            "row_count": df_silver.count(),
             "preview": get_table_preview(df_silver),
         },
     )
@@ -569,6 +579,7 @@ def adhoc__publish_master_to_gold(
         gold,
         metadata={
             **get_output_metadata(config),
+            "row_count": gold.count(),
             "preview": get_table_preview(gold),
         },
     )
@@ -605,7 +616,11 @@ def adhoc__publish_reference_to_gold(
 
     return Output(
         gold,
-        metadata={**get_output_metadata(config), "preview": get_table_preview(gold)},
+        metadata={
+            **get_output_metadata(config),
+            "row_count": gold.count(),
+            "preview": get_table_preview(gold),
+        },
     )
 
 

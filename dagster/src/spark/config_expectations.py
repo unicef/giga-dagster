@@ -294,7 +294,17 @@ class Config(BaseSettings):
             *self.NONEMPTY_COLUMNS_REFERENCE,
             *self.NONEMPTY_COLUMNS_GEOLOCATION,
             *self.NONEMPTY_COLUMNS_COVERAGE,
+            *self.NONEMPTY_COLUMNS_COVERAGE_FB,
+            *self.NONEMPTY_COLUMNS_COVERAGE_ITU,
             *self.NONEMPTY_COLUMNS_QOS,
+            *self.COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION,
+            *self.COLUMNS_EXCEPT_SCHOOL_ID_MASTER,
+            "signature",
+            "tile_bigint",
+            "clean_lat",
+            "clean_lon",
+            "school_id",
+            "name",
         ]
 
     VALUES_DOMAIN_MASTER: dict[str, list[str]] = {
@@ -476,6 +486,7 @@ class Config(BaseSettings):
             **self.VALUES_RANGE_REFERENCE,
             **self.VALUES_RANGE_GEOLOCATION,
             **self.VALUES_RANGE_COVERAGE,
+            **self.VALUES_RANGE_COVERAGE_ITU,
         }
 
     UNIQUE_SET_COLUMNS: list[list[str]] = [

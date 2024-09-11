@@ -3,6 +3,7 @@ from datetime import datetime
 from loguru import logger
 from pydantic import BaseModel, EmailStr
 
+from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.email.send_email_base import send_email_base
 
@@ -18,7 +19,7 @@ class EmailProps(BaseModel):
 
 
 async def send_email_master_release_notification(
-    props: EmailProps, recipients: list[EmailStr]
+    props: EmailProps, recipients: list[EmailStr], context: OpExecutionContext = None
 ):
     if len(recipients) == 0:
         logger.warning("No recipients found, skipping email.")
@@ -29,6 +30,7 @@ async def send_email_master_release_notification(
         props=props.dict(),
         recipients=recipients,
         subject="Master Data Update Notification",
+        context=context,
     )
 
 

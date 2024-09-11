@@ -6,6 +6,9 @@ from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
 from src.constants import UploadMode
+from src.utils.data_quality_descriptions import (
+    handle_rename_dq_has_critical_error_column,
+)
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -49,6 +52,10 @@ def critical_error_checks(
             ]
         )
 
+    full_human_readable_mapping = handle_rename_dq_has_critical_error_column(
+        config_column_list
+    )
+
     df = df.withColumns(
         {
             "dq_has_critical_error": f.when(
@@ -60,14 +67,13 @@ def critical_error_checks(
                 *[
                     f.when(
                         f.col(c) == 1,
-                        f.lit(c[3:]),  # remove `dq_` prefix
+                        f.lit(full_human_readable_mapping.get(c, c[3:])),
                     )
                     for c in critial_column_dq_checks
                 ],
             ),
         }
     )
-
     rest_columns = df.columns
     dataset_has_school_id_giga = "school_id_giga" in rest_columns
     dataset_has_school_id_govt = "school_id_govt" in rest_columns
@@ -84,7 +90,6 @@ def critical_error_checks(
 
     ordered_columns = []
     order_by_columns = []
-
     if dataset_has_school_id_govt:
         ordered_columns.append("school_id_govt")
         order_by_columns.append("school_id_govt")

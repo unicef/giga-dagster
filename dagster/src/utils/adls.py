@@ -17,7 +17,7 @@ from azure.storage.filedatalake import (
     FileProperties,
     PathProperties,
 )
-from dagster import ConfigurableResource, OutputContext
+from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
@@ -86,7 +86,7 @@ class ADLSFileClient(ConfigurableResource):
 
     def upload_pandas_dataframe_as_file(
         self,
-        context: OutputContext,
+        context: OutputContext | OpExecutionContext,
         data: pd.DataFrame,
         filepath: str,
     ) -> None:
@@ -105,7 +105,12 @@ class ADLSFileClient(ConfigurableResource):
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
-        config = FileConfig(**context.step_context.op_config)
+        if isinstance(context, OpExecutionContext):
+            config = FileConfig(**context._step_execution_context.op_config)
+
+        if isinstance(context, OutputContext):
+            config = FileConfig(**context.step_context.op_config)
+
         metadata = config.metadata
         metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
 
