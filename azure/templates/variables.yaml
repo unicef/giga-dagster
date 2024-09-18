@@ -26,6 +26,7 @@ variables:
   datahubOidcClientId: $(DATAHUB_OIDC_CLIENT_ID)
   datahubOidcClientSecret: $(DATAHUB_OIDC_CLIENT_SECRET)
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
+  slackWebHook: $(SLACK_WEBHOOK)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   mlabDbConnectionString: $(MLAB_DB_CONNECTION_STRING)
   procoDbConnectionString: $(PROCO_DB_CONNECTION_STRING)

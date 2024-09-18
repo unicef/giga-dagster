@@ -18,6 +18,10 @@ from src.utils.send_email_master_release_notification import (
     EmailProps,
     send_email_master_release_notification,
 )
+from src.utils.send_slack_master_release_notification import (
+    SlackProps,
+    send_slack_master_release_notification,
+)
 
 
 async def send_master_release_notes(
@@ -89,6 +93,18 @@ async def send_master_release_notes(
     await send_email_master_release_notification(
         props=props, recipients=recipients, context=context
     )
+
+    slack_props = SlackProps(
+        country=country,
+        added=counts["added"],
+        modified=counts["modified"],
+        deleted=counts["deleted"],
+        updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
+        version=latest_version,
+        rows=rows,
+    )
+
+    await send_slack_master_release_notification(props=slack_props)
 
     return {
         **props.dict(),
