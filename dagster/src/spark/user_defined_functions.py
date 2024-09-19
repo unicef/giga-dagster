@@ -11,8 +11,8 @@ from src.spark.config_expectations import config
 from .udf_dependencies import (
     boundary_distance,
     is_within_boundary_distance,
-    is_within_country_gadm,
     is_within_country_geopy,
+    is_within_country_mapbox,
 )
 
 
@@ -59,7 +59,7 @@ def is_not_within_country_boundaries_udf_factory(
     def is_not_within_country_check(
         latitude: pd.Series, longitude: pd.Series
     ) -> pd.Series:
-        return is_within_country_gadm(latitude, longitude, geometry, country_code_iso3)
+        return is_within_country_mapbox(latitude, longitude, geometry)
 
     return is_not_within_country_check
 
