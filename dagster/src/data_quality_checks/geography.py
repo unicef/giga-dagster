@@ -20,21 +20,25 @@ azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
-DIRECTORY_LOCATION = "raw/geospatial-data/gadm_files/version4.1/"
+DIRECTORY_LOCATION_GADM = "raw/geospatial-data/gadm_files/version4.1/"
+DIRECTORY_LOCATION_MAPBOX = "admin_data/admin0/"
 container_name = azure_blob_container_name
 
 
 def get_country_geometry(country_code_iso3: str):
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
-        filename = f"{country_code_iso3.upper()}.gpkg"
-        file = f"{DIRECTORY_LOCATION}{filename}"
+        filename = f"{country_code_iso3.upper()}_admin0.geojson"
+        file = f"{DIRECTORY_LOCATION_MAPBOX}{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
             download_stream.readinto(file_blob)
             file_blob.seek(0)
             gdf_boundaries = gpd.read_file(file_blob)
+            gdf_boundaries = gdf_boundaries[
+                gdf_boundaries["worldview"].str.contains("US|all")
+            ]
         country_geometry = gdf_boundaries
     except ValueError as e:
         if str(e) == "Must be a coordinate pair or Point":

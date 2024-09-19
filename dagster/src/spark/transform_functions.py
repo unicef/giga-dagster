@@ -296,7 +296,7 @@ def get_admin_boundaries(
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
         filename = f"{country_code_iso3}_{admin_level}.geojson"
-        file = f"mapbox_sample_data/{filename}"
+        file = f"admin_data/{admin_level}/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
