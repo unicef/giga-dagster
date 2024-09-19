@@ -36,7 +36,9 @@ def get_country_geometry(country_code_iso3: str):
             download_stream.readinto(file_blob)
             file_blob.seek(0)
             gdf_boundaries = gpd.read_file(file_blob)
-            gdf_boundaries = gdf_boundaries[gdf_boundaries['worldview'].str.contains('US|all')]
+            gdf_boundaries = gdf_boundaries[
+                gdf_boundaries["worldview"].str.contains("US|all")
+            ]
         country_geometry = gdf_boundaries
     except ValueError as e:
         if str(e) == "Must be a coordinate pair or Point":

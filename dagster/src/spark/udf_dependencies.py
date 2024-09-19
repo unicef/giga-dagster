@@ -35,9 +35,7 @@ def is_within_country_gadm(
 
 # Inside based on Mapbox admin boundaries data (pandas_udf)
 def is_within_country_mapbox(
-    latitude: pd.Series,
-    longitude: pd.Series,
-    boundaries: gpd.GeoDataFrame
+    latitude: pd.Series, longitude: pd.Series, boundaries: gpd.GeoDataFrame
 ) -> pd.Series:
     point_var = [get_point(x, y) for x, y in zip(longitude, latitude, strict=False)]
     gdf_points = gpd.GeoDataFrame(
@@ -46,7 +44,7 @@ def is_within_country_mapbox(
         geometry=point_var,
     )
     gdf_joined = gpd.sjoin(gdf_points, boundaries, how="left")
-    return gdf_joined['iso_3166_1_alpha_3'].isna().map(lambda empty: 1 if empty else 0)
+    return gdf_joined["iso_3166_1_alpha_3"].isna().map(lambda empty: 1 if empty else 0)
 
 
 # Inside based on geopy
