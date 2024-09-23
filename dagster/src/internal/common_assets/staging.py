@@ -271,6 +271,11 @@ class StagingStep:
             self.primary_key,
             column_names=[c.name for c in self.schema_columns],
         )
+
+        print(
+            "➡ dagster/src/internal/common_assets/staging.py:276 printing dataframe:",
+        )
+        df.show()
         query = build_deduped_merge_query(
             staging_dt,
             df,

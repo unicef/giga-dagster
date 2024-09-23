@@ -25,6 +25,8 @@ def execute_query_with_error_handler(
 ) -> None:
     full_table_name = f"{schema_name}.{table_name}"
 
+    print("➡ dagster/src/utils/delta.py:31 query:", query)
+
     try:
         query.execute()
     except AnalysisException as exc:
