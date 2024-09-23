@@ -390,6 +390,7 @@ def geolocation_staging(
         spark.spark_session,
         StagingChangeTypeEnum.UPDATE,
     )
+    context.log.info(geolocation_dq_passed_rows)
     staging = staging_step(geolocation_dq_passed_rows)
     row_count = 0 if staging is None else staging.count()
 
