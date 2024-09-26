@@ -223,11 +223,9 @@ class StagingStep:
             ) is not None:
                 if match_.nullable != column.nullable:
                     if match_.nullable:
-                        alter_stmts.append(
-                            f'ALTER COLUMN "{column.name}" DROP NOT NULL'
-                        )
+                        alter_stmts.append(f"ALTER COLUMN {column.name} DROP NOT NULL")
                     else:
-                        alter_stmts.append(f'ALTER COLUMN "{column.name}" SET NOT NULL')
+                        alter_stmts.append(f"ALTER COLUMN {column.name} SET NOT NULL")
 
         has_nullability_changed = len(alter_stmts) > 0
         has_schema_changed = updated_columns != existing_columns
