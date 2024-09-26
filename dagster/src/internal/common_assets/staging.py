@@ -244,8 +244,9 @@ class StagingStep:
             )
 
         if has_nullability_changed:
-            alter_sql = f"{alter_sql} {', '.join(alter_stmts)};"
-            self.spark.sql(alter_sql).show()
+            alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
+            for stmnt in alter_sql:
+                self.spark.sql(stmnt).show()
 
         if has_schema_changed or has_nullability_changed:
             self.reload_schema()
