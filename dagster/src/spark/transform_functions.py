@@ -383,8 +383,8 @@ def add_admin_columns(  # noqa: C901
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     try:
         service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
-        filename = "disputed_areas_admin0_sample.geojson"
-        file = f"mapbox_sample_data/{filename}"
+        filename = "disputed_areas_admin0.geojson"
+        file = f"admin_data/admin0/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
         with io.BytesIO() as file_blob:
             download_stream = blob_client.download_blob()
