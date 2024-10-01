@@ -41,7 +41,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             config.metastore_schema, config.tier
         )
         full_table_name = f"{schema_tier_name}.{table_name}"
-        context.log.info("Full table name", full_table_name)
+        context.log.info(f"Full table name: {full_table_name}")
 
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
@@ -179,8 +179,11 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
             existing_df = DeltaTable.forName(spark, full_table_name).toDF()
             existing_columns = sorted(existing_df.schema.fieldNames())
-
+            context.log.info(f"Existing columns {existing_columns}")
+            context.log.info(f"Updated df {updated_columns}")
             if updated_columns != existing_columns:
+                context.log.info("Updating schema...")
+
                 empty_data = spark.sparkContext.emptyRDD()
                 updated_schema_df = spark.createDataFrame(
                     data=empty_data, schema=updated_schema
