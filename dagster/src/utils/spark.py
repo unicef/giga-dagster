@@ -218,9 +218,19 @@ def transform_types(
     schema_name: str,
     context: OpExecutionContext | OutputContext = None,
 ) -> sql.DataFrame:
+    """
+    Retuns a dataframe with columns casted to use types in provided schema.
+    """
+
     logger = get_context_with_fallback_logger(context)
 
     columns = get_schema_columns(df.sparkSession, schema_name)
+    context.log.info(f"Schema name: {schema_name}")
+    context.log.info(f"Schema columns: {columns}")
+
+    master_columns = get_schema_columns(df.sparkSession, "school_master")
+    context.log.info(f"Master columns: {master_columns}")
+
     if schema_name == "qos":
         columns = [c for c in columns if c.name in df.columns]
 
