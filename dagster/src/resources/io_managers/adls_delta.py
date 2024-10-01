@@ -181,6 +181,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             existing_columns = sorted(existing_df.schema.fieldNames())
             context.log.info(f"Existing columns {existing_columns}")
             context.log.info(f"Updated df {updated_columns}")
+
+            context.log.info(f"incoming schema {data.schema}")
+            context.log.info(f"existing schema {existing_df.schema}")
+
             if updated_columns != existing_columns:
                 context.log.info("Updating schema...")
 
