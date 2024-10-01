@@ -229,7 +229,10 @@ def transform_types(
     context.log.info(f"Schema columns: {columns}")
 
     master_columns = get_schema_columns(df.sparkSession, "school_master")
+    reference_columns = get_schema_columns(df.sparkSession, "school_reference")
+
     context.log.info(f"Master columns: {master_columns}")
+    context.log.info(f"Reference columns columns: {reference_columns}")
 
     if schema_name == "qos":
         columns = [c for c in columns if c.name in df.columns]

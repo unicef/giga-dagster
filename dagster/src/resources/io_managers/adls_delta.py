@@ -29,6 +29,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+        context.log.info("Handling DeltaIOManager output...")
         if output is None:
             return
         if output.isEmpty():
@@ -40,6 +41,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             config.metastore_schema, config.tier
         )
         full_table_name = f"{schema_tier_name}.{table_name}"
+        context.log.info("Full table name", full_table_name)
+
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
         self._upsert_data(output, config.metastore_schema, full_table_name, context)
@@ -49,6 +52,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
+        context.log.info("Handling DeltaIOManager input...")
+
         table_name, _, _ = self._get_table_path(context)
         spark = self._get_spark_session()
         config = FileConfig(
@@ -57,7 +62,11 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         schema_name = config.metastore_schema
 
         schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        context.log.info(f"Schema_tier_name: {schema_tier_name}")
+
         full_table_name = construct_full_table_name(schema_tier_name, table_name)
+        context.log.info(f"full_table_name: {full_table_name}")
+        context.log.info(full_table_name)
 
         dt = DeltaTable.forName(spark, full_table_name)
 
