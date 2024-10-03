@@ -282,22 +282,43 @@ def sync_schema(
     existing_columns = sorted(existing_schema.fieldNames())
     has_schema_changed = updated_columns != existing_columns
 
-    # changed_datatypes = count_changed_datatypes(
-    #     existing_schema=existing_schema, updated_schema=updated_schema
-    # )
-    # has_datatype_changed = len(changed_datatypes) > 0
+    changed_datatypes = get_changed_datatypes(
+        context=context, existing_schema=existing_schema, updated_schema=updated_schema
+    )
+    has_datatype_changed = len(changed_datatypes) > 0
 
     if has_schema_changed:
-        context.log.info("Updating schema...")
-        updated_schema_df = spark.createDataFrame([], schema=updated_schema)
+        context.log.info("Adding schema columns...")
+        updated_schema = spark.createDataFrame([], schema=updated_schema)
         (
-            updated_schema_df.write.option("mergeSchema", "true")
+            updated_schema.write.option("mergeSchema", "true")
             .format("delta")
             .mode("append")
             .saveAsTable(table_name)
         )
 
     if has_nullability_changed:
+        context.log.info(
+            "Modifying column nullabilities with the SQL statements{alter_sql}..."
+        )
+
         alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
         for stmnt in alter_sql:
             spark.sql(stmnt).show()
+
+    if has_datatype_changed:
+        context.log.info("Updating datatype...")
+        existing_dataframe = spark.table(table_name)
+        updated_df = existing_dataframe
+
+        for column, datatype in changed_datatypes.items():
+            updated_df = updated_df.withColumn(
+                column, existing_dataframe[column].cast(datatype.typeName())
+            )
+
+        (
+            updated_df.write.option("overwriteSchema", "true")
+            .format("delta")
+            .mode("overwrite")
+            .saveAsTable(table_name)
+        )
