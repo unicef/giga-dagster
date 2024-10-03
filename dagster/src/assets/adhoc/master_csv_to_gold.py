@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from datahub.specific.dataset import DatasetPatchBuilder
+from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -36,10 +37,14 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
+from src.utils.delta import sync_schema
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_schema_columns, get_schema_columns_datahub
+from src.utils.schema import (
+    get_schema_columns,
+    get_schema_columns_datahub,
+)
 from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
@@ -603,6 +608,24 @@ def adhoc__publish_reference_to_gold(
     )
     gold = compute_row_hash(gold)
 
+    table_name = f"{config.metastore_schema}.{config.country_code}"
+    updated_schema = StructType(
+        get_schema_columns(
+            spark=spark.spark_session, schema_name=config.metastore_schema
+        )
+    )
+    existing_df = DeltaTable.forName(
+        sparkSession=spark.spark_session, tableOrViewName=table_name
+    ).toDF()
+    existing_schema = existing_df.schema
+
+    sync_schema(
+        table_name=table_name,
+        existing_schema=existing_schema,
+        updated_schema=updated_schema,
+        spark=spark.spark_session,
+        context=context,
+    )
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,

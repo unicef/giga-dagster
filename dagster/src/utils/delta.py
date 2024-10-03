@@ -257,3 +257,41 @@ def build_nullability_queries(
                 else:
                     alter_stmts.append(f"ALTER COLUMN {column.name} SET NOT NULL")
     return alter_stmts
+
+
+def sync_schema(
+    table_name: str,
+    existing_schema: StructType,
+    updated_schema: StructType,
+    spark: SparkSession,
+    context: OpExecutionContext,
+):
+    alter_sql = f"ALTER TABLE {table_name}"
+    alter_stmts = build_nullability_queries(
+        existing_schema=existing_schema, updated_schema=updated_schema
+    )
+    has_nullability_changed = len(alter_stmts) > 0
+
+    updated_columns = sorted(updated_schema.fieldNames())
+    existing_columns = sorted(existing_schema.fieldNames())
+    has_schema_changed = updated_columns != existing_columns
+
+    # changed_datatypes = count_changed_datatypes(
+    #     existing_schema=existing_schema, updated_schema=updated_schema
+    # )
+    # has_datatype_changed = len(changed_datatypes) > 0
+
+    if has_schema_changed:
+        context.log.info("Updating schema...")
+        updated_schema_df = spark.createDataFrame([], schema=updated_schema)
+        (
+            updated_schema_df.write.option("mergeSchema", "true")
+            .format("delta")
+            .mode("append")
+            .saveAsTable(table_name)
+        )
+
+    if has_nullability_changed:
+        alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
+        for stmnt in alter_sql:
+            spark.sql(stmnt).show()
