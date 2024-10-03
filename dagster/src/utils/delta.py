@@ -241,3 +241,19 @@ def count_changed_datatypes(
                 changed_datatypes[match_.name] = column.dataType
 
     return changed_datatypes
+
+
+def build_nullability_queries(
+    existing_schema: StructType, updated_schema: StructType
+) -> list[str]:
+    alter_stmts = []
+    for column in existing_schema:
+        if (
+            match_ := next((c for c in updated_schema if c.name == column.name), None)
+        ) is not None:
+            if match_.nullable != column.nullable:
+                if match_.nullable:
+                    alter_stmts.append(f"ALTER COLUMN {column.name} DROP NOT NULL")
+                else:
+                    alter_stmts.append(f"ALTER COLUMN {column.name} SET NOT NULL")
+    return alter_stmts
