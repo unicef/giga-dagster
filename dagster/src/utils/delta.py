@@ -7,7 +7,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.functions import collect_list, concat_ws, sha2
-from pyspark.sql.types import StructField, StructType
+from pyspark.sql.types import DataType, StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
 from src.constants import DataTier
@@ -226,3 +226,18 @@ def check_table_exists(
     return ic(spark.catalog.tableExists(table_name, tiered_schema_name)) and ic(
         DeltaTable.isDeltaTable(spark, table_path)
     )
+
+
+def count_changed_datatypes(
+    existing_schema: StructType, updated_schema: StructType
+) -> dict[str, DataType]:
+    changed_datatypes = {}
+
+    for column in existing_schema:
+        if (
+            match_ := next((c for c in updated_schema if c.name == column.name), None)
+        ) is not None:
+            if match_.dataType != column.dataType:
+                changed_datatypes[match_.name] = column.dataType
+
+    return changed_datatypes
