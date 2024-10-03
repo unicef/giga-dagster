@@ -96,7 +96,7 @@ class StagingStep:
                 # If silver table exists and no staging table exists, clone it to staging
                 self.create_staging_table_from_silver()
 
-            self.sync_schema()
+            self.sync_schema_staging()
 
             # If silver table exists and staging table exists, merge files for review to existing staging table
             if self.change_type != StagingChangeTypeEnum.DELETE:
@@ -111,7 +111,7 @@ class StagingStep:
                 staging = self.standard_transforms(upstream_df)
 
                 if self.staging_table_exists:
-                    self.sync_schema()
+                    self.sync_schema_staging()
                     staging = self.upsert_rows(staging)
                 else:
                     self.create_empty_staging_table()
@@ -203,7 +203,7 @@ class StagingStep:
             if_not_exists=True,
         )
 
-    def sync_schema(self):
+    def sync_schema_staging(self):
         """Update the schema of existing delta tables based on the reference schema delta tables."""
         self.context.log.info("Checking for schema update...")
         updated_schema = StructType(self.schema_columns)
