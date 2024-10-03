@@ -228,18 +228,24 @@ def check_table_exists(
     )
 
 
-def count_changed_datatypes(
-    existing_schema: StructType, updated_schema: StructType
+def get_changed_datatypes(
+    context: OpExecutionContext, existing_schema: StructType, updated_schema: StructType
 ) -> dict[str, DataType]:
+    original_datatypes = {}
     changed_datatypes = {}
+    context.log.info(f"Existing schema {existing_schema}")
+    context.log.info(f"Updated schema {updated_schema}")
 
     for column in existing_schema:
         if (
             match_ := next((c for c in updated_schema if c.name == column.name), None)
         ) is not None:
             if match_.dataType != column.dataType:
-                changed_datatypes[match_.name] = column.dataType
+                changed_datatypes[match_.name] = match_.dataType
+                original_datatypes[match_.name] = column.dataType
 
+    context.log.info(f"Original datatypes: {original_datatypes}")
+    context.log.info(f"Changed datatypes: {changed_datatypes}")
     return changed_datatypes
 
 
