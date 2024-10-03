@@ -287,25 +287,6 @@ def sync_schema(
     )
     has_datatype_changed = len(changed_datatypes) > 0
 
-    if has_schema_changed:
-        context.log.info("Adding schema columns...")
-        updated_schema = spark.createDataFrame([], schema=updated_schema)
-        (
-            updated_schema.write.option("mergeSchema", "true")
-            .format("delta")
-            .mode("append")
-            .saveAsTable(table_name)
-        )
-
-    if has_nullability_changed:
-        context.log.info(
-            "Modifying column nullabilities with the SQL statements{alter_sql}..."
-        )
-
-        alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
-        for stmnt in alter_sql:
-            spark.sql(stmnt).show()
-
     if has_datatype_changed:
         context.log.info("Updating datatype...")
         existing_dataframe = spark.table(table_name)
@@ -322,3 +303,24 @@ def sync_schema(
             .mode("overwrite")
             .saveAsTable(table_name)
         )
+
+    if has_schema_changed:
+        context.log.info("Adding schema columns...")
+        empty_dataframe_with_updated_schema = spark.createDataFrame(
+            [], schema=updated_schema
+        )
+        (
+            empty_dataframe_with_updated_schema.write.option("mergeSchema", "true")
+            .format("delta")
+            .mode("append")
+            .saveAsTable(table_name)
+        )
+
+    if has_nullability_changed:
+        context.log.info(
+            "Modifying column nullabilities with the SQL statements{alter_sql}..."
+        )
+
+        alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
+        for stmnt in alter_sql:
+            spark.sql(stmnt).show()
