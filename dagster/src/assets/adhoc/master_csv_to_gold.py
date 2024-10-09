@@ -12,6 +12,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import NullType, StructType
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -37,7 +38,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
-from src.utils.delta import sync_schema
+from src.utils.delta import check_table_exists, sync_schema
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -608,24 +609,37 @@ def adhoc__publish_reference_to_gold(
     )
     gold = compute_row_hash(gold)
 
-    table_name = f"{config.metastore_schema}.{config.country_code}"
-    updated_schema = StructType(
-        get_schema_columns(
-            spark=spark.spark_session, schema_name=config.metastore_schema
-        )
-    )
-    existing_df = DeltaTable.forName(
-        sparkSession=spark.spark_session, tableOrViewName=table_name
-    ).toDF()
-    existing_schema = existing_df.schema
-
-    sync_schema(
-        table_name=table_name,
-        existing_schema=existing_schema,
-        updated_schema=updated_schema,
+    table_exists = check_table_exists(
         spark=spark.spark_session,
-        context=context,
+        schema_name="school_reference",
+        table_name=config.country_code.lower(),
+        data_tier=DataTier.GOLD,
     )
+
+    if table_exists:
+        table_name = f"{config.metastore_schema}.{config.country_code}"
+        updated_schema = StructType(
+            get_schema_columns(
+                spark=spark.spark_session, schema_name="school_reference"
+            )
+        )
+
+        print("Existing table name", table_name)
+
+        existing_df = DeltaTable.forName(
+            sparkSession=spark.spark_session,
+            tableOrViewName=table_name,
+        ).toDF()
+        existing_schema = existing_df.schema
+
+        sync_schema(
+            table_name=table_name,
+            existing_schema=existing_schema,
+            updated_schema=updated_schema,
+            spark=spark.spark_session,
+            context=context,
+        )
+
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
