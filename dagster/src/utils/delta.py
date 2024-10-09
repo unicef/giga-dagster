@@ -326,6 +326,15 @@ def sync_schema(
             f"Modifying column nullabilities with the SQL statements{alter_stmts}..."
         )
 
-        alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
-        for stmnt in alter_sql:
+        # alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
+        alter_stmts = [
+            f"{alter_sql} ADD CONSTRAINT school_id_giga_not_null CHECK (school_id_giga is not null)"
+        ]
+
+        # overwrite alter_sql with nothing
+        alter_stmts = []
+
+        context.log.info(f"ALTER SQL: {alter_stmts}")
+
+        for stmnt in alter_stmts:
             spark.sql(stmnt).show()
