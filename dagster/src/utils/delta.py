@@ -274,8 +274,9 @@ def sync_schema(
 ):
     alter_sql = f"ALTER TABLE {table_name}"
     alter_stmts = build_nullability_queries(
-        existing_schema=existing_schema, updated_schema=updated_schema
+        context=context, existing_schema=existing_schema, updated_schema=updated_schema
     )
+    context.log.info(f"alter_stmts {alter_stmts}")
     has_nullability_changed = len(alter_stmts) > 0
 
     updated_columns = sorted(updated_schema.fieldNames())
@@ -287,6 +288,7 @@ def sync_schema(
     )
     has_datatype_changed = len(changed_datatypes) > 0
 
+    context.log.info(f"has_datatype_changed {has_datatype_changed}")
     if has_datatype_changed:
         context.log.info("Updating datatype...")
         existing_dataframe = spark.table(table_name)
@@ -304,6 +306,8 @@ def sync_schema(
             .saveAsTable(table_name)
         )
 
+    context.log.info(f"has_schema_changed {has_schema_changed}")
+
     if has_schema_changed:
         context.log.info("Adding schema columns...")
         empty_dataframe_with_updated_schema = spark.createDataFrame(
@@ -315,10 +319,11 @@ def sync_schema(
             .mode("append")
             .saveAsTable(table_name)
         )
+    context.log.info(f"has_nullability_changed {has_nullability_changed}")
 
     if has_nullability_changed:
         context.log.info(
-            "Modifying column nullabilities with the SQL statements{alter_sql}..."
+            f"Modifying column nullabilities with the SQL statements{alter_stmts}..."
         )
 
         alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
