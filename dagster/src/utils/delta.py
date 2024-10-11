@@ -250,8 +250,14 @@ def get_changed_datatypes(
 
 
 def build_nullability_queries(
-    existing_schema: StructType, updated_schema: StructType
+    context: OpExecutionContext,
+    existing_schema: StructType,
+    updated_schema: StructType,
+    table_name: str,
 ) -> list[str]:
+    context.log.info("Building nullability queries...")
+    context.log.info(f"Existing schema {existing_schema}")
+    context.log.info(f"Updated schema {updated_schema}")
     alter_stmts = []
     for column in existing_schema:
         if (
@@ -259,9 +265,15 @@ def build_nullability_queries(
         ) is not None:
             if match_.nullable != column.nullable:
                 if match_.nullable:
-                    alter_stmts.append(f"ALTER COLUMN {column.name} DROP NOT NULL")
+                    alter_stmts.append(
+                        f"ALTER TABLE {table_name} ADD CONSTRAINT {column.name}_not_null CHECK ({column.name} is not null)"
+                    )
+
                 else:
-                    alter_stmts.append(f"ALTER COLUMN {column.name} SET NOT NULL")
+                    alter_stmts.append(
+                        f"ALTER TABLE {table_name} DROP CONSTRAINT {column.name}_not_null"
+                    )
+
     return alter_stmts
 
 
@@ -272,9 +284,11 @@ def sync_schema(
     spark: SparkSession,
     context: OpExecutionContext,
 ):
-    alter_sql = f"ALTER TABLE {table_name}"
     alter_stmts = build_nullability_queries(
-        context=context, existing_schema=existing_schema, updated_schema=updated_schema
+        context=context,
+        existing_schema=existing_schema,
+        updated_schema=updated_schema,
+        table_name=table_name,
     )
     context.log.info(f"alter_stmts {alter_stmts}")
     has_nullability_changed = len(alter_stmts) > 0
@@ -326,14 +340,8 @@ def sync_schema(
             f"Modifying column nullabilities with the SQL statements{alter_stmts}..."
         )
 
-        # alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
-        alter_stmts = [
-            f"{alter_sql} ADD CONSTRAINT school_id_giga_not_null CHECK (school_id_giga is not null)"
-        ]
-
         # overwrite alter_sql with nothing
         alter_stmts = []
-
         context.log.info(f"ALTER SQL: {alter_stmts}")
 
         for stmnt in alter_stmts:
