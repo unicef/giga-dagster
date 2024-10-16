@@ -283,6 +283,6 @@ cd dagster
 # Add the dependency using poetry
 poetry add dagster-azure
 
-# Re-run task
+## Re-run task
 task
 ```
