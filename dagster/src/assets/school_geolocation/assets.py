@@ -99,8 +99,14 @@ def geolocation_bronze(
 
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
+    context.log.info("COLUMN MAPPING")
+    context.log.info(column_mapping)
+    context.log.info("COLUMN MAPPING DATAFRAME")
+    context.log.info(df.show())
 
     columns = get_schema_columns(s, schema_name)
+    context.log.info("COLUMN MAPPING DATAFRAME")
+    context.log.info(columns.show())
     schema = StructType(columns)
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
@@ -121,6 +127,9 @@ def geolocation_bronze(
             f.col("school_id_govt").cast(LongType()).cast(StringType()),
         ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
+    context.log.info("Casted bronze")
+    context.log.info(casted_silver.show())
+
     casted_bronze = df.withColumn(
         "school_id_govt",
         f.when(
@@ -128,6 +137,8 @@ def geolocation_bronze(
             f.col("school_id_govt").cast(LongType()).cast(StringType()),
         ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
+    context.log.info("Casted bronze")
+    context.log.info(casted_bronze.show())
 
     df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
 
