@@ -102,14 +102,16 @@ def geolocation_bronze(
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info(df.show())
+    context.log.info(df)
 
     columns = get_schema_columns(s, schema_name)
-    context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info(columns.show())
+    context.log.info("schema columns")
+    context.log.info(columns)
+
     schema = StructType(columns)
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        context.log.info("TABLE EXISTS")
         silver_tier_schema_name = construct_schema_name_for_tier(
             "school_geolocation", DataTier.SILVER
         )
@@ -118,6 +120,8 @@ def geolocation_bronze(
         )
         silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     else:
+        context.log.info("TABLE DOES NOT EXIST")
+
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
@@ -127,8 +131,8 @@ def geolocation_bronze(
             f.col("school_id_govt").cast(LongType()).cast(StringType()),
         ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
-    context.log.info("Casted bronze")
-    context.log.info(casted_silver.show())
+    context.log.info("Casted Silver")
+    context.log.info(casted_silver)
 
     casted_bronze = df.withColumn(
         "school_id_govt",
@@ -137,12 +141,15 @@ def geolocation_bronze(
             f.col("school_id_govt").cast(LongType()).cast(StringType()),
         ).otherwise(f.col("school_id_govt").cast(StringType())),
     )
-    context.log.info("Casted bronze")
-    context.log.info(casted_bronze.show())
+    context.log.info("Casted Bronze")
+    context.log.info(casted_bronze)
 
     df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
+    context.log.info("DF from create_bronze_layer_columns")
+    context.log.info(df)
 
     config.metadata.update({"column_mapping": column_mapping})
+    context.log.info("After config metadata update")
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -151,7 +158,12 @@ def geolocation_bronze(
         schema_reference=df,
     )
 
+    ## at this point it's already gone
+    context.log.info("BEFORE DF TO PANDAS")
     df_pandas = df.toPandas()
+    context.log.info("AFTER DF TO PANDAS")
+    context.log.info(df_pandas)
+
     return Output(
         df_pandas,
         metadata={
