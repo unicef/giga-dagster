@@ -248,7 +248,7 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         columns = [
             col
             for col in df.columns
-            if not col.startswith("dq_") or col != "failure_reason"
+            if not (col.startswith("dq_") or col == "failure_reason")
         ]
 
     df = df.filter(df.dq_has_critical_error == 0)
