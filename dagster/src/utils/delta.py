@@ -340,9 +340,5 @@ def sync_schema(
             f"Modifying column nullabilities with the SQL statements{alter_stmts}..."
         )
 
-        # overwrite alter_sql with nothing
-        alter_stmts = []
-        context.log.info(f"ALTER SQL: {alter_stmts}")
-
         for stmnt in alter_stmts:
             spark.sql(stmnt).show()
