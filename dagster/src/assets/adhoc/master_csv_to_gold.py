@@ -655,7 +655,7 @@ def adhoc__publish_reference_to_gold(
             )
         )
 
-        print("Existing table name", table_name)
+        context.log.info(f"Existing table name: {table_name}")
 
         existing_df = DeltaTable.forName(
             sparkSession=spark.spark_session,
