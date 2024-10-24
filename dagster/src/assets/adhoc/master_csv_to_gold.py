@@ -620,7 +620,7 @@ def adhoc__publish_reference_to_gold(
         table_name = f"{config.metastore_schema}.{config.country_code}"
         updated_schema = StructType(
             get_schema_columns(
-                spark=spark.spark_session, schema_name="school_reference"
+                spark=spark.spark_session, schema_name=config.metastore_schema
             )
         )
 
