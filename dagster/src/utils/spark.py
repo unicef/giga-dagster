@@ -222,8 +222,6 @@ def transform_types(
     Retuns a dataframe with columns casted to use types in provided schema.
     """
 
-    logger = get_context_with_fallback_logger(context)
-
     columns = get_schema_columns(df.sparkSession, schema_name)
     context.log.info(f"Schema name: {schema_name}")
     context.log.info(f"Schema columns: {columns}")
@@ -237,6 +235,9 @@ def transform_types(
     if schema_name == "qos":
         columns = [c for c in columns if c.name in df.columns]
 
+    context.log.info(
+        f"transform types schema columns before {df.schema.simpleString()}"
+    )
     df = df.withColumns(
         {
             column.name: col(column.name).cast(column.dataType)
@@ -244,7 +245,9 @@ def transform_types(
             if column.name != "signature"
         },
     )
-    logger.info("Transformed column types")
+    context.log.info(
+        f"transform types after df with columns {df.schema.simpleString()}"
+    )
     df.printSchema()
     return df
 

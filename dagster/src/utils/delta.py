@@ -341,4 +341,5 @@ def sync_schema(
         )
 
         for stmnt in alter_stmts:
+            context.log.info(f"executing sql: {stmnt}")
             spark.sql(stmnt).show()
