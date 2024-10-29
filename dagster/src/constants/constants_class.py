@@ -17,6 +17,7 @@ from pyspark.sql.types import (
     StringType,
     TimestampType,
 )
+
 from src.settings import settings
 
 
@@ -34,9 +35,13 @@ class Constants(BaseSettings):
 
     dq_passed_folder = f"{settings.LAKEHOUSE_PATH}/staging/pending-review"
     staging_approved_folder = f"{settings.LAKEHOUSE_PATH}/staging/approved"
-    archive_manual_review_rejected_folder = f"{settings.LAKEHOUSE_PATH}/archive/manual-review-rejected"
+    archive_manual_review_rejected_folder = (
+        f"{settings.LAKEHOUSE_PATH}/archive/manual-review-rejected"
+    )
     gold_source_folder = f"{settings.LAKEHOUSE_PATH}/updated_master_schema"
-    adhoc_master_updates_source_folder = f"{settings.LAKEHOUSE_PATH}/updated_master_schema/master_updates"
+    adhoc_master_updates_source_folder = (
+        f"{settings.LAKEHOUSE_PATH}/updated_master_schema/master_updates"
+    )
     qos_source_folder = f"{settings.LAKEHOUSE_PATH}/gold/qos"
 
     # can't set infinite, just set to a value most likely beyond the extinction of the human race
