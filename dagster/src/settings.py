@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     SPARK_DRIVER_MEMORY_MB: int = 1365
     LICENSE_LIST: list[str] = ["Open Source", "Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
+    LAKEHOUSE_USERNAME: str = ""
     ADMIN_EMAIL: str = ""
     MLAB_DB_CONNECTION_STRING: str = ""
     PROCO_DB_CONNECTION_STRING: str = ""
@@ -136,6 +137,14 @@ class Settings(BaseSettings):
     @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
         return f"{self.AZURE_BLOB_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
+
+    @property
+    def LAKEHOUSE_PATH(self) -> str:
+        if self.PYTHON_ENV == Environment.LOCAL:
+            if self.LAKEHOUSE_USERNAME:
+                return f"lakehouse-local-{self.LAKEHOUSE_USERNAME}"
+            return "lakehouse-local"
+        return ""
 
     @property
     def INGESTION_DB_HOST(self) -> str:
