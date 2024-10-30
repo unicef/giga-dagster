@@ -264,10 +264,11 @@ def build_nullability_queries(
             match_ := next((c for c in updated_schema if c.name == column.name), None)
         ) is not None:
             if match_.nullable != column.nullable:
+                alter_stmts.append(
+                    f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {column.name}_not_null"
+                )
+
                 if match_.nullable:
-                    alter_stmts.append(
-                        f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {column.name}_not_null"
-                    )
                     alter_stmts.append(
                         f"ALTER TABLE {table_name} ALTER COLUMN {column.name} DROP NOT NULL"
                     )
