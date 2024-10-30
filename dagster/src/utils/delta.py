@@ -349,4 +349,10 @@ def sync_schema(
 
         for stmnt in alter_stmts:
             context.log.info(f"executing sql: {stmnt}")
-            spark.sql(stmnt).show()
+            try:
+                spark.sql(stmnt).show()
+            except AnalysisException as exc:
+                if "DELTA_CONSTRAINT_ALREADY_EXISTS" in str(exc):
+                    continue
+                else:
+                    raise
