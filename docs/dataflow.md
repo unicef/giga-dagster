@@ -35,3 +35,6 @@ In the context of the current implementation of the platform, we are ingesting s
 geolocation data and school coverage data separately, so their tiers are separate up
 until `silver`. The silver geolocation and silver coverage tables are then joined to
 form the `gold` School Master table.
+
+
+There are also adhoc pipelines which can help with a direct push to the `gold` layer

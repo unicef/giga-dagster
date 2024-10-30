@@ -16,6 +16,7 @@ from src.jobs.adhoc import (
     school_master__dq_checks_job,
     school_master__generate_silver_tables_job,
     school_qos__convert_csv_to_deltatable_job,
+    school_qos_raw__convert_csv_to_deltatable_job,
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -194,6 +195,82 @@ def school_master__gold_csv_to_deltatable_sensor(
         run_requests.append(
             RunRequest(
                 run_key=f"{path}:{last_modified}",
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            ),
+        )
+
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
+
+
+@sensor(
+    job=school_qos_raw__convert_csv_to_deltatable_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def school_qos_raw__gold_csv_to_deltatable_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    run_requests = []
+
+    for file_data in adls_file_client.list_paths_generator(
+        constants.qos_raw_source_folder, recursive=True
+    ):
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+
+        if (
+            file_data.is_directory
+            or len(path.parent.name) != 3
+            or path.suffix.lower() != ".csv"
+        ):
+            context.log.warning(f"Skipping {adls_filepath}")
+            continue
+
+        stem = path.stem
+        country_code = path.parent.name
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+        metastore_schema = f"qos_raw"
+
+        ops_destination_mapping = {
+            "adhoc__load_qos_raw_csv": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=metastore_schema,
+                tier=DataTier.RAW,
+            ),
+            "adhoc__qos_raw_transforms": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.csv",
+                metastore_schema=metastore_schema,
+                tier=DataTier.TRANSFORMS,
+            ),
+            "adhoc__publish_qos_raw_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
+            ),
+        }
+
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type="qos-raw",
+            metadata=metadata,
+            file_size_bytes=size,
+            domain=DOMAIN,
+            country_code=country_code,
+        )
+
+        context.log.info(f"FILE: {path}")
+        run_requests.append(
+            RunRequest(
+                run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             ),
