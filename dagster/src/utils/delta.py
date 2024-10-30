@@ -266,10 +266,13 @@ def build_nullability_queries(
             if match_.nullable != column.nullable:
                 if match_.nullable:
                     alter_stmts.append(
-                        f"ALTER TABLE {table_name} ALTER COLUMN {column.name} DROP NOT NULL"
+                        f"ALTER TABLE {table_name} ADD CONSTRAINT {column.name}_not_null CHECK ({column.name} is not null)"
                     )
 
                 else:
+                    alter_stmts.append(
+                        f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {column.name}_not_null"
+                    )
                     alter_stmts.append(
                         f"ALTER TABLE {table_name} ALTER COLUMN {column.name} SET NOT NULL"
                     )
