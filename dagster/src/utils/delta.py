@@ -293,18 +293,22 @@ def sync_schema(
     context.log.info(f"alter_stmts {alter_stmts}")
     has_nullability_changed = len(alter_stmts) > 0
 
-    updated_columns = sorted(updated_schema.fieldNames())
-    existing_columns = sorted(existing_schema.fieldNames())
-    has_schema_changed = updated_columns != existing_columns
+    existing_columns = {field.name: field.name for field in existing_schema}
+    updated_columns = {field.name: field.name for field in updated_schema}
+
+    added_columns = set(updated_columns.keys()) - set(existing_columns.keys())
+    removed_columns = set(existing_columns.keys()) - set(updated_columns.keys())
+
+    has_schema_changed = len(added_columns) + len(removed_columns) > 0
 
     changed_datatypes = get_changed_datatypes(
         context=context, existing_schema=existing_schema, updated_schema=updated_schema
     )
     has_datatype_changed = len(changed_datatypes) > 0
 
-    context.log.info(f"has_datatype_changed {has_datatype_changed}")
     if has_datatype_changed:
         context.log.info("Updating datatype...")
+        context.log.info(f"Changed datatypes: {changed_datatypes}")
         existing_dataframe = spark.table(table_name)
         updated_df = existing_dataframe
 
@@ -320,10 +324,9 @@ def sync_schema(
             .saveAsTable(table_name)
         )
 
-    context.log.info(f"has_schema_changed {has_schema_changed}")
-
     if has_schema_changed:
-        context.log.info("Adding schema columns...")
+        context.log.info(f"Adding schema columns {added_columns}")
+
         empty_dataframe_with_updated_schema = spark.createDataFrame(
             [], schema=updated_schema
         )
