@@ -566,9 +566,15 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
         "connectivity",
         f.when(
             (f.lower(f.col("connectivity_RT")) == "yes")
-            | (f.lower(f.col("connectivity_govt")) == "yes"),
+            | (
+                (f.lower(f.col("connectivity_govt")) == "yes")
+                & (f.col("download_speed_govt") != 0)
+            )
+            | (f.col("download_speed_govt") > 0),
             "Yes",
-        ).otherwise("No"),
+        )
+        .when((f.lower(f.col("connectivity_govt")) == "yes"), "Unknown")
+        .otherwise("No"),
     )
     return master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
