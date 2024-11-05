@@ -264,17 +264,18 @@ def build_nullability_queries(
             match_ := next((c for c in updated_schema if c.name == column.name), None)
         ) is not None:
             if match_.nullable != column.nullable:
+                alter_stmts.append(
+                    f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {column.name}_not_null"
+                )
+
                 if match_.nullable:
                     alter_stmts.append(
-                        f"ALTER TABLE {table_name} ADD CONSTRAINT {column.name}_not_null CHECK ({column.name} is not null)"
+                        f"ALTER TABLE {table_name} ALTER COLUMN {column.name} DROP NOT NULL"
                     )
 
                 else:
                     alter_stmts.append(
-                        f"ALTER TABLE {table_name} DROP CONSTRAINT IF EXISTS {column.name}_not_null"
-                    )
-                    alter_stmts.append(
-                        f"ALTER TABLE {table_name} ALTER COLUMN {column.name} SET NOT NULL"
+                        f"ALTER TABLE {table_name} ADD CONSTRAINT {column.name}_not_null CHECK ({column.name} is not null)"
                     )
 
     return alter_stmts
@@ -348,4 +349,10 @@ def sync_schema(
 
         for stmnt in alter_stmts:
             context.log.info(f"executing sql: {stmnt}")
-            spark.sql(stmnt).show()
+            try:
+                spark.sql(stmnt).show()
+            except AnalysisException as exc:
+                if "DELTA_CONSTRAINT_ALREADY_EXISTS" in str(exc):
+                    continue
+                else:
+                    raise
