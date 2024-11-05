@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     MLAB_DB_CONNECTION_STRING: str = ""
     PROCO_DB_CONNECTION_STRING: str = ""
+    GIGAMAPS_DB_CONNECTION_STRING: str = ""
+    GIGAMETER_DB_CONNECTION_STRING: str = ""
 
     # Derived settings
     @property

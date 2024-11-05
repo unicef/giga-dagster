@@ -65,6 +65,8 @@ jobs:
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    GIGAMAPS_DB_CONNECTION_STRING: "$(gigamapsDbConnectionString)"
+                    GIGAMETER_DB_CONNECTION_STRING: "$(gigameterDbConnectionString)"
                     MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
                     PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
                     SPARK_DRIVER_CORES: "$(sparkDriverCores)"
