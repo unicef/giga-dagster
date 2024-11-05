@@ -12,7 +12,6 @@ from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import get_schema_columns_datahub
 from src.utils.spark import transform_types
 
 from dagster import (

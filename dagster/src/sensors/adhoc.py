@@ -235,7 +235,7 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
-        metastore_schema = f"qos_raw"
+        metastore_schema = "qos_raw"
 
         ops_destination_mapping = {
             "adhoc__load_qos_raw_csv": OpDestinationMapping(
