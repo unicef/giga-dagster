@@ -16,6 +16,12 @@ school_qos__convert_csv_to_deltatable_job = define_asset_job(
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
 
+school_qos_raw__convert_csv_to_deltatable_job = define_asset_job(
+    name="school_qos_raw__convert_csv_to_deltatable_job",
+    selection="adhoc__load_qos_raw_csv*",
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
+
 
 school_master__generate_mock_table_cdf_job = define_asset_job(
     name="school_master__generate_mock_table_cdf_job",
