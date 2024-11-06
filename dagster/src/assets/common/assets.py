@@ -23,6 +23,7 @@ from src.spark.transform_functions import (
     add_missing_columns,
     connectivity_rt_dataset,
     merge_connectivity_to_master,
+    standardize_connectivity_type,
 )
 from src.utils.adls import (
     ADLSFileClient,
@@ -321,6 +322,9 @@ def master(
         country_code_2 = coco.convert(country_code, to="ISO2")
         connectivity = connectivity_rt_dataset(s, country_code_2)
         silver = merge_connectivity_to_master(silver, connectivity)
+
+    # standardize the connectivity type
+    silver = standardize_connectivity_type(silver)
 
     # Conform to master schema and fill in missing values with NULL
     silver = add_missing_columns(silver, schema_columns)
