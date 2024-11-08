@@ -9,3 +9,8 @@ admin__terminate_all_runs_job = define_asset_job(
         "dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME,
     },
 )
+
+admin__create_lakehouse_local_job = define_asset_job(
+    name="admin__create_lakehouse_local_job",
+    selection=["admin__create_lakehouse_local"],
+)

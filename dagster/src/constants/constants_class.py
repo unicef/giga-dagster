@@ -27,6 +27,7 @@ class Constants(BaseSettings):
 
     raw_folder = f"{settings.LAKEHOUSE_PATH}/raw"  # if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = f"{settings.LAKEHOUSE_PATH}/raw/schema"
+    raw_schema_folder_source = "raw/schema"
     bronze_folder = f"{settings.LAKEHOUSE_PATH}/bronze"
     silver_folder = f"{settings.LAKEHOUSE_PATH}/silver"
     gold_folder = f"{settings.LAKEHOUSE_PATH}/gold"
