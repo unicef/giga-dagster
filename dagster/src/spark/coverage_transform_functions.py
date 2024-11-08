@@ -121,13 +121,15 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
 
 
 def itu_binary_to_boolean(df: sql.DataFrame):
-    df = df.withColumn("2G_coverage", f.col("2G") >= 1)
-    df = df.withColumn("3G_coverage", f.col("3G") == 1)
-    df = df.withColumn("4G_coverage", f.col("4G") == 1)
+    df = df.withColumn("2G_coverage", f.col("2g_mobile_coverage") == 1)
+    df = df.withColumn("3G_coverage", f.col("3g_mobile_coverage") == 1)
+    df = df.withColumn("4G_coverage", f.col("4g_mobile_coverage") == 1)
+    df = df.withColumn("5G_coverage", f.col("5g_mobile_coverage") == 1)
 
-    df = df.drop("2G")
-    df = df.drop("3G")
-    df = df.drop("4G")
+    df = df.drop("2g_mobile_coverage")
+    df = df.drop("3g_mobile_coverage")
+    df = df.drop("4g_mobile_coverage")
+    df = df.drop("5g_mobile_coverage")
     return df
 
 
