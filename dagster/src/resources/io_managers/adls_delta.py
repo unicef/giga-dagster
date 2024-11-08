@@ -149,7 +149,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context: OutputContext = None,
     ):
         spark = self._get_spark_session()
-        is_qos = schema_name in ["qos", "school-connectivity"]
+        is_qos = schema_name in ["qos", "qos_raw", "school-connectivity"]
 
         if is_qos:
             gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
