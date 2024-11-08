@@ -161,8 +161,9 @@ class ADLSFileClient(ConfigurableResource):
     def rename_file(self, old_filepath: str, new_filepath: str) -> DataLakeFileClient:
         file_client = _adls.get_file_client(file_path=old_filepath)
         new_path = file_client.file_system_name + "/" + new_filepath
-        file_client.rename_file(new_name=new_path)
+        renamed_file_client = file_client.rename_file(new_name=new_path)
         print(f"File {old_filepath} renamed to {new_path}")
+        return renamed_file_client
 
     def folder_exists(self, folder_path: str) -> bool:
         file_system_client = _client.get_file_system_client(
