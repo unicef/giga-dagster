@@ -253,28 +253,10 @@ class Config(BaseSettings):
 
     NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = [
         "school_id_giga",
-        "2G",
-        "3G",
-        "4G",
-        "fiber_node_distance",
-        "microwave_node_distance",
-        "nearest_school_distance",
-        "schools_within_1km",
-        "schools_within_2km",
-        "schools_within_3km",
-        "schools_within_10km",
-        "nearest_NR_id",
-        "nearest_NR_distance",
-        "nearest_LTE_id",
-        "nearest_LTE_distance",
-        "nearest_UMTS_id",
-        "nearest_UMTS_distance",
-        "nearest_GSM_id",
-        "nearest_GSM_distance",
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "pop_within_10km",
+        "2g_mobile_coverage",
+        "3g_mobile_coverage",
+        "4g_mobile_coverage",
+        "5g_mobile_coverage"
     ]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
