@@ -11,6 +11,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
 import azure.core.exceptions
+from azure.storage.blob import BlobServiceClient
 from azure.storage.filedatalake import (
     DataLakeFileClient,
     DataLakeServiceClient,
@@ -160,9 +161,54 @@ class ADLSFileClient(ConfigurableResource):
     def rename_file(self, old_filepath: str, new_filepath: str) -> DataLakeFileClient:
         file_client = _adls.get_file_client(file_path=old_filepath)
         new_path = file_client.file_system_name + "/" + new_filepath
-        renamed_file_client = file_client.rename_file(new_name=new_path)
+        file_client.rename_file(new_name=new_path)
         print(f"File {old_filepath} renamed to {new_path}")
-        return renamed_file_client
+
+    def folder_exists(self, folder_path: str) -> bool:
+        file_system_client = _client.get_file_system_client(
+            file_system=settings.AZURE_BLOB_CONTAINER_NAME
+        )
+
+        try:
+            file_system_client.get_directory_client(
+                folder_path
+            ).get_directory_properties()
+            return True
+        except azure.core.exceptions.ResourceNotFoundError:
+            return False
+
+    def copy_folder(self, source_folder: str, target_folder: str) -> None:
+        # We use BlobServiceClient to copy folders because DataLakeServiceClient does not support folder copy.
+        blob_service_client = BlobServiceClient.from_connection_string(
+            settings.AZURE_STORAGE_CONNECTION_STRING
+        )
+        source_container_client = blob_service_client.get_container_client(
+            settings.AZURE_BLOB_CONTAINER_NAME
+        )
+
+        source_blobs = source_container_client.list_blobs(
+            name_starts_with=source_folder
+        )
+        for blob in source_blobs:
+            if blob.name == source_folder:
+                continue
+
+            source_blob_client = source_container_client.get_blob_client(blob.name)
+
+            relative_path = blob.name[len(source_folder) :].lstrip("/")
+            destination_blob_name = f"{target_folder.rstrip('/')}/{relative_path}"
+
+            target_blob_client = source_container_client.get_blob_client(
+                destination_blob_name
+            )
+
+            try:
+                target_blob_client.start_copy_from_url(source_blob_client.url)
+                print(f"Copied: {blob.name} -> {destination_blob_name}")
+            except azure.core.exceptions.ResourceExistsError:
+                print(f"Skipping: {blob.name} already exists in {target_folder}")
+            except Exception as e:
+                print(f"Failed to copy {blob.name}: {e}")
 
     @staticmethod
     def delete(filepath: str, *, is_directory=False):
