@@ -507,10 +507,10 @@ class Config(BaseSettings):
 
     ITU_COLUMNS: list[str] = [
         "school_id_giga",
-        "2g_mobile_coverage",
-        "3g_mobile_coverage",
-        "4g_mobile_coverage",
-        "5g_mobile_coverage",
+        "2G_coverage",
+        "3G_coverage",
+        "4G_coverage",
+        "5G_coverage",
         "connected_node_dist",
         "fiber_node_dist",
         "microwave_node_distance",
