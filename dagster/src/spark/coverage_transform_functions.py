@@ -160,10 +160,10 @@ def itu_transforms(itu: sql.DataFrame):
     itu = itu.withColumn(
         "cellular_coverage_type",
         (
-            f.when(f.col("5g_mobile_coverage"), f.lit("5G"))
-            .when(f.col("4g_mobile_coverage"), f.lit("4G"))
-            .when(f.col("3g_mobile_coverage"), f.lit("3G"))
-            .when(f.col("2g_mobile_coverage"), f.lit("2G"))
+            f.when(f.col("5G_coverage"), f.lit("5G"))
+            .when(f.col("4G_coverage"), f.lit("4G"))
+            .when(f.col("3G_coverage"), f.lit("3G"))
+            .when(f.col("2G_coverage"), f.lit("2G"))
             .otherwise("no coverage")
         ),
     )
@@ -182,7 +182,7 @@ def itu_transforms(itu: sql.DataFrame):
     itu = itu.withColumns(columns_to_add)
 
     # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    itu = itu.drop("2g_mobile_coverage", "3g_mobile_coverage", "4g_mobile_coverage", "5g_mobile_coverage")
+    itu = itu.drop("2G_coverage", "3G_coverage", "4G_coverage", "5G_coverage")
 
     return itu
 
