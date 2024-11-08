@@ -1,4 +1,5 @@
 import io
+import re
 import uuid
 from itertools import chain
 
@@ -180,6 +181,65 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
         "download_speed_govt",
         f.regexp_replace(f.col("download_speed_govt"), "[^0-9.]", "").cast(FloatType()),
     )
+
+
+def standardize_connectivity_type(df: sql.DataFrame) -> sql.DataFrame:
+    type_conn_regex_patterns = {
+        "fibre": "fiber|fibre|fibra|ftt|fttx|ftth|fttp|gpon|epon|fo|Фибер|optic|птички",
+        "copper": "adsl|dsl|copper|hdsl|vdsl",
+        "coaxial": "coax|coaxial",
+        "wired_other": "wired|ethernet|kablovski",
+        "unknown_wired": "unknown_wired",
+        "cellular": "cell|cellular|celular|2g|3g|4g|5g|lte|gsm|umts|cdma|mobile|mobie|p2a",
+        "p2p": "p2p|radio|microwave|ptmp|micro.wave|wimax|optical",
+        "satellite": "satellite|satelite|vsat|geo|leo|meo",
+        "haps": "haps",
+        "drones": "drones",
+        "unknown_wireless": "unknown_wireless",
+        "other": "TVWS|other|ethernet",
+        "unknown": "unknown|null|nan|n/a",
+    }
+
+    connectivity_root_mappings = {
+        "wired": ["fibre", "copper", "coaxial", "wired_other", "unknown_wired"],
+        "wireless": [
+            "cellular",
+            "p2p",
+            "satellite",
+            "haps",
+            "drones",
+            "unknown_wireless",
+            "other_wireless",
+        ],
+        "unknown_connectivity_type": ["unknown"],
+    }
+
+    def clean_type_connectivity(value):
+        for cleaned, matches in type_conn_regex_patterns.items():
+            if pd.isna(value):
+                return "unknown"
+            elif re.search(matches, str(value).lower(), flags=re.I):
+                return cleaned
+        return "unknown"
+
+    clean_type_connectivity_udf = f.udf(clean_type_connectivity, StringType())
+
+    def get_connectivity_type_root(value):
+        for key in connectivity_root_mappings:
+            if value in connectivity_root_mappings[key]:
+                return key
+
+    get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
+
+    df = df.withColumn(
+        "connectivity_type", clean_type_connectivity_udf(df["connectivity_type_govt"])
+    )
+    df = df.withColumn(
+        "connectivity_type_root",
+        get_connectivity_type_root_udf(df["connectivity_type"]),
+    )
+
+    return df
 
 
 def column_mapping_rename(
