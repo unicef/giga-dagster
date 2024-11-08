@@ -163,10 +163,10 @@ def column_relation_checks(
     elif dataset_type == "coverage" or dataset_type == "coverage_itu":
         # nearest_XX_distance -- nearest_XX_id
         column_pairs = {
-            ("nearest_NR_id", "nearest_NR_distance"),
-            ("nearest_LTE_id", "nearest_LTE_distance"),
-            ("nearest_UMTS_id", "nearest_UMTS_distance"),
-            ("nearest_GSM_id", "nearest_GSM_distance"),
+            ("nearest_NR_id", "5g_cell_site_dist"),
+            ("nearest_LTE_id", "4g_cell_site_dist"),
+            ("nearest_UMTS_id", "3g_cell_site_dist"),
+            ("nearest_GSM_id", "2g_cell_site_dist"),
         }
 
         for id, distance in column_pairs:
