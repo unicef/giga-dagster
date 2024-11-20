@@ -257,7 +257,7 @@ command-line executables are in your `PATH`.
 
 Make sure to fill up `WAREHOUSE_USERNAME` and `LAKEHOUSE_USERNAME` with the same value, preferably your first name. This will create a new `warehouse-local-YOUR_NAME` and a `lakehouse-local-YOUR_NAME` respectively in our deployed ADLS dev environment.
 
-We are doing this to avoid sharing warehouses among developers. With this, each developer essentially has two environments to work with, their own, and the shared dev environemt.
+We are doing this to avoid sharing warehouses among developers. With this, each developer essentially has two environments to work with, their own, and the shared dev environment.
 
 - `warehouse-local` - This is where the bronze, silver, and gold delta lake tables reside. This is also what `trino` will be using to get the needed data for `data-ingestion` to run properly (e.g. it gets the ingested schemas from here).
 
