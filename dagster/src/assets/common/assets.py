@@ -317,11 +317,12 @@ def master(
     primary_key = get_primary_key(s, schema_name)
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # QoS Columns
-        coco = CountryConverter()
-        country_code_2 = coco.convert(country_code, to="ISO2")
-        connectivity = connectivity_rt_dataset(s, country_code_2)
-        silver = merge_connectivity_to_master(silver, connectivity)
+        if config.dataset_type != 'coverage':
+            # QoS Columns
+            coco = CountryConverter()
+            country_code_2 = coco.convert(country_code, to="ISO2")
+            connectivity = connectivity_rt_dataset(s, country_code_2)
+            silver = merge_connectivity_to_master(silver, connectivity)
 
     # standardize the connectivity type
     silver = standardize_connectivity_type(silver)
