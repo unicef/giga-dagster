@@ -148,12 +148,13 @@ def itu_transforms(itu: sql.DataFrame):
 
     # rename columns to match legacy names
     itu = itu.withColumnsRenamed(
-        {'fiber_node_dist': 'fiber_node_distance',
-         '5g_cell_site_dist': 'nearest_NR_distance',
-         '4g_cell_site_dist': 'nearest_LTE_distance',
-         '3g_cell_site_dist': 'nearest_UMTS_distance',
-         '2g_cell_site_dist': 'nearest_GSM_distance'
-         }
+        {
+            "fiber_node_dist": "fiber_node_distance",
+            "5g_cell_site_dist": "nearest_NR_distance",
+            "4g_cell_site_dist": "nearest_LTE_distance",
+            "3g_cell_site_dist": "nearest_UMTS_distance",
+            "2g_cell_site_dist": "nearest_GSM_distance",
+        }
     )
 
     # coverage availability and type columns

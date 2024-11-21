@@ -256,7 +256,7 @@ class Config(BaseSettings):
         "2g_mobile_coverage",
         "3g_mobile_coverage",
         "4g_mobile_coverage",
-        "5g_mobile_coverage"
+        "5g_mobile_coverage",
     ]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
@@ -519,7 +519,7 @@ class Config(BaseSettings):
         "poi_count_5km",
         "is_visible",
         "visible_cell_site_dist",
-        "visible_cell_site_radio_type"
+        "visible_cell_site_radio_type",
     ]
 
     COV_COLUMN_MERGE_LOGIC: list[str] = [
