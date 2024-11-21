@@ -147,7 +147,7 @@ def itu_transforms(itu: sql.DataFrame):
     itu = coverage_row_filter(itu)
 
     # rename columns to match legacy names
-    itu.withColumnsRenamed(
+    itu = itu.withColumnsRenamed(
         {'fiber_node_dist': 'fiber_node_distance',
          '5g_cell_site_dist': 'nearest_NR_distance',
          '4g_cell_site_dist': 'nearest_LTE_distance',
