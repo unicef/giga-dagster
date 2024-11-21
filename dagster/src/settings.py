@@ -121,6 +121,10 @@ class Settings(BaseSettings):
         return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
     @property
+    def AZURE_STORAGE_CONNECTION_STRING(self) -> str:
+        return f"BlobEndpoint=https://{self.AZURE_BLOB_SAS_HOST};SharedAccessSignature={self.AZURE_SAS_TOKEN}"
+
+    @property
     def DEFAULT_SENSOR_INTERVAL_SECONDS(self) -> int:
         return int(timedelta(minutes=2).total_seconds()) if self.IN_PRODUCTION else 30
 
