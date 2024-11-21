@@ -33,11 +33,11 @@ Refer to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 - Push your commits, open a PR and fill in the PR template.
 - Request a review from 1 other developer.
 - Once approved, rebase/squash your commits into `main`. Rule of thumb:
-    - If the PR contains 1 or 2 commits, perform a **Rebase**.
-    - If the PR contains several commits that build toward a larger feature, perform a
-      **Squash**.
-    - If the PR contains several commits that are relatively unrelated (e.g., an
-      assortment of bug fixes), perform a **Rebase**.
+  - If the PR contains 1 or 2 commits, perform a **Rebase**.
+  - If the PR contains several commits that build toward a larger feature, perform a
+    **Squash**.
+  - If the PR contains several commits that are relatively unrelated (e.g., an
+    assortment of bug fixes), perform a **Rebase**.
 
 ## Local Development
 
@@ -64,8 +64,8 @@ Refer to [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 #### As-needed
 
 - [ ] [Kubernetes](https://kubernetes.io/docs/tasks/tools/)
-    - If you are using Docker Desktop on Windows, you can use the bundled Kubernetes
-      distribution.
+  - If you are using Docker Desktop on Windows, you can use the bundled Kubernetes
+    distribution.
 - [ ] [Helm](https://helm.sh/docs/intro/install/)
 
 #### Windows Subsystem for Linux (WSL)
@@ -87,14 +87,14 @@ _Skip this step if you are on Linux or Mac._
 3. [Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install). You may be
    prompted to restart your device.
 4. In a separate Powershell/Command Prompt (CMD) terminal, run:
-    ```shell
-    wsl --set-default-version 2
-    ```
+   ```shell
+   wsl --set-default-version 2
+   ```
 5. Open the Microsoft Store, search for and install Ubuntu.
 6. In the Powershell/CMD terminal, run:
-    ```shell
-    wsl --set-default Ubuntu
-    ```
+   ```shell
+   wsl --set-default Ubuntu
+   ```
 7. In the start menu, Ubuntu should show up in the recently added programs. Open it.
 8. You will be prompted for a new username and password. Enter any credentials and make
    sure to remember them. You may be prompted to restart again.
@@ -150,73 +150,75 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
    echo 'export PATH="${KREW_ROOT:-$HOME/.krew}/bin:$PATH"' >> ~/.bashrc
    ```
 3. Load your new shell config:
-    ```shell
-    # bash
-    source ~/.bashrc
-   
-    # zsh
-    source ~/.zshrc
-    ```
+
+   ```shell
+   # bash
+   source ~/.bashrc
+
+   # zsh
+   source ~/.zshrc
+   ```
+
 4. Download the Krew plugin list
-    ```shell
-    kubectl krew update
-    ```
+   ```shell
+   kubectl krew update
+   ```
 5. Install `kubectx` and `kubens`
-    ```shell
-    kubectl krew install ctx
-    kubectl krew install ns
-    ```
+   ```shell
+   kubectl krew install ctx
+   kubectl krew install ns
+   ```
 6. Test if installation is ok:
-    ```shell
-    kubectl ctx
-    kubectl ns
-    ```
+   ```shell
+   kubectl ctx
+   kubectl ns
+   ```
 
 #### asdf
 
 1. Install [asdf](https://asdf-vm.com/guide/getting-started.html).
 2. Test installation:
-    ```shell
-    asdf
-    ```
+   ```shell
+   asdf
+   ```
 
 #### Python
 
 1. Install Python build dependencies:
-    - **MacOS**
-      ```shell
-      brew install openssl readline sqlite3 xz zlib tcl-tk
-      ```
-    - **Linux/WSL**
-      ```shell
-      sudo apt-get update
-      sudo apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
-      ```
+   - **MacOS**
+     ```shell
+     brew install openssl readline sqlite3 xz zlib tcl-tk
+     ```
+   - **Linux/WSL**
+     ```shell
+     sudo apt-get update
+     sudo apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev curl libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev
+     ```
 2. Install Python
-    ```shell
-    asdf plugin add python
-    asdf install python 3.11.7
-    ```
+   ```shell
+   asdf plugin add python
+   asdf install python 3.11.7
+   ```
 
 #### Poetry
 
 1. Install Poetry
-    ```shell
-    asdf add plugin poetry
-    asdf install poetry 1.7.1
-    ```
+   ```shell
+   asdf add plugin poetry
+   asdf install poetry 1.7.1
+   ```
 2. Add Poetry path to your shell config:
-    ```shell
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    ```
+   ```shell
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   ```
 3. Reload shell config:
-    ```shell
-    source ~/.bashrc
-    ```
+   ```shell
+   source ~/.bashrc
+   ```
 4. Test installation:
-    ```shell
-    poetry --version
-    ```
+   ```shell
+   poetry --version
+   ```
 5. Set recommended settings:
    ```shell
    poetry config virtualenvs.in-project true
@@ -225,21 +227,21 @@ Install [Krew](https://krew.sigs.k8s.io/docs/user-guide/setup/install/):
 #### Task
 
 1. Install Task:
-    ```shell
-    sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
-    ```
+   ```shell
+   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+   ```
 2. Test installation:
-    ```shell
-    task --version
-    ```
+   ```shell
+   task --version
+   ```
 
 ### Cloning and Installation
 
 1. `git clone` the repository to your workstation.
 2. Run initial setup:
-    ```shell
-    task setup
-    ```
+   ```shell
+   task setup
+   ```
 
 ### Environment Setup
 
@@ -250,6 +252,16 @@ named `.env` in the same directory, then supply your own values.
 
 Ensure that the Pre-requisites have already been set up and all the necessary
 command-line executables are in your `PATH`.
+
+#### Setting up your own warehouse and lakehouse
+
+Make sure to fill up `WAREHOUSE_USERNAME` and `LAKEHOUSE_USERNAME` with the same value, preferably your first name. This will create a new `warehouse-local-YOUR_NAME` and a `lakehouse-local-YOUR_NAME` respectively in our deployed ADLS dev environment.
+
+We are doing this to avoid sharing warehouses among developers. With this, each developer essentially has two environments to work with, their own, and the shared dev environment.
+
+- `warehouse-local` - This is where the bronze, silver, and gold delta lake tables reside. This is also what `trino` will be using to get the needed data for `data-ingestion` to run properly (e.g. it gets the ingested schemas from here).
+
+- `lakehouse-local` - This is where files uploaded by `data-ingestion` or manually through ADLS will reside. This is also where intermediate assets generated by the ops in our `dagster` pipelines will reside.
 
 ### Running the Application
 
@@ -263,6 +275,14 @@ task logs
 # List all tasks (inspect Taskfile.yml to see the actual commands being run)
 task -l
 ```
+
+Once you have initialized Dagster, follow the steps to initialize some schemas needed for the upload flow in `giga-ingestion` to work properly.
+
+1. Go to `localhost:3001` to access the dagster UI
+2. Go to `jobs`
+3. Click on `admin__create_lakehouse_local_job` and materialize the asset. This will spawn a job in the `runs` tab which will create your own `lakehouse` folder and also copy over schemas from ADLS -> `raw/schema`
+4. Afterwards go to `Overview->Sensors` and turn on the `migrations__schema_sensor` this will spawn some runs which will populate the schema tables needed by (7 at the time of writing)
+5. Validate by running `data-ingestion` and `trino` together, and then starting the Upload File Flow. It should no longer error out in the first screen
 
 #### Housekeeping
 
