@@ -326,7 +326,8 @@ def master(
             silver = merge_connectivity_to_master(silver, connectivity)
 
     # standardize the connectivity type
-    silver = standardize_connectivity_type(silver)
+    if "connectivity_type_govt" in silver.columns:
+        silver = standardize_connectivity_type(silver)
 
     # Conform to master schema and fill in missing values with NULL
     silver = add_missing_columns(silver, schema_columns)
