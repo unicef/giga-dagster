@@ -317,7 +317,7 @@ def master(
     primary_key = get_primary_key(s, schema_name)
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        if config.dataset_type != 'coverage':
+        if config.dataset_type != "coverage":
             # QoS Columns
             coco = CountryConverter()
             country_code_2 = coco.convert(country_code, to="ISO2")
