@@ -45,7 +45,8 @@ def fb_transforms(fb: sql.DataFrame):
     fb = fb.withColumn(
         "cellular_coverage_type",
         (
-            f.when(f.col("4G_coverage"), f.lit("4G"))
+            f.when(f.col("5G_coverage"), f.lit("5G"))
+            .when(f.col("4G_coverage"), f.lit("4G"))
             .when(f.col("3G_coverage"), f.lit("3G"))
             .when(f.col("2G_coverage"), f.lit("2G"))
             .otherwise(f.lit("no coverage"))
@@ -66,7 +67,7 @@ def fb_transforms(fb: sql.DataFrame):
     fb = fb.withColumns(columns_to_add)
 
     # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    fb = fb.drop("2G_coverage", "3G_coverage", "4G_coverage")
+    fb = fb.drop("2G_coverage", "3G_coverage", "4G_coverage", "5G_coverage")
 
     return fb
 
@@ -93,6 +94,7 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
         "cellular_coverage_type",
         f.expr(
             "CASE "
+            "WHEN cellular_coverage_type = '5G' OR cellular_coverage_type_fb = '5G' THEN '5G' "
             "WHEN cellular_coverage_type = '4G' OR cellular_coverage_type_fb = '4G' THEN '4G' "
             "WHEN cellular_coverage_type = '3G' OR cellular_coverage_type_fb = '3G' THEN '3G' "
             "WHEN cellular_coverage_type = '2G' OR cellular_coverage_type_fb = '4G' THEN '2G' "
@@ -119,13 +121,15 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
 
 
 def itu_binary_to_boolean(df: sql.DataFrame):
-    df = df.withColumn("2G_coverage", f.col("2G") >= 1)
-    df = df.withColumn("3G_coverage", f.col("3G") == 1)
-    df = df.withColumn("4G_coverage", f.col("4G") == 1)
+    df = df.withColumn("2G_coverage", f.col("2g_mobile_coverage") == 1)
+    df = df.withColumn("3G_coverage", f.col("3g_mobile_coverage") == 1)
+    df = df.withColumn("4G_coverage", f.col("4g_mobile_coverage") == 1)
+    df = df.withColumn("5G_coverage", f.col("5g_mobile_coverage") == 1)
 
-    df = df.drop("2G")
-    df = df.drop("3G")
-    df = df.drop("4G")
+    df = df.drop("2g_mobile_coverage")
+    df = df.drop("3g_mobile_coverage")
+    df = df.drop("4g_mobile_coverage")
+    df = df.drop("5g_mobile_coverage")
     return df
 
 
@@ -142,11 +146,23 @@ def itu_transforms(itu: sql.DataFrame):
     itu = coverage_column_filter(itu, config.ITU_COLUMNS)
     itu = coverage_row_filter(itu)
 
+    # rename columns to match legacy names
+    itu = itu.withColumnsRenamed(
+        {
+            "fiber_node_dist": "fiber_node_distance",
+            "5g_cell_site_dist": "nearest_NR_distance",
+            "4g_cell_site_dist": "nearest_LTE_distance",
+            "3g_cell_site_dist": "nearest_UMTS_distance",
+            "2g_cell_site_dist": "nearest_GSM_distance",
+        }
+    )
+
     # coverage availability and type columns
     itu = itu.withColumn(
         "cellular_coverage_type",
         (
-            f.when(f.col("4G_coverage"), f.lit("4G"))
+            f.when(f.col("5G_coverage"), f.lit("5G"))
+            .when(f.col("4G_coverage"), f.lit("4G"))
             .when(f.col("3G_coverage"), f.lit("3G"))
             .when(f.col("2G_coverage"), f.lit("2G"))
             .otherwise("no coverage")
@@ -167,7 +183,7 @@ def itu_transforms(itu: sql.DataFrame):
     itu = itu.withColumns(columns_to_add)
 
     # remove Xg_coverage_{source} because they are accounted for in cellular_coverage_type
-    itu = itu.drop("2G_coverage", "3G_coverage", "4G_coverage")
+    itu = itu.drop("2G_coverage", "3G_coverage", "4G_coverage", "5G_coverage")
 
     return itu
 
@@ -194,6 +210,7 @@ def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
         "cellular_coverage_type",
         f.expr(
             "CASE "
+            "WHEN cellular_coverage_type = '5G' OR cellular_coverage_type_itu = '5G' THEN '5G' "
             "WHEN cellular_coverage_type = '4G' OR cellular_coverage_type_itu = '4G' THEN '4G' "
             "WHEN cellular_coverage_type = '3G' OR cellular_coverage_type_itu = '3G' THEN '3G' "
             "WHEN cellular_coverage_type = '2G' OR cellular_coverage_type_itu = '4G' THEN '2G' "
