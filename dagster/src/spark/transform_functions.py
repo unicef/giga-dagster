@@ -633,7 +633,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             | (f.col("download_speed_govt") > 0),
             "Yes",
         )
-        .when((f.lower(f.col("connectivity_govt")) == "yes"), "Unknown")
+        .when((f.lower(f.col("connectivity_govt")).isnull()), "Unknown")
         .otherwise("No"),
     )
     return master.withColumn(
