@@ -70,6 +70,62 @@ def geolocation_raw(
     )
     return Output(raw, metadata=get_output_metadata(config))
 
+@asset
+def geolocation_metadata(
+    context: OpExecutionContext,
+    geolocation_raw: bytes,
+    config: FileConfig,
+    spark: PySparkResource,
+):
+    s: SparkSession = spark.spark_session
+    config = FileConfig(**context.get_step_execution_context().op_config)
+
+    file_size_bytes = config.file_size_bytes
+    metadata = config.metadata
+    file_path = config.filepath
+    country_code = config.country_code
+    schema_name = config.metastore_schema
+    pdf = pd.DataFrame(metadata)
+    giga_sync_id = file_path.split('/')[-1].split('_')[0]
+    pdf['giga_sync_id'] = giga_sync_id
+    pdf['raw_file_path'] = file_path
+    pdf['country_code'] = country_code
+    pdf['file_size_bytes'] = file_size_bytes
+    pdf['schema_name'] = schema_name
+    metadata_df = s.createDataFrame(pdf)
+
+    metadata_schema_name = 'helper_tables'
+    table_name = 'school_geolocation_metadata'
+
+    schema_columns = metadata_df.schema.fields
+    for col in schema_columns:
+        col.nullable = True
+
+    metadata_table_name = construct_full_table_name(
+        metadata_schema_name,
+        table_name,
+    )
+
+    create_schema(s, metadata_schema_name)
+    create_delta_table(
+        s,
+        metadata_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    metadata_df.write.format("delta").mode("append").saveAsTable(metadata_table_name)
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(metadata_df),
+            "preview": get_table_preview(metadata_df),
+        },
+    )
+
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def geolocation_bronze(
