@@ -2,7 +2,7 @@ from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pydantic import conint
 from pyspark.sql import SparkSession
-from src.constants.constants_class import Constants
+from src.constants.constants_class import constants
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
@@ -75,13 +75,13 @@ def admin__create_lakehouse_local(
     # For now, we only copy the raw schemas as that is the only folder needed to start the lakehouse.
     # After the lakehouse is created, the user can use ADLS to copy other folders as needed.
 
-    source_raw_schema = Constants.raw_schema_folder_source
+    source_raw_schema = constants.raw_schema_folder_source
     if not adls_file_client.folder_exists(source_raw_schema):
         raise ResourceNotFoundError(
             f"The folder {source_raw_schema} does not exist in {settings.AZURE_BLOB_CONTAINER_NAME}"
         )
 
-    target_raw_schema = Constants.raw_schema_folder
+    target_raw_schema = constants.raw_schema_folder
     if adls_file_client.folder_exists(target_raw_schema):
         context.log.info(
             f"The folder {target_raw_schema} already exists! Nothing to do."
