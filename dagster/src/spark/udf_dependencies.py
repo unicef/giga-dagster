@@ -63,7 +63,7 @@ def is_within_country_geopy(
             location = geolocator.reverse(coords, timeout=10)
         except ValueError:
             return False
-        if location:
+        if location is not None:
             geopy_country_code_iso2 = location.raw.get("address", {}).get(
                 "country_code",
                 "",
