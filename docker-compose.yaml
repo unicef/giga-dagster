@@ -64,6 +64,7 @@ services:
       - dagster-storage
     ports:
       - "3001:3002"
+      - "5678:5678"
 
   spark-master:
     <<: *spark-common-config
