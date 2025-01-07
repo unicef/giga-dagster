@@ -79,6 +79,7 @@ def geolocation_metadata(
 ):
     s: SparkSession = spark.spark_session
     config = FileConfig(**context.get_step_execution_context().op_config)
+    current_timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
@@ -92,6 +93,7 @@ def geolocation_metadata(
     pdf['country_code'] = country_code
     pdf['file_size_bytes'] = file_size_bytes
     pdf['schema_name'] = schema_name
+    pdf['timestamp'] = current_timestamp
     metadata_df = s.createDataFrame(pdf)
 
     metadata_schema_name = 'helper_tables'
