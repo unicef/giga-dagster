@@ -86,7 +86,7 @@ def geolocation_metadata(
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
-    pdf = pd.DataFrame(metadata)
+    pdf = pd.DataFrame([metadata])
     giga_sync_id = file_path.split('/')[-1].split('_')[0]
     pdf['giga_sync_id'] = giga_sync_id
     pdf['raw_file_path'] = file_path
