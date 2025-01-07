@@ -151,7 +151,7 @@ def geolocation_bronze(
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath)
+        pdf = pandas_loader(buffer, config.filepath).map(str)
 
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
