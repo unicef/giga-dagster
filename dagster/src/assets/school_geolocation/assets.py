@@ -81,6 +81,7 @@ def geolocation_metadata(
     s: SparkSession = spark.spark_session
     config = FileConfig(**context.get_step_execution_context().op_config)
 
+    context.log.info("Get upload details")
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
     file_path = config.filepath
@@ -98,15 +99,22 @@ def geolocation_metadata(
         "file_size_bytes": file_size_bytes,
     }
 
+    context.log.info('Create upload details dataframe')
     df = pd.DataFrame([upload_details])
+
+    context.log.info('Create giga sync metadata dataframe')
     metadata_df = pd.DataFrame([metadata])
+
+    context.log.info('Combine dataframes')
     metadata_df = pd.concat([df, metadata_df], axis="columns")
 
+    context.log.info('Create spark dataframe')
     metadata_df = s.createDataFrame(metadata_df)
 
     metadata_schema_name = "helper_tables"
     table_name = "school_geolocation_metadata"
 
+    context.log.info('Create if not exists, schema and table')
     schema_columns = metadata_df.schema.fields
     for col in schema_columns:
         col.nullable = True
@@ -126,6 +134,7 @@ def geolocation_metadata(
         if_not_exists=True,
     )
 
+    context.log.info('Upsert metadata')
     current_metadata_table = DeltaTable.forName(spark, metadata_table_name)
 
     (
@@ -138,15 +147,9 @@ def geolocation_metadata(
         .whenNotMatchedInsertAll()
         .execute()
     )
-    metadata_pandas_df = metadata_df.toPandas()
 
     return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": len(metadata_pandas_df),
-            "preview": get_table_preview(metadata_pandas_df),
-        },
+        None
     )
 
 
