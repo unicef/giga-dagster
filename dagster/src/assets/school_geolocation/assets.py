@@ -87,8 +87,9 @@ def geolocation_metadata(
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
-    created_at = metadata.created_at
     giga_sync_id = file_path.split("/")[-1].split("_")[0]
+    created_at = metadata['created_at']
+    metadata.pop('created_at', None)
 
     upload_details = {
         "giga_sync_id": giga_sync_id,
