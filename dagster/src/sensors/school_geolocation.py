@@ -50,6 +50,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             metadata = properties.metadata
             size = properties.size
+            metadata["created_at"] = properties.CreatedOn
 
             ops_destination_mapping = {
                 "geolocation_raw": OpDestinationMapping(

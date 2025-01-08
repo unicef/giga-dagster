@@ -70,6 +70,7 @@ def geolocation_raw(
     )
     return Output(raw, metadata=get_output_metadata(config))
 
+
 @asset
 def geolocation_metadata(
     context: OpExecutionContext,
@@ -79,25 +80,32 @@ def geolocation_metadata(
 ):
     s: SparkSession = spark.spark_session
     config = FileConfig(**context.get_step_execution_context().op_config)
-    current_timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
-    pdf = pd.DataFrame([metadata])
-    giga_sync_id = file_path.split('/')[-1].split('_')[0]
-    pdf['giga_sync_id'] = giga_sync_id
-    pdf['raw_file_path'] = file_path
-    pdf['country_code'] = country_code
-    pdf['file_size_bytes'] = file_size_bytes
-    pdf['schema_name'] = schema_name
-    pdf['timestamp'] = current_timestamp
-    metadata_df = s.createDataFrame(pdf)
+    created_at = metadata.created_at
+    giga_sync_id = file_path.split("/")[-1].split("_")[0]
 
-    metadata_schema_name = 'helper_tables'
-    table_name = 'school_geolocation_metadata'
+    upload_details = {
+        "giga_sync_id": giga_sync_id,
+        "country_code": country_code,
+        "creation_at": created_at,
+        "schema_name": schema_name,
+        "raw_file_path": file_path,
+        "file_size_bytes": file_size_bytes,
+    }
+
+    df = pd.DataFrame([upload_details])
+    metadata_df = pd.DataFrame([metadata])
+    metadata_df = pd.concat([df, metadata_df], axis="columns")
+
+    metadata_df = s.createDataFrame(metadata_df)
+
+    metadata_schema_name = "helper_tables"
+    table_name = "school_geolocation_metadata"
 
     schema_columns = metadata_df.schema.fields
     for col in schema_columns:
@@ -117,14 +125,27 @@ def geolocation_metadata(
         context,
         if_not_exists=True,
     )
-    metadata_df.write.format("delta").mode("append").saveAsTable(metadata_table_name)
+
+    current_metadata_table = DeltaTable.forName(spark, metadata_table_name)
+
+    (
+        current_metadata_table.alias("metadata_current")
+        .merge(
+            metadata_df.alias("metadata_updates"),
+            "metadata_current.giga_sync_id = metadata_updates.giga_sync_id",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+    metadata_pandas_df = metadata_df.toPandas()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(metadata_df),
-            "preview": get_table_preview(metadata_df),
+            "row_count": len(metadata_pandas_df),
+            "preview": get_table_preview(metadata_pandas_df),
         },
     )
 
