@@ -95,7 +95,7 @@ def geolocation_metadata(
     upload_details = {
         "giga_sync_id": giga_sync_id,
         "country_code": country_code,
-        "creation_at": created_at,
+        "created_at": created_at,
         "schema_name": schema_name,
         "raw_file_path": file_path,
         "file_size_bytes": file_size_bytes,
@@ -116,7 +116,7 @@ def geolocation_metadata(
     metadata_schema_name = "helper_tables"
     table_name = "school_geolocation_metadata"
 
-    context.log.info('Create if not exists, schema and table')
+    context.log.info('Create the schema and table if not exists')
     schema_columns = metadata_df.schema.fields
     for col in schema_columns:
         col.nullable = True
