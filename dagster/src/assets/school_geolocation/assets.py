@@ -137,7 +137,7 @@ def geolocation_metadata(
     )
 
     context.log.info('Upsert metadata')
-    current_metadata_table = DeltaTable.forName(spark, metadata_table_name)
+    current_metadata_table = DeltaTable.forName(s, metadata_table_name)
 
     (
         current_metadata_table.alias("metadata_current")
