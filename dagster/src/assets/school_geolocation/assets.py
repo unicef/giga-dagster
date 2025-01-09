@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -87,9 +88,9 @@ def geolocation_metadata(
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
-    giga_sync_id = file_path.split("/")[-1].split("_")[0]
-    created_at = metadata['created_at']
-    metadata.pop('created_at', None)
+    file_name = Path(file_path).name
+    giga_sync_id = file_name.split("_")[0]
+    created_at = datetime.strptime(file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S")
 
     upload_details = {
         "giga_sync_id": giga_sync_id,
@@ -120,11 +121,6 @@ def geolocation_metadata(
     for col in schema_columns:
         col.nullable = True
 
-    metadata_table_name = construct_full_table_name(
-        metadata_schema_name,
-        table_name,
-    )
-
     create_schema(s, metadata_schema_name)
     create_delta_table(
         s,
@@ -133,6 +129,11 @@ def geolocation_metadata(
         schema_columns,
         context,
         if_not_exists=True,
+    )
+
+    metadata_table_name = construct_full_table_name(
+        metadata_schema_name,
+        table_name,
     )
 
     context.log.info('Upsert metadata')
