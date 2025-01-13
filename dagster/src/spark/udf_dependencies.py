@@ -150,7 +150,11 @@ def boundary_distance(
             point1 = (point1[1], point1[0])
             point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
-        except ValueError:
+        except GEOSException as exc:
+            logger.error(f"GEOSException during nearest point calculation: {exc}")
+            return False
+        except Exception as exc:
+            logger.error(f"Error during distance calculation: {exc}")
             return False
 
     else:
