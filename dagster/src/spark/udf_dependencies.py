@@ -128,13 +128,15 @@ def boundary_distance(
         return 1000  # arbitrary large boundary distance
 
     if point is not None and geometry is not None:
-        p1, _ = nearest_points(geometry, point)
+        if geometry.is_empty or (isinstance(point, Point) and point.is_empty):
+            return False
 
         # geodesic distance format is in lat-long, we need to switch these over!
-        point1 = p1.coords[0]
-        point1 = (point1[1], point1[0])
-        point2 = (latitude, longitude)
         try:
+            p1, _ = nearest_points(geometry, point)
+            point1 = p1.coords[0]
+            point1 = (point1[1], point1[0])
+            point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
         except ValueError:
             return False
