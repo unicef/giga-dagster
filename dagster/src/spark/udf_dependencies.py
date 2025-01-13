@@ -95,8 +95,12 @@ def is_within_boundary_distance(
         return False
 
     point = get_point(longitude, latitude)
+
     if point is not None and geometry is not None:
-        if geometry.is_empty or (isinstance(point, Point) and point.is_empty):
+        if point.is_empty:
+            return False
+
+        if geometry.is_empty or not geometry.is_valid:
             return False
 
         try:
@@ -106,7 +110,11 @@ def is_within_boundary_distance(
             point1 = (point1[1], point1[0])
             point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
-        except ValueError:
+        except shapely.errors.GEOSException as exc:
+            logger.error(f"GEOSException during nearest point calculation: {exc}")
+            return False
+        except Exception as exc:
+            logger.error(f"Error during distance calculation: {exc}")
             return False
 
         return distance <= BOUNDARY_DISTANCE_THRESHOLD_KM
