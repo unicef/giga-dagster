@@ -6,6 +6,7 @@ from geopy.geocoders import Nominatim
 from loguru import logger
 from shapely.geometry import Point
 from shapely.ops import nearest_points
+from shapely.errors import GEOSException
 
 
 def get_point(longitude: float, latitude: float) -> None | Point:
@@ -110,7 +111,7 @@ def is_within_boundary_distance(
             point1 = (point1[1], point1[0])
             point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
-        except shapely.errors.GEOSException as exc:
+        except GEOSException as exc:
             logger.error(f"GEOSException during nearest point calculation: {exc}")
             return False
         except Exception as exc:
@@ -136,8 +137,11 @@ def boundary_distance(
         return 1000  # arbitrary large boundary distance
 
     if point is not None and geometry is not None:
-        if geometry.is_empty or (isinstance(point, Point) and point.is_empty):
-            return False
+        if point.is_empty:
+            return 1000
+
+        if geometry.is_empty or not geometry.is_valid:
+            return 1000
 
         # geodesic distance format is in lat-long, we need to switch these over!
         try:
