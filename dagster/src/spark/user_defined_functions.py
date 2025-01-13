@@ -1,5 +1,6 @@
 from decimal import Decimal
 from difflib import SequenceMatcher
+from math import isnan
 
 import numpy as np
 import pandas as pd
@@ -33,7 +34,9 @@ def point_110_udf(value) -> float | None:
     if value is None:
         return None
     try:
-        float(value)
+        x = float(value)
+        if isnan(x):
+            return None
     except ValueError:
         return None
 
