@@ -319,14 +319,20 @@ def create_bronze_layer_columns(
     columns_in_bronze_only = [col for col in df.columns if col not in silver.columns]
     columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
     common_columns = [col for col in df.columns if col in silver.columns]
-    uncommon_columns = columns_in_bronze_only + columns_in_silver_only
 
     # Build select expression
     select_expr = [
         f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
         for col in common_columns
     ]
-    select_expr.extend([f.col(f"silver.{col}") for col in uncommon_columns])
+    select_expr.extend(
+        [f.col(f"df.{col}").alias(col) for col in columns_in_bronze_only]
+    )
+    select_expr.extend(
+        [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
+    )
+
+    # Select columns from joined DataFrame
     df = joined_df.select(*select_expr)
 
     # standardize education level
