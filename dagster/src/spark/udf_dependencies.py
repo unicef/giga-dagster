@@ -6,6 +6,7 @@ from geopy.geocoders import Nominatim
 from loguru import logger
 from shapely.geometry import Point
 from shapely.ops import nearest_points
+from shapely.errors import GEOSException
 
 
 def get_point(longitude: float, latitude: float) -> None | Point:
@@ -95,16 +96,26 @@ def is_within_boundary_distance(
         return False
 
     point = get_point(longitude, latitude)
-    if point is not None and geometry is not None:
-        p1, _ = nearest_points(geometry, point)
 
-        # geodesic distance format is in lat-long, we need to switch these over!
-        point1 = p1.coords[0]
-        point1 = (point1[1], point1[0])
-        point2 = (latitude, longitude)
+    if point is not None and geometry is not None:
+        if point.is_empty:
+            return False
+
+        if geometry.is_empty or not geometry.is_valid:
+            return False
+
         try:
+            p1, _ = nearest_points(geometry, point)
+            # geodesic distance format is in lat-long, we need to switch these over!
+            point1 = p1.coords[0]
+            point1 = (point1[1], point1[0])
+            point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
-        except ValueError:
+        except GEOSException as exc:
+            logger.error(f"GEOSException during nearest point calculation: {exc}")
+            return False
+        except Exception as exc:
+            logger.error(f"Error during distance calculation: {exc}")
             return False
 
         return distance <= BOUNDARY_DISTANCE_THRESHOLD_KM
@@ -126,15 +137,24 @@ def boundary_distance(
         return 1000  # arbitrary large boundary distance
 
     if point is not None and geometry is not None:
-        p1, _ = nearest_points(geometry, point)
+        if point.is_empty:
+            return 1000
+
+        if geometry.is_empty or not geometry.is_valid:
+            return 1000
 
         # geodesic distance format is in lat-long, we need to switch these over!
-        point1 = p1.coords[0]
-        point1 = (point1[1], point1[0])
-        point2 = (latitude, longitude)
         try:
+            p1, _ = nearest_points(geometry, point)
+            point1 = p1.coords[0]
+            point1 = (point1[1], point1[0])
+            point2 = (latitude, longitude)
             distance = geodesic(point1, point2).km
-        except ValueError:
+        except GEOSException as exc:
+            logger.error(f"GEOSException during nearest point calculation: {exc}")
+            return False
+        except Exception as exc:
+            logger.error(f"Error during distance calculation: {exc}")
             return False
 
     else:
