@@ -43,6 +43,7 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
@@ -50,6 +51,7 @@ from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def manual_review_passed_rows(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -70,6 +72,7 @@ def manual_review_passed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def manual_review_failed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -154,6 +157,7 @@ def manual_review_failed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def silver(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -237,6 +241,7 @@ def silver(
 
 
 @asset(deps=["manual_review_passed_rows", "manual_review_failed_rows"])
+@capture_op_exceptions
 def reset_staging_table(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -296,6 +301,7 @@ def reset_staging_table(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def master(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -383,6 +389,7 @@ def master(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def reference(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -448,6 +455,7 @@ def reference(
 
 
 @asset
+@capture_op_exceptions
 async def broadcast_master_release_notes(
     context: OpExecutionContext,
     config: FileConfig,

@@ -3,6 +3,7 @@ from httpx import AsyncClient
 from pydantic import Field
 from pyspark.sql import SparkSession
 from src.settings import settings
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
@@ -32,6 +33,7 @@ class GenericEmailRequestConfig(Config):
 
 
 @asset
+@capture_op_exceptions
 def debug__drop_schema(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -43,6 +45,7 @@ def debug__drop_schema(
 
 
 @asset
+@capture_op_exceptions
 def debug__drop_table(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -54,6 +57,7 @@ def debug__drop_table(
 
 
 @asset
+@capture_op_exceptions
 def debug__test_mlab_db_connection(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
@@ -81,6 +85,7 @@ def debug__test_proco_db_connection(
 
 
 @asset
+@capture_op_exceptions
 def debug__test_connectivity_merge(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
@@ -213,6 +218,7 @@ def debug__test_connectivity_merge(
 
 
 @asset
+@capture_op_exceptions
 async def debug__send_test_email(
     context: OpExecutionContext, config: GenericEmailRequestConfig
 ):
