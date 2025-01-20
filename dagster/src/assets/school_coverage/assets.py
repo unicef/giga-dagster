@@ -50,11 +50,13 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def coverage_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -72,6 +74,7 @@ def coverage_raw(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def coverage_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
@@ -162,6 +165,7 @@ def coverage_data_quality_results(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
+@capture_op_exceptions
 async def coverage_data_quality_results_summary(
     context: OpExecutionContext,
     config: FileConfig,
@@ -201,6 +205,7 @@ async def coverage_data_quality_results_summary(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -232,6 +237,7 @@ def coverage_dq_passed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
@@ -264,6 +270,7 @@ def coverage_dq_failed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def coverage_bronze(
     context: OpExecutionContext,
     coverage_dq_passed_rows: sql.DataFrame,
@@ -314,6 +321,7 @@ def coverage_bronze(
 
 
 @asset
+@capture_op_exceptions
 def coverage_staging(
     context: OpExecutionContext,
     coverage_bronze: sql.DataFrame,
@@ -356,6 +364,7 @@ def coverage_staging(
 
 
 @asset
+@capture_op_exceptions
 def coverage_delete_staging(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,

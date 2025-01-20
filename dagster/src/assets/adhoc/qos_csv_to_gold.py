@@ -16,6 +16,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
 
 from dagster import (
@@ -26,6 +27,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__load_qos_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -36,6 +38,7 @@ def adhoc__load_qos_csv(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__qos_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -75,6 +78,7 @@ def adhoc__qos_transforms(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_qos_to_gold(
     context: OpExecutionContext,
     adhoc__qos_transforms: sql.DataFrame,

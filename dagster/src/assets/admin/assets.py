@@ -5,6 +5,7 @@ from pyspark.sql import SparkSession
 from src.constants.constants_class import constants
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from azure.core.exceptions import ResourceNotFoundError
 from dagster import (
@@ -19,6 +20,7 @@ from dagster import (
 
 
 @asset
+@capture_op_exceptions
 def admin__terminate_all_runs(context: OpExecutionContext):
     runs = [
         r
@@ -49,6 +51,7 @@ class RollbackTableConfig(Config):
 
 
 @asset
+@capture_op_exceptions
 def admin__rollback_table_version(
     _: OpExecutionContext, config: RollbackTableConfig, spark: PySparkResource
 ):
@@ -65,6 +68,7 @@ def admin__rollback_table_version(
 
 
 @asset
+@capture_op_exceptions
 def admin__create_lakehouse_local(
     context: OpExecutionContext, adls_file_client: ADLSFileClient
 ):

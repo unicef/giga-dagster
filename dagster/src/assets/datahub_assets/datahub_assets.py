@@ -17,11 +17,13 @@ from src.utils.datahub.ingest_azure_ad import (
 from src.utils.datahub.list_datasets import list_datasets_by_filter
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def datahub__test_connection(context: OpExecutionContext) -> Output[None]:
     context.log.info(f"Using {settings.DATAHUB_METADATA_SERVER_URL=}")
     emitter = DatahubRestEmitter(
@@ -42,6 +44,7 @@ def datahub__test_connection(context: OpExecutionContext) -> Output[None]:
 
 
 @asset
+@capture_op_exceptions
 def datahub__create_domains(context: OpExecutionContext) -> None:
     context.log.info("CREATING DOMAINS IN DATAHUB")
     domains = create_domains()
@@ -49,24 +52,28 @@ def datahub__create_domains(context: OpExecutionContext) -> None:
 
 
 @asset
+@capture_op_exceptions
 def datahub__create_tags(context: OpExecutionContext) -> None:
     context.log.info("CREATING TAGS IN DATAHUB")
     create_tags(context)
 
 
 @asset
+@capture_op_exceptions
 def datahub__get_azure_ad_users_groups(context: OpExecutionContext) -> None:
     context.log.info("INGESTING AZURE AD USERS AND GROUPS TO DATAHUB")
     ingest_azure_ad_to_datahub_pipeline()
 
 
 @asset(deps=[datahub__get_azure_ad_users_groups])
+@capture_op_exceptions
 def datahub__update_policies(context: OpExecutionContext) -> None:
     context.log.info("UPDATING POLICIES IN DATAHUB")
     update_policies(context)
 
 
 @asset
+@capture_op_exceptions
 def datahub__ingest_github_coverage_workflow_notebooks(
     context: OpExecutionContext,
 ) -> None:
@@ -85,6 +92,7 @@ def datahub__ingest_github_coverage_workflow_notebooks(
 
 
 @asset
+@capture_op_exceptions
 def datahub__create_platform_metadata(context: OpExecutionContext) -> None:
     context.log.info("ADDING PLATFORM METADATA IN DATAHUB...")
     context.log.info("Delta Lake")
@@ -98,6 +106,7 @@ def datahub__create_platform_metadata(context: OpExecutionContext) -> None:
 
 
 @asset
+@capture_op_exceptions
 def datahub__list_qos_datasets_to_delete(
     context: OpExecutionContext,
 ) -> Output[list[str]]:
@@ -130,6 +139,7 @@ def datahub__list_qos_datasets_to_delete(
 
 
 @asset
+@capture_op_exceptions
 def datahub__delete_references_to_qos_dry_run(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
@@ -149,6 +159,7 @@ def datahub__delete_references_to_qos_dry_run(
 
 
 @asset
+@capture_op_exceptions
 def datahub__delete_references_to_qos(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
@@ -168,6 +179,7 @@ def datahub__delete_references_to_qos(
 
 
 @asset(deps=[datahub__delete_references_to_qos_dry_run])
+@capture_op_exceptions
 def datahub__soft_delete_qos_datasets(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
@@ -185,6 +197,7 @@ def datahub__soft_delete_qos_datasets(
 
 
 @asset(deps=[datahub__delete_references_to_qos])
+@capture_op_exceptions
 def datahub__hard_delete_qos_datasets(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
@@ -202,6 +215,7 @@ def datahub__hard_delete_qos_datasets(
 
 
 @asset
+@capture_op_exceptions
 def datahub__add_business_glossary(context: OpExecutionContext) -> None:
     context.log.info("ADDING BUSINESS GLOSSARY TO DATAHUB...")
     add_business_glossary()
@@ -212,6 +226,7 @@ class DeleteAssertionsConfig(Config):
 
 
 @asset
+@capture_op_exceptions
 def datahub__list_assertions() -> Output[list[str]]:
     assertion_urns = list(emitter.get_urns_by_filter(entity_types=["assertion"]))
     return Output(
@@ -224,6 +239,7 @@ def datahub__list_assertions() -> Output[list[str]]:
 
 
 @asset
+@capture_op_exceptions
 def datahub__soft_delete_assertions(
     context: OpExecutionContext,
     datahub__list_assertions: list[str],
@@ -244,6 +260,7 @@ def datahub__soft_delete_assertions(
 
 
 @asset
+@capture_op_exceptions
 def datahub__hard_delete_assertions(
     context: OpExecutionContext,
     datahub__soft_delete_assertions: list[str],
