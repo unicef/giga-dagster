@@ -49,7 +49,7 @@ from src.utils.schema import (
 from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
-from dagster import OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -389,7 +389,7 @@ def adhoc__master_dq_checks_summary(
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> dict | list[dict]:
+) -> PythonObjectDagsterType(python_type=(dict, list)):
     df_summary = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
