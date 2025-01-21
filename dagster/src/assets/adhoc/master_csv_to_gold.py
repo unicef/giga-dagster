@@ -46,6 +46,7 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
@@ -53,6 +54,7 @@ from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__load_master_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -69,6 +71,7 @@ def adhoc__load_master_csv(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__load_reference_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -92,6 +95,7 @@ def adhoc__load_reference_csv(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__master_data_transforms(
     context: OpExecutionContext,
     adhoc__load_master_csv: bytes,
@@ -153,6 +157,7 @@ def adhoc__master_data_transforms(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__df_duplicates(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
@@ -175,6 +180,7 @@ def adhoc__df_duplicates(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__master_data_quality_checks(
     context: OpExecutionContext,
     adhoc__master_data_transforms: sql.DataFrame,
@@ -215,6 +221,7 @@ def adhoc__master_data_quality_checks(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__reference_data_quality_checks(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -272,6 +279,7 @@ def adhoc__reference_data_quality_checks(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__master_dq_checks_passed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -304,6 +312,7 @@ def adhoc__master_dq_checks_passed(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__reference_dq_checks_passed(
     _: OpExecutionContext,
     config: FileConfig,
@@ -339,6 +348,7 @@ def adhoc__reference_dq_checks_passed(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__master_dq_checks_failed(
     context: OpExecutionContext,
     adhoc__master_data_quality_checks: sql.DataFrame,
@@ -361,6 +371,7 @@ def adhoc__master_dq_checks_failed(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__reference_dq_checks_failed(
     _: OpExecutionContext,
     config: FileConfig,
@@ -385,6 +396,7 @@ def adhoc__reference_dq_checks_failed(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__master_dq_checks_summary(
     adhoc__master_data_quality_checks: sql.DataFrame,
     spark: PySparkResource,
@@ -403,6 +415,7 @@ def adhoc__master_dq_checks_summary(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_silver_geolocation(
     context: OpExecutionContext,
     config: FileConfig,
@@ -468,6 +481,7 @@ def adhoc__publish_silver_geolocation(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_silver_coverage(
     context: OpExecutionContext,
     config: FileConfig,
@@ -533,6 +547,7 @@ def adhoc__publish_silver_coverage(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_master_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
@@ -623,6 +638,7 @@ def adhoc__publish_master_to_gold(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_reference_to_gold(
     context: OpExecutionContext,
     config: FileConfig,
@@ -693,6 +709,7 @@ def adhoc__publish_reference_to_gold(
 
 
 @asset
+@capture_op_exceptions
 async def adhoc__broadcast_master_release_notes(
     context: OpExecutionContext,
     config: FileConfig,
