@@ -52,11 +52,13 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def geolocation_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -156,6 +158,7 @@ def geolocation_metadata(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
@@ -260,6 +263,7 @@ def geolocation_bronze(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
@@ -366,6 +370,7 @@ def geolocation_data_quality_results(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
+@capture_op_exceptions
 async def geolocation_data_quality_results_summary(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
@@ -400,6 +405,7 @@ async def geolocation_data_quality_results_summary(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
@@ -434,6 +440,7 @@ def geolocation_dq_passed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
@@ -469,6 +476,7 @@ def geolocation_dq_failed_rows(
 
 
 @asset
+@capture_op_exceptions
 def geolocation_staging(
     context: OpExecutionContext,
     geolocation_dq_passed_rows: sql.DataFrame,
@@ -511,6 +519,7 @@ def geolocation_staging(
 
 
 @asset
+@capture_op_exceptions
 def geolocation_delete_staging(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,

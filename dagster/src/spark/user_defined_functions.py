@@ -1,5 +1,6 @@
 from decimal import Decimal
 from difflib import SequenceMatcher
+from math import isnan
 
 import numpy as np
 import pandas as pd
@@ -9,9 +10,7 @@ from pyspark.sql.functions import pandas_udf, udf
 from src.spark.config_expectations import config
 
 from .udf_dependencies import (
-    boundary_distance,
     is_within_boundary_distance,
-    is_within_country_geopy,
     is_within_country_mapbox,
 )
 
@@ -21,8 +20,10 @@ def get_decimal_places_udf_factory(precision: int) -> callable:
     def get_decimal_places(value) -> int | None:
         if value is None:
             return None
-
-        decimal_places = -Decimal(str(value)).as_tuple().exponent
+        try:
+            decimal_places = -Decimal(str(value)).as_tuple().exponent
+        except TypeError:
+            return None
         return int(decimal_places < precision)
 
     return get_decimal_places
@@ -33,7 +34,9 @@ def point_110_udf(value) -> float | None:
     if value is None:
         return None
     try:
-        float(value)
+        x = float(value)
+        if isnan(x):
+            return None
     except ValueError:
         return None
 
@@ -77,11 +80,6 @@ def is_not_within_country_check_udf_factory(
         if is_within_boundary_distance(
             latitude, longitude, geometry, dq_is_not_within_country
         ):
-            return 0
-        if (
-            boundary_distance(latitude, longitude, geometry)
-            <= BOUNDARY_DISTANCE_THRESHOLD
-        ) and is_within_country_geopy(latitude, longitude, country_code_iso2):
             return 0
 
         return 1

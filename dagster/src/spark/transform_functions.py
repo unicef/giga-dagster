@@ -287,34 +287,57 @@ def create_bronze_layer_columns(
     df: sql.DataFrame,
     silver: sql.DataFrame,
     country_code_iso3: str,
+    is_qos: bool = False,
 ) -> sql.DataFrame:
-    # Merge with silver first to check with updates.
-    df = df.withColumns(
-        {
-            col.name: f.col(col.name).cast(TimestampType())
-            for col in df.schema
-            if col.name.endswith("_timestamp")
-        }
-    )
+    """Create bronze layer columns with optional QoS-specific handling.
 
+    Args:
+        df: Input DataFrame
+        silver: Reference silver DataFrame
+        country_code_iso3: Country code in ISO3 format
+        is_qos: Whether to apply QoS-specific transformations
+
+    Returns:
+        DataFrame with bronze layer columns added
+    """
+    # Handle timestamp columns for QoS data
+    if is_qos:
+        df = df.withColumns(
+            {
+                col.name: f.col(col.name).cast(TimestampType())
+                for col in df.schema
+                if col.name.endswith("_timestamp")
+            }
+        )
+
+    # Join with silver data
     joined_df = df.alias("df").join(
         silver.alias("silver"), on="school_id_govt", how="left"
     )
-    common_columns = [col for col in df.columns if col in silver.columns]
-    additional_columns = [col for col in silver.columns if col not in df.columns]
 
+    # Get column lists
+    columns_in_bronze_only = [col for col in df.columns if col not in silver.columns]
+    columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
+    common_columns = [col for col in df.columns if col in silver.columns]
+
+    # Build select expression
     select_expr = [
         f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
         for col in common_columns
     ]
-    select_expr.extend([f.col(f"silver.{col}") for col in additional_columns])
+    select_expr.extend(
+        [f.col(f"df.{col}").alias(col) for col in columns_in_bronze_only]
+    )
+    select_expr.extend(
+        [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
+    )
+
+    # Select columns from joined DataFrame
     df = joined_df.select(*select_expr)
 
     # standardize education level
     df = create_education_level(df)
-
-    # ID
-    df = create_school_id_giga(df)  # school_id_giga
+    df = create_school_id_giga(df)
     df = df.withColumn(
         "school_id_govt_type",
         f.coalesce(f.col("school_id_govt_type"), f.lit("Unknown")),
@@ -333,13 +356,7 @@ def create_bronze_layer_columns(
     )
     df = add_disputed_region_column(df=df)
 
-    ## Clean up columns -- function shouldnt exist, uploads should be clean
-    # df = standardize_internet_speed(df)
-
-    ## Special Cases -- function shouldnt exist, uploads should be clean
-    # df = standardize_school_name(df)
-
-    # Timestamp of ingestion
+    # Add ingestion timestamp
     return df.withColumn(
         "connectivity_govt_ingestion_timestamp",
         f.when(

@@ -3,6 +3,7 @@ from delta import DeltaTable
 from pyspark.sql import functions as f
 from src.utils.delta import execute_query_with_error_handler
 from src.utils.schema import get_schema_columns
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, asset
 
@@ -11,6 +12,7 @@ ZCDF_TABLE_NAME = "school_master.zcdf"
 
 
 @asset
+@capture_op_exceptions
 def adhoc__copy_original(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -42,6 +44,7 @@ def adhoc__copy_original(
 
 
 @asset(deps=["adhoc__copy_original"])
+@capture_op_exceptions
 def adhoc__generate_v2(spark: PySparkResource):
     master = DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME).toDF()
     updates = master.withColumn(
@@ -64,6 +67,7 @@ def adhoc__generate_v2(spark: PySparkResource):
 
 
 @asset(deps=["adhoc__generate_v2"])
+@capture_op_exceptions
 def adhoc__generate_v3(spark: PySparkResource):
     master = DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME).toDF()
     updates = master.withColumn(
