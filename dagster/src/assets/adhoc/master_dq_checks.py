@@ -22,11 +22,13 @@ from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def adhoc__standalone_master_data_quality_checks(
     context: OpExecutionContext,
     config: FileConfig,

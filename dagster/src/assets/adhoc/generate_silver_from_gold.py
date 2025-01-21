@@ -11,12 +11,14 @@ from src.utils.delta import check_table_exists, execute_query_with_error_handler
 from src.utils.metadata import get_table_preview
 from src.utils.op_config import DatasetConfig
 from src.utils.schema import get_schema_columns
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def adhoc__generate_silver_geolocation_from_gold(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -102,6 +104,7 @@ def adhoc__generate_silver_geolocation_from_gold(
 
 
 @asset
+@capture_op_exceptions
 def adhoc__generate_silver_coverage_from_gold(
     context: OpExecutionContext,
     spark: PySparkResource,

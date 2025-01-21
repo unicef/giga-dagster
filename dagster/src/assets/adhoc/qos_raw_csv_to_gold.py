@@ -12,6 +12,7 @@ from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
 
 from dagster import (
@@ -22,6 +23,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__load_qos_raw_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -32,6 +34,7 @@ def adhoc__load_qos_raw_csv(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__qos_raw_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -71,6 +74,7 @@ def adhoc__qos_raw_transforms(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_qos_raw_to_gold(
     context: OpExecutionContext,
     adhoc__qos_raw_transforms: sql.DataFrame,
