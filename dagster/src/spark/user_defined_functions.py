@@ -10,9 +10,7 @@ from pyspark.sql.functions import pandas_udf, udf
 from src.spark.config_expectations import config
 
 from .udf_dependencies import (
-    boundary_distance,
     is_within_boundary_distance,
-    is_within_country_geopy,
     is_within_country_mapbox,
 )
 
@@ -82,11 +80,6 @@ def is_not_within_country_check_udf_factory(
         if is_within_boundary_distance(
             latitude, longitude, geometry, dq_is_not_within_country
         ):
-            return 0
-        if (
-            boundary_distance(latitude, longitude, geometry)
-            <= BOUNDARY_DISTANCE_THRESHOLD
-        ) and is_within_country_geopy(latitude, longitude, country_code_iso2):
             return 0
 
         return 1
