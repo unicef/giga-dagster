@@ -9,6 +9,12 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.functions import udf
+from pyspark.sql.types import (
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -18,9 +24,11 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.resources import ResourceKey
+from src.spark.transform_functions import get_all_connectivity_rt_schools
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.delta import check_table_exists
 from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -326,3 +334,108 @@ def qos_school_connectivity_gold(
             "preview": get_table_preview(qos_school_connectivity_dq_passed_rows),
         },
     )
+
+
+@asset
+def school_connectivity_update_connected_schools_table(context: OpExecutionContext,
+                                                       adls_file_client: ADLSFileClient,
+                                                       spark: PySparkResource):
+    s: SparkSession = spark.spark_session
+
+    schema_name = "school_connectivity"
+    table_name = "connected_schools"
+    output_files_location = "raw/school_connectivity/connectivity_updates"
+    # table_exists = check_table_exists(s, schema_name, table_name)
+
+    rt_schools_schema = StructType(
+        [
+            StructField("school_id_govt", StringType(), True),
+            StructField("school_id_giga", StringType(), True),
+            StructField("connectivity_rt", StringType(), True),
+            StructField("connectivity_rt_timestamp", TimestampType(), True),
+            StructField("country_code", StringType(), True),
+            StructField("source", StringType(), True),
+        ]
+    )
+
+    if check_table_exists(spark, schema_name, table_name):
+        full_table_name = construct_full_table_name(schema_name, table_name)
+        previous_rt_schools = (
+            DeltaTable.forName(spark, full_table_name)
+            .alias("previous_rt_schools")
+            .toDF()
+        )
+    else:
+        previous_rt_schools = spark.createDataFrame(
+            spark.sparkContext.emptyRDD(), schema=rt_schools_schema
+        )
+
+    updated_rt_schools = get_all_connectivity_rt_schools(spark)
+
+    schools_for_update = updated_rt_schools.join(
+        previous_rt_schools,
+        how="left",
+        on=[updated_rt_schools.school_id_giga == previous_rt_schools.school_id_giga],
+        rsuffix="_previous",
+    )
+    schools_for_update = schools_for_update.withColumn(
+        "to_update",
+        f.when(f.col("connectivity_rt").isNull(), True).when(
+            f.col("source") != f.col("source_previous"), True
+        ),
+    )
+
+    schools_for_update = schools_for_update.filter(f.col("to_update"))
+    schools_for_update = schools_for_update.select(
+        *[col for col in schools_for_update.columns if col != "to_update"]
+    )
+
+    schools_for_update_pandas = schools_for_update.toPandas()
+
+    countries_to_update = schools_for_update_pandas['country_code'].unique()
+
+
+    for country_code in countries_to_update:
+        # TODO: verify the logic
+        file_name = f"{output_files_location}/{country_code}_connectivity_update_{datetime.strftime('%Y%m%d%H%M%S')}"
+        adls_file_client.upload_raw(file_name)
+
+
+    # TODO: Update the connectivity table
+    context.log.info('Create the schema and table if not exists')
+
+
+    create_schema(s, schema_name)
+    create_delta_table(
+        s,
+        schema_name,
+        table_name,
+        rt_schools_schema.fields,
+        context,
+        if_not_exists=True,
+    )
+
+    current_connected_schs_table = DeltaTable.forName(s, construct_full_table_name(schema_name,table_name))
+
+    (
+        current_connected_schs_table.alias("connected_schs_current")
+        .merge(
+            schools_for_update.alias("connected_schs_updates"),
+            "connected_schs_current.school_id_giga = connected_schs_updates.school_id_giga",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+
+
+@asset
+def school_connectivity_update_country_schools(context: OpExecutionContext,
+                                                       adls_file_client: ADLSFileClient,
+                                                       spark: PySparkResource):
+    raw = adls_file_client.upload_raw(config.file_path)
+    data = pandas_loader(raw)
+
+    spark_df = spark.createDataFrame(data)
+
+    # TODO: Update the connectivity field and connectivity_RT field for the relevant schools in the country master

@@ -658,6 +658,94 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     )
 
 
+
+def get_all_connectivity_rt_schools(
+    spark: SparkSession,
+    is_test=True,
+    context: OpExecutionContext = None
+):
+    from src.internal.connectivity_queries import (
+        get_all_gigameter_schools,
+        get_all_mlab_schools,
+        get_qos_schools_by_country,
+    )
+
+    schools_data_schema = StructType(
+        [
+            StructField("school_id_govt", StringType(), True),
+            StructField("school_id_giga", StringType(), True),
+            StructField("country_code", StringType(), True),
+            StructField("first_measurement_timestamp", TimestampType(), True),
+            StructField("source", StringType(), True),
+        ]
+    )
+    gigameter_schools = get_all_gigameter_schools()
+    mlab_schools = get_all_mlab_schools()
+
+    qos_countries = ['bra', 'ken', 'mng']
+    qos_schools = pd.DataFrame()
+    for country_code in qos_countries:
+        country_qos_schools = get_qos_schools_by_country(country_code=country_code)
+        country_qos_schools['country_code'] = country_code.upper()
+        country_qos_schools['source'] = 'qos'
+        qos_schools = pd.concat([qos_schools, country_qos_schools])
+
+    gigameter_schools_df = spark.createDataFrame(gigameter_schools, schema=schools_data_schema)
+    mlab_schools_df = spark.createDataFrame(mlab_schools, schema=schools_data_schema)
+    qos_schools_df = spark.createDataFrame(qos_schools, schema=schools_data_schema)
+
+    connectivity_rt_schools = gigameter_schools_df.join(mlab_schools_df,
+                                                        how='outer',
+                                                        on=[
+                                                            gigameter_schools_df.school_id_giga == mlab_schools_df.school_id_giga,
+                                                            gigameter_schools_df.country_code == mlab_schools_df.country_code
+                                                        ],
+                                                        rsuffix = '_mlab'
+
+    ).join(
+        qos_schools_df, how='outer', on=[mlab_schools_df.school_id_giga == qos_schools_df.school_id_giga,
+                                      mlab_schools_df.country_code == qos_schools_df.country_code
+                                      ],
+        rsuffix = '_qos'
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn('school_id_giga',
+                                                                 f.coalesce(f.col('school_id_giga'),
+                                                                            f.col('school_id_giga_mlab'),
+                                                                            f.col('school_id_giga_qos')))
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn('country_code',
+                                                                 f.coalesce(f.col('country_code'),
+                                                                            f.col('country_code_mlab'),
+                                                                            f.col('country_code_qos')))
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn('connectivity_rt_ingestion_timestamp',
+                                                                 f.least(f.col('first_measurement_timestamp'),
+                                                                         f.col('first_measurement_timestamp_mlab'),
+                                                                         f.col('first_measurement_timestamp_qos')))
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "source",
+        f.when(f.col("country_code")=="BRA", 'nic_br')
+         .otherwise(
+            f.regexp_replace(
+                f.concat_ws(
+                    ", ", f.trim(f.col("source_pcdc")), f.trim(f.col("source_mlab"))
+                ),
+                "^, |, $",
+                "",
+            )
+        )
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn("connectivity_rt", f.lit("Yes"))
+
+    columns_to_keep = ["school_id_giga", "school_id_govt", "connectivity_rt", "connectivity_rt_ingestion_timestamp",
+                       "source", "country_code"]
+    connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
+    return connectivity_rt_schools
+
+
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 

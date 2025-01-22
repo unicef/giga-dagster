@@ -25,6 +25,7 @@ class Constants(BaseSettings):
     UPLOAD_PATH_PREFIX: str = f"{settings.LAKEHOUSE_PATH}/raw/uploads"
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
+    connectivity_updates_folder = f"{settings.LAKEHOUSE_PATH}/raw/connectivity_updates"
     raw_folder = f"{settings.LAKEHOUSE_PATH}/raw"  # if settings.IN_PRODUCTION else "adls-testing-raw"
     raw_schema_folder = f"{settings.LAKEHOUSE_PATH}/raw/schema"
     raw_schema_folder_source = "raw/schema"
