@@ -92,7 +92,9 @@ def geolocation_metadata(
     schema_name = config.metastore_schema
     file_name = Path(file_path).name
     giga_sync_id = file_name.split("_")[0]
-    created_at = datetime.strptime(file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S")
+    created_at = datetime.strptime(
+        file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S"
+    )
 
     upload_details = {
         "giga_sync_id": giga_sync_id,
@@ -103,22 +105,22 @@ def geolocation_metadata(
         "file_size_bytes": file_size_bytes,
     }
 
-    context.log.info('Create upload details dataframe')
+    context.log.info("Create upload details dataframe")
     df = pd.DataFrame([upload_details])
 
-    context.log.info('Create giga sync metadata dataframe')
+    context.log.info("Create giga sync metadata dataframe")
     metadata_df = pd.DataFrame([metadata])
 
-    context.log.info('Combine dataframes')
+    context.log.info("Combine dataframes")
     metadata_df = pd.concat([df, metadata_df], axis="columns")
 
-    context.log.info('Create spark dataframe')
+    context.log.info("Create spark dataframe")
     metadata_df = s.createDataFrame(metadata_df)
 
     metadata_schema_name = "helper_tables"
     table_name = "school_geolocation_metadata"
 
-    context.log.info('Create the schema and table if not exists')
+    context.log.info("Create the schema and table if not exists")
     schema_columns = metadata_df.schema.fields
     for col in schema_columns:
         col.nullable = True
@@ -138,7 +140,7 @@ def geolocation_metadata(
         table_name,
     )
 
-    context.log.info('Upsert metadata')
+    context.log.info("Upsert metadata")
     current_metadata_table = DeltaTable.forName(s, metadata_table_name)
 
     (
@@ -152,9 +154,7 @@ def geolocation_metadata(
         .execute()
     )
 
-    return Output(
-        None
-    )
+    return Output(None)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
