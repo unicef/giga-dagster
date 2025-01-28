@@ -1,6 +1,6 @@
 import functools
 import socket
-from inspect import signature
+from inspect import iscoroutinefunction, signature
 
 import sentry_sdk
 from sentry_sdk.integrations.argv import ArgvIntegration
@@ -62,23 +62,32 @@ def log_op_context(context: OpExecutionContext) -> None:
 
 
 def capture_op_exceptions(func: callable) -> callable:
-    @functools.wraps(func)
-    def wrapped_fn(*args, **kwargs) -> signature(func).return_annotation:
-        if not SENTRY_ENABLED:
-            return func(*args, **kwargs)
+    def create_wrapper(is_async: bool):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs) -> signature(func).return_annotation:
+            if not SENTRY_ENABLED:
+                return (
+                    await func(*args, **kwargs) if is_async else func(*args, **kwargs)
+                )
 
-        logger = get_dagster_logger("sentry")
+            logger = get_dagster_logger("sentry")
 
-        try:
-            log_op_context(args[0])
-        except (AttributeError, IndexError):
-            logger.warning("Sentry did not find execution context as the first arg")
+            try:
+                log_op_context(args[0])
+            except (AttributeError, IndexError):
+                logger.warning("Sentry did not find execution context as the first arg")
 
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            event_id = sentry_sdk.capture_exception(e)
-            logger.error(f"Sentry captured an exception. Event ID: {event_id}")
-            raise e
+            try:
+                result = (
+                    await func(*args, **kwargs) if is_async else func(*args, **kwargs)
+                )
+                return result
+            except Exception as e:
+                event_id = sentry_sdk.capture_exception(e)
+                logger.error(f"Sentry captured an exception. Event ID: {event_id}")
+                raise e
 
-    return wrapped_fn
+        return wrapper
+
+    is_async = iscoroutinefunction(func)
+    return create_wrapper(is_async)
