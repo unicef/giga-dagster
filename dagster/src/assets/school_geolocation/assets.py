@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 from io import BytesIO
 
-import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
@@ -43,7 +42,6 @@ from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
@@ -52,6 +50,7 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
+from src.utils.spark import spark_loader
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
@@ -73,14 +72,14 @@ def geolocation_raw(
     return Output(raw, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -98,9 +97,8 @@ def geolocation_bronze(
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath).map(str)
+        df = spark_loader(buffer, config.filepath, s)
 
-    df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
@@ -124,7 +122,6 @@ def geolocation_bronze(
         silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     else:
         context.log.info("TABLE DOES NOT EXIST")
-
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
@@ -161,31 +158,25 @@ def geolocation_bronze(
         schema_reference=df,
     )
 
-    ## at this point it's already gone
-    context.log.info("BEFORE DF TO PANDAS")
-    df_pandas = df.toPandas()
-    context.log.info("AFTER DF TO PANDAS")
-    context.log.info(df_pandas)
-
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
+            "row_count": df.count(),
             "column_mapping": column_mapping,
-            "preview": get_table_preview(df_pandas),
+            "preview": get_table_preview(df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -267,8 +258,6 @@ def geolocation_data_quality_results(
         context=context,
     )
 
-    dq_pandas = dq_results.toPandas()
-
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -276,11 +265,11 @@ def geolocation_data_quality_results(
     )
 
     return Output(
-        dq_pandas,
+        dq_results,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(dq_pandas),
-            "preview": get_table_preview(dq_pandas),
+            "row_count": dq_results.count(),
+            "preview": get_table_preview(dq_results),
         },
     )
 
@@ -320,14 +309,14 @@ async def geolocation_data_quality_results_summary(
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -344,25 +333,24 @@ def geolocation_dq_passed_rows(
         schema_reference=schema_reference,
     )
 
-    df_pandas = df_passed.toPandas()
     return Output(
-        df_pandas,
+        df_passed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": df_passed.count(),
+            "preview": get_table_preview(df_passed),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -380,13 +368,12 @@ def geolocation_dq_failed_rows(
         df_failed=df_failed,
     )
 
-    df_pandas = df_failed.toPandas()
     return Output(
-        df_pandas,
+        df_failed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": df_failed.count(),
+            "preview": get_table_preview(df_failed),
         },
     )
 

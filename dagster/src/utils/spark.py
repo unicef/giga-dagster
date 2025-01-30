@@ -1,6 +1,9 @@
 import subprocess
+from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
+import pandas as pd
 import pyarrow_hotfix  # noqa: F401, pylint: disable=unused-import
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
@@ -9,6 +12,7 @@ from pyspark.sql import SparkSession, types
 from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
+from src.exceptions import UnsupportedFiletypeException
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -313,3 +317,32 @@ def compute_row_hash(
     out = df.withColumn("signature", sha2(concat_ws("|", *sorted(columns)), 256))
     logger.info(f"Calculated SHA256 signature for {out.count()} rows")
     return out
+
+
+def spark_loader(data: BytesIO, filepath: str, spark: SparkSession) -> sql.DataFrame:
+    """Load data into a Spark DataFrame from various file formats using pandas.
+
+    Args:
+        data: The file data as a BytesIO object
+        filepath: Path to the file (used to determine file type)
+        spark: Active SparkSession
+
+    Returns:
+        A Spark DataFrame containing the loaded data
+    """
+    ext = Path(filepath).suffix
+
+    if ext == ".csv":
+        pdf = pd.read_csv(data)
+    elif ext in [".xls", ".xlsx"]:
+        pdf = pd.read_excel(data, engine="openpyxl")
+    elif ext == ".json":
+        pdf = pd.read_json(data)
+    elif ext == ".parquet":
+        pdf = pd.read_parquet(data)
+    else:
+        raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
+
+    # Convert pandas DataFrame directly to Spark DataFrame
+    pdf = pdf.astype(str)
+    return spark.createDataFrame(pdf)

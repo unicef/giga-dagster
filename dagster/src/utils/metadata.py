@@ -1,6 +1,3 @@
-from typing import Union
-
-import pandas as pd
 from pyspark import sql
 
 from dagster import MarkdownMetadataValue, MetadataValue
@@ -20,12 +17,44 @@ def get_output_metadata(config: FileConfig, filepath: str = None) -> dict[str, s
 
 
 def get_table_preview(
-    df: Union[pd.DataFrame, sql.DataFrame],  # noqa:UP007 bug with union of symbols with the same name
+    df,  # Can be either pandas.DataFrame or pyspark.sql.DataFrame
     count: int = 5,
 ) -> MarkdownMetadataValue:
-    if isinstance(df, sql.DataFrame):
-        df_trunc = df.limit(count).toPandas()
-    else:
-        df_trunc = df.head(count)
+    """Generate a markdown preview of the first few rows of a DataFrame.
 
-    return MetadataValue.md(df_trunc.to_markdown(index=False))
+    Args:
+        df: Either a Pandas DataFrame or Spark DataFrame to preview
+        count: Number of rows to show in the preview
+
+    Returns:
+        A markdown formatted preview of the DataFrame
+    """
+    # Handle empty DataFrame
+    if (isinstance(df, sql.DataFrame) and not df.head()) or (
+        hasattr(df, "empty") and df.empty
+    ):
+        return MetadataValue.md("*Empty DataFrame*")
+
+    # Get the first n rows
+    if isinstance(df, sql.DataFrame):
+        preview_rows = df.limit(count).collect()
+        columns = df.columns
+    else:
+        preview_rows = df.head(count).to_dict(orient="records")
+        columns = df.columns.tolist()
+
+    # Build markdown table
+    header = "| " + " | ".join(columns) + " |"
+    separator = "|" + "|".join(["---"] * len(columns)) + "|"
+
+    # Convert rows to markdown
+    rows = []
+    for row in preview_rows:
+        if isinstance(df, sql.DataFrame):
+            row_values = [str(row[col] or "") for col in columns]
+        else:
+            row_values = [str(row[col] or "") for col in columns]
+        rows.append("| " + " | ".join(row_values) + " |")
+
+    markdown = "\n".join([header, separator] + rows)
+    return MetadataValue.md(markdown)
