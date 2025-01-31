@@ -683,8 +683,8 @@ def get_all_connectivity_rt_schools(
     qos_schools = pd.DataFrame()
     for country_code in qos_countries:
         country_qos_schools = get_qos_schools_by_country(country_code=country_code)
-        country_qos_schools["country_code"] = country_code.upper()
         country_qos_schools["source"] = "qos"
+        country_qos_schools["country_code"] = country_code.upper()
         qos_schools = pd.concat([qos_schools, country_qos_schools])
 
     gigameter_schools_df = spark.createDataFrame(
@@ -721,14 +721,7 @@ def get_all_connectivity_rt_schools(
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "country_code",
-        f.coalesce(
-            f.col("country_code"), f.col("country_code_mlab"), f.col("country_code_qos")
-        ),
-    )
-
-    connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "connectivity_rt_ingestion_timestamp",
+        "connectivity_RT_ingestion_timestamp",
         f.least(
             f.col("first_measurement_timestamp"),
             f.col("first_measurement_timestamp_mlab"),
@@ -737,11 +730,14 @@ def get_all_connectivity_rt_schools(
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "connectivity_rt_datasource",
+        "connectivity_RT_datasource",
         f.when(f.col("country_code") == "BRA", "nic_br").otherwise(
             f.regexp_replace(
                 f.concat_ws(
-                    ", ", f.trim(f.col("source_pcdc")), f.trim(f.col("source_mlab"))
+                    ", ",
+                    f.trim(f.col("source")),
+                    f.trim(f.col("source_mlab")),
+                    f.trim(f.col("source_qos")),
                 ),
                 "^, |, $",
                 "",
@@ -750,14 +746,14 @@ def get_all_connectivity_rt_schools(
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "connectivity_rt", f.lit("Yes")
+        "connectivity_RT", f.lit("Yes")
     )
 
     columns_to_keep = [
         "school_id_giga",
-        "connectivity_rt",
-        "connectivity_rt_ingestion_timestamp",
-        "connectivity_rt_datasource",
+        "connectivity_RT",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_RT_datasource",
         "country_code",
     ]
     connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)

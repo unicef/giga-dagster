@@ -68,9 +68,8 @@ def get_mlab_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
                     'mlab' source
                 FROM public.measurements
                 WHERE client_info::JSON ->> 'Country' = :country_code AND LOWER(source) = 'mlab'
-                LIMIT :limit
                 """),
-                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
+                {"country_code": iso2_country_code},
             )
             .mappings()
             .all()
@@ -89,15 +88,14 @@ def get_all_gigameter_schools(is_test=False) -> pd.DataFrame:
             SELECT DISTINCT measure.giga_id_school school_id_giga,
                    measure.school_id school_id_govt,
                    MIN(measure.timestamp) OVER (PARTITION BY measure.giga_id_school) first_measurement_timestamp,
+                   'daily_checkapp' source,
                    country.iso3_format country_code
             FROM gigameter_production_db.public.measurements measure
             LEFT JOIN gigamaps_production_db.public.schools_school school ON school.giga_id_school = measure.giga_id_school
             LEFT JOIN gigamaps_production_db.public.locations_country country ON country.id = school.country_id
             WHERE school.deleted IS NULL
               AND LOWER(measure.source) = 'dailycheckapp'
-                LIMIT :limit
                 """),
-                {"limit": 10 if is_test else None},
             )
             .mappings()
             .all()
@@ -120,13 +118,11 @@ def get_all_mlab_schools(is_test=False) -> pd.DataFrame:
                    country.iso3_format country_code
             FROM gigameter_production_db.public.measurements measure
             JOIN gigamaps_production_db.public.schools_school school ON school.external_id = measure.school_id
-            JOIN gigamaps_production_db.public.locations_country country ON country.id = school.country_id 
+            JOIN gigamaps_production_db.public.locations_country country ON country.id = school.country_id
                  AND country.code = json_query(json_format(measure.client_info), 'strict $.Country' omit quotes)
             WHERE school.deleted IS NULL
               AND LOWER(measure.source) = 'mlab'
-                LIMIT :limit
                 """),
-                {"limit": 10 if is_test else None},
             )
             .mappings()
             .all()
@@ -135,26 +131,23 @@ def get_all_mlab_schools(is_test=False) -> pd.DataFrame:
     return pd.DataFrame.from_records(mlab_schools)
 
 
-def get_qos_schools_by_country(country_iso3_code, is_test=False):
+def get_qos_schools_by_country(country_iso3_code):
     from src.utils.db.trino import get_db_context
 
-    table_name = f"qos.{country_iso3_code}"
+    table_name = f"delta_lake.qos.{country_iso3_code}"
 
     with get_db_context() as db:
         qos_schools = (
             db.execute(
-                text("""
-                SELECT DISTINCT school_id_giga,
-                       school_id_govt,
-                       MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp
-                FROM :table_name
-                LIMIT :limit
-                """),
-                {"table_name": table_name, "limit": 10 if is_test else None},
+                text(f"""
+        SELECT DISTINCT school_id_giga,
+               school_id_govt,
+               MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp
+        FROM {table_name}
+        """)
             )
             .mappings()
             .all()
         )
 
     return pd.DataFrame.from_records(qos_schools)
-

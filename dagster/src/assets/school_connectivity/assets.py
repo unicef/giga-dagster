@@ -354,10 +354,10 @@ def school_connectivity_update_realtime_schools_table(
         [
             StructField("school_id_govt", StringType(), True),
             StructField("school_id_giga", StringType(), True),
-            StructField("connectivity_rt", StringType(), True),
-            StructField("connectivity_rt_ingestion_timestamp", TimestampType(), True),
+            StructField("connectivity_RT", StringType(), True),
+            StructField("connectivity_RT_ingestion_timestamp", TimestampType(), True),
             StructField("country_code", StringType(), True),
-            StructField("connectivity_rt_datasource", StringType(), True),
+            StructField("connectivity_RT_datasource", StringType(), True),
         ]
     )
 
@@ -383,7 +383,7 @@ def school_connectivity_update_realtime_schools_table(
     )
     schools_for_update = schools_for_update.withColumn(
         "to_update",
-        f.when(f.col("connectivity_rt").isNull(), True).when(
+        f.when(f.col("connectivity_RT").isNull(), True).when(
             f.col("source") != f.col("source_previous"), True
         ),
     )
