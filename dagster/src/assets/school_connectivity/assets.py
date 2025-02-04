@@ -369,11 +369,11 @@ def school_connectivity_update_realtime_schools_table(
             DeltaTable.forName(s, full_table_name).alias("current_rt_schs").toDF()
         )
     else:
-        current_rt_schools = spark.createDataFrame(
-            spark.sparkContext.emptyRDD(), schema=rt_schools_schema
+        current_rt_schools = s.createDataFrame(
+            s.sparkContext.emptyRDD(), schema=rt_schools_schema
         )
 
-    updated_rt_schools = get_all_connectivity_rt_schools(spark)
+    updated_rt_schools = get_all_connectivity_rt_schools(s)
 
     schools_for_update = updated_rt_schools.join(
         current_rt_schools,
