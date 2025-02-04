@@ -118,11 +118,11 @@ def geolocation_metadata(
     context.log.info("Create spark dataframe")
     metadata_df = s.createDataFrame(metadata_df)
 
-    table_columns = get_schema_columns(s, "school-geolocation-metadata")
+    table_columns = get_schema_columns(s, "school_geolocation_metadata")
     table_name = "gigasync_metadata"
     table_schema_name = "pipeline_tables"
 
-    context.log.info("Create the schema and table if not exists")
+    context.log.info("Create the schema and table if they do not exist")
     metadata_df = add_missing_columns(metadata_df, table_columns)
     metadata_df = metadata_df.select(*StructType(table_columns).fieldNames())
 
@@ -136,7 +136,7 @@ def geolocation_metadata(
         if_not_exists=True,
     )
 
-    context.log.info("Upsert metadata")
+    context.log.info("Upsert the metadata from giga sync into the table")
     current_metadata_table = DeltaTable.forName(
         s, construct_full_table_name(table_schema_name, table_name)
     )
@@ -151,6 +151,7 @@ def geolocation_metadata(
         .whenNotMatchedInsertAll()
         .execute()
     )
+    context.log.info("Upsert operation completed")
 
     return Output(None)
 
