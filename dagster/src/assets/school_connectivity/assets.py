@@ -361,7 +361,7 @@ def school_connectivity_update_realtime_schools_table(
         ]
     )
 
-    table_exists = check_table_exists(spark, schema_name, table_name)
+    table_exists = check_table_exists(s, schema_name, table_name)
     full_table_name = construct_full_table_name(schema_name, table_name)
 
     if table_exists:
