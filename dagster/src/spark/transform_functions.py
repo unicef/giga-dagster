@@ -658,9 +658,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     )
 
 
-def get_all_connectivity_rt_schools(
-    spark: SparkSession, is_test=True, context: OpExecutionContext = None
-):
+def get_all_connectivity_rt_schools(spark: SparkSession):
     from src.internal.connectivity_queries import (
         get_all_gigameter_schools,
         get_all_mlab_schools,
@@ -669,11 +667,11 @@ def get_all_connectivity_rt_schools(
 
     schools_data_schema = StructType(
         [
-            StructField("school_id_govt", StringType(), True),
             StructField("school_id_giga", StringType(), True),
-            StructField("country_code", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
             StructField("first_measurement_timestamp", TimestampType(), True),
             StructField("source", StringType(), True),
+            StructField("country_code", StringType(), True),
         ]
     )
     gigameter_schools = get_all_gigameter_schools()
@@ -683,8 +681,6 @@ def get_all_connectivity_rt_schools(
     qos_schools = pd.DataFrame()
     for country_code in qos_countries:
         country_qos_schools = get_qos_schools_by_country(country_iso3_code=country_code)
-        country_qos_schools["source"] = "qos"
-        country_qos_schools["country_code"] = country_code.upper()
         qos_schools = pd.concat([qos_schools, country_qos_schools])
 
     gigameter_schools_df = spark.createDataFrame(

@@ -142,7 +142,9 @@ def get_qos_schools_by_country(country_iso3_code):
                 text(f"""
         SELECT DISTINCT school_id_giga,
                school_id_govt,
-               MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp
+               MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp,
+               'mlab' source,
+               {country_iso3_code.upper()} country_code
         FROM {table_name}
         """)
             )
