@@ -387,7 +387,9 @@ def school_connectivity_update_realtime_schools_table(
     schools_for_update = schools_for_update.withColumn(
         "to_update",
         f.when(f.col("connectivity_RT_previous").isNull(), True).when(
-            f.col("source") != f.col("source_previous"), True
+            f.col("connectivity_RT_datasource")
+            != f.col("connectivity_RT_datasource_previous"),
+            True,
         ),
     )
 
