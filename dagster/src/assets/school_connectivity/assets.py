@@ -347,17 +347,16 @@ def school_connectivity_update_realtime_schools_table(
 ):
     s: SparkSession = spark.spark_session
 
-    schema_name = "school_connectivity"
-    table_name = "realtime_schools"
+    schema_name = "pipeline_tables"
+    table_name = "schools_connected_realtime"
 
     rt_schools_schema = StructType(
         [
-            StructField("school_id_govt", StringType(), True),
             StructField("school_id_giga", StringType(), True),
             StructField("connectivity_RT", StringType(), True),
             StructField("connectivity_RT_ingestion_timestamp", TimestampType(), True),
-            StructField("country_code", StringType(), True),
             StructField("connectivity_RT_datasource", StringType(), True),
+            StructField("country_code", StringType(), True),
         ]
     )
 
@@ -365,9 +364,7 @@ def school_connectivity_update_realtime_schools_table(
     full_table_name = construct_full_table_name(schema_name, table_name)
 
     if table_exists:
-        current_rt_schools = (
-            DeltaTable.forName(s, full_table_name).alias("current_rt_schs").toDF()
-        )
+        current_rt_schools = DeltaTable.forName(s, full_table_name).toDF()
     else:
         current_rt_schools = s.createDataFrame(
             s.sparkContext.emptyRDD(), schema=rt_schools_schema

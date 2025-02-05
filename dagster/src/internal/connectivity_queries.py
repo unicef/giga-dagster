@@ -78,7 +78,7 @@ def get_mlab_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
     return pd.DataFrame.from_records(res)
 
 
-def get_all_gigameter_schools(is_test=False) -> pd.DataFrame:
+def get_all_gigameter_schools() -> pd.DataFrame:
     from src.utils.db.trino import get_db_context
 
     with get_db_context() as db:
@@ -104,7 +104,7 @@ def get_all_gigameter_schools(is_test=False) -> pd.DataFrame:
     return pd.DataFrame.from_records(giga_meter_schools)
 
 
-def get_all_mlab_schools(is_test=False) -> pd.DataFrame:
+def get_all_mlab_schools() -> pd.DataFrame:
     from src.utils.db.trino import get_db_context
 
     with get_db_context() as db:

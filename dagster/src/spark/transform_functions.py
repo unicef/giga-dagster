@@ -665,15 +665,6 @@ def get_all_connectivity_rt_schools(spark: SparkSession):
         get_qos_schools_by_country,
     )
 
-    schools_data_schema = StructType(
-        [
-            StructField("school_id_giga", StringType(), True),
-            StructField("school_id_govt", StringType(), True),
-            StructField("first_measurement_timestamp", TimestampType(), True),
-            StructField("source", StringType(), True),
-            StructField("country_code", StringType(), True),
-        ]
-    )
     gigameter_schools = get_all_gigameter_schools()
     mlab_schools = get_all_mlab_schools()
 
@@ -683,11 +674,9 @@ def get_all_connectivity_rt_schools(spark: SparkSession):
         country_qos_schools = get_qos_schools_by_country(country_iso3_code=country_code)
         qos_schools = pd.concat([qos_schools, country_qos_schools])
 
-    gigameter_schools_df = spark.createDataFrame(
-        gigameter_schools, schema=schools_data_schema
-    )
-    mlab_schools_df = spark.createDataFrame(mlab_schools, schema=schools_data_schema)
-    qos_schools_df = spark.createDataFrame(qos_schools, schema=schools_data_schema)
+    gigameter_schools_df = spark.createDataFrame(gigameter_schools)
+    mlab_schools_df = spark.createDataFrame(mlab_schools)
+    qos_schools_df = spark.createDataFrame(qos_schools)
 
     connectivity_rt_schools = gigameter_schools_df.join(
         mlab_schools_df,
