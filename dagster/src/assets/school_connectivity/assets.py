@@ -372,30 +372,37 @@ def school_connectivity_update_realtime_schools_table(
 
     updated_rt_schools = get_all_connectivity_rt_schools(s)
 
+    current_rt_schools = current_rt_schools.withColumnsRenamed(
+        {col: f"{col}_previous" for col in current_rt_schools.schema.fieldNames()}
+    )
+
     schools_for_update = updated_rt_schools.join(
         current_rt_schools,
         how="left",
-        on=[updated_rt_schools.school_id_giga == current_rt_schools.school_id_giga],
-        rsuffix="_previous",
+        on=[
+            updated_rt_schools.school_id_giga
+            == current_rt_schools.school_id_giga_previous
+        ],
     )
     schools_for_update = schools_for_update.withColumn(
         "to_update",
-        f.when(f.col("connectivity_RT").isNull(), True).when(
+        f.when(f.col("connectivity_RT_previous").isNull(), True).when(
             f.col("source") != f.col("source_previous"), True
         ),
     )
 
     schools_for_update = schools_for_update.filter(f.col("to_update"))
-    schools_for_update = schools_for_update.select(
-        *[col for col in schools_for_update.columns if col != "to_update"]
-    )
+    schools_for_update = schools_for_update.select(*rt_schools_schema.fieldNames())
 
     schools_for_update_pandas = schools_for_update.toPandas()
 
     countries_to_update = schools_for_update_pandas["country_code"].unique()
 
     for country_code in countries_to_update:
-        file_path = f"{constants.connectivity_updates_folder}/{country_code}_connectivity_update_{datetime.strftime('%Y%m%d-%H%M%S')}"
+        file_name = (
+            f"{country_code}_connectivity_update_{datetime.strftime('%Y%m%d-%H%M%S')}"
+        )
+        file_path = f"{constants.connectivity_updates_folder}/{file_name}"
         country_connected_schs = schools_for_update_pandas[
             schools_for_update_pandas["country_code"] == country_code
         ]
