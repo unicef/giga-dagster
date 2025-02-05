@@ -676,33 +676,36 @@ def get_all_connectivity_rt_schools(spark: SparkSession):
 
     gigameter_schools_df = spark.createDataFrame(gigameter_schools)
     mlab_schools_df = spark.createDataFrame(mlab_schools)
+    mlab_schools_df = mlab_schools_df.withColumnsRenamed(
+        {col: f"{col}_mlab" for col in mlab_schools_df.schema.fieldNames()}
+    )
     qos_schools_df = spark.createDataFrame(qos_schools)
+    qos_schools_df = qos_schools_df.withColumnsRenamed(
+        {col: f"{col}_qos" for col in qos_schools_df.schema.fieldNames()}
+    )
 
     connectivity_rt_schools = gigameter_schools_df.join(
         mlab_schools_df,
         how="outer",
-        on=[
-            gigameter_schools_df.school_id_giga == mlab_schools_df.school_id_giga,
-            gigameter_schools_df.country_code == mlab_schools_df.country_code,
-        ],
-        rsuffix="_mlab",
-    ).join(
-        qos_schools_df,
-        how="outer",
-        on=[
-            mlab_schools_df.school_id_giga == qos_schools_df.school_id_giga,
-            mlab_schools_df.country_code == qos_schools_df.country_code,
-        ],
-        rsuffix="_qos",
+        on=[gigameter_schools_df.school_id_giga == mlab_schools_df.school_id_giga_mlab],
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
         "school_id_giga",
-        f.coalesce(
-            f.col("school_id_giga"),
-            f.col("school_id_giga_mlab"),
-            f.col("school_id_giga_qos"),
-        ),
+        f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_mlab")),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.join(
+        qos_schools_df,
+        how="outer",
+        on=[
+            connectivity_rt_schools.school_id_giga == qos_schools_df.school_id_giga_qos
+        ],
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "school_id_giga",
+        f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_qos")),
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
