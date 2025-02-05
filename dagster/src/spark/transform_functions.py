@@ -682,7 +682,7 @@ def get_all_connectivity_rt_schools(
     qos_countries = ["bra", "ken", "mng"]
     qos_schools = pd.DataFrame()
     for country_code in qos_countries:
-        country_qos_schools = get_qos_schools_by_country(country_code=country_code)
+        country_qos_schools = get_qos_schools_by_country(country_iso3_code=country_code)
         country_qos_schools["source"] = "qos"
         country_qos_schools["country_code"] = country_code.upper()
         qos_schools = pd.concat([qos_schools, country_qos_schools])
