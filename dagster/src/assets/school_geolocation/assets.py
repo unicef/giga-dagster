@@ -113,29 +113,8 @@ def geolocation_bronze(
 
     schema = StructType(columns)
 
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
-        context.log.info("TABLE EXISTS")
-        silver_tier_schema_name = construct_schema_name_for_tier(
-            "school_geolocation", DataTier.SILVER
-        )
-        silver_table_name = construct_full_table_name(
-            silver_tier_schema_name, country_code
-        )
-        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    else:
-        context.log.info("TABLE DOES NOT EXIST")
-
-        silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
-
-    casted_silver = silver.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
-    )
-    context.log.info("Casted Silver")
-    context.log.info(casted_silver)
+    # Create empty base schema DataFrame
+    base_schema_df = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_bronze = df.withColumn(
         "school_id_govt",
@@ -147,7 +126,7 @@ def geolocation_bronze(
     context.log.info("Casted Bronze")
     context.log.info(casted_bronze)
 
-    df = create_bronze_layer_columns(casted_bronze, casted_silver, country_code)
+    df = create_bronze_layer_columns(casted_bronze, base_schema_df, country_code)
     context.log.info("DF from create_bronze_layer_columns")
     context.log.info(df)
 
