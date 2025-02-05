@@ -399,11 +399,9 @@ def school_connectivity_update_realtime_schools_table(
     schools_for_update_pandas = schools_for_update.toPandas()
 
     countries_to_update = schools_for_update_pandas["country_code"].unique()
-
+    current_timestamp_string = datetime.now().strftime("%Y%m%d-%H%M%S")
     for country_code in countries_to_update:
-        file_name = (
-            f"{country_code}_connectivity_update_{datetime.strftime('%Y%m%d-%H%M%S')}"
-        )
+        file_name = f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
         file_path = f"{constants.connectivity_updates_folder}/{file_name}"
         country_connected_schs = schools_for_update_pandas[
             schools_for_update_pandas["country_code"] == country_code
