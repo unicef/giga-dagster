@@ -363,6 +363,7 @@ def school_connectivity_update_realtime_schools_table(
     table_exists = check_table_exists(s, schema_name, table_name)
     full_table_name = construct_full_table_name(schema_name, table_name)
 
+    context.log.info("Determine if table exists")
     if table_exists:
         current_rt_schools = DeltaTable.forName(s, full_table_name).toDF()
     else:
@@ -370,12 +371,14 @@ def school_connectivity_update_realtime_schools_table(
             s.sparkContext.emptyRDD(), schema=rt_schools_schema
         )
 
+    context.log.info("Get the updated list of schools with realtime connectivity")
     updated_rt_schools = get_all_connectivity_rt_schools(s)
 
     current_rt_schools = current_rt_schools.withColumnsRenamed(
         {col: f"{col}_previous" for col in current_rt_schools.schema.fieldNames()}
     )
 
+    context.log.info("Determine the schools whose connectivity needs to be updated")
     schools_for_update = updated_rt_schools.join(
         current_rt_schools,
         how="left",
@@ -398,16 +401,19 @@ def school_connectivity_update_realtime_schools_table(
 
     schools_for_update_pandas = schools_for_update.toPandas()
 
+    context.log.info(
+        "Split the schools that need updating by country and create files for each of them"
+    )
     countries_to_update = schools_for_update_pandas["country_code"].unique()
     current_timestamp_string = datetime.now().strftime("%Y%m%d-%H%M%S")
     for country_code in countries_to_update:
         file_name = f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
-        file_path = f"{constants.connectivity_updates_folder}/{file_name}"
+        adls_file_path = f"{constants.connectivity_updates_folder}/{file_name}"
         country_connected_schs = schools_for_update_pandas[
             schools_for_update_pandas["country_code"] == country_code
         ]
         adls_file_client.upload_pandas_dataframe_as_file(
-            context=context, data=country_connected_schs, file_path=file_path
+            context=context, data=country_connected_schs, filepath=adls_file_path
         )
 
     context.log.info("Create the schema and table if not exists")
@@ -423,6 +429,7 @@ def school_connectivity_update_realtime_schools_table(
             if_not_exists=True,
         )
 
+    context.log.info("Update the table with realtime connected schools")
     current_connected_schs_table = DeltaTable.forName(s, full_table_name)
 
     (
