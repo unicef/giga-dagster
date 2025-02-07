@@ -8,7 +8,15 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    TimestampType,
+)
 from sqlalchemy import update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
@@ -300,6 +308,43 @@ def reset_staging_table(
             )
 
 
+def _handle_null_columns(schema_columns, primary_key, silver_columns):
+    """Handle null columns by providing default values based on data type.
+
+    If the column value is NULL, add a placeholder value if the following
+    conditions are met:
+    - The column is not nullable
+    - The column is not the primary key
+    - The column is not in the silver table
+
+    Default values by type:
+    - String: "Unknown"
+    - Numeric (Int/Long/Double/Float): 0
+    - Boolean: False
+    - Timestamp: current_timestamp()
+    """
+    column_actions = {}
+    for col in schema_columns:
+        if (
+            not col.nullable
+            and col.name != primary_key
+            and col.name not in [c.name for c in silver_columns]
+        ):
+            if col.dataType == StringType():
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+            elif isinstance(
+                col.dataType, IntegerType | LongType | DoubleType | FloatType
+            ):
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit(0))
+            elif isinstance(col.dataType, BooleanType):
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit(False))
+            elif isinstance(col.dataType, TimestampType):
+                column_actions[col.name] = f.coalesce(
+                    f.col(col.name), f.current_timestamp()
+                )
+    return column_actions
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
 @capture_op_exceptions
 def master(
@@ -351,22 +396,7 @@ def master(
     else:
         new_master = silver
 
-    column_actions = {}
-    for col in schema_columns:
-        # If the column value is NULL, add a placeholder value if the following
-        # conditions are met:
-        # - The column is not nullable
-        # - The column is not the primary key
-        # - The column type is string
-        # - The column is not in the silver table (e.g. the column comes from the
-        #   coverage schema, but we are currently processing a silver geolocation table)
-        if (
-            not col.nullable
-            and col.name != primary_key
-            and col.dataType == StringType()
-            and col.name not in [c.name for c in silver_columns]
-        ):
-            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_master = new_master.withColumns(column_actions)
     new_master = compute_row_hash(new_master)
 
@@ -424,15 +454,7 @@ def reference(
     else:
         new_reference = silver
 
-    column_actions = {}
-    for col in schema_columns:
-        if (
-            not col.nullable
-            and col.name != primary_key
-            and col.dataType == StringType()
-            and col.name not in [c.name for c in silver_columns]
-        ):
-            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_reference = new_reference.withColumns(column_actions)
     new_reference = compute_row_hash(new_reference)
 
