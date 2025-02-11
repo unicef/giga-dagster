@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -24,6 +25,7 @@ from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingSte
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
+    add_missing_columns,
     column_mapping_rename,
     create_bronze_layer_columns,
 )
@@ -71,6 +73,87 @@ def geolocation_raw(
         spark=spark,
     )
     return Output(raw, metadata=get_output_metadata(config))
+
+
+@asset
+def geolocation_metadata(
+    context: OpExecutionContext,
+    geolocation_raw: bytes,
+    config: FileConfig,
+    spark: PySparkResource,
+):
+    s: SparkSession = spark.spark_session
+
+    context.log.info("Get upload details")
+    file_size_bytes = config.file_size_bytes
+    metadata = config.metadata
+    file_path = config.filepath
+    country_code = config.country_code
+    schema_name = config.metastore_schema
+    file_name = Path(file_path).name
+    giga_sync_id = file_name.split("_")[0]
+    giga_sync_uploaded_at = datetime.strptime(
+        file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S"
+    )
+
+    upload_details = {
+        "giga_sync_id": giga_sync_id,
+        "country_code": country_code,
+        "giga_sync_uploaded_at": giga_sync_uploaded_at,
+        "schema_name": schema_name,
+        "raw_file_path": file_path,
+        "file_size_bytes": file_size_bytes,
+    }
+
+    context.log.info("Create upload details dataframe")
+    df = pd.DataFrame([upload_details])
+
+    context.log.info("Create giga sync metadata dataframe")
+    metadata_df = pd.DataFrame([metadata])
+
+    context.log.info("Combine dataframes")
+    metadata_df = pd.concat([df, metadata_df], axis="columns")
+    metadata_df["created_at"] = pd.Timestamp.now()
+
+    context.log.info("Create spark dataframe")
+    metadata_df = s.createDataFrame(metadata_df)
+
+    table_columns = get_schema_columns(s, "school_geolocation_metadata")
+    table_name = "gigasync_metadata"
+    table_schema_name = "pipeline_tables"
+
+    context.log.info("Create the schema and table if they do not exist")
+    metadata_df = add_missing_columns(metadata_df, table_columns)
+    metadata_df = metadata_df.select(*StructType(table_columns).fieldNames())
+
+    create_schema(s, table_schema_name)
+    create_delta_table(
+        s,
+        table_schema_name,
+        table_name,
+        table_columns,
+        context,
+        if_not_exists=True,
+    )
+
+    context.log.info("Upsert the metadata from giga sync into the table")
+    current_metadata_table = DeltaTable.forName(
+        s, construct_full_table_name(table_schema_name, table_name)
+    )
+
+    (
+        current_metadata_table.alias("metadata_current")
+        .merge(
+            metadata_df.alias("metadata_updates"),
+            "metadata_current.giga_sync_id = metadata_updates.giga_sync_id",
+        )
+        .whenMatchedUpdateAll()
+        .whenNotMatchedInsertAll()
+        .execute()
+    )
+    context.log.info("Upsert operation completed")
+
+    return Output(None)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
