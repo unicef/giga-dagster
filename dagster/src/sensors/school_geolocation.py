@@ -60,7 +60,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_metadata": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/helper_tables.db/school_geolocation_metadata",
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/pipeline_tables.db/school_geolocation_metadata",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.BRONZE,
                 ),
