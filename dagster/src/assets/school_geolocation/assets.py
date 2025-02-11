@@ -119,7 +119,7 @@ def geolocation_metadata(
     metadata_df = s.createDataFrame(metadata_df)
 
     table_columns = get_schema_columns(s, "school_geolocation_metadata")
-    table_name = "gigasync_metadata"
+    table_name = "school_geolocation_metadata"
     table_schema_name = "pipeline_tables"
 
     context.log.info("Create the schema and table if they do not exist")
