@@ -114,6 +114,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         if schema_name_for_tier == "qos":
             columns = data.schema.fields
             partition_columns = ["date"]
+        elif schema_name_for_tier == "custom_dataset":
+            columns = data.schema.fields
+            partition_columns = []
         else:
             columns = get_schema_columns(spark, columns_schema_name)
             partition_columns = get_partition_columns(spark, columns_schema_name)

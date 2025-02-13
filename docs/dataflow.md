@@ -38,3 +38,5 @@ form the `gold` School Master table.
 
 
 There are also adhoc pipelines which can help with a direct push to the `gold` layer
+
+Adding support for working with custom datasets

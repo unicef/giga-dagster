@@ -22,7 +22,6 @@ school_qos_raw__convert_csv_to_deltatable_job = define_asset_job(
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
 
-
 school_master__generate_mock_table_cdf_job = define_asset_job(
     name="school_master__generate_mock_table_cdf_job",
     selection="*adhoc__generate_v3",
@@ -42,4 +41,10 @@ school_master__dq_checks_job = define_asset_job(
     name="school_master__dq_checks_job",
     selection="adhoc__standalone_master_data_quality_checks",
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
+
+custom_dataset_create_bronze_job = define_asset_job(
+    name = "custom_dataset_create_bronze_job",
+    selection="adhoc",
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME}
 )
