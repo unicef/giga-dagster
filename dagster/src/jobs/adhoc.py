@@ -44,10 +44,10 @@ school_master__dq_checks_job = define_asset_job(
 )
 
 custom_dataset_create_bronze_job = define_asset_job(
-    name = "custom_dataset_create_bronze_job",
+    name="custom_dataset_create_bronze_job",
     selection=[
         "custom_dataset_raw",
         "custom_dataset_bronze",
     ],
-    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME}
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
