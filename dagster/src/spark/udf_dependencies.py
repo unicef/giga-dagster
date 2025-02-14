@@ -7,6 +7,7 @@ from loguru import logger
 from shapely.errors import GEOSException
 from shapely.geometry import Point
 from shapely.ops import nearest_points
+from shapely.errors import GEOSException
 
 
 def get_point(longitude: float, latitude: float) -> None | Point:
