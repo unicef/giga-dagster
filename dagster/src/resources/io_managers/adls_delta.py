@@ -45,7 +45,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, config.metastore_schema, full_table_name, context)
+        if config.metastore_schema == "custom_dataset":
+            self._overwrite_data(output, config.metastore_schema, full_table_name, context)
+        else:
+            self._upsert_data(output, config.metastore_schema, full_table_name, context)
 
         context.log.info(
             f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
@@ -215,3 +218,33 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if query is not None:
             query.execute()
+
+    def _overwrite_data(
+            self,
+            data: sql.dataframe,
+            schema_name: str,
+            full_table_name: str,
+            context: OutputContext = None,
+    ):
+        spark = self._get_spark_session()
+        columns = data.schema.fields
+        partition_columns = []
+
+        table_exists = DeltaTable.isDeltaTable(spark, full_table_name)
+
+        context.log.info(f"schema: {schema_name}, full table name: {full_table_name}")
+        column_names = [col.name for col in columns]
+        context.log.info(f"columns: {column_names}")
+
+        if table_exists:
+        # if the table exists, overwrite it with the new data
+            context.log.info(f"the table {full_table_name} already exists so overwriting with new data")
+            (
+                data.write.format("delta")
+                .mode("overwrite")
+                .option("overwriteSchema", "true")  # ensure schema updates are applied
+                .partitionBy(*partition_columns)
+                .saveAsTable(full_table_name)
+            )
+        else:
+            context.log.info(f"cannot add data since the table does not exist")
