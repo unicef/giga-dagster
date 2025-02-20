@@ -15,6 +15,7 @@ from pyspark.sql.types import (
     IntegerType,
     LongType,
     StringType,
+    StructType,
     TimestampType,
 )
 from sqlalchemy import update
@@ -229,6 +230,12 @@ def silver(
         )
     else:
         new_silver = df_passed
+
+    if new_silver.isEmpty():
+        context.log.info(
+            "Silver table is empty after merge, returning empty DataFrame."
+        )
+        new_silver = s.createDataFrame([], schema=StructType(schema_columns))
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
