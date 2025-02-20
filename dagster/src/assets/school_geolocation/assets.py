@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
+from country_converter import CountryConverter
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
@@ -23,6 +24,14 @@ from src.data_quality_checks.utils import (
 )
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
+from src.spark.transform_functions import (
+    standardize_connectivity_type,
+)
+from src.settings import DeploymentEnvironment, settings
+from src.spark.transform_functions import (
+    connectivity_rt_dataset,
+    merge_connectivity_to_master as merge_connectivity_to_df,
+)
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -228,6 +237,19 @@ def geolocation_bronze(
 
     config.metadata.update({"column_mapping": column_mapping})
     context.log.info("After config metadata update")
+
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        raw_connectivity_columns = {"download_speed_govt", "connectivity_govt"}
+        if raw_connectivity_columns.issubset(set(df.columns)):
+            # QoS Columns
+            coco = CountryConverter()
+            country_code_2 = coco.convert(country_code, to="ISO2")
+            connectivity = connectivity_rt_dataset(s, country_code_2)
+            df = merge_connectivity_to_df(df, connectivity)
+
+    # standardize the connectivity type
+    if "connectivity_type_govt" in df.columns:
+        df = standardize_connectivity_type(df)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
