@@ -11,7 +11,8 @@ from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 DOMAIN = "school"
-METASTORE_SCHEMA = "school_connectivity"
+# METASTORE_SCHEMA = "school_connectivity"
+METASTORE_SCHEMA = "school_geolocation"
 
 
 @sensor(

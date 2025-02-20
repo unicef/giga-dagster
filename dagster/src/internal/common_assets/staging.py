@@ -63,12 +63,14 @@ class StagingStep:
         adls_file_client: ADLSFileClient,
         spark: SparkSession,
         change_type: StagingChangeTypeEnum,
+        gigasync_change: bool = True,
     ):
         self.context = context
         self.config = config
         self.adls_file_client = adls_file_client
         self.spark = spark
         self.change_type = change_type
+        self.gigasync_change = gigasync_change
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
@@ -126,36 +128,37 @@ class StagingStep:
             else:
                 return None  # Cannot delete rows when silver and staging tables do not exist
 
-        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
-        with get_db_context() as db:
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == self.country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+        if self.gigasync_change:
+            formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+            with get_db_context() as db:
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == self.country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.enabled: True,
+                            ApprovalRequest.is_merge_processing: False,
+                        }
+                    ),
                 )
-                .values(
-                    {
-                        ApprovalRequest.enabled: True,
-                        ApprovalRequest.is_merge_processing: False,
-                    }
-                ),
-            )
-            db.commit()
+                db.commit()
 
-            files_for_review = db.scalars(
-                select(FileUpload).where(
-                    (FileUpload.country == self.country_code)
-                    & (FileUpload.dataset == self.config.dataset_type)
+                files_for_review = db.scalars(
+                    select(FileUpload).where(
+                        (FileUpload.country == self.country_code)
+                        & (FileUpload.dataset == self.config.dataset_type)
+                    )
                 )
-            )
-            upstream_filepaths = [f.upload_path for f in files_for_review]
+                upstream_filepaths = [f.upload_path for f in files_for_review]
 
-        emit_lineage_base(
-            upstream_datasets=upstream_filepaths,
-            dataset_urn=self.config.datahub_destination_dataset_urn,
-            context=self.context,
-        )
+            emit_lineage_base(
+                upstream_datasets=upstream_filepaths,
+                dataset_urn=self.config.datahub_destination_dataset_urn,
+                context=self.context,
+            )
 
         return staging
 

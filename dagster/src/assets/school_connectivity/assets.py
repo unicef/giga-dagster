@@ -23,6 +23,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
+from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.spark.transform_functions import get_all_connectivity_rt_schools
 from src.utils.adls import (
@@ -42,7 +43,7 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -444,9 +445,12 @@ def school_connectivity_update_realtime_schools_table(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-def school_connectivity_update_realtime_schools_status(
-    context: OpExecutionContext, config: FileConfig, adls_file_client: ADLSFileClient
+@asset
+def school_connectivity_staging(
+    context: OpExecutionContext,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
 ):
     file_path = config.file_path
     country_code = config.country_code
@@ -456,11 +460,43 @@ def school_connectivity_update_realtime_schools_status(
         adls_file_client.download_csv_as_pandas_dataframe(file_path)
     )
 
+    staging_step = StagingStep(
+        context,
+        config,
+        adls_file_client,
+        spark.spark_session,
+        StagingChangeTypeEnum.UPDATE,
+    )
+    staging = staging_step(country_updated_connectivity_schs)
+    row_count = 0 if staging is None else staging.count()
+
     return Output(
-        country_updated_connectivity_schs,
+        None,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(country_updated_connectivity_schs),
-            "preview": get_table_preview(country_updated_connectivity_schs),
+            "row_count": MetadataValue.int(row_count),
+            "preview": get_table_preview(staging),
         },
     )
+
+
+# @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+# def school_connectivity_update_realtime_schools_status(
+#     context: OpExecutionContext, config: FileConfig, adls_file_client: ADLSFileClient
+# ):
+#     file_path = config.file_path
+#     country_code = config.country_code
+#
+#     context.log.info(f"Updating data for country {country_code} from {file_path}")
+#     country_updated_connectivity_schs = (
+#         adls_file_client.download_csv_as_pandas_dataframe(file_path)
+#     )
+#
+#     return Output(
+#         country_updated_connectivity_schs,
+#         metadata={
+#             **get_output_metadata(config),
+#             "row_count": len(country_updated_connectivity_schs),
+#             "preview": get_table_preview(country_updated_connectivity_schs),
+#         },
+#     )
