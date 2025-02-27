@@ -460,7 +460,7 @@ def school_connectivity_realtime_schools(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def school_connectivity_realtime_master(
     context: OpExecutionContext,
     spark: PySparkResource,
