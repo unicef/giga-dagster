@@ -40,7 +40,7 @@ def school_connectivity_update_schools_connectivity_sensor(
         size = properties.size
 
         ops_destination_mapping = {
-            "school_connectivity_update_country_schools": OpDestinationMapping(
+            "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 metastore_schema=METASTORE_SCHEMA,

@@ -741,6 +741,9 @@ def get_all_connectivity_rt_schools(spark: SparkSession):
         "country_code",
     ]
     connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
+    connectivity_rt_schools = connectivity_rt_schools.filter(
+        f.col("school_id_giga").isNotNull()
+    )
     return connectivity_rt_schools
 
 
