@@ -58,6 +58,12 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.RAW,
                 ),
+                "geolocation_metadata": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/pipeline_tables.db/school_geolocation_metadata",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.BRONZE,
+                ),
                 "geolocation_bronze": OpDestinationMapping(
                     source_filepath=str(path),
                     destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",

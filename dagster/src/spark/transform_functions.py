@@ -316,7 +316,6 @@ def create_bronze_layer_columns(
     )
 
     # Get column lists
-    columns_in_bronze_only = [col for col in df.columns if col not in silver.columns]
     columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
     common_columns = [col for col in df.columns if col in silver.columns]
 
@@ -325,9 +324,6 @@ def create_bronze_layer_columns(
         f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
         for col in common_columns
     ]
-    select_expr.extend(
-        [f.col(f"df.{col}").alias(col) for col in columns_in_bronze_only]
-    )
     select_expr.extend(
         [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
     )

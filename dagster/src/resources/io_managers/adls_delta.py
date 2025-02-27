@@ -31,21 +31,28 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
         context.log.info("Handling DeltaIOManager output...")
         if output is None:
-            return
-        if output.isEmpty():
+            context.log.info("Output is None, skipping execution.")
             return
 
         config = FileConfig(**context.step_context.op_config)
-        table_name, _, _ = self._get_table_path(context)
+        table_name, table_root_path, table_path = self._get_table_path(context)
         schema_tier_name = construct_schema_name_for_tier(
             config.metastore_schema, config.tier
         )
         full_table_name = f"{schema_tier_name}.{table_name}"
         context.log.info(f"Full table name: {full_table_name}")
 
+        if self._handle_truncate(context, output, config, full_table_name):
+            return
+
         self._create_schema_if_not_exists(schema_tier_name)
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
-        self._upsert_data(output, config.metastore_schema, full_table_name, context)
+        if config.metastore_schema == "custom_dataset":
+            self._overwrite_data(
+                output, config.metastore_schema, full_table_name, context
+            )
+        else:
+            self._upsert_data(output, config.metastore_schema, full_table_name, context)
 
         context.log.info(
             f"Uploaded {table_name} to {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
@@ -114,6 +121,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         if schema_name_for_tier == "qos":
             columns = data.schema.fields
             partition_columns = ["date"]
+        elif schema_name_for_tier == "custom_dataset":
+            columns = data.schema.fields
+            partition_columns = []
         else:
             columns = get_schema_columns(spark, columns_schema_name)
             partition_columns = get_partition_columns(spark, columns_schema_name)
@@ -212,3 +222,66 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if query is not None:
             query.execute()
+
+    def _overwrite_data(
+        self,
+        data: sql.dataframe,
+        schema_name: str,
+        full_table_name: str,
+        context: OutputContext = None,
+    ):
+        # spark = self._get_spark_session()
+        columns = data.schema.fields
+        partition_columns = []
+
+        context.log.info(f"schema: {schema_name}, full table name: {full_table_name}")
+        column_names = [col.name for col in columns]
+        context.log.info(f"columns: {column_names}")
+
+        # overwrite the table with the new data
+        context.log.info(f"the table {full_table_name} overwriting with new data")
+        (
+            data.write.format("delta")
+            .mode("overwrite")
+            .option("overwriteSchema", "true")  # ensure schema updates are applied
+            .partitionBy(*partition_columns)
+            .saveAsTable(full_table_name)
+        )
+
+    def _handle_truncate(
+        self,
+        context: OutputContext,
+        output: sql.DataFrame,
+        config: FileConfig,
+        full_table_name: str,
+    ) -> bool:
+        """Handles truncation of a table's contents if conditions are met.
+
+        Returns:
+            bool: True if truncation was performed, False otherwise
+        """
+        truncate_schemas = [
+            "school_coverage",
+            "school_geolocation",
+            "school_master",
+            "school_reference",
+        ]
+
+        if (
+            output.isEmpty()
+            and config.metastore_schema in truncate_schemas
+            and "adhoc" not in context.asset_key.path[-1]
+        ):
+            context.log.info(
+                f"Output is empty, clearing all data from {full_table_name}"
+            )
+
+            empty_df = self._get_spark_session().createDataFrame([], output.schema)
+
+            self._overwrite_data(
+                empty_df, config.metastore_schema, full_table_name, context
+            )
+
+            context.log.info(f"Successfully cleared all data from {full_table_name}")
+            return True
+        return False

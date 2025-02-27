@@ -12,6 +12,7 @@ from dagster import (
 )
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
+    custom_dataset_create_bronze_job,
     school_master__convert_gold_csv_to_deltatable_job,
     school_master__dq_checks_job,
     school_master__generate_silver_tables_job,
@@ -29,6 +30,8 @@ from src.utils.op_config import (
     OpDestinationMapping,
     generate_run_ops,
 )
+
+from datetime import datetime
 
 DOMAIN = "school"
 
@@ -282,6 +285,81 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
         yield from run_requests
 
 
+# @sensor(
+#     job=school_qos__convert_csv_to_deltatable_job,
+#     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+# )
+# def school_qos__gold_csv_to_deltatable_sensor(
+#     context: SensorEvaluationContext,
+#     adls_file_client: ADLSFileClient,
+# ):
+#     run_requests = []
+
+#     for file_data in adls_file_client.list_paths_generator(
+#         constants.qos_source_folder, recursive=True
+#     ):
+#         adls_filepath = file_data.name
+#         path = Path(adls_filepath)
+
+#         if (
+#             file_data.is_directory
+#             or len(path.parent.name) != 3
+#             or path.suffix.lower() != ".csv"
+#         ):
+#             context.log.warning(f"Skipping {adls_filepath}")
+#             continue
+
+#         stem = path.stem
+#         country_code = path.parent.name
+#         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+#         metadata = properties.metadata
+#         size = properties.size
+#         metastore_schema = "qos"
+
+#         ops_destination_mapping = {
+#             "adhoc__load_qos_csv": OpDestinationMapping(
+#                 source_filepath=str(path),
+#                 destination_filepath=str(path),
+#                 metastore_schema=metastore_schema,
+#                 tier=DataTier.RAW,
+#             ),
+#             "adhoc__qos_transforms": OpDestinationMapping(
+#                 source_filepath=str(path),
+#                 destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
+#                 metastore_schema=metastore_schema,
+#                 tier=DataTier.TRANSFORMS,
+#             ),
+#             "adhoc__publish_qos_to_gold": OpDestinationMapping(
+#                 source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
+#                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+#                 metastore_schema=metastore_schema,
+#                 tier=DataTier.GOLD,
+#             ),
+#         }
+
+#         run_ops = generate_run_ops(
+#             ops_destination_mapping,
+#             dataset_type="qos",
+#             metadata=metadata,
+#             file_size_bytes=size,
+#             domain=DOMAIN,
+#             country_code=country_code,
+#         )
+
+#         context.log.info(f"FILE: {path}")
+#         run_requests.append(
+#             RunRequest(
+#                 run_key=str(path),
+#                 run_config=RunConfig(ops=run_ops),
+#                 tags={"country": country_code},
+#             ),
+#         )
+
+#     if len(run_requests) == 0:
+#         yield SkipReason("No files found to process.")
+#     else:
+#         yield from run_requests
+
 @sensor(
     job=school_qos__convert_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
@@ -290,7 +368,17 @@ def school_qos__gold_csv_to_deltatable_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    run_requests = []
+    # ensure last_processed_time is initialized correctly
+    if isinstance(context.cursor, str) and context.cursor:
+        try:
+            last_processed_time = datetime.fromisoformat(context.cursor)
+        except ValueError:
+            context.log.warning(f"Invalid cursor format: {context.cursor}, resetting to epoch.")
+            last_processed_time = datetime.min
+    else:
+        last_processed_time = datetime.min  # default to the beginning of time
+    new_last_processed_time = last_processed_time
+    new_files_found = False
 
     for file_data in adls_file_client.list_paths_generator(
         constants.qos_source_folder, recursive=True
@@ -298,6 +386,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
 
+        # skip directories, invalid paths, or non-CSV files
         if (
             file_data.is_directory
             or len(path.parent.name) != 3
@@ -306,6 +395,17 @@ def school_qos__gold_csv_to_deltatable_sensor(
             context.log.warning(f"Skipping {adls_filepath}")
             continue
 
+        # ensure file_data.last_modified is a valid datetime object
+        file_modified_time = file_data.last_modified
+        if not isinstance(file_modified_time, datetime):
+            context.log.warning(f"Skipping file {adls_filepath} due to missing or invalid last_modified timestamp.")
+            continue
+
+        # skip files that were already processed
+        if file_modified_time <= last_processed_time:
+            continue
+
+        # process new file
         stem = path.stem
         country_code = path.parent.name
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
@@ -343,19 +443,23 @@ def school_qos__gold_csv_to_deltatable_sensor(
             country_code=country_code,
         )
 
-        context.log.info(f"FILE: {path}")
-        run_requests.append(
-            RunRequest(
-                run_key=str(path),
-                run_config=RunConfig(ops=run_ops),
-                tags={"country": country_code},
-            ),
+        context.log.info(f"Processing new file: {adls_filepath}")
+
+        yield RunRequest(
+            run_key=str(path),
+            run_config=RunConfig(ops=run_ops),
+            tags={"country": country_code},
         )
 
-    if len(run_requests) == 0:
-        yield SkipReason("No files found to process.")
+        # update the latest processed file timestamp
+        new_last_processed_time = max(new_last_processed_time, file_modified_time)
+        new_files_found = True
+
+    # update cursor with the latest processed timestamp
+    if new_files_found:
+        context.update_cursor(new_last_processed_time.isoformat())
     else:
-        yield from run_requests
+        yield SkipReason("No new files found to process.")
 
 
 @sensor(
@@ -419,3 +523,62 @@ def school_master__dq_checks_sensor(
             ),
             tags={"country": table.name.upper()},
         )
+
+
+@sensor(
+    job=custom_dataset_create_bronze_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def custom_dataset_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    count = 0
+    source_directory = f"{constants.raw_folder}/custom-dataset"
+
+    for file_data in adls_file_client.list_paths_generator(
+        source_directory, recursive=True
+    ):
+        if file_data.is_directory:
+            continue
+
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+
+        ops_destination_mapping = {
+            "custom_dataset_raw": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema="custom_dataset",
+                tier=DataTier.RAW,
+            ),
+            "custom_dataset_bronze": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.bronze_folder}/custom_dataset.db/{stem}",
+                metastore_schema="custom_dataset",
+                tier=DataTier.BRONZE,
+            ),
+        }
+
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type="custom",
+            metadata=metadata,
+            file_size_bytes=size,
+            domain="custom",
+            country_code=stem,
+        )
+
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(
+            run_key=str(path),
+            run_config=RunConfig(ops=run_ops),
+        )
+        count += 1
+
+    if count == 0:
+        yield SkipReason(f"No uploads detected in {source_directory}")

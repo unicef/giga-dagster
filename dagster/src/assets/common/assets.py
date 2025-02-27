@@ -8,7 +8,16 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType
+from pyspark.sql.types import (
+    BooleanType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructType,
+    TimestampType,
+)
 from sqlalchemy import update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
@@ -18,11 +27,8 @@ from src.internal.merge import (
     partial_cdf_in_cluster_merge,
 )
 from src.resources import ResourceKey
-from src.settings import DeploymentEnvironment, settings
 from src.spark.transform_functions import (
     add_missing_columns,
-    connectivity_rt_dataset,
-    merge_connectivity_to_master,
     standardize_connectivity_type,
 )
 from src.utils.adls import (
@@ -43,6 +49,7 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
@@ -50,6 +57,7 @@ from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def manual_review_passed_rows(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -70,6 +78,7 @@ def manual_review_passed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def manual_review_failed_rows(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -154,6 +163,7 @@ def manual_review_failed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def silver(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -218,6 +228,12 @@ def silver(
     else:
         new_silver = df_passed
 
+    if new_silver.isEmpty():
+        context.log.info(
+            "Silver table is empty after merge, returning empty DataFrame."
+        )
+        new_silver = s.createDataFrame([], schema=StructType(schema_columns))
+
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -237,6 +253,7 @@ def silver(
 
 
 @asset(deps=["manual_review_passed_rows", "manual_review_failed_rows"])
+@capture_op_exceptions
 def reset_staging_table(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -295,7 +312,45 @@ def reset_staging_table(
             )
 
 
+def _handle_null_columns(schema_columns, primary_key, silver_columns):
+    """Handle null columns by providing default values based on data type.
+
+    If the column value is NULL, add a placeholder value if the following
+    conditions are met:
+    - The column is not nullable
+    - The column is not the primary key
+    - The column is not in the silver table
+
+    Default values by type:
+    - String: "Unknown"
+    - Numeric (Int/Long/Double/Float): 0
+    - Boolean: False
+    - Timestamp: current_timestamp()
+    """
+    column_actions = {}
+    for col in schema_columns:
+        if (
+            not col.nullable
+            and col.name != primary_key
+            and col.name not in [c.name for c in silver_columns]
+        ):
+            if col.dataType == StringType():
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+            elif isinstance(
+                col.dataType, IntegerType | LongType | DoubleType | FloatType
+            ):
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit(0))
+            elif isinstance(col.dataType, BooleanType):
+                column_actions[col.name] = f.coalesce(f.col(col.name), f.lit(False))
+            elif isinstance(col.dataType, TimestampType):
+                column_actions[col.name] = f.coalesce(
+                    f.col(col.name), f.current_timestamp()
+                )
+    return column_actions
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def master(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -316,18 +371,6 @@ def master(
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
 
-    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        raw_connectivity_columns = {"download_speed_govt", "connectivity_govt"}
-        if raw_connectivity_columns.issubset(set(silver.columns)):
-            # QoS Columns
-            coco = CountryConverter()
-            country_code_2 = coco.convert(country_code, to="ISO2")
-            connectivity = connectivity_rt_dataset(s, country_code_2)
-            silver = merge_connectivity_to_master(silver, connectivity)
-
-    # standardize the connectivity type
-    if "connectivity_type_govt" in silver.columns:
-        silver = standardize_connectivity_type(silver)
 
     # Conform to master schema and fill in missing values with NULL
     silver = add_missing_columns(silver, schema_columns)
@@ -345,22 +388,7 @@ def master(
     else:
         new_master = silver
 
-    column_actions = {}
-    for col in schema_columns:
-        # If the column value is NULL, add a placeholder value if the following
-        # conditions are met:
-        # - The column is not nullable
-        # - The column is not the primary key
-        # - The column type is string
-        # - The column is not in the silver table (e.g. the column comes from the
-        #   coverage schema, but we are currently processing a silver geolocation table)
-        if (
-            not col.nullable
-            and col.name != primary_key
-            and col.dataType == StringType()
-            and col.name not in [c.name for c in silver_columns]
-        ):
-            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_master = new_master.withColumns(column_actions)
     new_master = compute_row_hash(new_master)
 
@@ -383,6 +411,7 @@ def master(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
+@capture_op_exceptions
 def reference(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -417,15 +446,7 @@ def reference(
     else:
         new_reference = silver
 
-    column_actions = {}
-    for col in schema_columns:
-        if (
-            not col.nullable
-            and col.name != primary_key
-            and col.dataType == StringType()
-            and col.name not in [c.name for c in silver_columns]
-        ):
-            column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
+    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_reference = new_reference.withColumns(column_actions)
     new_reference = compute_row_hash(new_reference)
 
@@ -448,6 +469,7 @@ def reference(
 
 
 @asset
+@capture_op_exceptions
 async def broadcast_master_release_notes(
     context: OpExecutionContext,
     config: FileConfig,

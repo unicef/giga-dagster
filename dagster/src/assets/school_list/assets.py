@@ -39,11 +39,13 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_raw(
     context: OpExecutionContext, config: FileConfig
 ) -> Output[pd.DataFrame]:
@@ -69,6 +71,7 @@ def qos_school_list_raw(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_bronze(
     qos_school_list_raw: sql.DataFrame,
     config: FileConfig,
@@ -121,6 +124,7 @@ def qos_school_list_bronze(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
@@ -166,6 +170,7 @@ def qos_school_list_data_quality_results(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_data_quality_results_summary(
     qos_school_list_bronze: sql.DataFrame,
     qos_school_list_data_quality_results: sql.DataFrame,
@@ -188,6 +193,7 @@ def qos_school_list_data_quality_results_summary(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_dq_passed_rows(
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
@@ -220,6 +226,7 @@ def qos_school_list_dq_passed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_dq_failed_rows(
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
@@ -241,6 +248,7 @@ def qos_school_list_dq_failed_rows(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_school_list_staging(
     context: OpExecutionContext,
     qos_school_list_dq_passed_rows: sql.DataFrame,
