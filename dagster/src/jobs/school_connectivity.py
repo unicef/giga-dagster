@@ -3,7 +3,7 @@ from src.settings import settings
 
 school_connectivity__new_realtime_schools_job = define_asset_job(
     name="school_connectivity__new_realtime_schools_job",
-    selection=["school_geolocation_realtime_schools*"],
+    selection=["school_connectivity_realtime_schools*"],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
 
