@@ -476,9 +476,11 @@ def school_connectivity_realtime_master(
     primary_key = get_primary_key(s, schema_name)
 
     context.log.info(f"Updating data for country {country_code} from {file_path}")
-    updated_connectivity_schs = adls_file_client.download_csv_as_pandas_dataframe(
+    updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
         file_path
     )
+
+    updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
     updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
         {col: f"{col}_update" for col in updated_connectivity_schs.columns}
     )
