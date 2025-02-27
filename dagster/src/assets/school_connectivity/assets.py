@@ -469,7 +469,7 @@ def school_connectivity_realtime_master(
 ):
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
-    file_path = config.file_path
+    file_path = config.filepath
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
@@ -484,6 +484,7 @@ def school_connectivity_realtime_master(
     )
 
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        context.log.info("The table already exists")
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
