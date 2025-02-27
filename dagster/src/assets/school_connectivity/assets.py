@@ -23,9 +23,11 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
-from src.spark.transform_functions import get_all_connectivity_rt_schools
+from src.spark.transform_functions import (
+    get_all_connectivity_rt_schools,
+)
 from src.utils.adls import (
     ADLSFileClient,
 )
@@ -40,10 +42,13 @@ from src.utils.qos_apis.school_connectivity import query_school_connectivity_dat
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
+    get_primary_key,
+    get_schema_columns,
     get_schema_columns_datahub,
 )
+from src.utils.spark import compute_row_hash
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -341,7 +346,7 @@ def qos_school_connectivity_gold(
 
 
 @asset
-def school_connectivity_update_realtime_schools_table(
+def school_connectivity_realtime_schools(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
@@ -349,7 +354,7 @@ def school_connectivity_update_realtime_schools_table(
     s: SparkSession = spark.spark_session
 
     schema_name = "pipeline_tables"
-    table_name = "schools_connected_realtime"
+    table_name = "school_connectivity_realtime_schools"
 
     rt_schools_schema = StructType(
         [
@@ -376,7 +381,7 @@ def school_connectivity_update_realtime_schools_table(
     updated_rt_schools = get_all_connectivity_rt_schools(s)
 
     current_rt_schools = current_rt_schools.withColumnsRenamed(
-        {col: f"{col}_previous" for col in current_rt_schools.schema.fieldNames()}
+        {col: f"{col}_previous" for col in current_rt_schools.columns}
     )
 
     context.log.info("Determine the schools whose connectivity needs to be updated")
@@ -413,8 +418,10 @@ def school_connectivity_update_realtime_schools_table(
         country_connected_schs = schools_for_update_pandas[
             schools_for_update_pandas["country_code"] == country_code
         ]
-        adls_file_client.upload_pandas_dataframe_as_file(
-            context=context, data=country_connected_schs, filepath=adls_file_path
+        adls_file_client.upload_raw(
+            context=None,
+            data=country_connected_schs.to_csv(index=False).encode(),
+            filepath=adls_file_path,
         )
 
     context.log.info("Create the schema and table if not exists")
@@ -445,58 +452,89 @@ def school_connectivity_update_realtime_schools_table(
     )
 
 
-@asset
-def school_connectivity_staging(
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+def school_connectivity_realtime_master(
     context: OpExecutionContext,
+    spark: PySparkResource,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
-    spark: PySparkResource,
 ):
+    s: SparkSession = spark.spark_session
+    schema_name = config.metastore_schema
     file_path = config.file_path
     country_code = config.country_code
+    schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
+    primary_key = get_primary_key(s, schema_name)
 
     context.log.info(f"Updating data for country {country_code} from {file_path}")
-    country_updated_connectivity_schs = (
-        adls_file_client.download_csv_as_pandas_dataframe(file_path)
+    updated_connectivity_schs = adls_file_client.download_csv_as_pandas_dataframe(
+        file_path
+    )
+    updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
+        {col: f"{col}_update" for col in updated_connectivity_schs.columns}
     )
 
-    staging_step = StagingStep(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+    if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        current_master = DeltaTable.forName(
+            s, construct_full_table_name("school_master", country_code)
+        ).toDF()
+
+        updated_master = current_master.join(
+            updated_connectivity_schs,
+            on=[
+                current_master.school_id_giga
+                == updated_connectivity_schs.school_id_giga_updated
+            ],
+            how="left",
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity",
+            f.coalesce(f.col("connectivity_updated"), f.col("connectivity")),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT",
+            f.coalesce(f.col("connectivity_RT_updated"), f.col("connectivity_RT")),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT_datasource",
+            f.coalesce(
+                f.col("connectivity_RT_datasource_updated"),
+                f.col("connectivity_RT_datasource"),
+            ),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT_ingestion_timestamp",
+            f.coalesce(
+                f.col("connectivity_RT_ingestion_timestamp_updated"),
+                f.col("connectivity_RT_ingestion_timestamp"),
+            ),
+        )
+
+        updated_master = updated_master.drop(*updated_connectivity_schs.columns)
+
+        new_master = full_in_cluster_merge(
+            current_master, updated_master, primary_key, column_names
+        )
+    else:
+        context.log.error(f"The master table for country {country_code} does not exist")
+        return None
+
+    new_master = compute_row_hash(new_master)
+
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
     )
-    staging = staging_step(country_updated_connectivity_schs)
-    row_count = 0 if staging is None else staging.count()
 
     return Output(
-        None,
+        new_master,
         metadata={
             **get_output_metadata(config),
-            "row_count": MetadataValue.int(row_count),
-            "preview": get_table_preview(staging),
+            "row_count": new_master.count(),
+            "preview": get_table_preview(new_master),
         },
     )
-
-
-# @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-# def school_connectivity_update_realtime_schools_status(
-#     context: OpExecutionContext, config: FileConfig, adls_file_client: ADLSFileClient
-# ):
-#     file_path = config.file_path
-#     country_code = config.country_code
-#
-#     context.log.info(f"Updating data for country {country_code} from {file_path}")
-#     country_updated_connectivity_schs = (
-#         adls_file_client.download_csv_as_pandas_dataframe(file_path)
-#     )
-#
-#     return Output(
-#         country_updated_connectivity_schs,
-#         metadata={
-#             **get_output_metadata(config),
-#             "row_count": len(country_updated_connectivity_schs),
-#             "preview": get_table_preview(country_updated_connectivity_schs),
-#         },
-#     )
