@@ -45,7 +45,9 @@ class ADLSFileClient(ConfigurableResource):
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
-                file_client.upload_data(buffer.read(), metadata=metadata)
+                file_client.upload_data(
+                    buffer.read(), metadata=metadata, overwrite=True
+                )
             except azure.core.exceptions.ResourceModifiedError:
                 logger.warning("ResourceModifiedError: Skipping write")
             except azure.core.exceptions.ResourceNotFoundError as e:
