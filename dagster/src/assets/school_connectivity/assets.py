@@ -481,12 +481,16 @@ def school_connectivity_realtime_master(
     )
 
     updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
+    updated_connectivity_schs = updated_connectivity_schs.withColumn(
+        "connectivity", f.lit("Yes")
+    )
+
     updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
         {col: f"{col}_updated" for col in updated_connectivity_schs.columns}
     )
 
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
-        context.log.info("The table already exists")
+        context.log.info(f"The master table for {country_code} already exists")
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
