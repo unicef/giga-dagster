@@ -482,7 +482,7 @@ def school_connectivity_realtime_master(
 
     updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
     updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
-        {col: f"{col}_update" for col in updated_connectivity_schs.columns}
+        {col: f"{col}_updated" for col in updated_connectivity_schs.columns}
     )
 
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
