@@ -28,6 +28,8 @@ variables:
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
   slackWebHook: $(SLACK_WEBHOOK)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
+  supersetUsername: $(SUPERSET_USERNAME)
+  supersetPassword: $(SUPERSET_PASSWORD)
   gigamapsDbConnectionString: $(GIGAMAPS_DB_CONNECTION_STRING)
   gigameterDbConnectionString: $(GIGAMETER_DB_CONNECTION_STRING)
   mlabDbConnectionString: $(MLAB_DB_CONNECTION_STRING)
