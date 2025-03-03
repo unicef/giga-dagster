@@ -420,7 +420,7 @@ def school_connectivity_realtime_schools(
         "Split the schools that need updating by country and create files for each of them"
     )
     countries_to_update = schools_for_update_pandas["country_code"].unique()
-    current_timestamp_string = datetime.now().strftime("%Y%m%d-%H%M%S")
+    current_timestamp_string = datetime.now().strftime("%Y%m%d_%H%M%S")
     for country_code in countries_to_update:
         file_name = f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
         adls_file_path = f"{constants.connectivity_updates_folder}/{file_name}"

@@ -715,17 +715,15 @@ def get_all_connectivity_rt_schools(spark: SparkSession):
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
         "connectivity_RT_datasource",
-        f.when(f.col("country_code") == "BRA", "nic_br").otherwise(
-            f.regexp_replace(
-                f.concat_ws(
-                    ", ",
-                    f.trim(f.col("source")),
-                    f.trim(f.col("source_mlab")),
-                    f.trim(f.col("source_qos")),
-                ),
-                "^, |, $",
-                "",
-            )
+        f.regexp_replace(
+            f.concat_ws(
+                ", ",
+                f.trim(f.col("source")),
+                f.trim(f.col("source_mlab")),
+                f.trim(f.col("source_qos")),
+            ),
+            "^, |, $",
+            "",
         ),
     )
 
