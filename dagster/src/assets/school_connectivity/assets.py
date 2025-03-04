@@ -388,7 +388,7 @@ def school_connectivity_realtime_schools(
 
     context.log.info("Get the updated list of schools with realtime connectivity")
     updated_rt_schools = get_all_connectivity_rt_schools(context, s)
-    context.log.info(f"Generated {updated_rt_schools.count()} rt current schools")
+    context.log.info(f"{updated_rt_schools.count()} schools have realtime data")
 
     current_rt_schools = current_rt_schools.withColumnsRenamed(
         {col: f"{col}_previous" for col in current_rt_schools.columns}
@@ -403,7 +403,6 @@ def school_connectivity_realtime_schools(
             == current_rt_schools.school_id_giga_previous
         ],
     )
-    context.log.info(f"Generated {schools_for_update.count()} schools will be update")
 
     schools_for_update = schools_for_update.withColumn(
         "to_update",
@@ -418,12 +417,9 @@ def school_connectivity_realtime_schools(
     schools_for_update = schools_for_update.select(*rt_schools_schema.fieldNames())
 
     context.log.info(
-        f"The number of schools before changing to pandas {schools_for_update.count()}"
+        f"{schools_for_update.count()} schools will have their connectivity updated"
     )
     schools_for_update_pandas = schools_for_update.toPandas()
-    context.log.info(
-        f"The number of schools ater converting to pandas is {schools_for_update_pandas.shape[0]}"
-    )
 
     context.log.info(
         "Split the schools that need updating by country and create files for each of them"

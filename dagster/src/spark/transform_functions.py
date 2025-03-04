@@ -662,7 +662,11 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession):
     )
 
     gigameter_schools = get_all_gigameter_schools()
+    context.log.info(
+        f"Total number of gigameter schools is {gigameter_schools.shape[0]}"
+    )
     mlab_schools = get_all_mlab_schools()
+    context.log.info(f"Total number of mlab schools is {mlab_schools.shape[0]}")
 
     qos_countries = ["bra", "ken", "mng"]
     qos_schools = pd.DataFrame()
@@ -708,6 +712,15 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession):
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
         "school_id_giga",
         f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_qos")),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "country_code",
+        f.least(
+            f.col("country_code"),
+            f.col("country_code_mlab"),
+            f.col("country_code_qos"),
+        ),
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
