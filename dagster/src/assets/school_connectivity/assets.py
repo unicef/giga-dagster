@@ -465,6 +465,14 @@ def school_connectivity_realtime_schools(
         .execute()
     )
 
+    return Output(
+        None,
+        metadata={
+            "row_count": schools_for_update.shape[0],
+            "preview": get_table_preview(schools_for_update),
+        },
+    )
+
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def school_connectivity_realtime_master(

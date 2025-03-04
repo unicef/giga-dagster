@@ -3,7 +3,7 @@ from pathlib import Path
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.school_connectivity import (
-    school_connectivity__update_schools_realtime_status_job,
+    school_connectivity__update_master_realtime_schools_job,
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -15,7 +15,7 @@ METASTORE_SCHEMA = "school_master"
 
 
 @sensor(
-    job=school_connectivity__update_schools_realtime_status_job,
+    job=school_connectivity__update_master_realtime_schools_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
 def school_connectivity_update_schools_connectivity_sensor(

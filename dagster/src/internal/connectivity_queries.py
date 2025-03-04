@@ -139,14 +139,16 @@ def get_qos_schools_by_country(country_iso3_code):
     with get_db_context() as db:
         qos_schools = (
             db.execute(
-                text(f"""
-        SELECT DISTINCT school_id_giga,
-               school_id_govt,
-               MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp,
-               'qos' source,
-               '{country_iso3_code.upper()}' country_code
-        FROM {table_name}
-        """)
+                text(
+                    f"""
+                SELECT DISTINCT school_id_giga,
+                       school_id_govt,
+                       MIN(timestamp) OVER (PARTITION BY school_id_giga) first_measurement_timestamp,
+                       'qos' source,
+                       '{country_iso3_code.upper()}' country_code
+                FROM {table_name}
+        """  # nosec B608 (silence pre-commit bandit errors related to SQL injection)
+                )
             )
             .mappings()
             .all()
