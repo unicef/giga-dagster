@@ -1,5 +1,7 @@
-from dagster import job, op, OpExecutionContext
+from dagster import OpExecutionContext, job, op
+
 from ..resources.superset import get_access_token, get_saved_query, run_query
+
 
 @op
 def fetch_and_run_query(context: OpExecutionContext):
@@ -26,7 +28,9 @@ def fetch_and_run_query(context: OpExecutionContext):
                     yy[table_name] = query
 
         else:
-            context.log.error(f"failed to fetch any saved query: {response.status_code} {response.text}")
+            context.log.error(
+                f"failed to fetch any saved query: {response.status_code} {response.text}"
+            )
 
         for table_name in xx:
             if table_name in yy:
@@ -38,7 +42,10 @@ def fetch_and_run_query(context: OpExecutionContext):
             context.log.info(f"creating table: {table_name}")
             run_query(query_create, access_token)
     else:
-        context.log.error("error in authenticating with Superset so this will be ignored now")
+        context.log.error(
+            "error in authenticating with Superset so this will be ignored now"
+        )
+
 
 @job
 def refresh_table():
