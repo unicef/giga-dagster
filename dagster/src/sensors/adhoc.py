@@ -1,3 +1,4 @@
+from datetime import datetime
 from pathlib import Path
 
 from dagster_pyspark import PySparkResource
@@ -30,8 +31,6 @@ from src.utils.op_config import (
     OpDestinationMapping,
     generate_run_ops,
 )
-
-from datetime import datetime
 
 DOMAIN = "school"
 
@@ -360,6 +359,7 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
 #     else:
 #         yield from run_requests
 
+
 @sensor(
     job=school_qos__convert_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
@@ -373,7 +373,9 @@ def school_qos__gold_csv_to_deltatable_sensor(
         try:
             last_processed_time = datetime.fromisoformat(context.cursor)
         except ValueError:
-            context.log.warning(f"Invalid cursor format: {context.cursor}, resetting to epoch.")
+            context.log.warning(
+                f"Invalid cursor format: {context.cursor}, resetting to epoch."
+            )
             last_processed_time = datetime.min
     else:
         last_processed_time = datetime.min  # default to the beginning of time
@@ -398,7 +400,9 @@ def school_qos__gold_csv_to_deltatable_sensor(
         # ensure file_data.last_modified is a valid datetime object
         file_modified_time = file_data.last_modified
         if not isinstance(file_modified_time, datetime):
-            context.log.warning(f"Skipping file {adls_filepath} due to missing or invalid last_modified timestamp.")
+            context.log.warning(
+                f"Skipping file {adls_filepath} due to missing or invalid last_modified timestamp."
+            )
             continue
 
         # skip files that were already processed

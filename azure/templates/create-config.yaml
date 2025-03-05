@@ -62,6 +62,8 @@ jobs:
                     SENTRY_DSN: "$(sentryDsn)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
+                    SUPERSET_USERNAME: "$(supersetUsername)"
+                    SUPERSET_PASSWORD: "$(supersetPassword)"
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
                     INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
                     INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
