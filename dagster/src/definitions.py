@@ -21,7 +21,6 @@ from src.utils.load_module import (
 )
 from src.utils.sentry import setup_sentry
 
-
 setup_sentry()
 
 
