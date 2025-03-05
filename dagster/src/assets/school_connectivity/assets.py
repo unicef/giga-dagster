@@ -469,7 +469,7 @@ def school_connectivity_realtime_schools(
     return Output(
         None,
         metadata={
-            "row_count": schools_for_update.shape[0],
+            "row_count": schools_for_update.count(),
             "preview": get_table_preview(schools_for_update),
         },
     )

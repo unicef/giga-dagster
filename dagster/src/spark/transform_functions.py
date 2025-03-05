@@ -716,7 +716,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession):
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
         "country_code",
-        f.least(
+        f.coalesce(
             f.col("country_code"),
             f.col("country_code_mlab"),
             f.col("country_code_qos"),
