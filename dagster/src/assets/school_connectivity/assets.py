@@ -355,6 +355,7 @@ def qos_school_connectivity_gold(
 
 
 @asset
+@capture_op_exceptions
 def school_connectivity_realtime_schools(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -475,6 +476,7 @@ def school_connectivity_realtime_schools(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def school_connectivity_realtime_master(
     context: OpExecutionContext,
     spark: PySparkResource,
