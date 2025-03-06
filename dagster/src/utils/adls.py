@@ -39,13 +39,15 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext, data: bytes, filepath: str) -> None:
+    def upload_raw(context: OutputContext | None, data: bytes, filepath: str) -> None:
         file_client = _adls.get_file_client(filepath)
-        metadata = context.step_context.op_config["metadata"]
+        metadata = context.step_context.op_config["metadata"] if context else None
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
-                file_client.upload_data(buffer.read(), metadata=metadata)
+                file_client.upload_data(
+                    buffer.read(), metadata=metadata, overwrite=True
+                )
             except azure.core.exceptions.ResourceModifiedError:
                 logger.warning("ResourceModifiedError: Skipping write")
             except azure.core.exceptions.ResourceNotFoundError as e:
