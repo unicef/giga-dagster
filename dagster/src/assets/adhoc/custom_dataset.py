@@ -7,6 +7,8 @@ from pyspark import sql
 from pyspark.sql import (
     SparkSession,
 )
+from pyspark.sql.types import NullType
+from pyspark.sql import functions as F
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -40,11 +42,27 @@ def custom_dataset_bronze(
 
     with BytesIO(custom_dataset_raw) as buffer:
         buffer.seek(0)
-        pdf = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
+        pdf = pd.read_csv(buffer)
 
+    for col in pdf.select_dtypes(include='object').columns:
+        pdf[col] = pdf[col].fillna('').astype(str).replace('', None)
+
+    for col in pdf.select_dtypes(include=['number']).columns:
+        pdf[col] = pdf[col].astype(float).replace(nan, None)
+
+    pdf = pdf.drop_duplicates()
     df = s.createDataFrame(pdf)
-    df = df.dropDuplicates()
-    context.log.info("the Delta Table will get created from this dataframe")
+
+    context.log.info("original schema")
+    context.log.info(df.schema.simpleString())
+    void_columns = [field.name for field in df.schema.fields if isinstance(field.dataType, NullType)]
+
+    for col in void_columns:
+        context.log.info(f"{col}")
+        df = df.withColumn(col, F.col(col).cast("string"))
+
+    context.log.info("updated schema")
+    context.log.info(df.schema.simpleString())
 
     return Output(
         df,
