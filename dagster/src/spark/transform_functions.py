@@ -310,26 +310,45 @@ def create_bronze_layer_columns(
             }
         )
 
-    # Join with silver data
+    # Preserve all rows in the input DataFrame while properly coalescing values
+
+    # Create a temporary unique identifier to ensure we don't lose any rows
+    df = df.withColumn("_temp_row_id", f.monotonically_increasing_id())
+
+    # Identify common columns and silver-only columns
+    common_columns = [
+        col for col in df.columns if col in silver.columns and col != "school_id_govt"
+    ]
+    silver_only_columns = [col for col in silver.columns if col not in df.columns]
+
+    # Join with silver data using a left join to preserve all rows from df
     joined_df = df.alias("df").join(
         silver.alias("silver"), on="school_id_govt", how="left"
     )
 
-    # Get column lists
-    columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
-    common_columns = [col for col in df.columns if col in silver.columns]
+    # Build select expressions to properly coalesce values
+    select_expr = [f.col("df._temp_row_id")]
 
-    # Build select expression
-    select_expr = [
-        f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
-        for col in common_columns
-    ]
-    select_expr.extend(
-        [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
-    )
+    # Add all columns from df that aren't in silver
+    for col in df.columns:
+        if col not in silver.columns and col != "_temp_row_id":
+            select_expr.append(f.col(f"df.{col}"))
+
+    # Add common columns with coalescing
+    for col in common_columns:
+        select_expr.append(
+            f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
+        )
+
+    # Add silver-only columns
+    for col in silver_only_columns:
+        select_expr.append(f.col(f"silver.{col}"))
 
     # Select columns from joined DataFrame
-    df = joined_df.select(*select_expr)
+    joined_df = joined_df.select(*select_expr)
+
+    # Use the joined dataframe for further processing
+    df = joined_df.drop("_temp_row_id")
 
     # standardize education level
     df = create_education_level(df)
