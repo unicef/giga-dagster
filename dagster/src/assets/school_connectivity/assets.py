@@ -388,7 +388,7 @@ def school_connectivity_realtime_schools(
         )
 
     context.log.info("Get the updated list of schools with realtime connectivity")
-    updated_rt_schools = get_all_connectivity_rt_schools(context, s)
+    updated_rt_schools = get_all_connectivity_rt_schools(context, s, table_exists)
     context.log.info(f"{updated_rt_schools.count()} schools have realtime data")
 
     current_rt_schools = current_rt_schools.withColumnsRenamed(

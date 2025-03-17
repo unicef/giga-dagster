@@ -764,11 +764,16 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     )
 
     if not table_exists:
+        context.log(
+            "Creating RT schools table for the first time, adding RT data from giga maps"
+        )
         gigamaps_rt_schs = get_rt_schools()
         gigamaps_rt_schs_df = spark.createDataFrame(gigamaps_rt_schs)
         gigamaps_rt_schs_df = gigamaps_rt_schs_df.withColumnsRenamed(
             {col: f"{col}_maps" for col in gigamaps_rt_schs_df.columns}
         )
+
+        context.log("Add giga maps RT data to RT schools from all sources")
 
         connectivity_rt_schools = connectivity_rt_schools.join(
             gigamaps_rt_schs_df,
@@ -785,9 +790,17 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
         )
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
             "connectivity_RT_ingestion_timestamp",
-            f.coalesce(
-                f.col("connectivity_rt_ingestion_timestamp_maps"),
-                f.col("connectivity_RT_ingestion_timestamp"),
+            f.when(
+                f.col("country_code_maps") == "BRA",
+                f.coalesce(
+                    f.col("connectivity_rt_ingestion_timestamp_maps"),
+                    f.col("connectivity_RT_ingestion_timestamp"),
+                ),
+            ).otherwise(
+                f.coalesce(
+                    f.col("connectivity_rt_ingestion_timestamp"),
+                    f.col("connectivity_RT_ingestion_timestamp_maps"),
+                )
             ),
         )
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
