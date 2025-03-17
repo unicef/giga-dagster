@@ -654,11 +654,12 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     )
 
 
-def get_all_connectivity_rt_schools(context, spark: SparkSession):
+def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=True):
     from src.internal.connectivity_queries import (
         get_all_gigameter_schools,
         get_all_mlab_schools,
         get_qos_schools_by_country,
+        get_rt_schools,
     )
 
     gigameter_schools = get_all_gigameter_schools()
@@ -683,11 +684,11 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession):
     gigameter_schools_df = spark.createDataFrame(gigameter_schools)
     mlab_schools_df = spark.createDataFrame(mlab_schools)
     mlab_schools_df = mlab_schools_df.withColumnsRenamed(
-        {col: f"{col}_mlab" for col in mlab_schools_df.schema.fieldNames()}
+        {col: f"{col}_mlab" for col in mlab_schools_df.columns}
     )
     qos_schools_df = spark.createDataFrame(qos_schools)
     qos_schools_df = qos_schools_df.withColumnsRenamed(
-        {col: f"{col}_qos" for col in qos_schools_df.schema.fieldNames()}
+        {col: f"{col}_qos" for col in qos_schools_df.columns}
     )
 
     connectivity_rt_schools = gigameter_schools_df.join(
@@ -761,6 +762,47 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession):
     connectivity_rt_schools = connectivity_rt_schools.filter(
         f.col("school_id_giga").isNotNull()
     )
+
+    if not table_exists:
+        gigamaps_rt_schs = get_rt_schools()
+        gigamaps_rt_schs_df = spark.createDataFrame(gigamaps_rt_schs)
+        gigamaps_rt_schs_df = gigamaps_rt_schs_df.withColumnsRenamed(
+            {col: f"{col}_maps" for col in gigamaps_rt_schs_df.columns}
+        )
+
+        connectivity_rt_schools = connectivity_rt_schools.join(
+            gigamaps_rt_schs_df,
+            how="outer",
+            on=[
+                connectivity_rt_schools.school_id_giga
+                == gigamaps_rt_schs_df.school_id_giga_maps
+            ],
+        )
+
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "school_id_giga",
+            f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_maps")),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT_ingestion_timestamp",
+            f.coalesce(
+                f.col("connectivity_rt_ingestion_timestamp_maps"),
+                f.col("connectivity_RT_ingestion_timestamp"),
+            ),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT_datasource",
+            f.when(f.col("country_code_maps") == "BRA", "qos"),
+        ).otherwise(f.col("connectivity_RT_datasource"))
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "country_code", f.coalese(f.col("country_code"), f.col("country_code_maps"))
+        )
+
+        connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
+        connectivity_rt_schools = connectivity_rt_schools.filter(
+            f.col("connectivity_RT_datasource").isNotNull()
+        )
+
     return connectivity_rt_schools
 
 

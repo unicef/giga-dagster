@@ -2,26 +2,29 @@ import pandas as pd
 from sqlalchemy import text
 
 
-def get_rt_schools(iso2_country_code: str, is_test=False) -> pd.DataFrame:
+def get_rt_schools(iso2_country_code: str | None = None, is_test=False) -> pd.DataFrame:
     from src.utils.db.gigamaps import get_db_context
+
+    country_filter = f"AND c.code = {iso2_country_code}" if iso2_country_code else ""
 
     with get_db_context() as db:
         rt_schools = (
             db.execute(
-                text("""
+                text(
+                    f"""
                 SELECT
                     DISTINCT sch.giga_id_school school_id_giga,
                     sch.external_id school_id_govt,
                     (min(stat.created) over (partition by stat.school_id)) connectivity_RT_ingestion_timestamp,
-                    c.code country_code,
-                    c.name country
+                    c.iso3_format country_code
                 FROM public.connection_statistics_schooldailystatus stat
                 LEFT JOIN public.schools_school sch ON sch.id = stat.school_id
                 LEFT JOIN public.locations_country c ON c.id = sch.country_id
-                WHERE c.code = :country_code AND stat.deleted IS NULL AND sch.deleted IS NULL
+                WHERE stat.deleted IS NULL AND sch.deleted IS NULL {country_filter}
                 LIMIT :limit
-                """),
-                {"country_code": iso2_country_code, "limit": 10 if is_test else None},
+                """  # nosec B608
+                ),
+                {"limit": 10 if is_test else None},
             )
             .mappings()
             .all()
@@ -147,7 +150,7 @@ def get_qos_schools_by_country(country_iso3_code):
                        'qos' source,
                        '{country_iso3_code.upper()}' country_code
                 FROM {table_name}
-        """  # nosec B608 (silence pre-commit bandit errors related to SQL injection)
+        """  # nosec B608
                 )
             )
             .mappings()

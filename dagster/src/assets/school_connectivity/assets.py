@@ -538,8 +538,8 @@ def school_connectivity_realtime_master(
         updated_master = updated_master.withColumn(
             "connectivity_RT_ingestion_timestamp",
             f.coalesce(
-                f.col("connectivity_RT_ingestion_timestamp_updated"),
                 f.col("connectivity_RT_ingestion_timestamp"),
+                f.col("connectivity_RT_ingestion_timestamp_updated"),
             ),
         )
 
