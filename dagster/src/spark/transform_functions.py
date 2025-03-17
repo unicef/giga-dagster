@@ -764,7 +764,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     )
 
     if not table_exists:
-        context.log(
+        context.log.info(
             "Creating RT schools table for the first time, adding RT data from giga maps"
         )
         gigamaps_rt_schs = get_rt_schools()
@@ -773,7 +773,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
             {col: f"{col}_maps" for col in gigamaps_rt_schs_df.columns}
         )
 
-        context.log("Add giga maps RT data to RT schools from all sources")
+        context.log.info("Add giga maps RT data to RT schools from all sources")
 
         connectivity_rt_schools = connectivity_rt_schools.join(
             gigamaps_rt_schs_df,
