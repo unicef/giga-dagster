@@ -654,7 +654,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     )
 
     master = master.withColumn(
-        "connectivity_govt", f.initcap(f.col("connectivity_govt"))
+        "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
     )
 
     return master.withColumn(
