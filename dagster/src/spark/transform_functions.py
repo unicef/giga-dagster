@@ -805,8 +805,10 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
         )
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
             "connectivity_RT_datasource",
-            f.when(f.col("country_code_maps") == "BRA", "qos"),
-        ).otherwise(f.col("connectivity_RT_datasource"))
+            f.when(f.col("country_code_maps") == "BRA", f.lit("qos")).otherwise(
+                f.col("connectivity_RT_datasource")
+            ),
+        )
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
             "country_code", f.coalese(f.col("country_code"), f.col("country_code_maps"))
         )
