@@ -641,7 +641,10 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             (f.lower(f.col("connectivity_RT")) == "yes")
             | (
                 (f.lower(f.col("connectivity_govt")) == "yes")
-                & (f.col("download_speed_govt") != 0)
+                & (
+                    (f.col("download_speed_govt") != 0)
+                    | f.col("download_speed_govt").isNull()
+                )
             )
             | (f.col("download_speed_govt") > 0),
             "Yes",
@@ -649,6 +652,11 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
         .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
         .otherwise("No"),
     )
+
+    master = master.withColumn(
+        "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
+    )
+
     return master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
