@@ -18,8 +18,8 @@ def get_rt_schools(iso2_country_code: str | None = None, is_test=False) -> pd.Da
                     (min(stat.created) over (partition by stat.school_id)) connectivity_RT_ingestion_timestamp,
                     c.iso3_format country_code
                 FROM public.connection_statistics_schooldailystatus stat
-                LEFT JOIN public.schools_school sch ON sch.id = stat.school_id
-                LEFT JOIN public.locations_country c ON c.id = sch.country_id
+                JOIN public.schools_school sch ON sch.id = stat.school_id
+                JOIN public.locations_country c ON c.id = sch.country_id
                 WHERE stat.deleted IS NULL AND sch.deleted IS NULL {country_filter}
                 LIMIT :limit
                 """  # nosec B608
@@ -94,8 +94,8 @@ def get_all_gigameter_schools() -> pd.DataFrame:
                    'daily_checkapp' source,
                    country.iso3_format country_code
             FROM gigameter_production_db.public.measurements measure
-            LEFT JOIN gigamaps_production_db.public.schools_school school ON school.giga_id_school = measure.giga_id_school
-            LEFT JOIN gigamaps_production_db.public.locations_country country ON country.id = school.country_id
+            JOIN gigamaps_production_db.public.schools_school school ON school.giga_id_school = measure.giga_id_school
+            JOIN gigamaps_production_db.public.locations_country country ON country.id = school.country_id
             WHERE school.deleted IS NULL
               AND LOWER(measure.source) = 'dailycheckapp'
                 """),

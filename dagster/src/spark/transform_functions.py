@@ -5,6 +5,7 @@ from itertools import chain
 
 import geopandas as gpd
 import pandas as pd
+from delta import DeltaTable
 from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
@@ -25,6 +26,7 @@ from src.constants import UploadMode
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.schema import construct_full_table_name
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -813,6 +815,9 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
             "country_code",
             f.coalesce(f.col("country_code"), f.col("country_code_maps")),
         )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT", f.lit("Yes")
+        )
 
         connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
         connectivity_rt_schools = connectivity_rt_schools.filter(
@@ -820,6 +825,18 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
         )
 
     return connectivity_rt_schools
+
+
+def get_country_rt_schools(spark: SparkSession, country_code: str) -> sql.DataFrame:
+    schema_name = "pipeline_tables"
+    table_name = "school_connectivity_realtime_schools"
+
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    all_rt_schools = DeltaTable.forName(spark, full_table_name).toDF()
+    country_rt_schools = all_rt_schools.filter(f.col("country_code") == country_code)
+    country_rt_schools = country_rt_schools.drop("country_code")
+    return country_rt_schools
 
 
 if __name__ == "__main__":

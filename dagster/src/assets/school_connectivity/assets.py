@@ -422,49 +422,52 @@ def school_connectivity_realtime_schools(
     )
     schools_for_update_pandas = schools_for_update.toPandas()
 
-    context.log.info(
-        "Split the schools that need updating by country and create files for each of them"
-    )
-    countries_to_update = schools_for_update_pandas["country_code"].unique()
-    current_timestamp_string = datetime.now().strftime("%Y%m%d_%H%M%S")
-    for country_code in countries_to_update:
-        file_name = f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
-        adls_file_path = f"{constants.connectivity_updates_folder}/{file_name}"
-        country_connected_schs = schools_for_update_pandas[
-            schools_for_update_pandas["country_code"] == country_code
-        ]
-        adls_file_client.upload_raw(
-            context=None,
-            data=country_connected_schs.to_csv(index=False).encode(),
-            filepath=adls_file_path,
+    if not schools_for_update_pandas.empty:
+        context.log.info(
+            "Split the schools that need updating by country and create files for each of them"
         )
+        countries_to_update = schools_for_update_pandas["country_code"].unique()
+        current_timestamp_string = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for country_code in countries_to_update:
+            file_name = (
+                f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
+            )
+            adls_file_path = f"{constants.connectivity_updates_folder}/{file_name}"
+            country_connected_schs = schools_for_update_pandas[
+                schools_for_update_pandas["country_code"] == country_code
+            ]
+            adls_file_client.upload_raw(
+                context=None,
+                data=country_connected_schs.to_csv(index=False).encode(),
+                filepath=adls_file_path,
+            )
 
-    context.log.info("Create the schema and table if not exists")
+        context.log.info("Create the schema and table if not exists")
 
-    if not table_exists:
-        create_schema(s, schema_name)
-        create_delta_table(
-            s,
-            schema_name,
-            table_name,
-            rt_schools_schema.fields,
-            context,
-            if_not_exists=True,
+        if not table_exists:
+            create_schema(s, schema_name)
+            create_delta_table(
+                s,
+                schema_name,
+                table_name,
+                rt_schools_schema.fields,
+                context,
+                if_not_exists=True,
+            )
+
+        context.log.info("Update the table with realtime connected schools")
+        current_connected_schs_table = DeltaTable.forName(s, full_table_name)
+
+        (
+            current_connected_schs_table.alias("connected_schs_current")
+            .merge(
+                schools_for_update.alias("connected_schs_updates"),
+                "connected_schs_current.school_id_giga = connected_schs_updates.school_id_giga",
+            )
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute()
         )
-
-    context.log.info("Update the table with realtime connected schools")
-    current_connected_schs_table = DeltaTable.forName(s, full_table_name)
-
-    (
-        current_connected_schs_table.alias("connected_schs_current")
-        .merge(
-            schools_for_update.alias("connected_schs_updates"),
-            "connected_schs_current.school_id_giga = connected_schs_updates.school_id_giga",
-        )
-        .whenMatchedUpdateAll()
-        .whenNotMatchedInsertAll()
-        .execute()
-    )
 
     return Output(
         None,
@@ -495,6 +498,9 @@ def school_connectivity_realtime_master(
     updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
         file_path
     )
+    context.log.info(
+        f"{updated_connectivity_schs_df.shape[0]} schools will have RT updated"
+    )
 
     updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
     updated_connectivity_schs = updated_connectivity_schs.withColumn(
@@ -506,7 +512,9 @@ def school_connectivity_realtime_master(
     )
 
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
-        context.log.info(f"The master table for {country_code} already exists")
+        context.log.info(
+            f"The master table for {country_code} exists and will be updated"
+        )
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
@@ -551,6 +559,8 @@ def school_connectivity_realtime_master(
     else:
         context.log.error(f"The master table for country {country_code} does not exist")
         return None
+
+    context.log.info("Merge the updated RT data into the master table")
 
     new_master = compute_row_hash(new_master)
 
