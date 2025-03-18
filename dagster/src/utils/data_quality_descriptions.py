@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from pyspark import sql
 
@@ -40,7 +41,6 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_with_renamed_headers_pandas = pd.DataFrame()
     else:
         dq_with_renamed_headers_pandas = dq_results.toPandas()
-
         context.log.info(
             f"Original column count: {len(dq_with_renamed_headers_pandas.columns)}"
         )
@@ -50,9 +50,28 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
             for col in dq_with_renamed_headers_pandas.columns
             if not col.startswith("dq_") or col == "dq_has_critical_error"
         ]
-
         dq_with_renamed_headers_pandas = dq_with_renamed_headers_pandas[columns_to_keep]
+
+        empty_values = ["", "None", "null", "NaN", "nan"]
+        dq_with_renamed_headers_pandas.replace(empty_values, np.nan, inplace=True)
+
         dq_with_renamed_headers_pandas.dropna(axis=1, how="all", inplace=True)
+
+        threshold = 0.89
+        missing_ratio = dq_with_renamed_headers_pandas.isna().mean()
+        columns_to_drop = missing_ratio[missing_ratio > threshold].index.tolist()
+
+        if columns_to_drop:
+            dq_with_renamed_headers_pandas.drop(columns=columns_to_drop, inplace=True)
+
+        if "dq_has_critical_error" in dq_with_renamed_headers_pandas.columns:
+            if dq_with_renamed_headers_pandas["dq_has_critical_error"].isna().all():
+                context.log.info(
+                    "Removing 'dq_has_critical_error' column as it is completely empty"
+                )
+                dq_with_renamed_headers_pandas.drop(
+                    columns=["dq_has_critical_error"], inplace=True
+                )
 
     upload_path = Path(config.destination_filepath)
     dataset = upload_path.parts[1]
@@ -60,6 +79,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     file_name = upload_path.name
 
     temp_filepath = f"data-quality-results/{dataset}/dq-human-readable-descriptions/{country_code}/{file_name}"
+
     adls_client.upload_pandas_dataframe_as_file(
         context=context, data=dq_with_renamed_headers_pandas, filepath=temp_filepath
     )
