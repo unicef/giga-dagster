@@ -635,31 +635,56 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     master = master.drop(*columns_to_drop)
 
     master = master.join(connectivity, on="school_id_giga", how="left")
-    master = master.withColumn(
-        "connectivity",
-        f.when(
-            (f.lower(f.col("connectivity_RT")) == "yes")
-            | (
-                (f.lower(f.col("connectivity_govt")) == "yes")
-                & (
-                    (f.col("download_speed_govt") != 0)
-                    | f.col("download_speed_govt").isNull()
+
+    if set("download_speed_govt", "connectivity_govt").issubset(set(df.columns)):
+        # this block will run when we create schools or during updates if both download_speed_govt
+        # and connectivity_govt re provided
+        master = master.withColumn(
+            "connectivity",
+            f.when(
+                (f.lower(f.col("connectivity_RT")) == "yes")
+                | (
+                    (f.lower(f.col("connectivity_govt")) == "yes")
+                    & (
+                        (f.col("download_speed_govt") != 0)
+                        | f.col("download_speed_govt").isNull()
+                    )
                 )
+                | (f.col("download_speed_govt") > 0),
+                "Yes",
             )
-            | (f.col("download_speed_govt") > 0),
-            "Yes",
+            .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
+            .otherwise("No"),
         )
-        .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
-        .otherwise("No"),
-    )
+    elif "connectivity_govt" in df.columns:
+        # this will run during updates if only connectivity_govt is provided
+        master = master.withColumn(
+            "connectivity",
+            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes").when(
+                f.lower(f.col("connectivity_govt")) == "no"
+            ),
+            "No",
+        )
+    elif "download_speed_govt" in df.columns:
+        # this will run during updates if only connectivity_govt is provided
+        master = master.withColumn(
+            "connectivity",
+            f.when(f.col("download_speed_govt") > 0, "Yes").when(
+                f.col("download_speed_govt") == 0, "No"
+            ),
+        )
 
-    master = master.withColumn(
-        "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
-    )
+    # sanitize connectivity_govt if provided
+    if "connectivity_govt" in df.columns:
+        master = master.withColumn(
+            "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
+        )
 
-    return master.withColumn(
+    master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
+
+    return master
 
 
 if __name__ == "__main__":

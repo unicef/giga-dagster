@@ -14,7 +14,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import LongType, StringType, StructType
 from sqlalchemy import select
-from src.constants import DataTier
+from src.constants import DataTier, UploadMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -172,6 +172,7 @@ def geolocation_bronze(
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
+    mode = config.metadata["mode"]
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -234,14 +235,22 @@ def geolocation_bronze(
     config.metadata.update({"column_mapping": column_mapping})
     context.log.info("After config metadata update")
 
+    if mode == UploadMode.CREATE.value:
+        connectivity_related_cols = [
+            "download_speed_govt",
+            "connectivity_govt",
+            "connectivity_type_govt",
+        ]
+        for column in connectivity_related_cols:
+            if column not in df.columns:
+                df = df.withColumn(column, f.lit(None))
+
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        raw_connectivity_columns = {"download_speed_govt", "connectivity_govt"}
-        if raw_connectivity_columns.issubset(set(df.columns)):
-            # QoS Columns
-            coco = CountryConverter()
-            country_code_2 = coco.convert(country_code, to="ISO2")
-            connectivity = connectivity_rt_dataset(s, country_code_2)
-            df = merge_connectivity_to_df(df, connectivity)
+        # QoS Columns
+        coco = CountryConverter()
+        country_code_2 = coco.convert(country_code, to="ISO2")
+        connectivity = connectivity_rt_dataset(s, country_code_2)
+        df = merge_connectivity_to_df(df, connectivity)
 
     # standardize the connectivity type
     if "connectivity_type_govt" in df.columns:
