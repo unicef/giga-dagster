@@ -636,7 +636,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
 
     master = master.join(connectivity, on="school_id_giga", how="left")
 
-    if set("download_speed_govt", "connectivity_govt").issubset(set(df.columns)):
+    if {"download_speed_govt", "connectivity_govt"}.issubset(set(df.columns)):
         # this block will run when we create schools or during updates if both download_speed_govt
         # and connectivity_govt re provided
         master = master.withColumn(
