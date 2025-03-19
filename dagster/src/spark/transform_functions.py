@@ -636,7 +636,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
 
     master = master.join(connectivity, on="school_id_giga", how="left")
 
-    if {"download_speed_govt", "connectivity_govt"}.issubset(set(df.columns)):
+    if {"download_speed_govt", "connectivity_govt"}.issubset(set(master.columns)):
         # this block will run when we create schools or during updates if both download_speed_govt
         # and connectivity_govt re provided
         master = master.withColumn(
@@ -656,7 +656,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
             .otherwise("No"),
         )
-    elif "connectivity_govt" in df.columns:
+    elif "connectivity_govt" in master.columns:
         # this will run during updates if only connectivity_govt is provided
         master = master.withColumn(
             "connectivity",
@@ -665,7 +665,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             ),
             "No",
         )
-    elif "download_speed_govt" in df.columns:
+    elif "download_speed_govt" in master.columns:
         # this will run during updates if only connectivity_govt is provided
         master = master.withColumn(
             "connectivity",
@@ -675,7 +675,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
         )
 
     # sanitize connectivity_govt if provided
-    if "connectivity_govt" in df.columns:
+    if "connectivity_govt" in master.columns:
         master = master.withColumn(
             "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
         )
