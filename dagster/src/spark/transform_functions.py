@@ -641,9 +641,20 @@ def merge_connectivity_to_master(
 
     master = master.join(connectivity, on="school_id_giga", how="left")
 
-    if {"download_speed_govt", "connectivity_govt"}.issubset(set(uploaded_columns)):
+    master = master.withColumn(
+        "connectivity_govt",
+        f.when(
+            f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
+        ).otherwise(f.col("connectivity_govt")),
+    )
+
+    if mode == UploadMode.CREATE.value or {
+        "download_speed_govt",
+        "connectivity_govt",
+    }.issubset(set(uploaded_columns)):
         # this block will run when we create schools or during updates if both download_speed_govt
         # and connectivity_govt re provided
+
         master = master.withColumn(
             "connectivity",
             f.when(
@@ -665,21 +676,20 @@ def merge_connectivity_to_master(
             .otherwise("No"),
         )
     elif "connectivity_govt" in uploaded_columns:
-        # this will run during updates if only connectivity_govt is provided
+        # this will run during updates if only connectivity_govt is uploaded
         master = master.withColumn(
             "connectivity",
-            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes").when(
-                f.lower(f.col("connectivity_govt")) == "no"
-            ),
-            "No",
+            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
+            .when(f.lower(f.col("connectivity_govt")) == "no", "No")
+            .otherwise(f.lit(None).cast(StringType())),
         )
     elif "download_speed_govt" in uploaded_columns:
-        # this will run during updates if only connectivity_govt is provided
+        # this will run during updates if only download_speed_govt is uploaded
         master = master.withColumn(
             "connectivity",
-            f.when(f.col("download_speed_govt") > 0, "Yes").when(
-                f.col("download_speed_govt") == 0, "No"
-            ),
+            f.when(f.col("download_speed_govt") > 0, "Yes")
+            .when(f.col("download_speed_govt") == 0, "No")
+            .otherwise(f.lit(None).cast(StringType())),
         )
 
     # sanitize connectivity_govt if provided
