@@ -660,7 +660,7 @@ def merge_connectivity_to_master(
             )
             .when(
                 (f.lower(f.col("connectivity_govt")).isNull()),
-                f.when(mode == UploadMode.UPDATE.value, None).otherwise("Unknown"),
+                f.lit(None) if mode == UploadMode.UPDATE.value else f.lit("Unknown"),
             )
             .otherwise("No"),
         )
