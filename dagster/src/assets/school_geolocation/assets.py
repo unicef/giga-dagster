@@ -14,7 +14,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import LongType, StringType, StructType
 from sqlalchemy import select
-from src.constants import DataTier, UploadMode
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -195,6 +195,7 @@ def geolocation_bronze(
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
     context.log.info(df)
+    uploaded_columns = df.columns
 
     columns = get_schema_columns(s, schema_name)
     context.log.info("schema columns")
@@ -235,25 +236,35 @@ def geolocation_bronze(
     config.metadata.update({"column_mapping": column_mapping})
     context.log.info("After config metadata update")
 
-    if mode == UploadMode.CREATE.value:
-        connectivity_related_cols = [
-            "download_speed_govt",
-            "connectivity_govt",
-            "connectivity_type_govt",
-        ]
-        for column in connectivity_related_cols:
-            if column not in df.columns:
-                df = df.withColumn(column, f.lit(None))
+    # if mode == UploadMode.CREATE.value:
+    #     connectivity_related_cols = [
+    #         "download_speed_govt",
+    #         "connectivity_govt",
+    #         "connectivity_type_govt",
+    #     ]
+    #     for column in connectivity_related_cols:
+    #         if column not in df.columns:
+    #             df = df.withColumn(column, f.lit(None))
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         # QoS Columns
         coco = CountryConverter()
         country_code_2 = coco.convert(country_code, to="ISO2")
         connectivity = connectivity_rt_dataset(s, country_code_2)
-        df = merge_connectivity_to_df(df, connectivity)
+        df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
+
+    # if mode == UploadMode.UPDATE.value:
+    #     if 'connectivity_govt' in df.columns and df.connectivity_govt.isNull().sum():
+    #         silver_connectivity = DeltaTable.forName().toDF().select('school_id_giga', 'connectivity_govt')
+    #         silver_connectivity = silver_connectivity.withColumnRenamed()
+    #         # join to master
+    #         # coalesce with master
+    #         # get final column
+    #
+    #         # use silver to coalesce values
 
     # standardize the connectivity type
-    if "connectivity_type_govt" in df.columns:
+    if "connectivity_type_govt" in uploaded_columns:
         df = standardize_connectivity_type(df)
 
     datahub_emit_metadata_with_exception_catcher(

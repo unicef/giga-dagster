@@ -626,7 +626,12 @@ def connectivity_rt_dataset(
     return out
 
 
-def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFrame):
+def merge_connectivity_to_master(
+    master: sql.DataFrame,
+    connectivity: sql.DataFrame,
+    uploaded_columns: list,
+    mode: str,
+):
     connectivity_columns = [
         col for col in connectivity.columns if col != "school_id_giga"
     ]
@@ -636,7 +641,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
 
     master = master.join(connectivity, on="school_id_giga", how="left")
 
-    if {"download_speed_govt", "connectivity_govt"}.issubset(set(master.columns)):
+    if {"download_speed_govt", "connectivity_govt"}.issubset(set(uploaded_columns)):
         # this block will run when we create schools or during updates if both download_speed_govt
         # and connectivity_govt re provided
         master = master.withColumn(
@@ -653,10 +658,13 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
                 | (f.col("download_speed_govt") > 0),
                 "Yes",
             )
-            .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
+            .when(
+                (f.lower(f.col("connectivity_govt")).isNull()),
+                f.when(mode == UploadMode.UPDATE.value, None).otherwise("Unknown"),
+            )
             .otherwise("No"),
         )
-    elif "connectivity_govt" in master.columns:
+    elif "connectivity_govt" in uploaded_columns:
         # this will run during updates if only connectivity_govt is provided
         master = master.withColumn(
             "connectivity",
@@ -665,7 +673,7 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
             ),
             "No",
         )
-    elif "download_speed_govt" in master.columns:
+    elif "download_speed_govt" in uploaded_columns:
         # this will run during updates if only connectivity_govt is provided
         master = master.withColumn(
             "connectivity",
