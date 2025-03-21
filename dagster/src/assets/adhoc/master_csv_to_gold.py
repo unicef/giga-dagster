@@ -13,6 +13,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import NullType, StructType
+from sqlalchemy import update
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -22,7 +23,6 @@ from src.data_quality_checks.utils import (
     extract_school_id_govt_duplicates,
     row_level_checks,
 )
-from sqlalchemy import update
 from src.internal.common_assets.master_release_notes import (
     send_master_release_notes,
 )
@@ -742,15 +742,16 @@ async def adhoc__reset_geolocation_staging_table(
     )
     context.log.info(f"{staging_table_exists=}")
 
+    staging_table_name = construct_full_table_name(
+        staging_tier_schema_name, country_code
+    )
+
     if not staging_table_exists:
         context.log.info(
             f"Staging table {staging_table_name} does not exist. Skipping reset."
         )
         return None
 
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
     staging_table_path = config.destination_filepath
     silver_tier_schema_name = construct_schema_name_for_tier(
         f"school_{dataset_type}", DataTier.SILVER
