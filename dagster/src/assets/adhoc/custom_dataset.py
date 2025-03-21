@@ -6,9 +6,9 @@ from numpy import nan
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
+    functions as F,
 )
 from pyspark.sql.types import NullType
-from pyspark.sql import functions as F
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -44,10 +44,10 @@ def custom_dataset_bronze(
         buffer.seek(0)
         pdf = pd.read_csv(buffer)
 
-    for col in pdf.select_dtypes(include='object').columns:
-        pdf[col] = pdf[col].fillna('').astype(str).replace('', None)
+    for col in pdf.select_dtypes(include="object").columns:
+        pdf[col] = pdf[col].fillna("").astype(str).replace("", None)
 
-    for col in pdf.select_dtypes(include=['number']).columns:
+    for col in pdf.select_dtypes(include=["number"]).columns:
         pdf[col] = pdf[col].astype(float).replace(nan, None)
 
     pdf = pdf.drop_duplicates()
@@ -55,7 +55,9 @@ def custom_dataset_bronze(
 
     context.log.info("original schema")
     context.log.info(df.schema.simpleString())
-    void_columns = [field.name for field in df.schema.fields if isinstance(field.dataType, NullType)]
+    void_columns = [
+        field.name for field in df.schema.fields if isinstance(field.dataType, NullType)
+    ]
 
     for col in void_columns:
         context.log.info(f"{col}")
