@@ -629,7 +629,7 @@ def connectivity_rt_dataset(
 def merge_connectivity_to_master(
     master: sql.DataFrame,
     connectivity: sql.DataFrame,
-    uploaded_columns: list,
+    uploaded_columns: list[str],
     mode: str,
 ):
     connectivity_columns = [
@@ -652,8 +652,8 @@ def merge_connectivity_to_master(
         "download_speed_govt",
         "connectivity_govt",
     }.issubset(set(uploaded_columns)):
-        # this block will run when we create schools or during updates if both download_speed_govt
-        # and connectivity_govt re provided
+        # this block will run when schools are first created and during school updates only if both the
+        # download_speed_govt and connectivity_govt columns are part of the upload
 
         master = master.withColumn(
             "connectivity",
@@ -676,7 +676,7 @@ def merge_connectivity_to_master(
             .otherwise("No"),
         )
     elif "connectivity_govt" in uploaded_columns:
-        # this will run during updates if only connectivity_govt is uploaded
+        # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
         master = master.withColumn(
             "connectivity",
             f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
@@ -684,7 +684,7 @@ def merge_connectivity_to_master(
             .otherwise(f.lit(None).cast(StringType())),
         )
     elif "download_speed_govt" in uploaded_columns:
-        # this will run during updates if only download_speed_govt is uploaded
+        # this will run during updates if download_speed_govt is in the uploaded file without connectivity_govt
         master = master.withColumn(
             "connectivity",
             f.when(f.col("download_speed_govt") > 0, "Yes")
@@ -692,7 +692,7 @@ def merge_connectivity_to_master(
             .otherwise(f.lit(None).cast(StringType())),
         )
 
-    # sanitize connectivity_govt if provided
+    # format connectivity_govt correctly
     if "connectivity_govt" in master.columns:
         master = master.withColumn(
             "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
