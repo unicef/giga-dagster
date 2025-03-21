@@ -626,7 +626,12 @@ def connectivity_rt_dataset(
     return out
 
 
-def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFrame):
+def merge_connectivity_to_master(
+    master: sql.DataFrame,
+    connectivity: sql.DataFrame,
+    uploaded_columns: list[str],
+    mode: str,
+):
     connectivity_columns = [
         col for col in connectivity.columns if col != "school_id_giga"
     ]
@@ -635,31 +640,64 @@ def merge_connectivity_to_master(master: sql.DataFrame, connectivity: sql.DataFr
     master = master.drop(*columns_to_drop)
 
     master = master.join(connectivity, on="school_id_giga", how="left")
+
+    # make sure connectivity_govt is standardized
     master = master.withColumn(
-        "connectivity",
+        "connectivity_govt",
         f.when(
-            (f.lower(f.col("connectivity_RT")) == "yes")
-            | (
-                (f.lower(f.col("connectivity_govt")) == "yes")
-                & (
-                    (f.col("download_speed_govt") != 0)
-                    | f.col("download_speed_govt").isNull()
-                )
-            )
-            | (f.col("download_speed_govt") > 0),
-            "Yes",
-        )
-        .when((f.lower(f.col("connectivity_govt")).isNull()), "Unknown")
-        .otherwise("No"),
+            f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
+        ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
     )
+
+    if mode == UploadMode.CREATE.value or {
+        "download_speed_govt",
+        "connectivity_govt",
+    }.issubset(set(uploaded_columns)):
+        # this block will run when schools are first created and during school updates only if both the
+        # download_speed_govt and connectivity_govt columns are part of the upload
+
+        master = master.withColumn(
+            "connectivity",
+            f.when(
+                (f.lower(f.col("connectivity_RT")) == "yes")
+                | (
+                    (f.lower(f.col("connectivity_govt")) == "yes")
+                    & (
+                        (f.col("download_speed_govt") != 0)
+                        | f.col("download_speed_govt").isNull()
+                    )
+                )
+                | (f.col("download_speed_govt") > 0),
+                "Yes",
+            )
+            .when(
+                (f.lower(f.col("connectivity_govt")).isNull()),
+                f.lit(None) if mode == UploadMode.UPDATE.value else f.lit("Unknown"),
+            )
+            .otherwise("No"),
+        )
+    elif "connectivity_govt" in uploaded_columns:
+        # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
+        master = master.withColumn(
+            "connectivity",
+            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
+            .when(f.lower(f.col("connectivity_govt")) == "no", "No")
+            .otherwise(f.lit(None).cast(StringType())),
+        )
+    elif "download_speed_govt" in uploaded_columns:
+        # this will run during updates if download_speed_govt is in the uploaded file without connectivity_govt
+        master = master.withColumn(
+            "connectivity",
+            f.when(f.col("download_speed_govt") > 0, "Yes")
+            .when(f.col("download_speed_govt") == 0, "No")
+            .otherwise(f.lit(None).cast(StringType())),
+        )
 
     master = master.withColumn(
-        "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
-    )
-
-    return master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
+
+    return master
 
 
 if __name__ == "__main__":

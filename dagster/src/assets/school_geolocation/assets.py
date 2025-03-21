@@ -172,6 +172,7 @@ def geolocation_bronze(
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
+    mode = config.metadata["mode"]
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -194,6 +195,7 @@ def geolocation_bronze(
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
     context.log.info(df)
+    uploaded_columns = df.columns
 
     columns = get_schema_columns(s, schema_name)
     context.log.info("schema columns")
@@ -235,16 +237,14 @@ def geolocation_bronze(
     context.log.info("After config metadata update")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        raw_connectivity_columns = {"download_speed_govt", "connectivity_govt"}
-        if raw_connectivity_columns.issubset(set(df.columns)):
-            # QoS Columns
-            coco = CountryConverter()
-            country_code_2 = coco.convert(country_code, to="ISO2")
-            connectivity = connectivity_rt_dataset(s, country_code_2)
-            df = merge_connectivity_to_df(df, connectivity)
+        # QoS Columns
+        coco = CountryConverter()
+        country_code_2 = coco.convert(country_code, to="ISO2")
+        connectivity = connectivity_rt_dataset(s, country_code_2)
+        df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
-    if "connectivity_type_govt" in df.columns:
+    if "connectivity_type_govt" in uploaded_columns:
         df = standardize_connectivity_type(df)
 
     datahub_emit_metadata_with_exception_catcher(
