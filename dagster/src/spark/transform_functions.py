@@ -641,11 +641,12 @@ def merge_connectivity_to_master(
 
     master = master.join(connectivity, on="school_id_giga", how="left")
 
+    # make sure connectivity_govt is standardized
     master = master.withColumn(
         "connectivity_govt",
         f.when(
             f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
-        ).otherwise(f.col("connectivity_govt")),
+        ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
     )
 
     if mode == UploadMode.CREATE.value or {
@@ -692,13 +693,7 @@ def merge_connectivity_to_master(
             .otherwise(f.lit(None).cast(StringType())),
         )
 
-    # format connectivity_govt correctly
-    if "connectivity_govt" in master.columns:
-        master = master.withColumn(
-            "connectivity_govt", f.initcap(f.trim(f.col("connectivity_govt")))
-        )
-
-    master.withColumn(
+    master = master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
 
