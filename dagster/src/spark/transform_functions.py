@@ -374,17 +374,18 @@ def create_bronze_layer_columns(
         )
 
     # Admin mapbox columns
-    df = add_admin_columns(
-        df=df,
-        country_code_iso3=country_code_iso3,
-        admin_level="admin1",
-    )
-    df = add_admin_columns(
-        df=df,
-        country_code_iso3=country_code_iso3,
-        admin_level="admin2",
-    )
-    df = add_disputed_region_column(df=df)
+    if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
+        df = add_admin_columns(
+            df=df,
+            country_code_iso3=country_code_iso3,
+            admin_level="admin1",
+        )
+        df = add_admin_columns(
+            df=df,
+            country_code_iso3=country_code_iso3,
+            admin_level="admin2",
+        )
+        df = add_disputed_region_column(df=df)
 
     return df
 
