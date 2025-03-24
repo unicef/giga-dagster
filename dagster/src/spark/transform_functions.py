@@ -187,7 +187,7 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def standardize_connectivity_type(df: sql.DataFrame) -> sql.DataFrame:
+def standardize_connectivity_type(df: sql.DataFrame, mode: str) -> sql.DataFrame:
     type_conn_regex_patterns = {
         "fibre": "fiber|fibre|fibra|ftt|fttx|ftth|fttp|gpon|epon|fo|Фибер|optic|птички",
         "copper": "adsl|dsl|copper|hdsl|vdsl",
@@ -235,13 +235,32 @@ def standardize_connectivity_type(df: sql.DataFrame) -> sql.DataFrame:
 
     get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
 
-    df = df.withColumn(
-        "connectivity_type", clean_type_connectivity_udf(df["connectivity_type_govt"])
-    )
-    df = df.withColumn(
-        "connectivity_type_root",
-        get_connectivity_type_root_udf(df["connectivity_type"]),
-    )
+    if mode == UploadMode.UPDATE.value:
+        df = df.withColumn(
+            "connectivity_type",
+            f.when(
+                f.col("connectivity_type_govt").isNotNull(),
+                clean_type_connectivity_udf(df["connectivity_type_govt"]),
+            ).otherwise(f.lit(None).cast(StringType())),
+        )
+
+        df = df.withColumn(
+            "connectivity_type_root",
+            f.when(
+                f.col("connectivity_type_govt").isNotNull(),
+                get_connectivity_type_root_udf(df["connectivity_type"]),
+            ).otherwise(f.lit(None).cast(StringType())),
+        )
+
+    else:
+        df = df.withColumn(
+            "connectivity_type",
+            clean_type_connectivity_udf(df["connectivity_type_govt"]),
+        )
+        df = df.withColumn(
+            "connectivity_type_root",
+            get_connectivity_type_root_udf(df["connectivity_type"]),
+        )
 
     return df
 
@@ -341,13 +360,17 @@ def create_bronze_layer_columns(
     if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
         df = create_education_level(df)
 
-    if mode == UploadMode.CREATE.value:
-        df = create_school_id_giga(df)
+    df = create_school_id_giga(df)
 
     if mode == UploadMode.CREATE.value or "school_id_govt_type" in uploaded_columns:
         df = df.withColumn(
             "school_id_govt_type",
-            f.coalesce(f.col("school_id_govt_type"), f.lit("Unknown")),
+            f.coalesce(
+                f.col("school_id_govt_type"),
+                f.lit("Unknown")
+                if mode == UploadMode.CREATE.value
+                else f.lit(None).cast(StringType()),
+            ),
         )
 
     # Admin mapbox columns
