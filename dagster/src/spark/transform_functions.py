@@ -397,7 +397,7 @@ def create_bronze_layer_columns(
         df = add_disputed_region_column(df=df)
 
         missing_location_condition = (
-            f.col("latitude").isNull() | f.col("longitide").isNull()
+            f.col("latitude").isNull() | f.col("longitude").isNull()
         )
         for column in ("admin1", "admin1_id_giga", "admin2", "admin2_id_giga"):
             df = df.withColumn(
