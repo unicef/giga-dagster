@@ -366,7 +366,7 @@ def create_bronze_layer_columns(
 
     # standardize education level
     if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
-        df = create_education_level(df, uploaded_columns)
+        df = create_education_level(df, mode, uploaded_columns)
 
     df = create_school_id_giga(df)
 
