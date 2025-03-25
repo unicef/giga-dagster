@@ -122,6 +122,11 @@ def create_education_level(df: sql.DataFrame, mode: str) -> sql.DataFrame:
         df = df.withColumn(
             "education_level", mapped_column[f.col("education_level_govt")]
         )
+        df = df.withColumn(
+            "education_level",
+            f.isnan(f.col("education_level")),
+            f.lit(None).cast(StringType()),
+        )
 
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
