@@ -127,8 +127,10 @@ def create_education_level(
 
     df = df.withColumn(
         "education_level",
-        f.when(f.isnan(f.col("education_level")), f.lit(None).cast(StringType())),
-    ).otherwise(f.col("education_level"))
+        f.when(
+            f.isnan(f.col("education_level")), f.lit(None).cast(StringType())
+        ).otherwise(f.col("education_level")),
+    )
 
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
