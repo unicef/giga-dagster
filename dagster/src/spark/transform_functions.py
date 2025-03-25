@@ -87,7 +87,9 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     return df.drop("identifier_concat")
 
 
-def create_education_level(df: sql.DataFrame, mode: str) -> sql.DataFrame:
+def create_education_level(
+    df: sql.DataFrame, mode: str, uploaded_columns: list[str]
+) -> sql.DataFrame:
     education_level_govt_mapping = {
         # None : "Unknown",
         "Other": "Unknown",
@@ -110,7 +112,7 @@ def create_education_level(df: sql.DataFrame, mode: str) -> sql.DataFrame:
         [f.lit(x) for x in chain(*education_level_govt_mapping.items())]
     )
 
-    if "education_level" in df.columns:
+    if "education_level" in uploaded_columns:
         df = df.withColumn(
             "mapped_column", mapped_column[f.col("education_level_govt")]
         )
@@ -122,11 +124,12 @@ def create_education_level(df: sql.DataFrame, mode: str) -> sql.DataFrame:
         df = df.withColumn(
             "education_level", mapped_column[f.col("education_level_govt")]
         )
-        df = df.withColumn(
-            "education_level",
-            f.isnan(f.col("education_level")),
-            f.lit(None).cast(StringType()),
-        )
+
+    df = df.withColumn(
+        "education_level",
+        f.isnan(f.col("education_level")),
+        f.lit(None).cast(StringType()),
+    )
 
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
@@ -363,7 +366,7 @@ def create_bronze_layer_columns(
 
     # standardize education level
     if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
-        df = create_education_level(df)
+        df = create_education_level(df, uploaded_columns)
 
     df = create_school_id_giga(df)
 
