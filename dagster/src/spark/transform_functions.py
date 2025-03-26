@@ -125,13 +125,6 @@ def create_education_level(
             "education_level", mapped_column[f.col("education_level_govt")]
         )
 
-    df = df.withColumn(
-        "education_level",
-        f.when(
-            f.isnan(f.col("education_level")), f.lit(None).cast(StringType())
-        ).otherwise(f.col("education_level")),
-    )
-
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
             {
@@ -142,6 +135,14 @@ def create_education_level(
                     f.col("education_level"), f.lit("Unknown")
                 ),
             }
+        )
+
+    for column in ("education_level", "education_level_govt"):
+        df = df.withColumn(
+            column,
+            f.when(f.isnan(f.col(column)), f.lit(None).cast(StringType())).otherwise(
+                f.col(column)
+            ),
         )
 
     return df
