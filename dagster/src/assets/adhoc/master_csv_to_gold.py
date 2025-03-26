@@ -6,6 +6,7 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from datahub.specific.dataset import DatasetPatchBuilder
 from delta import DeltaTable
+from models.approval_requests import ApprovalRequest
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -39,11 +40,19 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
-from src.utils.delta import check_table_exists, sync_schema
+from src.utils.db.primary import get_db_context
+from src.utils.delta import (
+    check_table_exists,
+    create_delta_table,
+    create_schema,
+    sync_schema,
+)
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
+    construct_full_table_name,
+    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )

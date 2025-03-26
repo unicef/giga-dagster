@@ -228,7 +228,7 @@ def geolocation_bronze(
     context.log.info(casted_bronze)
 
     df = create_bronze_layer_columns(
-        casted_bronze, casted_geolocation_base, country_code
+        casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
     )
     context.log.info("DF from create_bronze_layer_columns")
     context.log.info(df)
@@ -245,7 +245,7 @@ def geolocation_bronze(
 
     # standardize the connectivity type
     if "connectivity_type_govt" in uploaded_columns:
-        df = standardize_connectivity_type(df)
+        df = standardize_connectivity_type(df, mode)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,

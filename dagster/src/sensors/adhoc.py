@@ -173,6 +173,18 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema=reference_metastore_schema,
                 tier=DataTier.GOLD,
             ),
+            "adhoc__reset_geolocation_staging_table": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
+                metastore_schema="school_geolocation",
+                tier=DataTier.STAGING,
+            ),
+            "adhoc__reset_coverage_staging_table": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                metastore_schema="school_coverage",
+                tier=DataTier.STAGING,
+            ),
             "adhoc__broadcast_master_release_notes": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.csv",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{master_metastore_schema}.db/{country_code}",
