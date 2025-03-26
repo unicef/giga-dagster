@@ -189,6 +189,7 @@ def geolocation_bronze(
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath).map(str)
 
+    pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")

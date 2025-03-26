@@ -280,7 +280,9 @@ def column_mapping_rename(
     column_mapping: dict[str, str],
 ) -> tuple[sql.DataFrame, dict[str, str]]:
     column_mapping_filtered = {
-        k: v for k, v in column_mapping.items() if (k is not None) and (v is not None)
+        k.strip(): v
+        for k, v in column_mapping.items()
+        if (k is not None) and (v is not None)
     }
     return df.withColumnsRenamed(column_mapping_filtered), column_mapping_filtered
 
