@@ -674,7 +674,7 @@ def connectivity_rt_dataset(
     logger.info(out.schema)
     return out
 
-
+ 
 def merge_connectivity_to_master(
     master: sql.DataFrame,
     connectivity: sql.DataFrame,

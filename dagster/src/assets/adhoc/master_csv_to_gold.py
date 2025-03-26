@@ -261,7 +261,7 @@ def adhoc__reference_data_quality_checks(
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 
-    columns_non_nullable = ["education_level_govt", "school_id_govt_type"]
+    columns_non_nullable = ["school_id_govt_type"]
     column_actions = {
         c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
