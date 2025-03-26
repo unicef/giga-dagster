@@ -403,9 +403,9 @@ def create_bronze_layer_columns(
         for column in ("admin1", "admin1_id_giga", "admin2", "admin2_id_giga"):
             df = df.withColumn(
                 column,
-                f.when(missing_location_condition, f.lit(None)).otherwise(
-                    f.col(column)
-                ),
+                f.when(
+                    missing_location_condition, f.lit(None).cast(StringType())
+                ).otherwise(f.col(column)),
             )
 
     return df
@@ -674,7 +674,7 @@ def connectivity_rt_dataset(
     logger.info(out.schema)
     return out
 
- 
+
 def merge_connectivity_to_master(
     master: sql.DataFrame,
     connectivity: sql.DataFrame,
