@@ -348,20 +348,68 @@ def create_bronze_layer_columns(
             }
         )
 
+    # First, extract the school_id_giga to school_id_govt mapping from silver
+    # This ensures we respect existing mappings
+    if "school_id_govt" in silver.columns and "school_id_giga" in silver.columns:
+        silver_mapping = silver.select("school_id_govt", "school_id_giga")
+    else:
+        silver_mapping = silver.sparkSession.createDataFrame(
+            [],
+            StructType(
+                [
+                    StructField("school_id_govt", StringType(), True),
+                    StructField("school_id_giga", StringType(), True),
+                ]
+            ),
+        )
+
     # Join with silver data
     joined_df = df.alias("df").join(
-        silver.alias("silver"), on="school_id_govt", how="left"
+        silver_mapping.alias("silver_mapping"), on="school_id_govt", how="left"
+    )
+
+    # Preserve school_id_giga from silver for matching records
+    if "school_id_giga" in df.columns:
+        joined_df = joined_df.withColumn(
+            "school_id_giga",
+            f.when(
+                f.col("silver_mapping.school_id_giga").isNotNull(),
+                f.col(
+                    "silver_mapping.school_id_giga"
+                ),  # Always use silver school_id_giga when it exists
+            ).otherwise(
+                f.col("df.school_id_giga")
+            ),  # Keep bronze school_id_giga for new records
+        )
+
+    # Continue with normal join for other columns
+    joined_df = (
+        joined_df.alias("df")
+        .join(silver.alias("silver"), on="school_id_govt", how="left")
+        .drop("silver_mapping.school_id_giga")
     )
 
     # Get column lists
     columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
     common_columns = [col for col in df.columns if col in silver.columns]
 
-    # Build select expression
+    # Special handling for school_id_giga to make sure we don't use coalesce which would prefer bronze value
+    special_columns = ["school_id_giga"]
+    normal_common_columns = [
+        col for col in common_columns if col not in special_columns
+    ]
+
+    # Build select expression for normal columns
     select_expr = [
         f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
-        for col in common_columns
+        for col in normal_common_columns
     ]
+
+    # Add school_id_giga with special handling if it exists
+    if "school_id_giga" in common_columns:
+        select_expr.append(f.col("df.school_id_giga").alias("school_id_giga"))
+
+    # Add silver-only columns
     select_expr.extend(
         [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
     )
