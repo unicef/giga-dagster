@@ -732,6 +732,9 @@ async def adhoc__reset_geolocation_staging_table(
     staging_tier_schema_name = construct_schema_name_for_tier(
         f"school_{dataset_type}", DataTier.STAGING
     )
+    staging_table_name = construct_full_table_name(
+        staging_tier_schema_name, country_code
+    )
 
     # Check if staging table exists
     staging_table_exists = check_table_exists(
@@ -741,10 +744,6 @@ async def adhoc__reset_geolocation_staging_table(
         data_tier=DataTier.STAGING,
     )
     context.log.info(f"{staging_table_exists=}")
-
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
 
     if not staging_table_exists:
         context.log.info(
