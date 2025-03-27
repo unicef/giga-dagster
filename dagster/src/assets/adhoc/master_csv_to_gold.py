@@ -40,7 +40,6 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
-from src.utils.db.primary import get_db_context
 from src.utils.delta import (
     check_table_exists,
     create_delta_table,
@@ -61,6 +60,7 @@ from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
+from dagster.src.utils.external_db import get_db_context
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
