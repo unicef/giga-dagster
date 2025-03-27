@@ -727,10 +727,13 @@ def merge_connectivity_to_master(
                 "Yes",
             )
             .when(
-                (f.lower(f.col("connectivity_govt")).isNull()),
-                f.lit(None) if mode == UploadMode.UPDATE.value else f.lit("Unknown"),
+                (f.lower("connectivity_govt") == "no")
+                | (f.col("download_speed_govt") == 0),
+                "No",
             )
-            .otherwise("No"),
+            .otherwise(
+                f.lit(None) if mode == UploadMode.UPDATE.value else f.lit("Unknown"),
+            ),
         )
     elif "connectivity_govt" in uploaded_columns:
         # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
