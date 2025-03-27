@@ -261,7 +261,7 @@ def adhoc__reference_data_quality_checks(
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 
-    columns_non_nullable = ["education_level_govt", "school_id_govt_type"]
+    columns_non_nullable = ["school_id_govt_type"]
     column_actions = {
         c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
@@ -751,9 +751,6 @@ async def adhoc__reset_geolocation_staging_table(
         )
         return None
 
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
     staging_table_path = config.destination_filepath
     silver_tier_schema_name = construct_schema_name_for_tier(
         f"school_{dataset_type}", DataTier.SILVER
