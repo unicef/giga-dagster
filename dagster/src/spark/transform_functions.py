@@ -91,12 +91,10 @@ def create_education_level(
     df: sql.DataFrame, mode: str, uploaded_columns: list[str]
 ) -> sql.DataFrame:
     education_level_govt_mapping = {
-        # None : "Unknown",
         "Other": "Unknown",
         "Unknown": "Unknown",
-        "Pre-Primary And Primary And Secondary": "Pre-Primary, Primary and Secondary",
-        "Primary, Secondary And Post-Secondary": "Primary, Secondary and Post-Secondary",
-        "Pre-Primary, Primary, And Secondary": "Pre-Primary, Primary and Secondary",
+        "Pre-Primary, Primary and Secondary": "Pre-Primary, Primary and Secondary",
+        "Primary, Secondary and Post-Secondary": "Primary, Secondary and Post-Secondary",
         "Basic": "Primary",
         "Basic And Secondary": "Primary and Secondary",
         "Pre-Primary": "Pre-Primary",
@@ -105,7 +103,10 @@ def create_education_level(
         "Post-Secondary": "Post-Secondary",
         "Pre-Primary And Primary": "Pre-Primary and Primary",
         "Primary And Secondary": "Primary and Secondary",
-        "Pre-Primary, Primary And Secondary": "Pre-Primary, Primary and Secondary",
+    }
+
+    education_level_govt_mapping = {
+        key.lower(): value for key, value in education_level_govt_mapping.items()
     }
 
     mapped_column = f.create_map(
@@ -114,7 +115,7 @@ def create_education_level(
 
     if "education_level" in uploaded_columns:
         df = df.withColumn(
-            "mapped_column", mapped_column[f.col("education_level_govt")]
+            "mapped_column", mapped_column[f.lower(f.col("education_level_govt"))]
         )
         df = df.withColumn(
             "education_level",
