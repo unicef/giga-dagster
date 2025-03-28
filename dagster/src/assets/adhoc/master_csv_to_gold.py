@@ -46,6 +46,7 @@ from src.utils.delta import (
     create_schema,
     sync_schema,
 )
+from src.utils.external_db import get_db_context
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
@@ -60,7 +61,6 @@ from src.utils.spark import compute_row_hash, transform_types
 
 from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
-from dagster.src.utils.external_db import get_db_context
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
