@@ -40,13 +40,13 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
+from src.utils.db.primary import get_db_context
 from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
     sync_schema,
 )
-from src.utils.external_db import get_db_context
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
