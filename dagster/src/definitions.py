@@ -10,6 +10,7 @@ from src.assets import (
     school_connectivity,
     school_coverage,
     school_geolocation,
+    qos,
     school_list,
     unstructured,
 )
@@ -22,7 +23,6 @@ from src.utils.load_module import (
 from src.utils.sentry import setup_sentry
 
 setup_sentry()
-
 
 defs = Definitions(
     assets=[
@@ -69,6 +69,10 @@ defs = Definitions(
             package_module=unstructured,
             group_name=unstructured.GROUP_NAME,
         ),
+        *load_assets_from_package_module(
+            package_module=qos,
+            group_name=qos.GROUP_NAME,
+        )
     ],
     resources=RESOURCE_DEFINITIONS,
     jobs=load_jobs_from_package_module(jobs),

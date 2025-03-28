@@ -15,3 +15,12 @@ qos_school_connectivity__automated_data_checks_job = define_asset_job(
     selection=AssetSelection.groups(SCHOOL_CONNECTIVITY_GROUP_NAME),
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+qos_availability_create_silver_job = define_asset_job(
+    name="qos_availability_create_silver_job",
+    selection=AssetSelection.keys(
+        "qos_availability_raw",
+        "qos_availability_bronze",
+    ),
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)

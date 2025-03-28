@@ -118,7 +118,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             **context.step_context.op_config
         ).metastore_schema
 
-        if schema_name_for_tier == "qos":
+        if schema_name_for_tier in ["qos", "qos_bronze"]:
             columns = data.schema.fields
             partition_columns = ["date"]
         elif schema_name_for_tier == "custom_dataset":
