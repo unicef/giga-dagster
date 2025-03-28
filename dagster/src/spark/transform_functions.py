@@ -123,7 +123,7 @@ def create_education_level(
         ).drop("mapped_column")
     else:
         df = df.withColumn(
-            "education_level", mapped_column[f.col("education_level_govt")]
+            "education_level", mapped_column[f.lower(f.col("education_level_govt"))]
         )
 
     if mode == UploadMode.CREATE.value:
