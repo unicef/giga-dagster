@@ -19,7 +19,8 @@ def create_checks(
         silver.alias("silver"), on="school_id_govt", how="left"
     )
     df = joined_df.withColumn(
-        "dq_is_not_create", f.when(f.col("silver.school_id_govt").isNotNull(), 1).otherwise(0)
+        "dq_is_not_create",
+        f.when(f.col("silver.school_id_govt").isNotNull(), 1).otherwise(0),
     )
 
     return df.drop("silver.school_id_govt")

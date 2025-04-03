@@ -375,7 +375,9 @@ def create_bronze_layer_columns(
             "school_id_giga",
             f.when(
                 f.col("silver_mapping.school_id_giga").isNotNull(),
-                f.col("silver_mapping.school_id_giga"),  # Use silver school_id_giga for existing schools
+                f.col(
+                    "silver_mapping.school_id_giga"
+                ),  # Use silver school_id_giga for existing schools
             ).otherwise(
                 f.lit(None)  # Will be filled by create_school_id_giga function
             ),
