@@ -23,9 +23,7 @@ def setup_sentry() -> None:
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,
             sample_rate=1.0,
-            enable_tracing=True,
             traces_sample_rate=1.0,
-            profiles_sample_rate=1.0,
             environment=settings.DEPLOY_ENV.value,
             release=f"github.com/unicef/giga-dagster:{settings.COMMIT_SHA}",
             server_name=f"dagster-dagster-{settings.DEPLOY_ENV.name}@{socket.gethostname()}",
