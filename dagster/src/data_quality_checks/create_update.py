@@ -13,17 +13,16 @@ def create_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running create checks...")
 
-    silver = silver.select(*["school_id_govt", "school_id_giga"])
-    silver = silver.withColumnRenamed("school_id_giga", "school_id_giga1")
-
+    # Check if school_id_govt already exists in silver
+    silver = silver.select("school_id_govt")
     joined_df = bronze.alias("bronze").join(
         silver.alias("silver"), on="school_id_govt", how="left"
     )
     df = joined_df.withColumn(
-        "dq_is_not_create", f.when(f.col("school_id_giga1").isNotNull(), 1).otherwise(0)
+        "dq_is_not_create", f.when(f.col("silver.school_id_govt").isNotNull(), 1).otherwise(0)
     )
 
-    return df.drop("school_id_giga1")
+    return df.drop("silver.school_id_govt")
 
 
 def _rename_silver_columns(
@@ -50,18 +49,9 @@ def _check_update_validity(
     return joined_df.withColumn(
         "dq_is_not_update",
         f.when(
-            f.col(silver_giga_col).isNull(),
+            f.col("silver.school_id_govt").isNull(),
             1,  # No matching school_id_govt
-        ).otherwise(
-            f.when(
-                # Check for mismatched school_id_giga when both exist
-                ("school_id_giga" in bronze_columns)
-                & (f.col("school_id_giga").isNotNull())
-                & (f.col(silver_giga_col).isNotNull())
-                & (f.col("school_id_giga") != f.col(silver_giga_col)),
-                1,  # Mismatched school_id_giga
-            ).otherwise(0)
-        ),
+        ).otherwise(0),
     )
 
 
@@ -71,16 +61,11 @@ def _log_mismatches(
     """Log any mismatched school_id_giga values."""
     if context:
         logger = get_context_with_fallback_logger(context)
-        mismatched = df.filter(
-            (f.col("dq_is_not_update") == 1)
-            & (f.col(silver_giga_col).isNotNull())
-            & ("school_id_giga" in df.columns)
-            & (f.col("school_id_giga").isNotNull())
-        )
+        mismatched = df.filter(f.col("dq_is_not_update") == 1)
         mismatched_count = mismatched.count()
         if mismatched_count > 0:
             logger.warning(
-                f"Found {mismatched_count} rows with mismatched school_id_giga values"
+                f"Found {mismatched_count} rows with no matching school_id_govt in silver"
             )
             logger.warning("These records will be flagged as invalid updates")
 
@@ -114,38 +99,17 @@ def update_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running update checks...")
 
-    # Rename silver columns to avoid conflicts after join
-    silver_renamed, renamed_columns = _rename_silver_columns(silver)
-
     # Join to get existing data
-    joined_df = bronze.join(silver_renamed, on="school_id_govt", how="left")
+    joined_df = bronze.join(silver, on="school_id_govt", how="left")
 
     # Mark rows that aren't valid updates
-    silver_giga_col = renamed_columns.get("school_id_giga", "silver_school_id_giga")
-
-    # Check update validity
-    df = _check_update_validity(joined_df, silver_giga_col, bronze.columns)
+    df = _check_update_validity(joined_df, "school_id_giga", bronze.columns)
 
     # Log mismatches
-    _log_mismatches(df, silver_giga_col, context)
+    _log_mismatches(df, "school_id_giga", context)
 
     # Fill null values for valid updates
-    df = _fill_null_values(df, bronze.columns, silver.columns, renamed_columns)
-
-    # Add school_id_giga from silver for valid updates if it's not in bronze
-    if "school_id_giga" not in bronze.columns and "school_id_giga" in silver.columns:
-        silver_giga_col = renamed_columns.get("school_id_giga")
-        df = df.withColumn(
-            "school_id_giga",
-            f.when(f.col("dq_is_not_update") == 0, f.col(silver_giga_col)).otherwise(
-                None
-            ),
-        )
-
-    # Drop all silver renamed columns to avoid duplicates
-    for col in renamed_columns.values():
-        if col in df.columns:
-            df = df.drop(col)
+    df = _fill_null_values(df, bronze.columns, silver.columns, {})
 
     logger.info("Completed update checks with field filling")
     return df
