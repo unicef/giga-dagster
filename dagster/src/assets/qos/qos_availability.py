@@ -54,7 +54,7 @@ def qos_availability_bronze(
     context.log.info("original schema")
     context.log.info(df.schema.simpleString())
 
-    id_columns = ["country", "provider", "timestamp"]
+    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt"]
     metric_columns = [col for col in df.columns if col not in id_columns]
 
     df = df.select([F.col(col).cast("STRING").alias(col) for col in df.columns])
