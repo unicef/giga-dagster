@@ -128,16 +128,25 @@ services:
 
   hms-database:
     <<: *common-config
-    image: bitnami/postgresql:9.6.24-debian-10-r70
+    image: bitnami/postgresql:14.10.0-debian-11-r31
     env_file: ./hive/.env
     environment:
       POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}
       POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
       POSTGRESQL_DATABASE: ${HMS_POSTGRESQL_DATABASE}
+      POSTGRESQL_PGAUDIT_LOG: "NONE"
+      POSTGRESQL_INITSCRIPTS_USERNAME: ${HMS_POSTGRESQL_USERNAME}
+      POSTGRESQL_INITSCRIPTS_PASSWORD: ${HMS_POSTGRESQL_PASSWORD}
+      POSTGRESQL_PG_HBA_CONF: |
+        # TYPE  DATABASE        USER            ADDRESS                 METHOD
+        local   all            all                                     trust
+        host    all            all             127.0.0.1/32            md5
+        host    all            all             ::1/128                 md5
+        host    all            all             0.0.0.0/0               md5
     volumes:
       - hms-db-storage:/bitnami/postgresql
     healthcheck:
-      test: [ "CMD", "pg_isready", "-U", "metastore" ]
+      test: [ "CMD", "pg_isready", "-U", "${HMS_POSTGRESQL_USERNAME}" ]
       timeout: 3s
       start_period: 5s
       retries: 5
