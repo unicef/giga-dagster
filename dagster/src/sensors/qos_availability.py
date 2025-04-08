@@ -47,12 +47,14 @@ def qos_availability__raw_file_uploads_sensor(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=METASTORE_SCHEMA,
+                table_name="availability",
                 tier=DataTier.RAW,
             ),
             "qos_availability_bronze": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.bronze_folder}/qos.db/availability",
                 metastore_schema="qos_bronze",
+                table_name="availability",
                 tier=DataTier.BRONZE,
             ),
         }

@@ -44,28 +44,24 @@ def qos_availability_bronze(
         buffer.seek(0)
         pdf = pd.read_csv(buffer)
 
-    column_actions = {
-        "date": f.to_date(f.col("timestamp")),
-    }
-
     df = s.createDataFrame(pdf)
-    df = df.withColumns(column_actions).drop_duplicates()
+    df = df.drop_duplicates()
+    df = df.withColumn("date", f.to_date("timestamp"))
 
-    context.log.info("original schema")
-    context.log.info(df.schema.simpleString())
-
-    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt"]
+    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt", "school_id_giga"]
     metric_columns = [col for col in df.columns if col not in id_columns]
-
     df = df.select([F.col(col).cast("STRING").alias(col) for col in df.columns])
 
-    # stack the metric columns into a long format
     long_df = df.selectExpr(
         *id_columns,  # keep identifier columns
         f"stack({len(metric_columns)}, " + ", ".join([f"'{col}', {col}" for col in metric_columns]) + ") as (metric_type, metric_value)"
     )
+    column_actions = {
+        "signature": f.sha2(f.concat_ws("|", *long_df.columns), 256),
+    }
+    long_df = long_df.withColumns(column_actions)
 
-    context.log.info("updated schema")
+    context.log.info("table schema")
     context.log.info(long_df.schema.simpleString())
 
     return Output(
