@@ -79,6 +79,12 @@ class FileConfig(Config):
     domain: str = Field(
         default=None,
     )
+    table_name: str = Field(
+        description="""
+        The name of the table which refers to this dataset. Used if the output format is a Delta Table
+        """,
+        default=None,
+    )
 
     @property
     def filepath_object(self) -> Path:
@@ -141,6 +147,7 @@ def generate_run_ops(
     country_code: str,
     dq_target_filepath: str = None,
     database_data: str = None,
+    table_name: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
 
@@ -157,6 +164,7 @@ def generate_run_ops(
             domain=domain,
             country_code=country_code,
             database_data=database_data,
+            table_name=table_name,
         )
         run_ops[asset_key] = file_config
 

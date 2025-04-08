@@ -88,7 +88,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context: InputContext | OutputContext,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
-        table_name = config.country_code
+        table_name = config.table_name if config.table_name else config.country_code
         table_root_path = f"{settings.SPARK_WAREHOUSE_DIR}/{config.metastore_schema}.db"
         return (
             ic(table_name),
