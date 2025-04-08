@@ -44,11 +44,11 @@ def qos_availability_bronze(
         buffer.seek(0)
         pdf = pd.read_csv(buffer)
 
+    df = s.createDataFrame(pdf)
     column_actions = {
+        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
         "date": f.to_date(f.col("timestamp")),
     }
-
-    df = s.createDataFrame(pdf)
     df = df.withColumns(column_actions).drop_duplicates()
 
     context.log.info("original schema")
