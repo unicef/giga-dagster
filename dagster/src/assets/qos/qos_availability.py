@@ -2,14 +2,12 @@ from io import BytesIO
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from numpy import nan
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
+    functions as F,
     functions as f,
 )
-from pyspark.sql.types import NullType
-from pyspark.sql import functions as F
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -20,6 +18,7 @@ from dagster import (
     Output,
     asset,
 )
+
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
 def qos_availability_raw(
@@ -53,7 +52,9 @@ def qos_availability_bronze(
 
     long_df = df.selectExpr(
         *id_columns,  # keep identifier columns
-        f"stack({len(metric_columns)}, " + ", ".join([f"'{col}', {col}" for col in metric_columns]) + ") as (metric_type, metric_value)"
+        f"stack({len(metric_columns)}, "
+        + ", ".join([f"'{col}', {col}" for col in metric_columns])
+        + ") as (metric_type, metric_value)",
     )
     column_actions = {
         "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
@@ -71,4 +72,3 @@ def qos_availability_bronze(
             "preview": get_table_preview(long_df),
         },
     )
-
