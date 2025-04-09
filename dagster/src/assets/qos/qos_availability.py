@@ -45,27 +45,23 @@ def qos_availability_bronze(
         pdf = pd.read_csv(buffer)
 
     df = s.createDataFrame(pdf)
-    column_actions = {
-        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
-        "date": f.to_date(f.col("timestamp")),
-    }
-    df = df.withColumns(column_actions).drop_duplicates()
-
-    context.log.info("original schema")
-    context.log.info(df.schema.simpleString())
+    df = df.drop_duplicates()
 
     id_columns = ["country", "provider", "timestamp", "date", "school_id_govt"]
     metric_columns = [col for col in df.columns if col not in id_columns]
-
     df = df.select([F.col(col).cast("STRING").alias(col) for col in df.columns])
 
-    # stack the metric columns into a long format
     long_df = df.selectExpr(
         *id_columns,  # keep identifier columns
         f"stack({len(metric_columns)}, " + ", ".join([f"'{col}', {col}" for col in metric_columns]) + ") as (metric_type, metric_value)"
     )
+    column_actions = {
+        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
+        "date": f.to_date(f.col("timestamp")),
+    }
+    long_df = long_df.withColumns(column_actions)
 
-    context.log.info("updated schema")
+    context.log.info("table schema")
     context.log.info(long_df.schema.simpleString())
 
     return Output(

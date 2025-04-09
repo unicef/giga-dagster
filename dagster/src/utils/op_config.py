@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -136,6 +136,7 @@ class OpDestinationMapping(BaseModel):
     destination_filepath: str
     metastore_schema: str
     tier: DataTier
+    table_name: Optional[str] = None
 
 
 def generate_run_ops(
@@ -147,7 +148,6 @@ def generate_run_ops(
     country_code: str,
     dq_target_filepath: str = None,
     database_data: str = None,
-    table_name: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}
 
@@ -157,6 +157,7 @@ def generate_run_ops(
             destination_filepath=op_mapping.destination_filepath,
             metastore_schema=op_mapping.metastore_schema,
             tier=op_mapping.tier,
+            table_name=op_mapping.table_name,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,
@@ -164,7 +165,6 @@ def generate_run_ops(
             domain=domain,
             country_code=country_code,
             database_data=database_data,
-            table_name=table_name,
         )
         run_ops[asset_key] = file_config
 
