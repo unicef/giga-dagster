@@ -46,6 +46,7 @@ def qos_availability_bronze(
 
     df = s.createDataFrame(pdf)
     df = df.drop_duplicates()
+    df = df.withColumn("date", f.to_date("timestamp"))
 
     id_columns = ["country", "provider", "timestamp", "date", "school_id_govt"]
     metric_columns = [col for col in df.columns if col not in id_columns]
@@ -57,7 +58,6 @@ def qos_availability_bronze(
     )
     column_actions = {
         "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
-        "date": f.to_date(f.col("timestamp")),
     }
     long_df = long_df.withColumns(column_actions)
 
