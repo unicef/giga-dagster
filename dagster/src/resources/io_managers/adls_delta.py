@@ -35,6 +35,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             return
 
         config = FileConfig(**context.step_context.op_config)
+        context.log.info(print(config.model_dump()))
         table_name, table_root_path, table_path = self._get_table_path(context)
         schema_tier_name = construct_schema_name_for_tier(
             config.metastore_schema, config.tier
