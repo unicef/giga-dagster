@@ -18,6 +18,7 @@ from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
+    aggregate_report_statistics,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -412,6 +413,21 @@ async def geolocation_data_quality_results_summary(
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
+
+
+@asset
+def geolocation_data_quality_report(
+    context: OpExecutionContext,
+    geolocation_data_quality_results: sql.DataFrame,
+    config: FileConfig,
+    spark: PySparkResource,
+):
+    dq_report = aggregate_report_statistics(geolocation_data_quality_results)
+
+    adls_client = ADLSFileClient()
+    file_path = config.destination_filepath
+
+    adls_client.upload_raw(context=context, data=dq_report.encode(), filepath=file_path)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
