@@ -36,7 +36,12 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         config = FileConfig(**context.step_context.op_config)
         try:
-            context.log.info(print(config.dict()))
+            context.log.info(config.country_code)
+            context.log.info(config.domain)
+            context.log.info(config.metastore_schema)
+            context.log.info(config.tier)
+            context.log.info(config.table_name)
+            context.log.info(config.destination_filepath)
         except:
             pass
         table_name, table_root_path, table_path = self._get_table_path(context)
