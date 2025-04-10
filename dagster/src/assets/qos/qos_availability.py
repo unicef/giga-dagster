@@ -48,7 +48,7 @@ def qos_availability_bronze(
     df = df.drop_duplicates()
     df = df.withColumn("date", f.to_date("timestamp"))
 
-    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt"]
+    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt", "school_id_giga"]
     metric_columns = [col for col in df.columns if col not in id_columns]
     df = df.select([F.col(col).cast("STRING").alias(col) for col in df.columns])
 
@@ -57,7 +57,7 @@ def qos_availability_bronze(
         f"stack({len(metric_columns)}, " + ", ".join([f"'{col}', {col}" for col in metric_columns]) + ") as (metric_type, metric_value)"
     )
     column_actions = {
-        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
+        "signature": f.sha2(f.concat_ws("|", *long_df.columns), 256),
     }
     long_df = long_df.withColumns(column_actions)
 
