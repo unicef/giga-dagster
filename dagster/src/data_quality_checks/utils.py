@@ -267,27 +267,23 @@ def aggregate_report_statistics(df: sql.DataFrame):
     count_schools_raw_file = df.count()
 
     dq_report_columns = [
-        "dq_has_critical_error",
         "dq_duplicate-school_id_govt",
-        "dq_missing_location",
-        "dq_is_not_within_country",
-        "dq_is_null_mandatory-school_id_govt",
-        "dq_is_null_optional-school_name",
-        "dq_is_null_optional-education_level_govt",
-        "dq_is_null_optional-connectivity_govt",
-        "dq_is_null_connectivity_type_when_connectivity_govt",
         "dq_duplicate_all_except_school_code",
         "dq_duplicate_name_level_within_110m_radius",
         "dq_duplicate_set-education_level_location_id",
-        "dq_duplicate_set-school_id_govt_school_name_education_level_location_id",
-        "dq_is_null_optional-computer_availability",
-        "dq_is_school_density_greater_than_5",
-        "dq_duplicate_all_except_school_code",
         "dq_duplicate_set-school_id_govt_school_name_education_level_location_id",
         "dq_duplicate_set-school_name_education_level_location_id",
-        "dq_duplicate_set-education_level_location_id",
-        "dq_duplicate_name_level_within_110m_radius",
         "dq_duplicate_similar_name_same_level_within_110m_radius",
+        "dq_has_critical_error",
+        "dq_is_not_within_country",
+        "dq_is_null_connectivity_type_when_connectivity_govt",
+        "dq_is_null_mandatory-school_id_govt",
+        "dq_is_null_optional-computer_availability",
+        "dq_is_null_optional-connectivity_govt",
+        "dq_is_null_optional-education_level_govt",
+        "dq_is_null_optional-school_name",
+        "dq_is_school_density_greater_than_5",
+        "dq_missing_location",
         "dq_precision-latitude",
         "dq_precision-longitude",
     ]
@@ -301,7 +297,7 @@ def aggregate_report_statistics(df: sql.DataFrame):
         [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_report_columns]
     )
 
-    unpivoted_df = df.selectExpr(
+    unpivoted_df = df_report.selectExpr(
         f"stack({len(dq_report_columns)}, {stack_expr}) as (assertion, value)",
     )
 
