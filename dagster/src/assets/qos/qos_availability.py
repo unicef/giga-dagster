@@ -47,8 +47,14 @@ def qos_availability_bronze(
     df = s.createDataFrame(pdf)
     df = df.drop_duplicates()
     df = df.withColumn("date", f.to_date("timestamp"))
+    df = df.withColumn("gigasync_id", f.sha2(
+        f.concat_ws(
+              "_", f.col("school_id_giga"), f.col("timestamp")
+        ),
+        256
+    ))
 
-    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt", "school_id_giga"]
+    id_columns = ["country", "provider", "timestamp", "date", "school_id_govt", "school_id_giga", "gigasync_id"]
     metric_columns = [col for col in df.columns if col not in id_columns]
     df = df.select([F.col(col).cast("STRING").alias(col) for col in df.columns])
 
