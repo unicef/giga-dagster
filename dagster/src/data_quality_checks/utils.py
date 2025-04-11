@@ -347,14 +347,14 @@ def aggregate_report_statistics(df: sql.DataFrame):
         "count_duplicate_all_except_school_code": agg_df_pd.at[
             "duplicate_all_except_school_code", "count_schools"
         ],
-        "count_duplicate_set-school_id_govt_school_name_education_level_location_id": agg_df_pd.at[
+        "count_duplicate_school_id_govt_school_name_education_level_location_id": agg_df_pd.at[
             "duplicate_set-school_id_govt_school_name_education_level_location_id",
             "count_schools",
         ],
-        "count_duplicate_set-school_name_education_level_location_id": agg_df_pd.at[
+        "count_duplicate_school_name_education_level_location_id": agg_df_pd.at[
             "duplicate_set-school_name_education_level_location_id", "count_schools"
         ],
-        "count_duplicate_set-education_level_location_id": agg_df_pd.at[
+        "count_duplicate_education_level_location_id": agg_df_pd.at[
             "duplicate_set-education_level_location_id", "count_schools"
         ],
         "count_duplicate_name_level_within_110m_radius": agg_df_pd.at[
@@ -363,8 +363,8 @@ def aggregate_report_statistics(df: sql.DataFrame):
         "count_duplicate_similar_name_same_level_within_110m_radius": agg_df_pd.at[
             "duplicate_similar_name_same_level_within_110m_radius", "count_schools"
         ],
-        "count_precision-latitude": agg_df_pd.at["precision-latitude", "count_schools"],
-        "count_precision-longitude": agg_df_pd.at[
+        "count_precision_latitude": agg_df_pd.at["precision-latitude", "count_schools"],
+        "count_precision_longitude": agg_df_pd.at[
             "precision-longitude", "count_schools"
         ],
     }
@@ -424,7 +424,7 @@ def get_report_template() -> str:
     container_name = settings.AZURE_BLOB_CONTAINER_NAME
 
     service = BlobServiceClient(account_url=account_url, credential=azure_sas_token)
-    filename = "templates/data_quality_template.txt"
+    filename = "templates/data_quality/data_quality_report_template.txt"
     blob_client = service.get_blob_client(container=container_name, blob=filename)
     data = blob_client.download_blob(encoding="UTF-8").readall()
     return data
