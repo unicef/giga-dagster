@@ -1,8 +1,6 @@
-import io
 from datetime import UTC, datetime
 
 from jinja2 import BaseLoader, Environment
-from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -425,18 +423,11 @@ def get_report_template() -> str:
     azure_sas_token = settings.AZURE_SAS_TOKEN
     container_name = settings.AZURE_BLOB_CONTAINER_NAME
 
-    try:
-        service = BlobServiceClient(account_url=account_url, credential=azure_sas_token)
-        filename = "templates/data_quality_template.txt"
-        blob_client = service.get_blob_client(container=container_name, blob=filename)
-        with io.BytesIO() as file_blob:
-            download_stream = blob_client.download_blob()
-            download_stream.readinto(file_blob)
-            file_blob.seek(0)
-            return file_blob.read()
-    except Exception as exc:
-        logger.error(exc)
-        return None
+    service = BlobServiceClient(account_url=account_url, credential=azure_sas_token)
+    filename = "templates/data_quality_template.txt"
+    blob_client = service.get_blob_client(container=container_name, blob=filename)
+    data = blob_client.download_blob(encoding="UTF-8").readall()
+    return data
 
 
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
