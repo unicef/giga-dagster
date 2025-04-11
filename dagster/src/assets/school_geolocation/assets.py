@@ -415,7 +415,7 @@ async def geolocation_data_quality_results_summary(
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
 def geolocation_data_quality_report(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
@@ -423,11 +423,7 @@ def geolocation_data_quality_report(
     spark: PySparkResource,
 ):
     dq_report = aggregate_report_statistics(geolocation_data_quality_results)
-
-    adls_client = ADLSFileClient()
-    file_path = config.destination_filepath
-
-    adls_client.upload_raw(context=context, data=dq_report.encode(), filepath=file_path)
+    return Output(dq_report)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
