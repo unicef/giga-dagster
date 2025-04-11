@@ -259,9 +259,9 @@ def aggregate_report_statistics(df: sql.DataFrame):
         "dq_is_null_connectivity_type_when_connectivity_govt",
         f.when(
             (f.col("dq_is_null_optional-connectivity_type_govt") == 1)
-            & (f.col("dq_is_null_optional-connectivity_govt") == 0)
-        ),
-        1,
+            & (f.col("dq_is_null_optional-connectivity_govt") == 0),
+            1,
+        ).otherwise(0),
     )
 
     count_schools_raw_file = df.count()
