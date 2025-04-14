@@ -45,6 +45,7 @@ class Constants(BaseSettings):
     )
     qos_source_folder = f"{settings.LAKEHOUSE_PATH}/gold/qos"
     qos_raw_source_folder = f"{settings.LAKEHOUSE_PATH}/gold/qos-raw"
+    error_folder = f"{settings.LAKEHOUSE_PATH}/error"
 
     # can't set infinite, just set to a value most likely beyond the extinction of the human race
     school_master_retention_period = "interval 1000000 weeks"
