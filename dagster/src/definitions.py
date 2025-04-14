@@ -7,10 +7,10 @@ from src.assets import (
     datahub_assets,
     debug,
     migrations,
+    qos,
     school_connectivity,
     school_coverage,
     school_geolocation,
-    qos,
     school_list,
     unstructured,
 )
@@ -72,7 +72,7 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=qos,
             group_name=qos.GROUP_NAME,
-        )
+        ),
     ],
     resources=RESOURCE_DEFINITIONS,
     jobs=load_jobs_from_package_module(jobs),

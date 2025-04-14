@@ -1,20 +1,20 @@
 from pathlib import Path
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
-from src.jobs.qos import (
-    qos_availability_create_silver_job
-)
+from src.jobs.qos import qos_availability_create_silver_job
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.op_config import OpDestinationMapping, generate_run_ops
 from src.utils.filename import (
     deconstruct_adhoc_filename_components,
 )
+from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "availability"
 DOMAIN = "qos"
 DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 METASTORE_SCHEMA = f"{DOMAIN}_{DATASET_TYPE}"
+
 
 @sensor(
     job=qos_availability_create_silver_job,
@@ -65,7 +65,7 @@ def qos_availability__raw_file_uploads_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
-            country_code=country_code
+            country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
