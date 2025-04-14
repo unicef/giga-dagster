@@ -22,7 +22,7 @@ class ResourceKey(Enum):
 
 RESOURCE_DEFINITIONS = {
     ResourceKey.ADLS_DELTA_IO_MANAGER.value: ADLSDeltaIOManager(pyspark=pyspark),
-    ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER: ADLSGenericFileIOManager(),
+    ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value: ADLSGenericFileIOManager(),
     ResourceKey.ADLS_JSON_IO_MANAGER.value: ADLSJSONIOManager(),
     ResourceKey.ADLS_PANDAS_IO_MANAGER.value: ADLSPandasIOManager(pyspark=pyspark),
     ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value: ADLSPassthroughIOManager(),
