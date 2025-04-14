@@ -41,21 +41,36 @@ def qos_availability__raw_file_uploads_sensor(
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
+        table_name = "availability"
 
         ops_destination_mapping = {
             "qos_availability_raw": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=METASTORE_SCHEMA,
-                table_name="availability",
+                table_name=table_name,
                 tier=DataTier.RAW,
             ),
             "qos_availability_bronze": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.bronze_folder}/qos.db/availability",
                 metastore_schema="qos_bronze",
-                table_name="availability",
+                table_name=table_name,
                 tier=DataTier.BRONZE,
+            ),
+            "qos_availability_silver": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.silver_folder}/qos.db/availability",
+                metastore_schema="qos_silver",
+                table_name=table_name,
+                tier=DataTier.SILVER,
+            ),
+            "qos_availability_error": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.error_folder}/qos.db/availability",
+                metastore_schema="qos_error",
+                table_name=table_name,
+                tier=DataTier.ERROR,
             ),
         }
 
@@ -69,6 +84,7 @@ def qos_availability__raw_file_uploads_sensor(
         )
 
         context.log.info(f"FILE: {path}")
+
         yield RunRequest(
             run_key=str(path),
             run_config=RunConfig(ops=run_ops),

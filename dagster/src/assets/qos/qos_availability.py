@@ -8,6 +8,7 @@ from pyspark.sql import (
     functions as F,
     functions as f,
 )
+from pyspark.sql.functions import col
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -82,5 +83,73 @@ def qos_availability_bronze(
         metadata={
             **get_output_metadata(config),
             "preview": get_table_preview(long_df),
+        },
+    )
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+def qos_availability_silver(
+        context: OpExecutionContext,
+        spark: PySparkResource,
+        config: FileConfig,
+        qos_availability_raw: bytes,
+) -> Output[sql.DataFrame]:
+    s: SparkSession = spark.spark_session
+
+    with BytesIO(qos_availability_raw) as buffer:
+        buffer.seek(0)
+        pdf = pd.read_csv(buffer)
+
+    df = s.createDataFrame(pdf)
+    df = df.drop_duplicates()
+
+    df = df.withColumn("date", f.to_date("timestamp"))
+    df = df.withColumn("gigasync_id", f.sha2(
+        f.concat_ws(
+              "_", f.col("school_id_giga"), f.col("timestamp")
+        ),
+        256
+    ))
+
+    # map column name
+    # convert datatype
+    # validate
+    # all of this will come from where the schema is defined
+    # can have a mapping of columns in availability with the datatype to begin with
+
+    availability_columns = {
+        "country": "string",
+        "provider": "string",
+        "timestamp": "timestamp",
+        "query_time": "timestamp",
+        "date": "string",
+        "school_id_govt": "string",
+        "school_id_giga": "string",
+        "gigasync_id": "string",
+        "metric_type": "string",
+        "rta": "float",
+        "lost": "float"
+    }
+
+    context.log.info(
+        f"transform types schema columns before {df.schema.simpleString()}"
+    )
+    df = df.withColumns({
+        column_name: col(column_name).cast(availability_columns.get(column_name, "string"))
+        for column_name in df.columns
+    })
+    context.log.info(
+        f"transform types after df with columns {df.schema.simpleString()}"
+    )
+
+    column_actions = {
+        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
+    }
+    df = df.withColumns(column_actions)
+
+    return Output(
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "preview": get_table_preview(df),
         },
     )
