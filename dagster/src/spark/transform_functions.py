@@ -368,16 +368,16 @@ def create_bronze_layer_columns(
         silver_mapping.alias("silver_mapping"), on="school_id_govt", how="left"
     )
 
-    # For existing schools (matched by school_id_govt), use the silver school_id_giga
-    # For new schools, generate a new school_id_giga using the create_school_id_giga function
+    # For existing schools (matched by school_id_govt), use the existing school_id_giga
+    # For new schools, keep school_id_giga null to be filled by create_school_id_giga function later
     if "school_id_giga" in df.columns:
         joined_df = joined_df.withColumn(
             "school_id_giga",
             f.when(
                 f.col("silver_mapping.school_id_giga").isNotNull(),
-                f.col("silver_mapping.school_id_giga"),  # Use silver school_id_giga for existing schools
+                f.col("silver_mapping.school_id_giga"),
             ).otherwise(
-                f.lit(None)  # Will be filled by create_school_id_giga function
+                f.lit(None)
             ),
         )
 
@@ -421,7 +421,8 @@ def create_bronze_layer_columns(
         df = create_education_level(df, mode, uploaded_columns)
 
     # Generate school_id_giga for new schools using the dedicated function
-    df = create_school_id_giga(df)
+    if mode == UploadMode.CREATE.value:
+        df = create_school_id_giga(df)
 
     if mode == UploadMode.CREATE.value or "school_id_govt_type" in uploaded_columns:
         df = df.withColumn(
