@@ -376,9 +376,7 @@ def create_bronze_layer_columns(
             f.when(
                 f.col("silver_mapping.school_id_giga").isNotNull(),
                 f.col("silver_mapping.school_id_giga"),
-            ).otherwise(
-                f.lit(None)
-            ),
+            ).otherwise(f.lit(None)),
         )
 
     # Continue with normal join for other columns
