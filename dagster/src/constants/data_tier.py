@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class DataTier(StrEnum):
     RAW = "raw"
     BRONZE = "bronze"
