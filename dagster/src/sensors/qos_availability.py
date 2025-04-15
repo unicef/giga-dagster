@@ -65,13 +65,13 @@ def qos_availability__raw_file_uploads_sensor(
                 table_name=table_name,
                 tier=DataTier.SILVER,
             ),
-            "qos_availability_error": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{constants.error_folder}/qos.db/availability",
-                metastore_schema="qos_error",
-                table_name=table_name,
-                tier=DataTier.ERROR,
-            ),
+            # "qos_availability_error": OpDestinationMapping(
+            #     source_filepath=str(path),
+            #     destination_filepath=f"{constants.error_folder}/qos.db/availability",
+            #     metastore_schema="qos_error",
+            #     table_name=table_name,
+            #     tier=DataTier.ERROR,
+            # ),
         }
 
         run_ops = generate_run_ops(
