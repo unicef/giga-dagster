@@ -22,7 +22,7 @@ qos_availability_create_silver_job = define_asset_job(
         "qos_availability_raw",
         "qos_availability_bronze",
         "qos_availability_silver",
-        "qos_availability_error",
+        # "qos_availability_error",
     ),
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
