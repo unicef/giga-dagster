@@ -162,7 +162,7 @@ def geolocation_metadata(
     return Output(None)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
@@ -270,7 +270,7 @@ def geolocation_bronze(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
@@ -415,7 +415,7 @@ def geolocation_data_quality_report(
     return Output(dq_report)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
@@ -451,7 +451,7 @@ def geolocation_dq_passed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
