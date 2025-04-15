@@ -86,12 +86,13 @@ def qos_availability_bronze(
         },
     )
 
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 def qos_availability_silver(
-        context: OpExecutionContext,
-        spark: PySparkResource,
-        config: FileConfig,
-        qos_availability_raw: bytes,
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+    qos_availability_raw: bytes,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
@@ -103,12 +104,10 @@ def qos_availability_silver(
     df = df.drop_duplicates()
 
     df = df.withColumn("date", f.to_date("timestamp"))
-    df = df.withColumn("gigasync_id", f.sha2(
-        f.concat_ws(
-              "_", f.col("school_id_giga"), f.col("timestamp")
-        ),
-        256
-    ))
+    df = df.withColumn(
+        "gigasync_id",
+        f.sha2(f.concat_ws("_", f.col("school_id_giga"), f.col("timestamp")), 256),
+    )
 
     # map column name
     # convert datatype
@@ -127,16 +126,20 @@ def qos_availability_silver(
         "gigasync_id": "string",
         "metric_type": "string",
         "rta": "float",
-        "lost": "float"
+        "lost": "float",
     }
 
     context.log.info(
         f"transform types schema columns before {df.schema.simpleString()}"
     )
-    df = df.withColumns({
-        column_name: col(column_name).cast(availability_columns.get(column_name, "string"))
-        for column_name in df.columns
-    })
+    df = df.withColumns(
+        {
+            column_name: col(column_name).cast(
+                availability_columns.get(column_name, "string")
+            )
+            for column_name in df.columns
+        }
+    )
     context.log.info(
         f"transform types after df with columns {df.schema.simpleString()}"
     )

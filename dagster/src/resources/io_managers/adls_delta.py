@@ -42,7 +42,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             context.log.info(config.tier)
             context.log.info(config.table_name)
             context.log.info(config.destination_filepath)
-        except:
+        except Exception as e:
+            context.log.error(f"Error in config: {e}")
             pass
         table_name, table_root_path, table_path = self._get_table_path(context)
         schema_tier_name = construct_schema_name_for_tier(
