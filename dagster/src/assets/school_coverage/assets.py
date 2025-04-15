@@ -69,7 +69,7 @@ def coverage_raw(
     yield Output(df, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_data_quality_results(
     context: OpExecutionContext,
@@ -176,7 +176,7 @@ async def coverage_data_quality_results_summary(
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
@@ -210,7 +210,7 @@ def coverage_dq_passed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
@@ -245,7 +245,7 @@ def coverage_dq_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_bronze(
     context: OpExecutionContext,
