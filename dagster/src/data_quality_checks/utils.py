@@ -321,7 +321,7 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
     # extract required statistics
     count_unique_schools_ids = df.select("school_id_govt").distinct().count()
     stats = {
-        "country": upload_details["country"],
+        "country": upload_details["country_code"],
         "file_name": upload_details["file_name"],
         "count_schools_raw_file": count_schools_raw_file,
         "count_schools_dropped": agg_df_pd.at["has_critical_error", "count_schools"],
