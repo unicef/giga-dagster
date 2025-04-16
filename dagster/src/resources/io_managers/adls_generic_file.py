@@ -7,8 +7,11 @@ adls_client = ADLSFileClient()
 
 
 class ADLSGenericFileIOManager(BaseConfigurableIOManager):
-    def handle_output(self, context: OutputContext, output: bytes):
+    def handle_output(self, context: OutputContext, output: bytes | str):
         path = self._get_filepath(context)
+
+        if isinstance(output, str):
+            output = output.encode()
         adls_client.upload_raw(context, output, str(path))
 
         context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")
