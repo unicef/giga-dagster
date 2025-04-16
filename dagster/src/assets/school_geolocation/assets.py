@@ -422,7 +422,24 @@ def geolocation_data_quality_report(
     config: FileConfig,
     spark: PySparkResource,
 ):
-    dq_report = aggregate_report_statistics(geolocation_data_quality_results)
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+
+        file_upload = FileUploadConfig.from_orm(file_upload)
+
+    upload_details = {
+        "country_code": file_upload.country,
+        "file_name": file_upload.original_filename,
+    }
+    dq_report = aggregate_report_statistics(
+        geolocation_data_quality_results, upload_details
+    )
     return Output(dq_report)
 
 

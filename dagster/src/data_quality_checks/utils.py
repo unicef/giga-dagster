@@ -242,7 +242,7 @@ def aggregate_report_json(
     return transformed_data
 
 
-def aggregate_report_statistics(df: sql.DataFrame):
+def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
     # add necessary columns
     df = df.withColumn(
         "dq_missing_location",
@@ -291,6 +291,18 @@ def aggregate_report_statistics(df: sql.DataFrame):
     for column_name in df_report.columns:
         df_report = df_report.withColumn(column_name, f.col(column_name).cast("int"))
 
+    dq_duplicate_columns = [
+        col for col in dq_report_columns if col.startswith("dq_duplicate")
+    ]
+    check_duplicate_columns = [
+        f.col(duplicate_col) == 1 for duplicate_col in dq_duplicate_columns
+    ]
+
+    df_report = df_report.withColumn(
+        "dq_suspected_duplicate",
+        f.when(f.greatest(check_duplicate_columns), 1).otherwise(0),
+    )
+
     stack_expr = ", ".join(
         [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_report_columns]
     )
@@ -309,7 +321,9 @@ def aggregate_report_statistics(df: sql.DataFrame):
     # extract required statistics
     count_unique_schools_ids = df.select("school_id_govt").distinct().count()
     stats = {
-        "count_raw_file": count_schools_raw_file,
+        "country": upload_details["country"],
+        "file_name": upload_details["file_name"],
+        "count_schools_raw_file": count_schools_raw_file,
         "count_schools_dropped": agg_df_pd.at["has_critical_error", "count_schools"],
         "count_schools_passed": count_schools_raw_file
         - agg_df_pd.at["has_critical_error", "count_schools"],
@@ -342,8 +356,12 @@ def aggregate_report_statistics(df: sql.DataFrame):
         "count_null_computer_availability": agg_df_pd.at[
             "is_null_optional-computer_availability", "count_schools"
         ],
-        # "count_school_density_greater_than_5": agg_df_pd.at[
-        #     'is_school_density_greater_than_5', 'count_schools']
+        "count_school_density_greater_than_5": agg_df_pd.at[
+            "is_school_density_greater_than_5", "count_schools"
+        ],
+        "count_suspected_duplicate": agg_df_pd.at[
+            "suspected_duplicate", "count_schools"
+        ],
         "count_duplicate_all_except_school_code": agg_df_pd.at[
             "duplicate_all_except_school_code", "count_schools"
         ],
@@ -385,6 +403,27 @@ def aggregate_report_statistics(df: sql.DataFrame):
         education_level_counts_string = education_level_counts.to_string(index=False)
         education_level_counts_string = education_level_counts_string.split("\n", 1)[1]
         stats["education_level_govt_counts"] = education_level_counts_string
+
+    # counts in education_level_govt
+    connectivity_govt_counts = (
+        df.groupBy("connectivity_govt").count().toPandas().fillna("Unknown")
+    )
+    if not (
+        connectivity_govt_counts.shape[0] == 1
+        and connectivity_govt_counts.at[
+            (connectivity_govt_counts["connectivity_govt"] == "Unknown").index[0],
+            "count",
+        ]
+        == count_schools_raw_file
+    ):
+        connectivity_govt_counts.columns = [None] * len(education_level_counts.columns)
+        connectivity_govt_counts_string = connectivity_govt_counts.to_string(
+            index=False
+        )
+        connectivity_govt_counts_string = connectivity_govt_counts_string.split(
+            "\n", 1
+        )[1]
+        stats["connectivity_govt_counts"] = connectivity_govt_counts_string
 
     # counts in connectivity_type_govt
     connectivity_type_counts = (
