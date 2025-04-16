@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -79,6 +79,12 @@ class FileConfig(Config):
     domain: str = Field(
         default=None,
     )
+    table_name: str = Field(
+        description="""
+        The name of the table which refers to this dataset. Used if the output format is a Delta Table
+        """,
+        default=None,
+    )
 
     @property
     def filepath_object(self) -> Path:
@@ -130,6 +136,7 @@ class OpDestinationMapping(BaseModel):
     destination_filepath: str
     metastore_schema: str
     tier: DataTier
+    table_name: Optional[str] = None
 
 
 def generate_run_ops(
@@ -150,6 +157,7 @@ def generate_run_ops(
             destination_filepath=op_mapping.destination_filepath,
             metastore_schema=op_mapping.metastore_schema,
             tier=op_mapping.tier,
+            table_name=op_mapping.table_name,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,

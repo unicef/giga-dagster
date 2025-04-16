@@ -35,6 +35,16 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             return
 
         config = FileConfig(**context.step_context.op_config)
+        try:
+            context.log.info(config.country_code)
+            context.log.info(config.domain)
+            context.log.info(config.metastore_schema)
+            context.log.info(config.tier)
+            context.log.info(config.table_name)
+            context.log.info(config.destination_filepath)
+        except Exception as e:
+            context.log.error(f"Error in config: {e}")
+            pass
         table_name, table_root_path, table_path = self._get_table_path(context)
         schema_tier_name = construct_schema_name_for_tier(
             config.metastore_schema, config.tier
@@ -88,7 +98,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context: InputContext | OutputContext,
     ) -> tuple[str, str, AnyUrl]:
         config = FileConfig(**context.step_context.op_config)
-        table_name = config.country_code
+        table_name = config.table_name if config.table_name else config.country_code
         table_root_path = f"{settings.SPARK_WAREHOUSE_DIR}/{config.metastore_schema}.db"
         return (
             ic(table_name),

@@ -54,9 +54,6 @@ def log_op_context(context: OpExecutionContext) -> None:
             "asset_key": context.asset_key,
         },
     )
-    sentry_sdk.set_tag("job_name", context.job_name)
-    sentry_sdk.set_tag("op_name", context.op_def.name)
-    sentry_sdk.set_tag("run_id", context.run_id)
 
 
 def capture_op_exceptions(func: callable) -> callable:
