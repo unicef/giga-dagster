@@ -221,9 +221,36 @@ def aggregate_report_json(
         "timestamp": timestamp,
     }
 
+    # get the checks related to critical checks
+    critial_column_dq_checks = [
+        "dq_duplicate-school_id_govt",
+        "dq_duplicate-school_id_giga",
+        "dq_is_invalid_range-latitude",
+        "dq_is_invalid_range-longitude",
+        "dq_is_not_within_country",
+    ]
+    df_aggregated = df_aggregated.withColumn(
+        "is_critical_dq_check",
+        f.when(
+            (f.col("assertion") == "is_null_mandatory")
+            | (
+                f.concat(
+                    f.lit("dq_"), f.col("assertion"), f.lit("-"), f.col("column")
+                ).isin(critial_column_dq_checks)
+            ),
+            1,
+        ).otherwise(0),
+    )
+
+    critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
+    critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
+    critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
+
+    df_aggregated = df_aggregated.drop("is_critical_dq_check")
+
     # Initialize an empty dictionary for the transformed data
     agg_array = df_aggregated.toPandas().to_dict(orient="records")
-    transformed_data = {"summary": summary}
+    transformed_data = {"summary": summary, "critical_checks": critical_checks_summary}
 
     # Iterate through each JSON line
     for agg in agg_array:
