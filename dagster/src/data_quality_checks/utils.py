@@ -302,6 +302,7 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "dq_suspected_duplicate",
         f.when(f.greatest(*check_duplicate_columns), 1).otherwise(0),
     )
+    dq_report_columns.append("dq_suspected_duplicate")
 
     stack_expr = ", ".join(
         [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_report_columns]
