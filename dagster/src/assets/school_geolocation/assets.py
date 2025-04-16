@@ -18,6 +18,7 @@ from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
+    dq_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -36,9 +37,6 @@ from src.spark.transform_functions import (
 )
 from src.utils.adls import (
     ADLSFileClient,
-)
-from src.utils.data_quality_descriptions import (
-    convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
@@ -353,13 +351,13 @@ def geolocation_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        dq_results=dq_results,
-        dataset_type=dataset_type,
-        bronze=casted_bronze,
-        config=config,
-        context=context,
-    )
+    # convert_dq_checks_to_human_readeable_descriptions_and_upload(
+    #     dq_results=dq_results,
+    #     dataset_type=dataset_type,
+    #     bronze=casted_bronze,
+    #     config=config,
+    #     context=context,
+    # )
 
     dq_pandas = dq_results.toPandas()
 
@@ -379,22 +377,61 @@ def geolocation_data_quality_results(
     )
 
 
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_data_quality_results_user_version(
+    context: OpExecutionContext,
+    geolocation_data_quality_results: sql.DataFrame,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log.info("Get the file upload object from the database")
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+        context.log.info("Obtain the list of the uploaded columns")
+        file_upload = FileUploadConfig.from_orm(file_upload)
+        column_mapping = file_upload.column_to_schema_mapping
+        uploaded_columns = list(column_mapping.values())
+
+        context.log.info("Create a new dataframe with only the relevant columns")
+        df = dq_extract_relevant_columns(
+            geolocation_data_quality_results, uploaded_columns
+        )
+        context.log.info("Convert the dataframe to a pands object to save it locally")
+        df_pandas = df.toPandas()
+
+        return Output(
+            df_pandas,
+            metadata={
+                **get_output_metadata(config),
+                "row_count": len(df_pandas),
+                "preview": get_table_preview(df_pandas),
+            },
+        )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 @capture_op_exceptions
 async def geolocation_data_quality_results_summary(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
-            geolocation_data_quality_results,
+            geolocation_data_quality_results_user_version,
         ),
         df_bronze=geolocation_bronze,
-        df_data_quality_checks=geolocation_data_quality_results,
+        df_data_quality_checks=geolocation_data_quality_results_user_version,
     )
 
     datahub_emit_assertions_with_exception_catcher(
@@ -418,12 +455,12 @@ async def geolocation_data_quality_results_summary(
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
-        geolocation_data_quality_results,
+        geolocation_data_quality_results_user_version,
         config.dataset_type,
     )
 
@@ -453,12 +490,12 @@ def geolocation_dq_passed_rows(
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
-        geolocation_data_quality_results,
+        geolocation_data_quality_results_user_version,
         config.dataset_type,
     )
 
