@@ -18,7 +18,7 @@ from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
-    dq_extract_relevant_columns,
+    dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -400,7 +400,7 @@ async def geolocation_data_quality_results_user_version(
         uploaded_columns = list(column_mapping.values())
 
         context.log.info("Create a new dataframe with only the relevant columns")
-        df = dq_extract_relevant_columns(
+        df = dq_geolocation_extract_relevant_columns(
             geolocation_data_quality_results, uploaded_columns
         )
         context.log.info("Convert the dataframe to a pands object to save it locally")
