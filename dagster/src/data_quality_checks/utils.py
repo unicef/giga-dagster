@@ -302,8 +302,7 @@ def dq_geolocation_extract_relevant_columns(
     assertions_location_based = [
         "dq_is_not_within_country",
         "dq_duplicate_all_except_school_code",
-        "dq_duplicate_similar_name_same_level_within_110m_radius"
-        ""
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
         "dq_duplicate_name_level_within_110m_radius",
         "dq_is_school_density_greater_than_5",
         "dq_duplicate_set",
@@ -314,7 +313,8 @@ def dq_geolocation_extract_relevant_columns(
         "dq_is_invalid_range",
         "dq_precision",
         "dq_is_null_optional",
-        "dq_is_not_numeric" "dq_is_not_alphanumeric",
+        "dq_is_not_numeric",
+        "dq_is_not_alphanumeric",
     ]
 
     columns_to_keep = uploaded_columns
