@@ -305,8 +305,11 @@ def dq_geolocation_extract_relevant_columns(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         "dq_duplicate_name_level_within_110m_radius",
         "dq_is_school_density_greater_than_5",
-        "dq_duplicate_set",
     ]
+
+    assertions_location_based.extend(
+        [col for col in all_dq_columns if col.startswith("dq_duplicate_set")]
+    )
 
     assertions_optional = [
         "dq_is_invalid_domain",
