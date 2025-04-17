@@ -18,6 +18,7 @@ from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
+    aggregate_report_statistics,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -412,6 +413,34 @@ async def geolocation_data_quality_results_summary(
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+def geolocation_data_quality_report(
+    context: OpExecutionContext,
+    geolocation_data_quality_results: sql.DataFrame,
+    config: FileConfig,
+    spark: PySparkResource,
+):
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+
+        file_upload = FileUploadConfig.from_orm(file_upload)
+
+    upload_details = {
+        "country_code": file_upload.country,
+        "file_name": file_upload.original_filename,
+    }
+    dq_report = aggregate_report_statistics(
+        geolocation_data_quality_results, upload_details
+    )
+    return Output(dq_report)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)

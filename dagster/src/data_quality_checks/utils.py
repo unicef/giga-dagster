@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from jinja2 import BaseLoader, Environment
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -14,6 +15,7 @@ from pyspark.sql.types import (
     StructType,
 )
 
+from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.data_quality_checks.column_relation import column_relation_checks
@@ -39,6 +41,7 @@ from src.data_quality_checks.geometry import (
 )
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
+from src.settings import settings
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -237,6 +240,234 @@ def aggregate_report_json(
             transformed_data[key].append(agg)
 
     return transformed_data
+
+
+def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
+    # add necessary columns
+    df = df.withColumn(
+        "dq_missing_location",
+        f.when(
+            (f.col("dq_is_null_optional-latitude") == 1)
+            | (f.col("dq_is_null_optional-latitude") == 1),
+            1,
+        ).otherwise(0),
+    )
+
+    df = df.withColumn(
+        "dq_is_null_connectivity_type_when_connectivity_govt",
+        f.when(
+            (f.col("dq_is_null_optional-connectivity_type_govt") == 1)
+            & (f.col("dq_is_null_optional-connectivity_govt") == 0),
+            1,
+        ).otherwise(0),
+    )
+
+    count_schools_raw_file = df.count()
+
+    dq_report_columns = [
+        "dq_duplicate-school_id_govt",
+        "dq_duplicate_all_except_school_code",
+        "dq_duplicate_name_level_within_110m_radius",
+        "dq_duplicate_set-education_level_location_id",
+        "dq_duplicate_set-school_id_govt_school_name_education_level_location_id",
+        "dq_duplicate_set-school_name_education_level_location_id",
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
+        "dq_has_critical_error",
+        "dq_is_not_within_country",
+        "dq_is_null_connectivity_type_when_connectivity_govt",
+        "dq_is_null_mandatory-school_id_govt",
+        "dq_is_null_optional-computer_availability",
+        "dq_is_null_optional-connectivity_govt",
+        "dq_is_null_optional-education_level_govt",
+        "dq_is_null_optional-school_name",
+        "dq_is_school_density_greater_than_5",
+        "dq_missing_location",
+        "dq_precision-latitude",
+        "dq_precision-longitude",
+    ]
+
+    df_report = df.select(*dq_report_columns)
+
+    for column_name in df_report.columns:
+        df_report = df_report.withColumn(column_name, f.col(column_name).cast("int"))
+
+    dq_duplicate_columns = [
+        col for col in dq_report_columns if col.startswith("dq_duplicate")
+    ]
+    check_duplicate_columns = [
+        f.col(duplicate_col) == 1 for duplicate_col in dq_duplicate_columns
+    ]
+
+    df_report = df_report.withColumn(
+        "dq_suspected_duplicate",
+        f.when(f.greatest(*check_duplicate_columns), 1).otherwise(0),
+    )
+    dq_report_columns.append("dq_suspected_duplicate")
+
+    stack_expr = ", ".join(
+        [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_report_columns]
+    )
+
+    unpivoted_df = df_report.selectExpr(
+        f"stack({len(dq_report_columns)}, {stack_expr}) as (assertion, value)",
+    )
+
+    agg_df = unpivoted_df.groupBy("assertion").agg(
+        f.expr("count(CASE WHEN value = 1 THEN value END) as count_schools")
+    )
+
+    agg_df_pd = agg_df.toPandas()
+    agg_df_pd.set_index("assertion", inplace=True)
+
+    # extract required statistics
+    count_unique_schools_ids = df.select("school_id_govt").distinct().count()
+    stats = {
+        "country": upload_details["country_code"],
+        "file_name": upload_details["file_name"],
+        "count_schools_raw_file": count_schools_raw_file,
+        "count_schools_dropped": agg_df_pd.at["has_critical_error", "count_schools"],
+        "count_schools_passed": count_schools_raw_file
+        - agg_df_pd.at["has_critical_error", "count_schools"],
+        "count_schools_no_location": agg_df_pd.at["missing_location", "count_schools"],
+        "count_schools_outside_country": agg_df_pd.at[
+            "is_not_within_country", "count_schools"
+        ],
+        "count_unique_school_id_govt": count_unique_schools_ids,
+        "percent_unique_school_ids": round(
+            (100 * count_unique_schools_ids / count_schools_raw_file), 2
+        ),
+        "count_null_school_id_govt": agg_df_pd.at[
+            "is_null_mandatory-school_id_govt", "count_schools"
+        ],
+        "count_duplicate_school_id": agg_df_pd.at[
+            "duplicate-school_id_govt", "count_schools"
+        ],
+        "count_null_school_name": agg_df_pd.at[
+            "is_null_optional-school_name", "count_schools"
+        ],
+        "count_null_education_level_govt": agg_df_pd.at[
+            "is_null_optional-education_level_govt", "count_schools"
+        ],
+        "count_null_connectivity_govt": agg_df_pd.at[
+            "is_null_optional-connectivity_govt", "count_schools"
+        ],
+        "count_null_connectivity_type_govt_when_connectivity": agg_df_pd.at[
+            "is_null_connectivity_type_when_connectivity_govt", "count_schools"
+        ],
+        "count_null_computer_availability": agg_df_pd.at[
+            "is_null_optional-computer_availability", "count_schools"
+        ],
+        "count_school_density_greater_than_5": agg_df_pd.at[
+            "is_school_density_greater_than_5", "count_schools"
+        ],
+        "count_suspected_duplicate": agg_df_pd.at[
+            "suspected_duplicate", "count_schools"
+        ],
+        "count_duplicate_all_except_school_code": agg_df_pd.at[
+            "duplicate_all_except_school_code", "count_schools"
+        ],
+        "count_duplicate_school_id_govt_school_name_education_level_location_id": agg_df_pd.at[
+            "duplicate_set-school_id_govt_school_name_education_level_location_id",
+            "count_schools",
+        ],
+        "count_duplicate_school_name_education_level_location_id": agg_df_pd.at[
+            "duplicate_set-school_name_education_level_location_id", "count_schools"
+        ],
+        "count_duplicate_education_level_location_id": agg_df_pd.at[
+            "duplicate_set-education_level_location_id", "count_schools"
+        ],
+        "count_duplicate_name_level_within_110m_radius": agg_df_pd.at[
+            "duplicate_name_level_within_110m_radius", "count_schools"
+        ],
+        "count_duplicate_similar_name_same_level_within_110m_radius": agg_df_pd.at[
+            "duplicate_similar_name_same_level_within_110m_radius", "count_schools"
+        ],
+        "count_precision_latitude": agg_df_pd.at["precision-latitude", "count_schools"],
+        "count_precision_longitude": agg_df_pd.at[
+            "precision-longitude", "count_schools"
+        ],
+    }
+
+    # counts in education_level_govt
+    education_level_counts = (
+        df.groupBy("education_level_govt").count().toPandas().fillna("Unknown")
+    )
+    if not (
+        education_level_counts.shape[0] == 1
+        and education_level_counts.at[
+            (education_level_counts["education_level_govt"] == "Unknown").index[0],
+            "count",
+        ]
+        == count_schools_raw_file
+    ):
+        education_level_counts.columns = [None] * len(education_level_counts.columns)
+        education_level_counts_string = education_level_counts.to_string(index=False)
+        education_level_counts_string = education_level_counts_string.split("\n", 1)[1]
+        stats["education_level_govt_counts"] = education_level_counts_string
+
+    # counts in education_level_govt
+    connectivity_govt_counts = (
+        df.groupBy("connectivity_govt").count().toPandas().fillna("Unknown")
+    )
+    if not (
+        connectivity_govt_counts.shape[0] == 1
+        and connectivity_govt_counts.at[
+            (connectivity_govt_counts["connectivity_govt"] == "Unknown").index[0],
+            "count",
+        ]
+        == count_schools_raw_file
+    ):
+        connectivity_govt_counts.columns = [None] * len(education_level_counts.columns)
+        connectivity_govt_counts_string = connectivity_govt_counts.to_string(
+            index=False
+        )
+        connectivity_govt_counts_string = connectivity_govt_counts_string.split(
+            "\n", 1
+        )[1]
+        stats["connectivity_govt_counts"] = connectivity_govt_counts_string
+
+    # counts in connectivity_type_govt
+    connectivity_type_counts = (
+        df.groupBy("connectivity_type_govt").count().toPandas().fillna("Unknown")
+    )
+    if not (
+        connectivity_type_counts.shape[0] == 1
+        and connectivity_type_counts.at[
+            (connectivity_type_counts["connectivity_type_govt"] == "Unknown").index[0],
+            "count",
+        ]
+        == count_schools_raw_file
+    ):
+        connectivity_type_counts.columns = [None] * len(
+            connectivity_type_counts.columns
+        )
+        connectivity_type_counts_string = connectivity_type_counts.to_string(
+            index=False
+        )
+        connectivity_type_counts_string = connectivity_type_counts_string.split(
+            "\n", 1
+        )[1]
+        stats["connectivity_type_govt_counts"] = connectivity_type_counts_string
+
+    report_template_string = get_report_template()
+    report_template = Environment(loader=BaseLoader()).from_string(
+        report_template_string
+    )
+    data_quality_report = report_template.render(**stats)
+
+    return data_quality_report
+
+
+def get_report_template() -> str:
+    account_url = f"https://{settings.AZURE_DFS_SAS_HOST}"
+    azure_sas_token = settings.AZURE_SAS_TOKEN
+    container_name = settings.AZURE_BLOB_CONTAINER_NAME
+
+    service = BlobServiceClient(account_url=account_url, credential=azure_sas_token)
+    filename = "templates/data_quality/data_quality_report_template.txt"
+    blob_client = service.get_blob_client(container=container_name, blob=filename)
+    data = blob_client.download_blob(encoding="UTF-8").readall()
+    return data
 
 
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
