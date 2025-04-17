@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.qos import qos_availability_create_silver_job
@@ -11,6 +12,7 @@ DATASET_TYPE = "availability"
 DOMAIN = "qos"
 DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
 METASTORE_SCHEMA = f"{DOMAIN}_{DATASET_TYPE}"
+
 
 @sensor(
     job=qos_availability_create_silver_job,
