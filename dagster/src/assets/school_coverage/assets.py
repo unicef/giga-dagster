@@ -1,7 +1,5 @@
-from datetime import UTC, datetime
 from io import BytesIO
 
-import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from icecream import ic
@@ -37,12 +35,10 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
-from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
-    construct_full_table_name,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -70,14 +66,14 @@ def coverage_raw(
     yield Output(df, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     coverage_raw: bytes,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
     with get_db_context() as db:
@@ -96,11 +92,8 @@ def coverage_data_quality_results(
         pdf = pandas_loader(buffer, config.filepath)
 
     source = config.filename_components.source
-    schema_name = config.metastore_schema
-    id = config.filename_components.id
     country_code = config.country_code
     dataset_type = f"coverage_{source}"
-    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
@@ -118,29 +111,6 @@ def coverage_data_quality_results(
 
     config.metadata.update({"column_mapping": column_mapping})
 
-    dq_results_schema_name = f"{schema_name}_{source}_dq_results"
-    table_name = f"{id}_{country_code}_{current_timestamp}"
-
-    schema_columns = dq_results.schema.fields
-    for col in schema_columns:
-        col.nullable = True
-
-    dq_results_table_name = construct_full_table_name(
-        dq_results_schema_name,
-        table_name,
-    )
-
-    create_schema(s, dq_results_schema_name)
-    create_delta_table(
-        s,
-        dq_results_schema_name,
-        table_name,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
-
     convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_results=dq_results,
         bronze=df,
@@ -149,14 +119,16 @@ def coverage_data_quality_results(
         context=context,
     )
 
-    dq_pandas = dq_results.toPandas()
+    row_count = dq_results.count()
+    preview_df = dq_results.limit(10).toPandas()
+
     return Output(
-        dq_pandas,
+        dq_results,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(dq_pandas),
+            "row_count": row_count,
             "column_mapping": column_mapping,
-            "preview": get_table_preview(dq_pandas),
+            "preview": get_table_preview(preview_df),
         },
     )
 
@@ -198,14 +170,14 @@ async def coverage_data_quality_results_summary(
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -219,25 +191,27 @@ def coverage_dq_passed_rows(
         schema_reference=schema_reference,
     )
 
-    df_pandas = df_passed.toPandas()
+    row_count = df_passed.count()
+    preview_df = df_passed.limit(10).toPandas()
+
     return Output(
-        df_pandas,
+        df_passed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
     coverage_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
     schema_reference = get_schema_columns_datahub(
@@ -252,25 +226,27 @@ def coverage_dq_failed_rows(
         df_failed=df_failed,
     )
 
-    df_pandas = df_failed.toPandas()
+    row_count = df_failed.count()
+    preview_df = df_failed.limit(10).toPandas()
+
     return Output(
-        df_pandas,
+        df_failed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_bronze(
     context: OpExecutionContext,
     coverage_dq_passed_rows: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
     silver_table_name = config.country_code.lower()
@@ -304,13 +280,15 @@ def coverage_bronze(
         schema_reference=schema_reference,
     )
 
-    df_pandas = df.toPandas()
+    row_count = df.count()
+    preview_df = df.limit(10).toPandas()
+
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
@@ -347,13 +325,16 @@ def coverage_staging(
     )
     staging = staging_step(coverage_bronze)
     row_count = 0 if staging is None else staging.count()
+    preview_df = None if staging is None else staging.limit(10).toPandas()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
-            "row_count": row_count,
-            "preview": get_table_preview(staging),
+            "row_count": MetadataValue.int(row_count),
+            "preview": get_table_preview(preview_df)
+            if preview_df is not None
+            else MetadataValue.text("No staging output"),
         },
     )
 
