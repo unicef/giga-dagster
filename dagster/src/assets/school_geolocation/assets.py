@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -163,14 +163,14 @@ def geolocation_metadata(
     return Output(None)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -256,38 +256,32 @@ def geolocation_bronze(
         schema_reference=df,
     )
 
-    ## at this point it's already gone
-    context.log.info("BEFORE DF TO PANDAS")
-    df_pandas = df.toPandas()
-    context.log.info("AFTER DF TO PANDAS")
-    context.log.info(df_pandas)
+    row_count = df.count()
+    preview_df = df.limit(10).toPandas()
 
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
+            "row_count": row_count,
             "column_mapping": column_mapping,
-            "preview": get_table_preview(df_pandas),
+            "preview": get_table_preview(preview_df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
-    id = config.filename_components.id
     dataset_type = "geolocation"
-
-    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     columns = get_schema_columns(s, schema_name)
     schema = StructType(columns)
@@ -331,30 +325,13 @@ def geolocation_data_quality_results(
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
-    dq_results_schema_name = f"{schema_name}_dq_results"
-    table_name = f"{id}_{country_code}_{current_timestamp}"
-
-    schema_columns = dq_results.schema.fields
-    for col in schema_columns:
-        col.nullable = True
-
-    dq_results_table_name = construct_full_table_name(
-        dq_results_schema_name,
-        table_name,
+    convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=dq_results,
+        dataset_type=dataset_type,
+        bronze=casted_bronze,
+        config=config,
+        context=context,
     )
-
-    create_schema(s, dq_results_schema_name)
-    create_delta_table(
-        s,
-        dq_results_schema_name,
-        table_name,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
-
-    dq_pandas = dq_results.toPandas()
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -362,12 +339,15 @@ def geolocation_data_quality_results(
         spark=spark,
     )
 
+    row_count = dq_results.count()
+    preview_df = dq_results.limit(10).toPandas()
+
     return Output(
-        dq_pandas,
+        dq_results,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(dq_pandas),
-            "preview": get_table_preview(dq_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
@@ -549,14 +529,14 @@ def geolocation_data_quality_report(
     return Output(dq_report)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -573,25 +553,26 @@ def geolocation_dq_passed_rows(
         schema_reference=schema_reference,
     )
 
-    df_pandas = df_passed.toPandas()
+    row_count = df_passed.count()
+    preview_df = df_passed.limit(10).toPandas()
     return Output(
-        df_pandas,
+        df_passed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -609,13 +590,15 @@ def geolocation_dq_failed_rows(
         df_failed=df_failed,
     )
 
-    df_pandas = df_failed.toPandas()
+    row_count = df_failed.count()
+    preview_df = df_failed.limit(10).toPandas()
+
     return Output(
-        df_pandas,
+        df_failed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(preview_df),
         },
     )
 
@@ -652,13 +635,16 @@ def geolocation_staging(
     )
     staging = staging_step(geolocation_dq_passed_rows)
     row_count = 0 if staging is None else staging.count()
+    preview_df = None if staging is None else staging.limit(10).toPandas()
 
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
             "row_count": MetadataValue.int(row_count),
-            "preview": get_table_preview(staging),
+            "preview": get_table_preview(preview_df)
+            if preview_df is not None
+            else MetadataValue.text("No staging output"),
         },
     )
 
@@ -695,7 +681,7 @@ def geolocation_delete_staging(
             None,
             metadata={
                 **get_output_metadata(config),
-                "preview": get_table_preview(staging),
+                "preview": get_table_preview(staging.limit(10).toPandas()),
                 "delete_row_ids": MetadataValue.json(delete_row_ids),
             },
         )
