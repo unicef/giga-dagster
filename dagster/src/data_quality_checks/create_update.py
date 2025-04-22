@@ -1,3 +1,5 @@
+import uuid
+
 from pyspark import sql
 from pyspark.sql import functions as f
 
@@ -29,37 +31,33 @@ def create_checks(
 def _rename_silver_columns(
     silver: sql.DataFrame,
 ) -> tuple[sql.DataFrame, dict[str, str]]:
-    """Rename silver columns to avoid conflicts after join."""
+    """Rename silver columns to avoid conflicts after join.
+
+    Keeps school_id_govt and school_id_giga with original names for join/prioritization.
+    Other columns get prefixed with 'silver_'.
+    """
     silver_renamed = silver
     silver_columns = silver.columns
     renamed_columns_map = {}
 
     for col_name in silver_columns:
-        # Don't rename the join key or the target column
         if col_name not in ["school_id_govt", "school_id_giga"]:
             new_name = f"silver_{col_name}"
-            silver_renamed = silver_renamed.withColumnRenamed(col_name, new_name)
-            renamed_columns_map[col_name] = new_name
-        elif (
-            col_name == "school_id_giga"
-        ):  # Keep track of the original giga id column name
-            renamed_columns_map[col_name] = col_name
+            # Check if new_name already exists to prevent Spark error
+            if new_name not in silver_renamed.columns:
+                silver_renamed = silver_renamed.withColumnRenamed(col_name, new_name)
+                renamed_columns_map[col_name] = new_name
+            else:
+                # Handle cases where prefix might already exist (unlikely but safe)
+                temp_name = f"silver_{col_name}_{uuid.uuid4().hex[:4]}"
+                silver_renamed = silver_renamed.withColumnRenamed(col_name, temp_name)
+                renamed_columns_map[col_name] = temp_name
+
+        elif col_name == "school_id_giga":
+            renamed_columns_map[col_name] = col_name  # Keep track, no rename
+        # school_id_govt is the join key, implicitly kept track of, no rename needed
 
     return silver_renamed, renamed_columns_map
-
-
-def _check_update_validity(
-    joined_df: sql.DataFrame, silver_giga_col: str, bronze_columns: list[str]
-) -> sql.DataFrame:
-    """Check if updates are valid."""
-    # Use the original silver school_id_govt column for the check, which wasn't renamed
-    return joined_df.withColumn(
-        "dq_is_not_update",
-        f.when(
-            f.col("silver.school_id_govt").isNull(),
-            1,  # No matching school_id_govt
-        ).otherwise(0),
-    )
 
 
 def _log_mismatches(
@@ -77,106 +75,117 @@ def _log_mismatches(
             logger.warning("These records will be flagged as invalid updates")
 
 
-def _fill_null_values(
-    df: sql.DataFrame,
-    bronze_cols: list[str],
-    silver_columns: list[str],
-    renamed_columns_map: dict[str, str],
-) -> sql.DataFrame:
-    """Fill null values for valid updates from silver data."""
-    for col_name in bronze_cols:
-        # Skip school_id_giga as it's handled by prioritization logic
-        if col_name == "school_id_giga":
-            continue
-
-        if col_name != "school_id_govt" and col_name in silver_columns:
-            # Use the map to find the corresponding (potentially renamed) silver column
-            silver_col = renamed_columns_map.get(col_name)
-            if silver_col:
-                df = df.withColumn(
-                    col_name,
-                    f.when(
-                        (f.col("dq_is_not_update") == 0) & f.col(col_name).isNull(),
-                        f.col(
-                            f"silver.{silver_col}"
-                        ),  # Reference the silver column correctly
-                    ).otherwise(f.col(col_name)),
-                )
-    return df
-
-
 def update_checks(
     bronze: sql.DataFrame,
     silver: sql.DataFrame,
     context: OpExecutionContext = None,
 ):
     logger = get_context_with_fallback_logger(context)
-    logger.info("Running update checks...")
+    logger.info("Running update checks with immediate select resolution...")
 
-    # Select only necessary columns from silver and rename them
-    silver_cols_to_select = ["school_id_govt", "school_id_giga"] + [
+    # 1. Prepare Silver DataFrame
+    silver_cols_to_select = ["school_id_govt"]
+    if "school_id_giga" in silver.columns:
+        silver_cols_to_select.append("school_id_giga")
+
+    common_cols_for_coalesce = [
         col
         for col in bronze.columns
-        if col in silver.columns and col != "school_id_govt"
+        if col in silver.columns and col not in ["school_id_govt", "school_id_giga"]
     ]
+    silver_cols_to_select.extend(common_cols_for_coalesce)
+    silver_cols_to_select = list(dict.fromkeys(silver_cols_to_select))  # Ensure unique
+
+    if not silver_cols_to_select:
+        logger.warning(
+            "Silver columns to select is empty, cannot perform update checks effectively."
+        )
+        # Return bronze with a dummy DQ column? Or raise error?
+        # For now, add DQ column assuming no silver match
+        return bronze.withColumn("dq_is_not_update", f.lit(1))
+
     silver_minimal = silver.select(*[f.col(c) for c in silver_cols_to_select])
     silver_renamed, renamed_columns_map = _rename_silver_columns(silver_minimal)
 
-    # Join bronze with renamed silver
-    # Use alias for clarity
+    # 2. Perform Join
     joined_df = bronze.alias("bronze").join(
         silver_renamed.alias("silver"),
-        on="school_id_govt",  # Join key is not renamed
+        on="school_id_govt",
         how="left",
     )
 
-    # Mark rows that aren't valid updates (no match in silver)
-    df_checked = _check_update_validity(joined_df, "school_id_giga", bronze.columns)
+    # 3. Build Select Expression List for Immediate Resolution
+    final_select_expr = []
 
-    # Log mismatches
-    _log_mismatches(df_checked, "school_id_giga", context)
-
-    # Prioritize silver school_id_giga for valid updates
-    # Ensure the column exists before trying to overwrite
-    if "school_id_giga" in bronze.columns and "school_id_giga" in silver.columns:
-        df_prioritized = df_checked.withColumn(
-            "school_id_giga",
-            f.when(
-                (f.col("dq_is_not_update") == 0)
-                & f.col("silver.school_id_giga").isNotNull(),
-                f.col("silver.school_id_giga"),  # Use silver's giga id
-            ).otherwise(
-                f.col("bronze.school_id_giga")  # Keep bronze's giga id
-            ),
-        )
-    else:
-        # If school_id_giga is not in bronze or silver, just keep the checked df
-        df_prioritized = df_checked
-
-    # Explicitly drop the potentially ambiguous silver.school_id_giga BEFORE filling nulls
-    # This ensures f.col("school_id_giga") in _fill_null_values is unambiguous
-    if "silver.school_id_giga" in df_prioritized.columns:
-        df_prioritized = df_prioritized.drop("silver.school_id_giga")
-
-    # Fill other null values for valid updates using the renamed silver columns map
-    df_filled = _fill_null_values(
-        df_prioritized,
-        bronze.columns,
-        silver_minimal.columns,  # Original silver column names
-        renamed_columns_map,  # Map to potentially renamed silver columns
+    # DQ Check Flag
+    final_select_expr.append(
+        f.when(f.col("silver.school_id_govt").isNull(), 1)
+        .otherwise(0)
+        .alias("dq_is_not_update")
     )
 
-    # Drop the potentially renamed silver columns (except the prioritized school_id_giga)
-    cols_to_drop = [
-        f"silver.{renamed_columns_map[col]}"
-        for col in silver_minimal.columns
-        if col in renamed_columns_map and col != "school_id_giga"
-    ]
-    # Also drop the original silver join key if it wasn't selected in bronze initially
-    if "silver.school_id_govt" in df_filled.columns:
-        cols_to_drop.append("silver.school_id_govt")
+    # Handle school_id_giga prioritization
+    bronze_has_giga = "school_id_giga" in bronze.columns
+    silver_has_giga = "school_id_giga" in silver_renamed.columns
 
-    final_df = df_filled.drop(*cols_to_drop)
+    if bronze_has_giga and silver_has_giga:
+        # Prioritize Silver's Giga ID if it exists and is valid update
+        final_select_expr.append(
+            f.when(
+                (f.col("silver.school_id_govt").isNotNull())  # Check if join matched
+                & f.col("silver.school_id_giga").isNotNull(),
+                f.col("silver.school_id_giga"),
+            )
+            .otherwise(f.col("bronze.school_id_giga"))  # Fallback to Bronze's Giga ID
+            .alias("school_id_giga")
+        )
+    elif bronze_has_giga:
+        # Only bronze has giga, use it
+        final_select_expr.append(f.col("bronze.school_id_giga").alias("school_id_giga"))
+    elif silver_has_giga:
+        # Only silver has giga, use it only if the join matched
+        final_select_expr.append(
+            f.when(
+                f.col("silver.school_id_govt").isNotNull(),
+                f.col("silver.school_id_giga"),
+            )
+            .otherwise(
+                f.lit(None).cast(
+                    bronze.schema["school_id_giga"].dataType
+                    if bronze_has_giga
+                    else silver.schema["school_id_giga"].dataType
+                )
+            )  # Ensure correct type
+            .alias("school_id_giga")
+        )
+    # else: Neither has school_id_giga, so it won't be selected
 
-    logger.info("Completed update checks")
+    # Handle other columns (Coalesce for common, direct select for bronze-only)
+    for col_name in bronze.columns:
+        if col_name == "school_id_giga":  # Already handled above
+            continue
+        elif col_name == "school_id_govt":  # Use bronze's as the definitive one
+            final_select_expr.append(
+                f.col("bronze.school_id_govt").alias("school_id_govt")
+            )
+        elif (
+            col_name in renamed_columns_map
+        ):  # Common column, potentially fill nulls from silver
+            silver_col_name = renamed_columns_map[col_name]
+            final_select_expr.append(
+                f.coalesce(
+                    f.col(f"bronze.{col_name}"), f.col(f"silver.{silver_col_name}")
+                ).alias(col_name)
+            )
+        else:  # Column only exists in bronze
+            final_select_expr.append(f.col(f"bronze.{col_name}").alias(col_name))
+
+    # 4. Execute Select
+    # Use select instead of selectExpr for safety with generated column names
+    final_df = joined_df.select(*final_select_expr)
+
+    # Optional: Log mismatches based on final_df if needed
+    # _log_mismatches(final_df, 'school_id_giga', context)
+
+    logger.info("Completed update checks via immediate select resolution.")
     return final_df
