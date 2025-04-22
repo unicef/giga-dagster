@@ -1,7 +1,7 @@
 from delta import DeltaTable
 from pyspark import sql
 
-from dagster import OutputContext
+from dagster import InputContext, OutputContext
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import execute_query_with_error_handler
@@ -59,6 +59,33 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         context.log.info(
             f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
+
+    def load_input(self, context: InputContext) -> sql.DataFrame:
+        """
+        Loads input data from an intermediary Delta table, ensuring the
+        'int_' prefix is used for the schema name.
+        """
+        context.log.info("Handling IntermediaryDeltaIOManager input...")
+
+        table_name, _, _ = self._get_table_path(context)
+        spark = self._get_spark_session()
+        # Config retrieval might need adjustment depending on how upstream config is passed
+        # Assuming config is available similarly to how it's accessed in the base class
+        config = FileConfig(**context.upstream_output.step_context.op_config)
+        # Enforce the 'int_' prefix for the schema name
+        schema_tier_name = f"int_{config.metastore_schema}"
+        context.log.info(f"Enforcing intermediary schema for input: {schema_tier_name}")
+
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
+        context.log.info(f"Full table name for input: {full_table_name}")
+
+        dt = DeltaTable.forName(spark, full_table_name)
+
+        context.log.info(
+            f"Loaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+        )
+
+        return dt.toDF()
 
     def _create_table_if_not_exists(
         self,
