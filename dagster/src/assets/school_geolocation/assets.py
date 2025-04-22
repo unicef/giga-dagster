@@ -382,7 +382,6 @@ def geolocation_data_quality_results(
 async def geolocation_data_quality_results_user_version(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
-    spark: PySparkResource,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     context.log.info("Get the file upload object from the database")
@@ -414,6 +413,53 @@ async def geolocation_data_quality_results_user_version(
                 "preview": get_table_preview(df_pandas),
             },
         )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_dq_schools_passed_user_version(
+    context: OpExecutionContext,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log("Filter and keep schools that do not have a critical error")
+    df = geolocation_data_quality_results_user_version.filter(
+        geolocation_data_quality_results_user_version.dq_has_critical_error == 0
+    )
+    df = df.drop("dq_has_critical_error", "failure_reason")
+    df_pandas = df.toPandas()
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_dq_schools_failed_user_version(
+    context: OpExecutionContext,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log("Filter and keep schools that have a critical error")
+    df = geolocation_data_quality_results_user_version.filter(
+        geolocation_data_quality_results_user_version.dq_has_critical_error == 1
+    )
+    df_pandas = df.toPandas()
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
@@ -455,12 +501,12 @@ async def geolocation_data_quality_results_summary(
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(
-        geolocation_data_quality_results_user_version,
+        geolocation_data_quality_results,
         config.dataset_type,
     )
 
@@ -490,12 +536,12 @@ def geolocation_dq_passed_rows(
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
-        geolocation_data_quality_results_user_version,
+        geolocation_data_quality_results,
         config.dataset_type,
     )
 

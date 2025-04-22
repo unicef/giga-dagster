@@ -271,8 +271,6 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         schema_name = f"school_{dataset_type}"
         schema_columns = get_schema_columns(df.sparkSession, schema_name)
         columns = [col.name for col in schema_columns]
-    elif dataset_type == "geolocation":
-        columns = df.columns
     else:
         columns = [
             col
