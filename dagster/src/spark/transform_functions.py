@@ -722,6 +722,7 @@ def merge_connectivity_to_master(
                     & (
                         (f.col("download_speed_govt") != 0)
                         | f.col("download_speed_govt").isNull()
+                        | f.isnan(f.col("download_speed_govt"))
                     )
                 )
                 | (f.col("download_speed_govt") > 0),
