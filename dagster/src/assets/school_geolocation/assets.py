@@ -422,7 +422,7 @@ async def geolocation_dq_schools_passed_user_version(
     geolocation_data_quality_results_user_version: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
-    context.log("Filter and keep schools that do not have a critical error")
+    context.log.info("Filter and keep schools that do not have a critical error")
     df = geolocation_data_quality_results_user_version.filter(
         geolocation_data_quality_results_user_version.dq_has_critical_error == 0
     )
@@ -446,7 +446,7 @@ async def geolocation_dq_schools_failed_user_version(
     geolocation_data_quality_results_user_version: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
-    context.log("Filter and keep schools that have a critical error")
+    context.log.info("Filter and keep schools that have a critical error")
     df = geolocation_data_quality_results_user_version.filter(
         geolocation_data_quality_results_user_version.dq_has_critical_error == 1
     )
