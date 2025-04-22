@@ -2,10 +2,9 @@ import os
 
 import requests
 
-SUPERSET_URL = "http://superset.ictd-ooi-superset-stg:8088"
+SUPERSET_URL = os.getenv("SUPERSET_URL")
 USERNAME = os.getenv("SUPERSET_USERNAME")
 PASSWORD = os.getenv("SUPERSET_PASSWORD")
-
 
 def get_access_token():
     """Authenticate and return token"""
