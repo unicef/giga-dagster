@@ -38,6 +38,9 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.data_quality_descriptions import (
+    convert_dq_checks_to_human_readeable_descriptions_and_upload,
+)
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -419,7 +422,9 @@ async def geolocation_dq_schools_passed_user_version(
         geolocation_data_quality_results_user_version.dq_has_critical_error == 0
     )
     df = df.drop("dq_has_critical_error", "failure_reason")
-    df_pandas = df.toPandas()
+    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        df, upload=False
+    )
 
     return Output(
         df_pandas,
@@ -442,7 +447,9 @@ async def geolocation_dq_schools_failed_user_version(
     df = geolocation_data_quality_results_user_version.filter(
         geolocation_data_quality_results_user_version.dq_has_critical_error == 1
     )
-    df_pandas = df.toPandas()
+    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        df, upload=False
+    )
 
     return Output(
         df_pandas,

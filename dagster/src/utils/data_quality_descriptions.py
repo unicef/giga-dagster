@@ -244,7 +244,7 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     dq_with_renamed_headers_pandas = dq_with_renamed_headers.toPandas()
 
     if not upload:
-        return
+        return dq_with_renamed_headers_pandas
 
     # upload to new path
     upload_path = Path(config.destination_filepath)
