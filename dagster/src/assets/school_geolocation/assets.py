@@ -351,14 +351,6 @@ def geolocation_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    # convert_dq_checks_to_human_readeable_descriptions_and_upload(
-    #     dq_results=dq_results,
-    #     dataset_type=dataset_type,
-    #     bronze=casted_bronze,
-    #     config=config,
-    #     context=context,
-    # )
-
     dq_pandas = dq_results.toPandas()
 
     datahub_emit_metadata_with_exception_catcher(
