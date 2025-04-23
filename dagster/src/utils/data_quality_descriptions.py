@@ -203,7 +203,6 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     bronze: sql.DataFrame,
     config: FileConfig,
     context: OpExecutionContext,
-    upload: bool = True,
 ):
     adls_client = ADLSFileClient()
     columns = bronze.columns
@@ -243,7 +242,8 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     dq_with_renamed_headers = dq_results
     dq_with_renamed_headers_pandas = dq_with_renamed_headers.toPandas()
 
-    if not upload:
+    # for geolocation, we will split this further into two files downstream
+    if dataset_type == "geolocation":
         return dq_with_renamed_headers_pandas
 
     # upload to new path

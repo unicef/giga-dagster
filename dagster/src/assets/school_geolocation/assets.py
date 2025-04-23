@@ -374,8 +374,9 @@ def geolocation_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 @capture_op_exceptions
-async def geolocation_data_quality_results_user_version(
+async def geolocation_data_quality_results_human_readable(
     context: OpExecutionContext,
+    geolocation_bronze: sql.DataFrame,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
@@ -388,43 +389,29 @@ async def geolocation_data_quality_results_user_version(
             raise FileNotFoundError(
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
-        context.log.info("Obtain the list of the uploaded columns")
-        file_upload = FileUploadConfig.from_orm(file_upload)
-        column_mapping = file_upload.column_to_schema_mapping
-        uploaded_columns = list(column_mapping.values())
 
-        context.log.info("Create a new dataframe with only the relevant columns")
-        df = dq_geolocation_extract_relevant_columns(
-            geolocation_data_quality_results, uploaded_columns
-        )
-        context.log.info("Convert the dataframe to a pands object to save it locally")
-        df_pandas = df.toPandas()
+    context.log.info("Obtain the list of uploaded columns")
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    column_mapping = file_upload.column_to_schema_mapping
+    uploaded_columns = list(column_mapping.values())
+    dataset_type = "geolocation"
 
-        return Output(
-            df_pandas,
-            metadata={
-                **get_output_metadata(config),
-                "row_count": len(df_pandas),
-                "preview": get_table_preview(df_pandas),
-            },
-        )
-
-
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-@capture_op_exceptions
-async def geolocation_dq_schools_passed_user_version(
-    context: OpExecutionContext,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
-    config: FileConfig,
-) -> Output[pd.DataFrame]:
-    context.log.info("Filter and keep schools that do not have a critical error")
-    df = geolocation_data_quality_results_user_version.filter(
-        geolocation_data_quality_results_user_version.dq_has_critical_error == 0
+    context.log.info("Create a new dataframe with only the relevant columns")
+    df = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns
     )
-    df = df.drop("dq_has_critical_error", "failure_reason")
-    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        df, upload=False
+
+    bronze = geolocation_bronze.select(*uploaded_columns)
+    context.log.info("Convert the dataframe to a pands object to save it locally")
+
+    df = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=df,
+        dataset_type=dataset_type,
+        bronze=bronze,
+        config=config,
+        context=context,
     )
+    df_pandas = df.toPandas()
 
     return Output(
         df_pandas,
@@ -438,7 +425,31 @@ async def geolocation_dq_schools_passed_user_version(
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 @capture_op_exceptions
-async def geolocation_dq_schools_failed_user_version(
+async def geolocation_dq_schools_passed_human_readable(
+    context: OpExecutionContext,
+    geolocation_data_quality_results_user_version: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log.info("Filter and keep schools that do not have a critical error")
+    df = geolocation_data_quality_results_user_version.filter(
+        geolocation_data_quality_results_user_version.dq_has_critical_error == 0
+    )
+    df = df.drop("dq_has_critical_error", "failure_reason")
+    df_pandas = df.toPandas()
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_dq_schools_failed_human_readable(
     context: OpExecutionContext,
     geolocation_data_quality_results_user_version: sql.DataFrame,
     config: FileConfig,
@@ -447,9 +458,7 @@ async def geolocation_dq_schools_failed_user_version(
     df = geolocation_data_quality_results_user_version.filter(
         geolocation_data_quality_results_user_version.dq_has_critical_error == 1
     )
-    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        df, upload=False
-    )
+    df_pandas = df.toPandas()
 
     return Output(
         df_pandas,
