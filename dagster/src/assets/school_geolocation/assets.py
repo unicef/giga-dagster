@@ -427,12 +427,12 @@ async def geolocation_data_quality_results_human_readable(
 @capture_op_exceptions
 async def geolocation_dq_schools_passed_human_readable(
     context: OpExecutionContext,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
+    geolocation_data_quality_results_human_readable: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     context.log.info("Filter and keep schools that do not have a critical error")
-    df = geolocation_data_quality_results_user_version.filter(
-        geolocation_data_quality_results_user_version.dq_has_critical_error == 0
+    df = geolocation_data_quality_results_human_readable.filter(
+        geolocation_data_quality_results_human_readable.dq_has_critical_error == 0
     )
     df = df.drop("dq_has_critical_error", "failure_reason")
     df_pandas = df.toPandas()
@@ -451,12 +451,12 @@ async def geolocation_dq_schools_passed_human_readable(
 @capture_op_exceptions
 async def geolocation_dq_schools_failed_human_readable(
     context: OpExecutionContext,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
+    geolocation_data_quality_results_human_readable: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     context.log.info("Filter and keep schools that have a critical error")
-    df = geolocation_data_quality_results_user_version.filter(
-        geolocation_data_quality_results_user_version.dq_has_critical_error == 1
+    df = geolocation_data_quality_results_human_readable.filter(
+        geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
     )
     df_pandas = df.toPandas()
 
@@ -475,17 +475,17 @@ async def geolocation_dq_schools_failed_human_readable(
 async def geolocation_data_quality_results_summary(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
-    geolocation_data_quality_results_user_version: sql.DataFrame,
+    geolocation_data_quality_results_human_readable: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
-            geolocation_data_quality_results_user_version,
+            geolocation_data_quality_results_human_readable,
         ),
         df_bronze=geolocation_bronze,
-        df_data_quality_checks=geolocation_data_quality_results_user_version,
+        df_data_quality_checks=geolocation_data_quality_results_human_readable,
     )
 
     datahub_emit_assertions_with_exception_catcher(
