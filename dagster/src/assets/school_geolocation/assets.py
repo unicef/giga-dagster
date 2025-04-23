@@ -27,6 +27,7 @@ from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingSte
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import DeploymentEnvironment, settings
+from src.spark.config_expectations import Config as ConfigExpecations
 from src.spark.transform_functions import (
     add_missing_columns,
     column_mapping_rename,
@@ -248,6 +249,12 @@ def geolocation_bronze(
     # standardize the connectivity type
     if "connectivity_type_govt" in uploaded_columns:
         df = standardize_connectivity_type(df, mode)
+
+    config_expectations_instance = ConfigExpecations()
+
+    for column in config_expectations_instance.TITLE_FORMATTED_COLUMNS:
+        if column in df.columns:
+            df = df.withColumn(column, f.initcap(f.col(column)))
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
