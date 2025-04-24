@@ -393,17 +393,13 @@ async def geolocation_data_quality_results_human_readable(
     context.log.info("Obtain the list of uploaded columns")
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
-    context.log.info(f"The column mapping is {column_mapping}")
     uploaded_columns = list(column_mapping.values())
-    context.log.info(f"The uploaded columns are: {uploaded_columns}")
+    context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
     dataset_type = "geolocation"
 
     context.log.info("Create a new dataframe with only the relevant columns")
     df = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
-    )
-    context.log.info(
-        f"The uploaded columns at this point are: {column_mapping.values()}"
     )
     bronze = geolocation_bronze.select(*uploaded_columns)
     context.log.info("Convert the dataframe to a pands object to save it locally")
@@ -492,19 +488,19 @@ async def geolocation_data_quality_results_summary(
             )
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
-    context.log.info(f"The column mapping is {column_mapping}")
     uploaded_columns = list(column_mapping.values())
+    context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
-    dr_results = dq_geolocation_extract_relevant_columns(
+    dq_results = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
     )
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
-            dr_results,
+            dq_results,
         ),
         df_bronze=geolocation_bronze,
-        df_data_quality_checks=dr_results,
+        df_data_quality_checks=dq_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
