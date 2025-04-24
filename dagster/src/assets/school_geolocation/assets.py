@@ -408,14 +408,13 @@ async def geolocation_data_quality_results_human_readable(
     bronze = geolocation_bronze.select(*uploaded_columns)
     context.log.info("Convert the dataframe to a pands object to save it locally")
 
-    df = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_results=df,
         dataset_type=dataset_type,
         bronze=bronze,
         config=config,
         context=context,
     )
-    df_pandas = df.toPandas()
 
     return Output(
         df_pandas,
