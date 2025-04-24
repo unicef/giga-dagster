@@ -478,17 +478,33 @@ async def geolocation_dq_schools_failed_human_readable(
 async def geolocation_data_quality_results_summary(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
-    geolocation_data_quality_results_human_readable: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    column_mapping = file_upload.column_to_schema_mapping
+    context.log.info(f"The column mapping is {column_mapping}")
+    uploaded_columns = list(column_mapping.values())
+
+    dr_results = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns
+    )
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
-            geolocation_data_quality_results_human_readable,
+            dr_results,
         ),
         df_bronze=geolocation_bronze,
-        df_data_quality_checks=geolocation_data_quality_results_human_readable,
+        df_data_quality_checks=dr_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
