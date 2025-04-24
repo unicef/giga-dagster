@@ -318,7 +318,7 @@ def dq_geolocation_extract_relevant_columns(
         "dq_is_not_alphanumeric",
     ]
 
-    columns_to_keep = uploaded_columns
+    columns_to_keep = [*uploaded_columns]
 
     dq_columns_list = [
         col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
