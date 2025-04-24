@@ -394,16 +394,16 @@ async def geolocation_data_quality_results_human_readable(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     context.log.info(f"The column mapping is {column_mapping}")
-    uploaded_columns = list(column_mapping.values())
-    context.log.info(f"The uploaded columns are: {uploaded_columns}")
+    original_columns = list(column_mapping.values())
+    context.log.info(f"The uploaded columns are: {original_columns}")
     dataset_type = "geolocation"
 
     context.log.info("Create a new dataframe with only the relevant columns")
     df = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns
+        geolocation_data_quality_results, original_columns
     )
-    context.log.info(f"The uploaded columns at this point are: {uploaded_columns}")
-    bronze = geolocation_bronze.select(*uploaded_columns)
+    context.log.info(f"The uploaded columns at this point are: {original_columns}")
+    bronze = geolocation_bronze.select(*original_columns)
     context.log.info("Convert the dataframe to a pands object to save it locally")
 
     df = convert_dq_checks_to_human_readeable_descriptions_and_upload(
