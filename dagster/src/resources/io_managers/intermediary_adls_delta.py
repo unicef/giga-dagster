@@ -32,7 +32,11 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
             return
 
         config = FileConfig(**context.step_context.op_config)
-        table_name, _, _ = self._get_table_path(context)
+        # Use asset key's last element as the base table name
+        asset_name = context.asset_key.path[-1]
+        country_code = config.country_code.lower()  # Ensure consistency
+        table_name = f"{asset_name}_{country_code}"
+        context.log.info(f"Using asset and country code for table: {table_name}")
         # Enforce an 'int_' prefix for the schema name, ignoring the configured tier
         schema_tier_name = f"int_{config.metastore_schema}"
         context.log.info(f"Enforcing intermediary schema: {schema_tier_name}")
@@ -59,6 +63,58 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         context.log.info(
             f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
+
+    def load_input(self, context: InputContext) -> sql.DataFrame:
+        """
+        Loads input data from an intermediary Delta table, ensuring the
+        'int_' prefix is used for the schema name.
+        """
+        context.log.info("Handling IntermediaryDeltaIOManager input...")
+
+        # Use asset key's last element as the base table name
+        asset_name = context.asset_key.path[-1]
+        context.log.info(f"Using asset name for base table: {asset_name}")
+        spark = self._get_spark_session()
+        # Config retrieval might need adjustment depending on how upstream config is passed
+        # Assuming config is available similarly to how it's accessed in the base class
+        # Attempt to get config from upstream output context first
+        upstream_config = {}
+        if context.upstream_output:
+            upstream_config = context.upstream_output.step_context.op_config
+        else:
+            # Fallback to current step context if no upstream (e.g., source asset)
+            # This might need refinement based on actual usage patterns
+            upstream_config = context.step_context.op_config
+            context.log.warning(
+                "No upstream output found, using current step config for schema name. "
+                "This might be incorrect if the IO manager is used on a source asset."
+            )
+
+        # Ensure upstream_config is not None before creating FileConfig
+        if upstream_config is None:
+            raise ValueError(
+                "Could not determine upstream configuration for IO Manager."
+            )
+
+        config = FileConfig(**upstream_config)
+        country_code = config.country_code.lower()  # Ensure consistency
+        # Construct the table name including the country code
+        table_name = f"{asset_name}_{country_code}"
+        context.log.info(f"Derived table name for input: {table_name}")
+        # Enforce the 'int_' prefix for the schema name
+        schema_tier_name = f"int_{config.metastore_schema}"
+        context.log.info(f"Enforcing intermediary schema for input: {schema_tier_name}")
+
+        full_table_name = construct_full_table_name(schema_tier_name, table_name)
+        context.log.info(f"Full table name for input: {full_table_name}")
+
+        dt = DeltaTable.forName(spark, full_table_name)
+
+        context.log.info(
+            f"Loaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+        )
+
+        return dt.toDF()
 
     def _create_table_if_not_exists(
         self,
