@@ -51,3 +51,12 @@ custom_dataset_create_bronze_job = define_asset_job(
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+adhoc__sync_silver_from_gold_job = define_asset_job(
+    name="adhoc__sync_silver_from_gold_job",
+    selection=[
+        "adhoc__sync_silver_geolocation_from_gold",
+        "adhoc__sync_silver_coverage_from_gold",
+    ],
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
