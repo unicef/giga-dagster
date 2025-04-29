@@ -1,6 +1,6 @@
-from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark.sql import functions as f
+from src.resources import ResourceKey
 from src.utils.delta import execute_query_with_error_handler
 from src.utils.schema import get_schema_columns
 from src.utils.sentry import capture_op_exceptions
@@ -11,23 +11,23 @@ SOURCE_TABLE_NAME = "school_master.ben"
 ZCDF_TABLE_NAME = "school_master.zcdf"
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def adhoc__copy_original(
     context: OpExecutionContext,
-    spark: PySparkResource,
 ):
-    original = DeltaTable.forName(spark.spark_session, SOURCE_TABLE_NAME).toDF()
-    columns = get_schema_columns(spark.spark_session, "school_master")
+    s = context.resources.spark.spark_session
+    original = DeltaTable.forName(s, SOURCE_TABLE_NAME).toDF()
+    columns = get_schema_columns(s, "school_master")
 
     query = (
-        DeltaTable.createOrReplace(spark.spark_session)
+        DeltaTable.createOrReplace(s)
         .tableName(ZCDF_TABLE_NAME)
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
     )
     execute_query_with_error_handler(
-        spark.spark_session,
+        s,
         query,
         "school_master",
         "zcdf",
@@ -35,7 +35,7 @@ def adhoc__copy_original(
     )
 
     (
-        DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
+        DeltaTable.forName(s, ZCDF_TABLE_NAME)
         .alias("source")
         .merge(original.alias("new"), "source.school_id_giga = new.school_id_giga")
         .whenNotMatchedInsertAll()
@@ -43,10 +43,13 @@ def adhoc__copy_original(
     )
 
 
-@asset(deps=["adhoc__copy_original"])
+@asset(deps=["adhoc__copy_original"], required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
-def adhoc__generate_v2(spark: PySparkResource):
-    master = DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME).toDF()
+def adhoc__generate_v2(
+    context: OpExecutionContext,
+):
+    s = context.resources.spark.spark_session
+    master = DeltaTable.forName(s, ZCDF_TABLE_NAME).toDF()
     updates = master.withColumn(
         "cellular_coverage_availability",
         f.when(f.col("cellular_coverage_availability") == "No", f.lit("Yes")),
@@ -54,7 +57,7 @@ def adhoc__generate_v2(spark: PySparkResource):
     updates = updates.filter(f.col("cellular_coverage_availability") != "no_coverage")
 
     (
-        DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
+        DeltaTable.forName(s, ZCDF_TABLE_NAME)
         .alias("master")
         .merge(
             updates.alias("updates"),
@@ -66,10 +69,13 @@ def adhoc__generate_v2(spark: PySparkResource):
     )
 
 
-@asset(deps=["adhoc__generate_v2"])
+@asset(deps=["adhoc__generate_v2"], required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
-def adhoc__generate_v3(spark: PySparkResource):
-    master = DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME).toDF()
+def adhoc__generate_v3(
+    context: OpExecutionContext,
+):
+    s = context.resources.spark.spark_session
+    master = DeltaTable.forName(s, ZCDF_TABLE_NAME).toDF()
     updates = master.withColumn(
         "cellular_coverage_availability",
         f.when(f.col("cellular_coverage_availability") == "Yes", f.lit("No")),
@@ -77,7 +83,7 @@ def adhoc__generate_v3(spark: PySparkResource):
     updates = updates.filter(f.col("cellular_coverage_type") != "2G")
 
     (
-        DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
+        DeltaTable.forName(s, ZCDF_TABLE_NAME)
         .alias("master")
         .merge(
             updates.alias("updates"),

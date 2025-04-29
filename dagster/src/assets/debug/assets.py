@@ -1,7 +1,7 @@
-from dagster_pyspark import PySparkResource
 from httpx import AsyncClient
 from pydantic import Field
 from pyspark.sql import SparkSession
+from src.resources import ResourceKey
 from src.settings import settings
 from src.utils.sentry import capture_op_exceptions
 
@@ -32,26 +32,24 @@ class GenericEmailRequestConfig(Config):
     text_part: str | None
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def debug__drop_schema(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: DropSchemaConfig,
 ):
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     s.sql(f"DROP SCHEMA IF EXISTS {config.schema_name} CASCADE")
     context.log.info(f"Dropped schema {config.schema_name}")
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def debug__drop_table(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: DropTableConfig,
 ):
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     s.sql(f"DROP TABLE IF EXISTS {config.schema_name}.{config.table_name}")
     context.log.info(f"Dropped table {config.schema_name}.{config.table_name}")
 

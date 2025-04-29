@@ -1,4 +1,3 @@
-from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark.sql import (
     SparkSession,
@@ -6,6 +5,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StructType
 from src.constants import DataTier, constants
+from src.resources import ResourceKey
 from src.spark.transform_functions import add_missing_columns
 from src.utils.delta import check_table_exists, execute_query_with_error_handler
 from src.utils.metadata import get_table_preview
@@ -17,14 +17,13 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def adhoc__generate_silver_geolocation_from_gold(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: DatasetConfig,
 ) -> Output[None]:
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     table_name = config.country_code.lower()
     schema_columns = get_schema_columns(s, "school_geolocation")
 
@@ -103,14 +102,13 @@ def adhoc__generate_silver_geolocation_from_gold(
     )
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def adhoc__generate_silver_coverage_from_gold(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: DatasetConfig,
 ) -> Output[None]:
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     table_name = config.country_code.lower()
     schema_columns = get_schema_columns(s, "school_coverage")
 

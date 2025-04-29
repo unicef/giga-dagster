@@ -1,4 +1,3 @@
-from dagster_pyspark import PySparkResource
 from datahub.specific.dataset import DatasetPatchBuilder
 from delta import DeltaTable
 from pyspark.sql import (
@@ -10,6 +9,7 @@ from src.data_quality_checks.utils import (
     aggregate_report_spark_df,
     row_level_checks,
 )
+from src.resources import ResourceKey
 from src.utils.datahub.create_validation_tab import (
     datahub_emit_assertions_with_exception_catcher,
 )
@@ -27,15 +27,14 @@ from src.utils.sentry import capture_op_exceptions
 from dagster import OpExecutionContext, Output, asset
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def adhoc__standalone_master_data_quality_checks(
     context: OpExecutionContext,
     config: FileConfig,
-    spark: PySparkResource,
 ) -> Output[None]:
     logger = ContextLoggerWithLoguruFallback(context)
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     dt = DeltaTable.forName(s, f"school_master.{config.country_code}")
     master = dt.toDF()
 
@@ -94,7 +93,10 @@ def adhoc__standalone_master_data_quality_checks(
 
     schema_reference = get_schema_columns_datahub(s, config.metastore_schema)
     datahub_emit_metadata_with_exception_catcher(
-        context=context, config=config, spark=spark, schema_reference=schema_reference
+        context=context,
+        config=config,
+        spark=context.resources.spark,
+        schema_reference=schema_reference,
     )
     datahub_emit_assertions_with_exception_catcher(
         context=context, dq_summary_statistics=dq_summary

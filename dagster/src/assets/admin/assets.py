@@ -1,8 +1,8 @@
-from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pydantic import conint
 from pyspark.sql import SparkSession
 from src.constants.constants_class import constants
+from src.resources import ResourceKey
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.sentry import capture_op_exceptions
@@ -50,12 +50,13 @@ class RollbackTableConfig(Config):
     version: conint(ge=0)
 
 
-@asset
+@asset(required_resource_keys={ResourceKey.SPARK.value})
 @capture_op_exceptions
 def admin__rollback_table_version(
-    _: OpExecutionContext, config: RollbackTableConfig, spark: PySparkResource
+    context: OpExecutionContext,
+    config: RollbackTableConfig,
 ):
-    s: SparkSession = spark.spark_session
+    s: SparkSession = context.resources.spark.spark_session
     dt = DeltaTable.forName(s, f"{config.schema_name}.{config.table_name}")
     result = dt.restoreToVersion(config.version)
 
