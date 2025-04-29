@@ -246,7 +246,7 @@ def geolocation_bronze(
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
-    df = standardize_connectivity_type(df, mode)
+    df = standardize_connectivity_type(df, mode, uploaded_columns)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
