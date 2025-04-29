@@ -198,7 +198,7 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def standardize_connectivity_type(df: sql.DataFrame, mode: str) -> sql.DataFrame:
+def clean_type_connectivity(value):
     type_conn_regex_patterns = {
         "fibre": "fiber|fibre|fibra|ftt|fttx|ftth|fttp|gpon|epon|fo|Фибер|optic|птички",
         "copper": "adsl|dsl|copper|hdsl|vdsl",
@@ -215,6 +215,15 @@ def standardize_connectivity_type(df: sql.DataFrame, mode: str) -> sql.DataFrame
         "unknown": "unknown|null|nan|n/a",
     }
 
+    for cleaned, matches in type_conn_regex_patterns.items():
+        if pd.isna(value):
+            return "unknown"
+        elif re.search(matches, str(value).lower(), flags=re.I):
+            return cleaned
+    return "unknown"
+
+
+def get_connectivity_type_root(value):
     connectivity_root_mappings = {
         "wired": ["fibre", "copper", "coaxial", "wired_other", "unknown_wired"],
         "wireless": [
@@ -228,42 +237,40 @@ def standardize_connectivity_type(df: sql.DataFrame, mode: str) -> sql.DataFrame
         ],
         "unknown_connectivity_type": ["unknown"],
     }
+    for key in connectivity_root_mappings:
+        if value in connectivity_root_mappings[key]:
+            return key
 
-    def clean_type_connectivity(value):
-        for cleaned, matches in type_conn_regex_patterns.items():
-            if pd.isna(value):
-                return "unknown"
-            elif re.search(matches, str(value).lower(), flags=re.I):
-                return cleaned
-        return "unknown"
 
+def standardize_connectivity_type(
+    df: sql.DataFrame, mode: str, uploaded_columns: list[str]
+) -> sql.DataFrame:
     clean_type_connectivity_udf = f.udf(clean_type_connectivity, StringType())
-
-    def get_connectivity_type_root(value):
-        for key in connectivity_root_mappings:
-            if value in connectivity_root_mappings[key]:
-                return key
 
     get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
 
     if mode == UploadMode.UPDATE.value:
-        df = df.withColumn(
-            "connectivity_type",
-            f.when(
-                f.col("connectivity_type_govt").isNotNull(),
-                clean_type_connectivity_udf(df["connectivity_type_govt"]),
-            ).otherwise(f.lit(None).cast(StringType())),
-        )
+        if "connectivity_type_govt" in uploaded_columns:
+            df = df.withColumn(
+                "connectivity_type",
+                f.when(
+                    f.col("connectivity_type_govt").isNotNull(),
+                    clean_type_connectivity_udf(df["connectivity_type_govt"]),
+                ).otherwise(f.lit(None).cast(StringType())),
+            )
 
-        df = df.withColumn(
-            "connectivity_type_root",
-            f.when(
-                f.col("connectivity_type_govt").isNotNull(),
-                get_connectivity_type_root_udf(df["connectivity_type"]),
-            ).otherwise(f.lit(None).cast(StringType())),
-        )
+            df = df.withColumn(
+                "connectivity_type_root",
+                f.when(
+                    f.col("connectivity_type_govt").isNotNull(),
+                    get_connectivity_type_root_udf(df["connectivity_type"]),
+                ).otherwise(f.lit(None).cast(StringType())),
+            )
 
     else:
+        if "connectivity_type_govt" not in uploaded_columns:
+            df = df.withColumn("connectivity_type_govt", f.lit(None).cast(StringType()))
+
         df = df.withColumn(
             "connectivity_type",
             clean_type_connectivity_udf(df["connectivity_type_govt"]),
