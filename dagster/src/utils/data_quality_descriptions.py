@@ -242,7 +242,11 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     dq_with_renamed_headers = dq_results
     dq_with_renamed_headers_pandas = dq_with_renamed_headers.toPandas()
 
-    ## upload to new path
+    # for school geolocation, we will split this further into two files downstream, so we don't upload it yet
+    if dataset_type == "geolocation":
+        return dq_with_renamed_headers_pandas
+
+    # upload to new path
     upload_path = Path(config.destination_filepath)
     dataset = upload_path.parts[1]
     country_code = upload_path.parts[3]

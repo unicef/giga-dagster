@@ -18,6 +18,7 @@ from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
+    dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -352,14 +353,6 @@ def geolocation_data_quality_results(
     )
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        dq_results=dq_results,
-        dataset_type=dataset_type,
-        bronze=casted_bronze,
-        config=config,
-        context=context,
-    )
-
     dq_pandas = dq_results.toPandas()
 
     datahub_emit_metadata_with_exception_catcher(
@@ -378,6 +371,103 @@ def geolocation_data_quality_results(
     )
 
 
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_data_quality_results_human_readable(
+    context: OpExecutionContext,
+    geolocation_bronze: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log.info("Get the file upload object from the database")
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+
+    context.log.info("Obtain the list of uploaded columns")
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    column_mapping = file_upload.column_to_schema_mapping
+    uploaded_columns = list(column_mapping.values())
+    context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
+    dataset_type = "geolocation"
+
+    context.log.info("Create a new dataframe with only the relevant columns")
+    df = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns
+    )
+    bronze = geolocation_bronze.select(*uploaded_columns)
+    context.log.info("Convert the dataframe to a pands object to save it locally")
+
+    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+        dq_results=df,
+        dataset_type=dataset_type,
+        bronze=bronze,
+        config=config,
+        context=context,
+    )
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_dq_schools_passed_human_readable(
+    context: OpExecutionContext,
+    geolocation_data_quality_results_human_readable: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log.info("Filter and keep schools that do not have a critical error")
+    df = geolocation_data_quality_results_human_readable.filter(
+        geolocation_data_quality_results_human_readable.dq_has_critical_error == 0
+    )
+    df = df.drop("dq_has_critical_error", "failure_reason")
+    df_pandas = df.toPandas()
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+async def geolocation_dq_schools_failed_human_readable(
+    context: OpExecutionContext,
+    geolocation_data_quality_results_human_readable: sql.DataFrame,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    context.log.info("Filter and keep schools that have a critical error")
+    df = geolocation_data_quality_results_human_readable.filter(
+        geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
+    )
+    df_pandas = df.toPandas()
+
+    return Output(
+        df_pandas,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": len(df_pandas),
+            "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 @capture_op_exceptions
 async def geolocation_data_quality_results_summary(
@@ -387,13 +477,30 @@ async def geolocation_data_quality_results_summary(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    column_mapping = file_upload.column_to_schema_mapping
+    uploaded_columns = list(column_mapping.values())
+    context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
+
+    dq_results = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns
+    )
+
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(
             spark.spark_session,
-            geolocation_data_quality_results,
+            dq_results,
         ),
         df_bronze=geolocation_bronze,
-        df_data_quality_checks=geolocation_data_quality_results,
+        df_data_quality_checks=dq_results,
     )
 
     datahub_emit_assertions_with_exception_catcher(
