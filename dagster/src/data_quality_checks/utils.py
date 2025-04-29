@@ -221,9 +221,36 @@ def aggregate_report_json(
         "timestamp": timestamp,
     }
 
+    # get the checks related to critical checks
+    critial_column_dq_checks = [
+        "dq_duplicate-school_id_govt",
+        "dq_duplicate-school_id_giga",
+        "dq_is_invalid_range-latitude",
+        "dq_is_invalid_range-longitude",
+        "dq_is_not_within_country",
+    ]
+    df_aggregated = df_aggregated.withColumn(
+        "is_critical_dq_check",
+        f.when(
+            (f.col("assertion") == "is_null_mandatory")
+            | (
+                f.concat(
+                    f.lit("dq_"), f.col("assertion"), f.lit("-"), f.col("column")
+                ).isin(critial_column_dq_checks)
+            ),
+            1,
+        ).otherwise(0),
+    )
+
+    critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
+    critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
+    critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
+
+    df_aggregated = df_aggregated.drop("is_critical_dq_check")
+
     # Initialize an empty dictionary for the transformed data
     agg_array = df_aggregated.toPandas().to_dict(orient="records")
-    transformed_data = {"summary": summary}
+    transformed_data = {"summary": summary, "critical_checks": critical_checks_summary}
 
     # Iterate through each JSON line
     for agg in agg_array:
@@ -259,6 +286,62 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     df = df.filter(df.dq_has_critical_error == 1)
     return df
+
+
+def dq_geolocation_extract_relevant_columns(
+    df: sql.DataFrame, uploaded_columns: list[str]
+):
+    all_dq_columns = [col for col in df.columns if col.startswith("dq_")]
+
+    assertions_creation_update = ["dq_is_not_update", "dq_is_not_create"]
+
+    assertions_critical = ["dq_is_null_mandatory", "dq_duplicate"]
+
+    assertions_location_based = [
+        "dq_is_not_within_country",
+        "dq_duplicate_all_except_school_code",
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
+        "dq_duplicate_name_level_within_110m_radius",
+        "dq_is_school_density_greater_than_5",
+    ]
+
+    assertions_location_based.extend(
+        [col for col in all_dq_columns if col.startswith("dq_duplicate_set")]
+    )
+
+    assertions_optional = [
+        "dq_is_invalid_domain",
+        "dq_is_invalid_range",
+        "dq_precision",
+        "dq_is_null_optional",
+        "dq_is_not_numeric",
+        "dq_is_not_alphanumeric",
+    ]
+
+    columns_to_keep = [*uploaded_columns]
+
+    dq_columns_list = [
+        col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
+    ]
+
+    for dq_col in all_dq_columns:
+        if dq_col.split("-")[0] not in [*assertions_critical, *assertions_optional]:
+            continue
+
+        assertion, column = dq_col.split("-")
+        if assertion in assertions_critical and column in uploaded_columns:
+            dq_columns_list.append(dq_col)
+
+        if assertion in assertions_optional and column in uploaded_columns:
+            dq_columns_list.append(dq_col)
+
+    if "latitude" in uploaded_columns or "longitude" in uploaded_columns:
+        dq_columns_list.extend(assertions_location_based)
+
+    columns_to_keep.extend(["dq_has_critical_error", "failure_reason"])
+    columns_to_keep.extend(dq_columns_list)
+
+    return df.select(*columns_to_keep)
 
 
 def row_level_checks(

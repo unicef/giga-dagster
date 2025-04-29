@@ -76,6 +76,24 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
+                "geolocation_data_quality_results_human_readable": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_schools_passed_human_readable": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_schools_failed_human_readable": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
                 "geolocation_data_quality_results_summary": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
