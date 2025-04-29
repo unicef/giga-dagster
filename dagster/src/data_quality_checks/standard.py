@@ -103,9 +103,11 @@ def domain_checks(
     logger.info("Running domain checks...")
 
     column_actions = {}
+    columns_domain = []
     for column in config_column_list:
         check_name = f"dq_is_invalid_domain-{column}"
         if column in df.columns:
+            columns_domain.append(column)
             column_actions[check_name] = f.when(
                 f.lower(f.col(f"{column}")).isin(
                     [x.lower() for x in config_column_list[column]],
@@ -114,7 +116,14 @@ def domain_checks(
             ).otherwise(1)
         else:
             column_actions[check_name] = f.lit(1)
-    return df.withColumns(column_actions)
+    df = df.withColumns(column_actions)
+
+    for column in columns_domain:
+        check_name = f"dq_is_invalid_domain-{column}"
+        df = df.withColumn(
+            column, f.when(f.col(check_name) == 1, "Unknown").otherwise(f.col(column))
+        )
+    return df
 
 
 def format_validation_checks(df, context: OpExecutionContext = None):
