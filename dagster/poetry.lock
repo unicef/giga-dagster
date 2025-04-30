@@ -3778,6 +3778,23 @@ files = [
 ]
 
 [[package]]
+name = "nocodb-api"
+version = "0.0.4"
+description = "Python client for NocoDB API v2"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "nocodb_api-0.0.4-py3-none-any.whl", hash = "sha256:8cce6414c2a550bc4ecf46e68d4c7beed1aa65f0e828daa4d9f3802eb26dd960"},
+    {file = "nocodb_api-0.0.4.tar.gz", hash = "sha256:e0d11d094b5e1d1baa41493c7b68e5259e6b516122268e985dbe5af2f362ce13"},
+]
+
+[package.dependencies]
+requests = "*"
+
+[package.extras]
+doc = ["pdoc"]
+
+[[package]]
 name = "notebook"
 version = "7.2.2"
 description = "Jupyter Notebook - A web-based notebook environment for interactive computing"
@@ -6831,4 +6848,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "a5209c1f9df9f48585d648f9bb3e33ac1aa1463d683ee685a57deb91d31505c9"
+content-hash = "b283b4e1a3db93bf3a6d9fbeb89c016afdca135979188f485c0b960eee3867d8"

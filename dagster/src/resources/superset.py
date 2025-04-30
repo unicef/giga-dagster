@@ -1,10 +1,13 @@
 import os
-
 import requests
+from nocodb import NocoDB
 
 SUPERSET_URL = os.getenv("SUPERSET_URL")
 USERNAME = os.getenv("SUPERSET_USERNAME")
 PASSWORD = os.getenv("SUPERSET_PASSWORD")
+CATALOG_TOKEN = os.getenv("CATALOG_TOKEN")
+CATALOG_BASE = os.getenv("CATALOG_BASE")
+DATABASE_ID = int(os.getenv("DATABASE_ID"))
 
 def get_access_token():
     """Authenticate and return token"""
@@ -30,7 +33,6 @@ def get_access_token():
         print("Failed to authenticate:", response.status_code, response.text)
         return None
 
-
 def get_saved_query(access_token):
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -43,13 +45,22 @@ def get_saved_query(access_token):
     response = requests.get(saved_queries_url, headers=headers, params=params)
     return response
 
+def fetch_saved_query():
+    token = CATALOG_TOKEN
+    base = CATALOG_BASE
+    title = "Physical Table"
+    noco = NocoDB(url="https://app.nocodb.com", api_key=token)
+    x = noco.get_base(base)
+    table = x.get_table_by_title(title)
+    response = list(map(lambda x: x.get_values(), table.get_records()))
+    return response
 
 def run_query(query, access_token):
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
-    sql_payload = {"database_id": 12, "sql": query["sql"]}
+    sql_payload = {"database_id": DATABASE_ID, "sql": query["sql"]}
 
     print("running query", query["label"])
 

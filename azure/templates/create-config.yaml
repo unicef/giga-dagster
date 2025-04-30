@@ -75,6 +75,9 @@ jobs:
                     SPARK_DRIVER_CORES: "$(sparkDriverCores)"
                     SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
                     GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
+                    CATALOG_TOKEN: "$(catalogToken)"
+                    CATALOG_BASE: "$(catalogBase)"
+                    DATABASE_ID: "$(databaseId)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

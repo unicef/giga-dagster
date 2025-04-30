@@ -41,4 +41,7 @@ variables:
   sparkDriverCores: $(SPARK_DRIVER_CORES)
   sparkDriverMemoryMB: $(SPARK_DRIVER_MEMORY_MB)
   githubAccessToken: $(GITHUB_ACCESS_TOKEN)
+  catalogToken: $(CATALOG_TOKEN)
+  catalogBase: $(CATALOG_BASE)
+  databaseId: $(DATABASE_ID)
   system.debug: true
