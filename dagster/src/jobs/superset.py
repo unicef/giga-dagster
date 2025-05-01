@@ -17,7 +17,7 @@ def fetch_and_run_query(context: OpExecutionContext):
                 "label": "Query to Create",
                 "sql": table["Query to Create"]
             }
-            context.log.info(f"running query: {table['title']}")
+            context.log.info(f"running query: {table['Title']}")
             run_query(query_to_delete, access_token)
             time.sleep(5)
             # TODO: change this to poll and wait for the result here
