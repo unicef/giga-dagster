@@ -1,4 +1,5 @@
 import os
+
 import requests
 from nocodb import NocoDB
 
@@ -8,6 +9,7 @@ PASSWORD = os.getenv("SUPERSET_PASSWORD")
 CATALOG_TOKEN = os.getenv("CATALOG_TOKEN")
 CATALOG_BASE = os.getenv("CATALOG_BASE")
 DATABASE_ID = int(os.getenv("DATABASE_ID"))
+
 
 def get_access_token():
     """Authenticate and return token"""
@@ -33,6 +35,7 @@ def get_access_token():
         print("Failed to authenticate:", response.status_code, response.text)
         return None
 
+
 def get_saved_query(access_token):
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -45,6 +48,7 @@ def get_saved_query(access_token):
     response = requests.get(saved_queries_url, headers=headers, params=params)
     return response
 
+
 def fetch_saved_query():
     token = CATALOG_TOKEN
     base = CATALOG_BASE
@@ -54,6 +58,7 @@ def fetch_saved_query():
     table = x.get_table_by_title(title)
     response = list(map(lambda x: x.get_values(), table.get_records()))
     return response
+
 
 def run_query(query, access_token):
     headers = {
