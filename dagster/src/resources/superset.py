@@ -8,7 +8,11 @@ USERNAME = os.getenv("SUPERSET_USERNAME")
 PASSWORD = os.getenv("SUPERSET_PASSWORD")
 CATALOG_TOKEN = os.getenv("CATALOG_TOKEN")
 CATALOG_BASE = os.getenv("CATALOG_BASE")
-DATABASE_ID = int(os.getenv("DATABASE_ID"))
+
+try:
+    DATABASE_ID = int(os.getenv("DATABASE_ID"))
+except Exception:
+    DATABASE_ID = None
 
 
 def get_access_token():
