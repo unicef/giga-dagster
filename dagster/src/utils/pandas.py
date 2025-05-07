@@ -11,8 +11,10 @@ def pandas_loader(data: BytesIO, filepath: str) -> pd.DataFrame:
 
     if ext == ".csv":
         return pd.read_csv(data)
-    if ext in [".xls", ".xlsx"]:
+    if ext == ".xlsx":
         return pd.read_excel(data, engine="openpyxl")
+    if ext == ".xls":
+        return pd.read_excel(data, engine="xlrd")
     if ext == ".json":
         return pd.read_json(data)
     if ext == ".parquet":
