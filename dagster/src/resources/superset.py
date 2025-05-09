@@ -58,9 +58,13 @@ def fetch_saved_query():
     base = CATALOG_BASE
     title = "Physical Table"
     noco = NocoDB(url="https://app.nocodb.com", api_key=token)
-    x = noco.get_base(base)
-    table = x.get_table_by_title(title)
-    response = list(map(lambda x: x.get_values(), table.get_records()))
+
+    base = noco.get_base(base)
+    table = base.get_table_by_title(title)
+    all_records = table.get_records()
+
+    response = [record.get_values() for record in all_records]
+
     return response
 
 
