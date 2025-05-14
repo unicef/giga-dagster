@@ -549,7 +549,9 @@ def dq_geolocation_extract_relevant_columns(
         "dq_is_not_alphanumeric",
     ]
 
-    columns_to_keep = [*uploaded_columns]
+    admin_columns = ["admin1", "admin2", "admin3", "admin4"]
+
+    columns_to_keep = [*uploaded_columns, *admin_columns]
 
     dq_columns_list = [
         col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
@@ -571,6 +573,8 @@ def dq_geolocation_extract_relevant_columns(
 
     columns_to_keep.extend(["dq_has_critical_error", "failure_reason"])
     columns_to_keep.extend(dq_columns_list)
+
+    columns_to_keep = [col for col in columns_to_keep if col in df.columns]
 
     return df.select(*columns_to_keep)
 
