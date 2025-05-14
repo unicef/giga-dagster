@@ -407,6 +407,16 @@ def create_bronze_layer_columns(
             country_code_iso3=country_code_iso3,
             admin_level="admin2",
         )
+        df = add_admin_columns(
+            df=df,
+            country_code_iso3=country_code_iso3,
+            admin_level="admin3",
+        )
+        df = add_admin_columns(
+            df=df,
+            country_code_iso3=country_code_iso3,
+            admin_level="admin4",
+        )
         df = add_disputed_region_column(df=df)
 
         missing_location_condition = (
