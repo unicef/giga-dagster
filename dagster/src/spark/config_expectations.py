@@ -458,6 +458,20 @@ class Config(BaseSettings):
             **self.VALUES_RANGE_COVERAGE_ITU,
         }
 
+    TITLE_CASE_COLUMNS: list = [
+        "computer_lab",
+        "connectivity",
+        "connectivity_govt",
+        "cellular_coverage_availability",
+        "electricity_availability",
+        "water_availability",
+        "school_area_type",
+        "computer_lab",
+        "school_funding_type",
+        "school_area_type",
+        "is_school_open",
+    ]
+
     UNIQUE_SET_COLUMNS: list[list[str]] = [
         ["school_id_govt", "school_name", "education_level", "location_id"],
         ["school_name", "education_level", "location_id"],
