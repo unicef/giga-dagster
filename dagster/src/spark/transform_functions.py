@@ -463,10 +463,8 @@ def add_admin_columns(  # noqa: C901
     if admin_boundaries is None:
         return df.withColumns(
             {
-                admin_level: f.coalesce(f.col(admin_level), f.lit("Unknown")),
-                f"{admin_level}_id_giga": f.coalesce(
-                    f.col(f"{admin_level}_id_giga"), f.lit(None)
-                ),
+                admin_level: f.lit("Unknown"),
+                f"{admin_level}_id_giga": f.lit(None),
             }
         )
 
