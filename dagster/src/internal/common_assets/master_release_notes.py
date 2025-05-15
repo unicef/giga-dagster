@@ -20,6 +20,7 @@ from src.utils.send_email_master_release_notification import (
 )
 from src.utils.send_slack_master_release_notification import (
     SlackProps,
+    format_changes_for_slack_message,
     send_slack_master_release_notification,
 )
 
@@ -55,6 +56,12 @@ async def send_master_release_notes(
     if cdf.count() == 0:
         context.log.warning("No changes to master, skipping email.")
         return None
+
+    column_changes_count = aggregate_changes_by_column_and_type(cdf)
+
+    context.log.info(
+        f"Preview of the column changes dataframe:\n{column_changes_count.show()}"
+    )
 
     counts = get_change_operation_counts(cdf)
     country = coco.convert(country_code, to="name_short")
@@ -94,6 +101,8 @@ async def send_master_release_notes(
         props=props, recipients=recipients, context=context
     )
 
+    column_changes_txt = format_changes_for_slack_message(column_changes_count)
+
     slack_props = SlackProps(
         country=country,
         added=counts["added"],
@@ -102,6 +111,7 @@ async def send_master_release_notes(
         updateDate=update_date.strftime("%Y-%m-%d %H:%M:%S"),
         version=latest_version,
         rows=rows,
+        column_changes=column_changes_txt,
     )
 
     await send_slack_master_release_notification(props=slack_props)
@@ -110,3 +120,73 @@ async def send_master_release_notes(
         **props.dict(),
         "recipients": recipients,
     }
+
+
+def aggregate_changes_by_column_and_type(cdf: sql.DataFrame) -> sql.DataFrame:
+    """
+    Aggregate of the changes of each column for each change type including inserts, updates and deletions
+
+    :param cdf: delta lake change data capture dataframe
+    :return: DataFrame with columns: [column_name, operation, change_count]
+    """
+
+    # Filter update preimage and postimage
+    preimage_df = cdf.filter(f.col("_change_type") == "update_preimage").alias(
+        "preimage"
+    )
+    postimage_df = cdf.filter(f.col("_change_type") == "update_postimage").alias(
+        "postimage"
+    )
+
+    pre_post_image_df = preimage_df.join(postimage_df, on="school_id_giga")
+    master_data_cols = [
+        column
+        for column in cdf.columns
+        if column not in ("_change_type", "_commit_version", "_commit_timestamp")
+    ]
+
+    # Updates
+    update_changes_dfs = []
+    for column in master_data_cols:
+        has_changed_condition = f"pre.{column} IS DISTINCT FROM post.{column}"
+        update_changes_dfs.append(
+            pre_post_image_df.filter(f.expr(has_changed_condition)).selectExpr(
+                f"'{column}' as column_name", "'update' as change_type"
+            )
+        )
+
+    # Inserts
+    inserts_df = cdf.filter(f.col("_change_type") == "insert")
+    insert_changes_dfs = []
+    for column in master_data_cols:
+        insert_changes_dfs.append(
+            inserts_df.filter(f.col(column).isNotNull()).selectExpr(
+                f"'{column}' as column_name", "'insert' as change_type"
+            )
+        )
+
+    # Deletions
+    deletes_df = cdf.filter(f.col("_change_type") == "delete")
+    delete_changes_dfs = []
+    for column in master_data_cols:
+        delete_changes_dfs.append(
+            deletes_df.filter(f.col(column).isNotNull()).selectExpr(
+                f"'{column}' as column_name", "'delete' as change_type"
+            )
+        )
+
+    # Combine all the changes
+    combined_changes_df = update_changes_dfs[0]
+    for df_list in [update_changes_dfs[1:], insert_changes_dfs, delete_changes_dfs]:
+        for df in df_list:
+            combined_changes_df = combined_changes_df.union(df)
+
+    # count of changes by column and change type
+    column_changes_count = (
+        combined_changes_df.groupBy("column_name", "change_type")
+        .count()
+        .withColumnsRenamed({"count": "change_count", "change_type": "operation"})
+        .orderBy(f.col("change_count").desc())
+    )
+
+    return column_changes_count
