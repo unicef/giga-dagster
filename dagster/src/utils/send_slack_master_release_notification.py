@@ -16,12 +16,12 @@ class SlackProps(BaseModel):
 
 
 def format_changes_for_slack_message(df):
-    rows = df.collect()
-    header = f"{'Column':<20} {'Operation':<12} {'Count':<6}"
+    rows = df.orderBy("operation", "column").collect()
+    header = f"{'Column':<45} {'Operation':<12} {'Count':<6}"
     lines = [header, "-" * len(header)]
     for row in rows:
         lines.append(
-            f"{row['column_name']:<20} {row['operation']:<12} {row['change_count']:<6}"
+            f"{row['column_name']:<45} {row['operation']:<12} {row['change_count']:<6}"
         )
     return "```\n" + "\n".join(lines) + "\n```"
 

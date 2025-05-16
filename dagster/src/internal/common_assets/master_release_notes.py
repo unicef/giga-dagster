@@ -165,19 +165,9 @@ def aggregate_changes_by_column_and_type(cdf: sql.DataFrame) -> sql.DataFrame:
             )
         )
 
-    # Deletions
-    deletes_df = cdf.filter(f.col("_change_type") == "delete")
-    delete_changes_dfs = []
-    for column in master_data_cols:
-        delete_changes_dfs.append(
-            deletes_df.filter(f.col(column).isNotNull()).selectExpr(
-                f"'{column}' as column_name", "'delete' as change_type"
-            )
-        )
-
     # Combine all the changes
     combined_changes_df = update_changes_dfs[0]
-    for df_list in [update_changes_dfs[1:], insert_changes_dfs, delete_changes_dfs]:
+    for df_list in [update_changes_dfs[1:], insert_changes_dfs]:
         for df in df_list:
             combined_changes_df = combined_changes_df.union(df)
 
