@@ -47,3 +47,43 @@ class PostgresDatabaseProvider:
             raise err
         finally:
             session.close()
+
+
+class TrinoDatabaseProvider:
+    def __init__(self, url: str):
+        if url == "":
+            raise ValueError("Database URL is empty")
+
+        self.engine = create_engine(
+            url,
+            echo=not settings.IN_PRODUCTION,
+            future=True,
+            connect_args={"http_scheme": "https"},
+        )
+        self.session_maker = sessionmaker(
+            bind=self.engine,
+            autoflush=True,
+            autocommit=False,
+            expire_on_commit=False,
+        )
+
+    def get_db(self) -> Generator[Session, Any, Any]:
+        session = self.session_maker()
+        try:
+            yield session
+        except DatabaseError as err:
+            logger.error(str(err))
+            raise err
+        finally:
+            session.close()
+
+    @contextmanager
+    def get_db_context(self) -> AbstractContextManager[Session]:
+        session = self.session_maker()
+        try:
+            yield session
+        except DatabaseError as err:
+            logger.error(str(err))
+            raise err
+        finally:
+            session.close()
