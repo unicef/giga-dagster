@@ -16,7 +16,7 @@ class SlackProps(BaseModel):
 
 
 def format_changes_for_slack_message(df):
-    rows = df.orderBy("operation", "column").collect()
+    rows = df.orderBy("operation", "column_name").collect()
     header = f"{'Column':<45} {'Operation':<12} {'Count':<6}"
     lines = [header, "-" * len(header)]
     for row in rows:
@@ -40,8 +40,8 @@ async def send_slack_master_release_notification(props: SlackProps):
 
     text += f"*Updated*: {props.updateDate}\n"
     text += f"*Version*: {props.version}\n"
-    text += f"*Current Rows*: {props.rows}\n"
-    text += "*These are the column changes*\n\n"
+    text += f"*Current Rows*: {props.rows}\n\n\n"
+    text += "*Column changes*\n\n"
     text += props.column_changes
 
     await send_slack_base(text)
