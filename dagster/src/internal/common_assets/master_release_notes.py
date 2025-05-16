@@ -148,7 +148,7 @@ def aggregate_changes_by_column_and_type(cdf: sql.DataFrame) -> sql.DataFrame:
     # Updates
     update_changes_dfs = []
     for column in master_data_cols:
-        has_changed_condition = f"pre.{column} IS DISTINCT FROM post.{column}"
+        has_changed_condition = f"preimage.{column} IS DISTINCT FROM postimage.{column}"
         update_changes_dfs.append(
             pre_post_image_df.filter(f.expr(has_changed_condition)).selectExpr(
                 f"'{column}' as column_name", "'update' as change_type"
