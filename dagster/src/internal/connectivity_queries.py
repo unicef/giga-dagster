@@ -159,3 +159,14 @@ def get_qos_schools_by_country(country_iso3_code):
         )
 
     return pd.DataFrame.from_records(qos_schools)
+
+
+def get_qos_tables():
+    from src.utils.db.trino import get_db_context
+
+    with get_db_context() as db:
+        qos_tables = (
+            db.execute(text("""SHOW TABLES FROM delta_lake.qos""")).mappings().all()
+        )
+
+    return pd.DataFrame.from_records(qos_tables)
