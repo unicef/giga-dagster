@@ -26,6 +26,7 @@ from src.data_quality_checks.utils import (
 from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
+    add_missing_columns,
     get_all_connectivity_rt_schools,
 )
 from src.utils.adls import (
@@ -43,6 +44,7 @@ from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
     get_primary_key,
+    get_schema_columns,
     get_schema_columns_datahub,
 )
 from src.utils.sentry import capture_op_exceptions
@@ -488,8 +490,8 @@ def school_connectivity_realtime_master(
     schema_name = config.metastore_schema
     file_path = config.filepath
     country_code = config.country_code
-    # schema_columns = get_schema_columns(s, schema_name)
-    # column_names = [c.name for c in schema_columns]
+    schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
 
     context.log.info(f"Updating data for country {country_code} from {file_path}")
@@ -516,8 +518,7 @@ def school_connectivity_realtime_master(
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
-        column_names = current_master.columns
-        # current_master = add_missing_columns(current_master, schema_columns)
+        current_master = add_missing_columns(current_master, schema_columns)
 
         updated_master = current_master.join(
             updated_connectivity_schs,
