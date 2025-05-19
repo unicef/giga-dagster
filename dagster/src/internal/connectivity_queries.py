@@ -169,4 +169,7 @@ def get_qos_tables():
             db.execute(text("""SHOW TABLES FROM delta_lake.qos""")).mappings().all()
         )
 
-    return pd.DataFrame.from_records(qos_tables)
+    qos_tables_df = pd.DataFrame.from_records(qos_tables)
+    qos_tables_df = qos_tables_df[qos_tables_df["Table"] != "transforms"]
+
+    return
