@@ -26,7 +26,6 @@ from src.data_quality_checks.utils import (
 from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
-    add_missing_columns,
     get_all_connectivity_rt_schools,
 )
 from src.utils.adls import (
@@ -518,7 +517,7 @@ def school_connectivity_realtime_master(
         current_master = DeltaTable.forName(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
-        current_master = add_missing_columns(current_master, schema_columns)
+        # current_master = add_missing_columns(current_master, schema_columns)
 
         updated_master = current_master.join(
             updated_connectivity_schs,

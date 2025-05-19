@@ -3,6 +3,7 @@ import re
 import uuid
 from itertools import chain
 
+import country_converter as coco
 import geopandas as gpd
 import pandas as pd
 from delta import DeltaTable
@@ -23,6 +24,7 @@ from pyspark.sql.types import (
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
+from src.internal.connectivity_queries import get_qos_tables
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
@@ -801,6 +803,13 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     context.log.info(f"Total number of mlab schools is {mlab_schools.shape[0]}")
 
     qos_countries = ["bra", "ken", "mng"]
+    qos_schema_tables_df = get_qos_tables()
+    qos_schema_tables = qos_schema_tables_df.tolist()
+    qos_countries = [
+        table
+        for table in qos_schema_tables
+        if coco.convert(table, to="short_name") != "not found"
+    ]
     qos_schools = pd.DataFrame()
     for country_code in qos_countries:
         context.log.info(f"Fetching QoS data for {country_code.upper()}")
