@@ -451,11 +451,34 @@ def adhoc__publish_silver_geolocation(
             if c in adhoc__reference_dq_checks_passed.schema.fieldNames()
             and c != "signature"
         ]
+
+        ref_selected_df = adhoc__reference_dq_checks_passed.select(*reference_columns)
+
+        master_column_names = df_one_gold.columns
+        columns_to_rename_in_ref = {}  # Stores original_name -> temp_ref_name
+
+        for ref_col_name in ref_selected_df.columns:
+            if ref_col_name in master_column_names and ref_col_name != "school_id_giga":
+                temp_ref_name = f"{ref_col_name}_ref_temp"
+                columns_to_rename_in_ref[ref_col_name] = temp_ref_name
+                ref_selected_df = ref_selected_df.withColumnRenamed(
+                    ref_col_name, temp_ref_name
+                )
+
         df_one_gold = df_one_gold.join(
-            adhoc__reference_dq_checks_passed.select(*reference_columns),
+            ref_selected_df,
             "school_id_giga",
             "left",
         )
+
+        for original_name, temp_ref_name in columns_to_rename_in_ref.items():
+            if (
+                temp_ref_name in df_one_gold.columns
+            ):  # Ensure the temp column exists after join
+                df_one_gold = df_one_gold.withColumn(
+                    original_name,
+                    f.coalesce(df_one_gold[original_name], df_one_gold[temp_ref_name]),
+                ).drop(temp_ref_name)
 
     df_silver = add_missing_columns(df_one_gold, schema_columns)
     columns_non_nullable = [
