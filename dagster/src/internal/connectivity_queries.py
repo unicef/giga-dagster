@@ -172,4 +172,4 @@ def get_qos_tables():
     qos_tables_df = pd.DataFrame.from_records(qos_tables)
     qos_tables_df = qos_tables_df[qos_tables_df["Table"] != "transforms"]
 
-    return
+    return qos_tables_df
