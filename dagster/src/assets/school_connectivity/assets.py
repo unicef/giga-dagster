@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from datahub.specific.dataset import DatasetPatchBuilder
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import (
@@ -23,6 +24,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
+from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
@@ -35,6 +37,7 @@ from src.utils.adls import (
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -580,3 +583,41 @@ def school_connectivity_realtime_master(
             "preview": get_table_preview(new_master),
         },
     )
+
+
+@asset
+@capture_op_exceptions
+async def connectivity_broadcast_master_release_notes(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    school_connectivity_realtime_master: sql.DataFrame,
+) -> Output[None]:
+    metadata = await send_master_release_notes(
+        context, config, spark, school_connectivity_realtime_master
+    )
+    if metadata is None:
+        return Output(None)
+
+    with get_rest_emitter() as emitter:
+        context.log.info(f"{config.datahub_destination_dataset_urn=}")
+
+        for patch_mcp in (
+            DatasetPatchBuilder(config.datahub_destination_dataset_urn)
+            .add_custom_properties(
+                {
+                    "Dataset Version": str(metadata["version"]),
+                    "Row Count": f'{metadata["rows"]:,}',
+                    "Rows Added": f'{metadata["added"]:,}',
+                    "Rows Updated": f'{metadata["modified"]:,}',
+                    "Rows Deleted": f'{metadata["deleted"]:,}',
+                }
+            )
+            .build()
+        ):
+            try:
+                emitter.emit(patch_mcp, lambda e, s: context.log.info(f"{e=}\n{s=}"))
+            except Exception as e:
+                context.log.error(str(e))
+
+    return Output(None, metadata=metadata)
