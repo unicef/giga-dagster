@@ -39,13 +39,13 @@ def school_connectivity_update_schools_connectivity_sensor(
         size = properties.size
 
         ops_destination_mapping = {
-            "master": OpDestinationMapping(
+            "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.GOLD,
             ),
-            "broadcast_master_release_notes": OpDestinationMapping(
+            "connectivity_broadcast_master_release_notes": OpDestinationMapping(
                 source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 metastore_schema=METASTORE_SCHEMA,
