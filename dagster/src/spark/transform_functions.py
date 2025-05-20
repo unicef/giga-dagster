@@ -803,7 +803,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     context.log.info(f"Total number of mlab schools is {mlab_schools.shape[0]}")
 
     qos_schema_tables_df = get_qos_tables()
-    qos_schema_tables = qos_schema_tables_df.to_list()
+    qos_schema_tables = qos_schema_tables_df["Table"].to_list()
     qos_countries = [
         table
         for table in qos_schema_tables
