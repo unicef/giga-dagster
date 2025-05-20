@@ -217,3 +217,58 @@ class ADLSFileClient(ConfigurableResource):
     def delete(filepath: str, *, is_directory=False):
         file_client = _adls.get_file_client(file_path=filepath)
         file_client.delete_file(recursive=is_directory)
+
+    def upload_spark_dataframe_as_files(
+        self,
+        context: OutputContext | OpExecutionContext,
+        data: sql.DataFrame,
+        folder_path: str,
+        file_format: str = "csv",
+    ) -> None:
+        """
+        Upload a Spark DataFrame to ADLS as files in the specified format.
+        The output will be a directory containing potentially partitioned files.
+
+        Args:
+            context: The Dagster execution context
+            data: The Spark DataFrame to upload
+            folder_path: The folder path to save the files to
+            file_format: The format to save the files as (csv, parquet, json, etc.)
+        """
+        if data is None or data.rdd.isEmpty():
+            logger.warning(f"Data is empty. Skipping upload to {folder_path}")
+            return
+
+        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{folder_path}"
+
+        # Get metadata from context
+        if isinstance(context, OpExecutionContext):
+            config = FileConfig(**context._step_execution_context.op_config)
+        elif isinstance(context, OutputContext):
+            config = FileConfig(**context.step_context.op_config)
+        else:
+            raise ValueError(f"Unsupported context type: {type(context)}")
+
+        metadata = config.metadata
+        metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
+
+        # Spark file writer options
+        write_options = {}
+
+        if file_format == "csv":
+            write_options = {
+                "header": "true",
+                "delimiter": ",",
+                "quote": '"',
+                "escape": '"',
+                "encoding": "UTF-8",
+            }
+
+        # Create a SparkWriter with the specified format and options
+        writer = data.write.format(file_format).options(**write_options)
+
+        # Write the data to ADLS
+        logger.info(f"Writing Spark DataFrame to {adls_path} in {file_format} format")
+        writer.mode("overwrite").save(adls_path)
+
+        logger.info(f"Successfully uploaded Spark DataFrame to {folder_path}")

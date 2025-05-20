@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from delta import DeltaTable
 from pyspark import sql
 
@@ -18,13 +20,16 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
     An ADLS Delta IO Manager designed for intermediary outputs where schema
     validation against a predefined schema is not required, and data is
     typically overwritten.
+
+    Additionally, this IO manager saves a copy of the data as CSV files
+    in a timestamped folder to allow for historical tracking of intermediate results.
     """
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
         """
-        Handles the output by creating the schema and table if they don't exist
-        (using the DataFrame's schema) and then overwriting the table's contents.
-        Schema evolution is handled by Delta Lake's overwriteSchema option.
+        Handles the output by:
+        1. Creating the schema and table if they don't exist and writing to Delta Table
+        2. Additionally saving the data as CSV files in a timestamped folder
         """
         context.log.info("Handling IntermediaryDeltaIOManager output...")
         if output is None:
@@ -48,6 +53,7 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         # if self._handle_truncate(context, output, config, full_table_name):
         #     return
 
+        # 1. Create and save to Delta Table as before
         self._create_schema_if_not_exists(schema_tier_name)
         # Use the overridden _create_table_if_not_exists specific to this class
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
@@ -63,6 +69,41 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         context.log.info(
             f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
+
+        # 2. Additionally save as CSV files with timestamp
+        self._save_data_as_files(context, output, schema_tier_name, table_name)
+
+    def _save_data_as_files(
+        self,
+        context: OutputContext,
+        data: sql.DataFrame,
+        schema_tier_name: str,
+        table_name: str,
+    ):
+        """
+        Save the data as CSV files in a timestamped folder structure.
+
+        The folder structure will be:
+        /intermediary/{schema_tier_name}/{table_name}/{timestamp}/
+        """
+        # Generate timestamp for this execution
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Define the folder path with schema, table, and timestamp
+        folder_path = f"intermediary/{schema_tier_name}/{table_name}/{timestamp}"
+
+        context.log.info(f"Saving CSV files to folder: {folder_path}")
+
+        try:
+            # Use the new method to upload the spark dataframe as CSV files
+            adls_client.upload_spark_dataframe_as_files(
+                context=context, data=data, folder_path=folder_path, file_format="csv"
+            )
+
+            context.log.info(f"Successfully saved CSV files to {folder_path}")
+        except Exception as e:
+            context.log.error(f"Failed to save CSV files: {e}")
+            # Don't raise the error to prevent the main Delta Table functionality from failing
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         """
