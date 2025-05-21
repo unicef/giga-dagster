@@ -92,7 +92,7 @@ def get_all_gigameter_schools() -> pd.DataFrame:
             SELECT DISTINCT measure.giga_id_school school_id_giga,
                    measure.school_id school_id_govt,
                    MIN(measure.timestamp) OVER (PARTITION BY measure.giga_id_school) first_measurement_timestamp,
-                   'daily_checkapp' source,
+                   'gigameter' source,
                    country.iso3_format country_code
             FROM gigameter_production_db.public.measurements measure
             JOIN gigamaps_production_db.public.schools_school school ON school.giga_id_school = measure.giga_id_school
