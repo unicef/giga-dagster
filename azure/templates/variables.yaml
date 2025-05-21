@@ -35,6 +35,7 @@ variables:
   gigameterDbConnectionString: $(GIGAMETER_DB_CONNECTION_STRING)
   mlabDbConnectionString: $(MLAB_DB_CONNECTION_STRING)
   procoDbConnectionString: $(PROCO_DB_CONNECTION_STRING)
+  trinoConnectionString: $(TRINO_CONNECTION_STRING)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)

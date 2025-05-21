@@ -16,6 +16,7 @@ icecream = "^2.1.3"
 croniter = "^2.0.2"
 msgraph-sdk = "^1.2.0"
 certifi = ">=2024.07.04"
+trino = {extras = ["sqlalchemy"], version = "^0.334.0"}
 
 [tool.poetry.group.dagster.dependencies]
 dagster-webserver = "^1.6.0"
