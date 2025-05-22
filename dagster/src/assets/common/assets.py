@@ -280,6 +280,7 @@ def reset_staging_table(
         context.log.warning(e)
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     create_schema(s, staging_tier_schema_name)
     create_delta_table(
@@ -362,6 +363,7 @@ def master(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     silver_columns = get_schema_columns(s, f"school_{config.dataset_type}")
 
@@ -422,6 +424,7 @@ def reference(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
