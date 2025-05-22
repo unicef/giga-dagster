@@ -47,6 +47,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     )
     execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
+    spark.catalog.refreshTable(full_table_name)
     (
         DeltaTable.forName(spark, full_table_name)
         .alias("master")

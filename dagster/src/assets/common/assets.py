@@ -134,6 +134,7 @@ def manual_review_failed_rows(
     # If yes, do an in-cluster merge
     # Else, the current df_failed is the initial rejects table
     if check_table_exists(s, schema_name, country_code, DataTier.MANUAL_REJECTED):
+        s.catalog.refreshTable(rejected_table_name)
         rejected = DeltaTable.forName(s, rejected_table_name).toDF()
         rejected = add_missing_columns(rejected, schema_columns)
         new_rejected = partial_cdf_in_cluster_merge(
@@ -218,6 +219,7 @@ def silver(
     df_passed = manual_review_dedupe_strat(df_passed)
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        s.catalog.refreshTable(silver_table_name)
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
         current_silver = add_missing_columns(current_silver, schema_columns)
         new_silver = partial_cdf_in_cluster_merge(
@@ -280,6 +282,7 @@ def reset_staging_table(
         context.log.warning(e)
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     create_schema(s, staging_tier_schema_name)
     create_delta_table(
@@ -362,6 +365,7 @@ def master(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     silver_columns = get_schema_columns(s, f"school_{config.dataset_type}")
 
@@ -374,9 +378,11 @@ def master(
     silver = transform_types(silver, schema_name, context)
     silver = silver.select([c.name for c in schema_columns])
 
+    master_table_name = construct_full_table_name("school_master", country_code)
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        s.catalog.refreshTable(master_table_name)
         current_master = DeltaTable.forName(
-            s, construct_full_table_name("school_master", country_code)
+            s, master_table_name
         ).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
         new_master = full_in_cluster_merge(
@@ -422,6 +428,7 @@ def reference(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
@@ -432,9 +439,11 @@ def reference(
     silver = transform_types(silver, schema_name, context)
     silver = silver.select([c.name for c in schema_columns])
 
+    reference_table_name = construct_full_table_name("school_reference", country_code)
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        s.catalog.refreshTable(reference_table_name)
         current_reference = DeltaTable.forName(
-            s, construct_full_table_name("school_reference", country_code)
+            s, reference_table_name
         ).toDF()
         current_reference = add_missing_columns(current_reference, schema_columns)
         new_reference = full_in_cluster_merge(

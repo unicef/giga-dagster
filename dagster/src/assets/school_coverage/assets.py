@@ -292,6 +292,7 @@ def coverage_bronze(
         df = df.select(*[c.name for c in columns])
 
     if s.catalog.tableExists(full_silver_table_name):
+        s.catalog.refreshTable(full_silver_table_name)
         silver = DeltaTable.forName(s, full_silver_table_name).toDF()
         if source == "fb":
             df = fb_coverage_merge(df, silver)

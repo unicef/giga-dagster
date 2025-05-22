@@ -28,12 +28,14 @@ def adhoc__generate_silver_geolocation_from_gold(
     table_name = config.country_code.lower()
     schema_columns = get_schema_columns(s, "school_geolocation")
 
+    s.catalog.refreshTable(f"school_master.{table_name}")
     master = (
         DeltaTable.forName(s, f"school_master.{table_name}").toDF().drop("signature")
     )
     master = add_missing_columns(master, get_schema_columns(s, "school_master"))
 
     if check_table_exists(s, "school_reference", table_name, DataTier.GOLD):
+        s.catalog.refreshTable(f"school_reference.{table_name}")
         reference = (
             DeltaTable.forName(s, f"school_reference.{table_name}")
             .toDF()
@@ -114,12 +116,14 @@ def adhoc__generate_silver_coverage_from_gold(
     table_name = config.country_code.lower()
     schema_columns = get_schema_columns(s, "school_coverage")
 
+    s.catalog.refreshTable(f"school_master.{table_name}")
     master = (
         DeltaTable.forName(s, f"school_master.{table_name}").toDF().drop("signature")
     )
     master = add_missing_columns(master, get_schema_columns(s, "school_master"))
 
     if check_table_exists(s, "school_reference", table_name, DataTier.GOLD):
+        s.catalog.refreshTable(f"school_reference.{table_name}")
         reference = (
             DeltaTable.forName(s, f"school_reference.{table_name}")
             .toDF()

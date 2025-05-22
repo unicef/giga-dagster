@@ -17,6 +17,7 @@ def adhoc__copy_original(
     context: OpExecutionContext,
     spark: PySparkResource,
 ):
+    spark.spark_session.catalog.refreshTable(SOURCE_TABLE_NAME)
     original = DeltaTable.forName(spark.spark_session, SOURCE_TABLE_NAME).toDF()
     columns = get_schema_columns(spark.spark_session, "school_master")
 

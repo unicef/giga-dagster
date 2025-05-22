@@ -144,6 +144,7 @@ def geolocation_metadata(
     )
 
     context.log.info("Upsert the metadata from giga sync into the table")
+    s.catalog.refreshTable(construct_full_table_name(table_schema_name, table_name))
     current_metadata_table = DeltaTable.forName(
         s, construct_full_table_name(table_schema_name, table_name)
     )
@@ -299,6 +300,7 @@ def geolocation_data_quality_results(
         silver_table_name = construct_full_table_name(
             silver_tier_schema_name, country_code
         )
+        s.catalog.refreshTable(silver_table_name)
         silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)

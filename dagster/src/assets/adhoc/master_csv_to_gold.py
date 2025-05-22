@@ -623,6 +623,7 @@ def adhoc__publish_master_to_gold(
 
         context.log.info(f"Existing table name: {table_name}")
 
+        spark.spark_session.catalog.refreshTable(table_name)
         existing_df = DeltaTable.forName(
             sparkSession=spark.spark_session, tableOrViewName=table_name
         ).toDF()
@@ -706,6 +707,7 @@ def adhoc__publish_reference_to_gold(
 
         context.log.info(f"Existing table name: {table_name}")
 
+        spark.spark_session.catalog.refreshTable(table_name)
         existing_df = DeltaTable.forName(
             sparkSession=spark.spark_session,
             tableOrViewName=table_name,
