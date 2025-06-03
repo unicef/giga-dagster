@@ -2,6 +2,7 @@ from http import HTTPStatus
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.filters import RemovedStatusFilter
+from loguru import logger
 from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
@@ -299,5 +300,91 @@ def datahub__hard_delete_assertions(
         None,
         metadata={
             "count": len(datahub__soft_delete_assertions),
+        },
+    )
+
+
+class ListPlatformEntitiesConfig(Config):
+    status: RemovedStatusFilter = Field(
+        RemovedStatusFilter.NOT_SOFT_DELETED,
+        description="Filter for the status of entities during search",
+    )
+    platform: str = Field(
+        "",
+        description="Platform to filter entities by",
+    )
+    urns_to_delete: list[str] = Field(
+        [],
+        description="List of specific URNs to filter entities by. If empty, all entities for the platform will be considered for deletion.",
+    )
+
+
+@asset
+@capture_op_exceptions
+def datahub__list_entities_to_delete(
+    context: OpExecutionContext, config: ListPlatformEntitiesConfig
+) -> Output[list[str]]:
+    if config.platform == "":
+        raise ValueError("Platform must be specified in the configuration.")
+
+    assertion_urns = list(
+        datahub_graph_client.get_urns_by_filter(
+            status=config.status,
+            platform=config.platform,
+        )
+    )
+
+    valid_urns = []
+    for item in assertion_urns:
+        dataset_urn = item.split(",")[1]
+
+        if not any(valid_urn in dataset_urn for valid_urn in config.urns_to_delete):
+            logger.info(f"Found valid URN for deletion: {item}")
+            valid_urns.append(item)
+
+    context.log.info(
+        f"Found {len(valid_urns)} valid URNs for platform {config.platform}."
+    )
+
+    return Output(
+        valid_urns,
+        metadata={
+            "count": len(valid_urns),
+            "preview": assertion_urns[:10],
+        },
+    )
+
+
+@asset
+@capture_op_exceptions
+def datahub__delete_entities(
+    context: OpExecutionContext,
+    config: DeleteAssertionsConfig,
+    datahub__list_entities_to_delete: list[str],
+):
+    num_of_entities = len(datahub__list_entities_to_delete)
+
+    if config.hard:
+        logger.warning("Hard deleting entities...")
+
+        for idx, entity in enumerate(datahub__list_entities_to_delete):
+            logger.info(
+                f"Hard deleting entity #{idx+1} out of {num_of_entities}: {entity}"
+            )
+            datahub_graph_client.hard_delete_entity(urn=entity)
+
+    else:
+        logger.warning("Soft deleting entities...")
+        for idx, entity in enumerate(datahub__list_entities_to_delete):
+            logger.info(
+                f"Soft deleting entity #{idx+1} out of {num_of_entities}: {entity}"
+            )
+            datahub_graph_client.soft_delete_entity(urn=entity)
+
+    return Output(
+        None,
+        metadata={
+            "count": len(datahub__list_entities_to_delete),
+            "preview": datahub__list_entities_to_delete[:10],
         },
     )
