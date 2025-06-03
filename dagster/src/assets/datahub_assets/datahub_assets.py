@@ -1,6 +1,7 @@
 from http import HTTPStatus
 
 from datahub.emitter.rest_emitter import DatahubRestEmitter
+from datahub.ingestion.graph.filters import RemovedStatusFilter
 from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
@@ -8,9 +9,7 @@ from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
-from src.utils.datahub.graphql import (
-    datahub_graph_client as emitter,
-)
+from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
@@ -148,7 +147,9 @@ def datahub__delete_references_to_qos_dry_run(
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=True)
+        references_info = datahub_graph_client.delete_references_to_urn(
+            qos_dataset, dry_run=True
+        )
         i += 1
         context.log.info(f"{i} of {count}: {qos_dataset}")
         context.log.info(f"Count of references: {references_info[0]}")
@@ -168,7 +169,9 @@ def datahub__delete_references_to_qos(
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        references_info = emitter.delete_references_to_urn(qos_dataset, dry_run=False)
+        references_info = datahub_graph_client.delete_references_to_urn(
+            qos_dataset, dry_run=False
+        )
         i += 1
         context.log.info(f"{i} of {count}: {qos_dataset}")
         context.log.info(f"Count of references: {references_info[0]}")
@@ -188,7 +191,7 @@ def datahub__soft_delete_qos_datasets(
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        emitter.soft_delete_entity(qos_dataset)
+        datahub_graph_client.soft_delete_entity(qos_dataset)
         i += 1
         context.log.info(f"SOFT DELETED {i} of {count}: {qos_dataset}")
 
@@ -206,7 +209,7 @@ def datahub__hard_delete_qos_datasets(
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        emitter.hard_delete_entity(qos_dataset)
+        datahub_graph_client.hard_delete_entity(qos_dataset)
         i += 1
         context.log.info(f"HARD DELETED {i} of {count}: {qos_dataset}")
 
@@ -225,10 +228,25 @@ class DeleteAssertionsConfig(Config):
     hard: bool = Field(False, description="Whether to hard delete assertions.")
 
 
+class ListAssertionsConfig(Config):
+    status: RemovedStatusFilter = Field(
+        RemovedStatusFilter.NOT_SOFT_DELETED,
+        description="Filter for the status of entities during search",
+    )
+
+
 @asset
 @capture_op_exceptions
-def datahub__list_assertions() -> Output[list[str]]:
-    assertion_urns = list(emitter.get_urns_by_filter(entity_types=["assertion"]))
+def datahub__list_assertions(
+    context: OpExecutionContext, config: ListAssertionsConfig
+) -> Output[list[str]]:
+    assertion_urns = list(
+        datahub_graph_client.get_urns_by_filter(
+            entity_types=["assertion"], status=config.status
+        )
+    )
+    context.log.info(f"Number of listed entries: {len(assertion_urns)}")
+
     return Output(
         assertion_urns,
         metadata={
@@ -249,7 +267,7 @@ def datahub__soft_delete_assertions(
             context.log.info(
                 f"Soft deleting {i + 1:,} of {len(datahub__list_assertions):,} assertions..."
             )
-        emitter.soft_delete_entity(urn)
+        datahub_graph_client.soft_delete_entity(urn)
 
     return Output(
         datahub__list_assertions,
@@ -275,7 +293,7 @@ def datahub__hard_delete_assertions(
             context.log.info(
                 f"Hard deleting {i + 1:,} of {len(datahub__soft_delete_assertions):,} assertions..."
             )
-        emitter.soft_delete_entity(urn)
+        datahub_graph_client.hard_delete_entity(urn)
 
     return Output(
         None,
