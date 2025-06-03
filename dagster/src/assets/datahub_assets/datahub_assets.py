@@ -313,7 +313,7 @@ class ListPlatformEntitiesConfig(Config):
         "",
         description="Platform to filter entities by",
     )
-    urns_to_delete: list[str] = Field(
+    urns_to_keep: list[str] = Field(
         [],
         description="List of specific URNs to filter entities by. If empty, all entities for the platform will be considered for deletion.",
     )
@@ -338,7 +338,7 @@ def datahub__list_entities_to_delete(
     for item in assertion_urns:
         dataset_urn = item.split(",")[1]
 
-        if not any(valid_urn in dataset_urn for valid_urn in config.urns_to_delete):
+        if not any(valid_urn in dataset_urn for valid_urn in config.urns_to_keep):
             logger.info(f"Found valid URN for deletion: {item}")
             valid_urns.append(item)
 
