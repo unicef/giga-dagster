@@ -101,3 +101,13 @@ datahub__purge_assertions_job = define_asset_job(
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+datahub__purge_entities_job = define_asset_job(
+    name="datahub__purge_entities_job",
+    description="Soft deletes all assertions by default; must specify platform via Launchpad.",
+    selection=[
+        "datahub__list_entities_to_delete",
+        "datahub__delete_entities",
+    ],
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
