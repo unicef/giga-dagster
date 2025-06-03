@@ -93,6 +93,7 @@ datahub__add_business_glossary_job = define_asset_job(
 
 datahub__purge_assertions_job = define_asset_job(
     name="datahub__purge_assertions_job",
+    description="Soft deletes all assertions by default; can be changed to hard delete via Launchpad.",
     selection=[
         "datahub__list_assertions",
         "datahub__soft_delete_assertions",
