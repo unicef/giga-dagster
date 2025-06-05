@@ -27,6 +27,7 @@ from src.utils.datahub.emit_lineage import emit_lineage
 from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.datahub.update_policies import update_policy_for_group
+from src.utils.datahub.validator import should_emit_metadata
 from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_column_descriptions
 from src.utils.sentry import log_op_context
@@ -271,6 +272,15 @@ def datahub_emit_metadata_with_exception_catcher(
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:
+    urn_id = config.datahub_destination_dataset_urn.split("/")[1]
+
+    if not should_emit_metadata(
+        dataset_urn=config.datahub_destination_dataset_urn,
+        urn_id=urn_id,
+        in_production=settings.IN_PRODUCTION,
+    ):
+        return
+
     try:
         emit_metadata_to_datahub(
             context=context,
