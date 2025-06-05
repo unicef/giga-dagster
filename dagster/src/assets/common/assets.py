@@ -381,9 +381,7 @@ def master(
     master_table_name = construct_full_table_name("school_master", country_code)
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
         s.catalog.refreshTable(master_table_name)
-        current_master = DeltaTable.forName(
-            s, master_table_name
-        ).toDF()
+        current_master = DeltaTable.forName(s, master_table_name).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
         new_master = full_in_cluster_merge(
             current_master, silver, primary_key, column_names
@@ -442,9 +440,7 @@ def reference(
     reference_table_name = construct_full_table_name("school_reference", country_code)
     if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
         s.catalog.refreshTable(reference_table_name)
-        current_reference = DeltaTable.forName(
-            s, reference_table_name
-        ).toDF()
+        current_reference = DeltaTable.forName(s, reference_table_name).toDF()
         current_reference = add_missing_columns(current_reference, schema_columns)
         new_reference = full_in_cluster_merge(
             current_reference, silver, primary_key, column_names
