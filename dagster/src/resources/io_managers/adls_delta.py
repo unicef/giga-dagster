@@ -168,6 +168,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         full_table_name: str,
         context: OutputContext = None,
     ):
+        context.log.info("Upserting data...")
         spark = self._get_spark_session()
         is_qos = schema_name in ["qos", "qos_bronze", "school-connectivity"]
 
@@ -220,6 +221,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
+        context.log.info("Building deduped merge query...")
+        context.log.info(f"Is qos: {is_qos}")
         query = build_deduped_merge_query(
             master,
             data,
