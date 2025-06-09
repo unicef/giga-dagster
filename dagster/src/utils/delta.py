@@ -108,6 +108,8 @@ def build_deduped_merge_query(
         all_partitions = incoming.select(f.col("date")).distinct().collect()
 
         incoming_partitions = []
+
+        context.log.info(f"Number of partitions {len(all_partitions)} ")
         for idx, partition in enumerate(all_partitions):
             logger.info(
                 f"Partition number {idx + 1} of {len(all_partitions)}: {partition.date}"
