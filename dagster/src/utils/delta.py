@@ -1,5 +1,6 @@
 from delta.tables import DeltaMergeBuilder, DeltaTable, DeltaTableBuilder
 from icecream import ic
+from loguru import logger
 from pyspark import sql
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import (
@@ -104,9 +105,15 @@ def build_deduped_merge_query(
     incoming = updates.alias("incoming")
 
     if is_qos:
-        incoming_partitions = [
-            r.date for r in incoming.select(f.col("date")).distinct().collect()
-        ]
+        all_partitions = incoming.select(f.col("date")).distinct().collect()
+
+        incoming_partitions = []
+        for idx, partition in enumerate(all_partitions):
+            logger.info(
+                f"Partition number {idx + 1} of {len(all_partitions)}: {partition.date}"
+            )
+
+            incoming_partitions.append(partition.date)
         bc_incoming_partitions = incoming.sparkSession.sparkContext.broadcast(
             incoming_partitions
         )
