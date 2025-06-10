@@ -504,3 +504,13 @@ async def broadcast_master_release_notes(
                 context.log.error(str(e))
 
     return Output(None, metadata=metadata)
+
+
+@asset
+async def debug_print_asset():
+    """A debug asset to print the asset execution context."""
+    from dagster import get_dagster_logger
+
+    logger = get_dagster_logger()
+    logger.info("This is a debug asset to print the asset execution context.")
+    return Output(None, metadata={"message": "Debug asset executed successfully."})
