@@ -100,21 +100,33 @@ def build_deduped_merge_query(
     `updates` DataFrame without explicitly setting the `is_partial_dataset` flag. Otherwise,
     you may end up deleting more rows than you intended.
     """
-    master_df = master.toDF()
     incoming = updates.alias("incoming")
 
     if is_qos:
         incoming_partitions = [
             r.date for r in incoming.select(f.col("date")).distinct().collect()
         ]
+
+        if context is not None:
+            context.log.info(
+                f"Processing {len(incoming_partitions)} date partitions: {incoming_partitions}"
+            )
+
+        partition_filter = f.col("date").isin(incoming_partitions)
+
+        master_df = master.toDF().filter(partition_filter)
+        merge_condition = f.col(f"master.{primary_key}") == f.col(
+            f"incoming.{primary_key}"
+        )
+
         bc_incoming_partitions = incoming.sparkSession.sparkContext.broadcast(
             incoming_partitions
         )
-        master_df = master_df.filter(f.col("date").isin(bc_incoming_partitions.value))
-        merge_condition = (
-            f.col(f"master.{primary_key}") == f.col(f"incoming.{primary_key}")
-        ) & (f.col("incoming.date").isin(bc_incoming_partitions.value))
+        merge_condition = merge_condition & f.col("master.date").isin(
+            bc_incoming_partitions.value
+        )
     else:
+        master_df = master.toDF()
         merge_condition = f.col(f"master.{primary_key}") == f.col(
             f"incoming.{primary_key}"
         )
