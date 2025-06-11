@@ -490,10 +490,10 @@ async def broadcast_master_release_notes(
             .add_custom_properties(
                 {
                     "Dataset Version": str(metadata["version"]),
-                    "Row Count": f'{metadata["rows"]:,}',
-                    "Rows Added": f'{metadata["added"]:,}',
-                    "Rows Updated": f'{metadata["modified"]:,}',
-                    "Rows Deleted": f'{metadata["deleted"]:,}',
+                    "Row Count": f"{metadata['rows']:,}",
+                    "Rows Added": f"{metadata['added']:,}",
+                    "Rows Updated": f"{metadata['modified']:,}",
+                    "Rows Deleted": f"{metadata['deleted']:,}",
                 }
             )
             .build()
@@ -509,8 +509,15 @@ async def broadcast_master_release_notes(
 @asset
 async def debug_print_asset():
     """A debug asset to print the asset execution context."""
+    from loguru import logger
+
     from dagster import get_dagster_logger
 
-    logger = get_dagster_logger()
-    logger.info("This is a debug asset to print the asset execution context.")
+    dagster_logger = get_dagster_logger()
+    dagster_logger.info(
+        "DAGSTER_LOGGER: This is a debug asset to print the asset execution context."
+    )
+
+    logger.info("LOGURU:This is a debug asset to print the asset execution context.")
+    print("PRINT: logger")
     return Output(None, metadata={"message": "Debug asset executed successfully."})
