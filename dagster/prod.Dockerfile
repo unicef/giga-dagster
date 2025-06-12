@@ -62,5 +62,7 @@ COPY scripts ./scripts
 
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
+# Fix for Windows/Azure stdout logging issues
+ENV PYTHONLEGACYWINDOWSSTDIO 1
 
 CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]

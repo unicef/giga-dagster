@@ -3,6 +3,8 @@ FROM python:3.11-bullseye
 # Standard Python flags
 ENV PYTHONUNBUFFERED 1
 ENV PYTHONDONTWRITEBYTECODE 1
+# Fix for Windows/Azure stdout logging issues
+ENV PYTHONLEGACYWINDOWSSTDIO 1
 ARG POETRY_VERSION=1.6.1
 
 # Spark flags
