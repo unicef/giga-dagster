@@ -760,6 +760,7 @@ def merge_connectivity_to_master(
             "connectivity",
             f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
             .when(f.lower(f.col("connectivity_govt")) == "no", "No")
+            .when(f.lower(f.col("connectivity_govt")) == "unknown", "Unknown")
             .otherwise(f.lit(None).cast(StringType())),
         )
     elif "download_speed_govt" in uploaded_columns:
