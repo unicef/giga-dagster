@@ -6,7 +6,6 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import DataType, StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
@@ -100,48 +99,57 @@ def build_deduped_merge_query(
     `updates` DataFrame without explicitly setting the `is_partial_dataset` flag. Otherwise,
     you may end up deleting more rows than you intended.
     """
-    master_df = master.toDF()
     incoming = updates.alias("incoming")
 
     if is_qos:
         incoming_partitions = [
             r.date for r in incoming.select(f.col("date")).distinct().collect()
         ]
-        bc_incoming_partitions = incoming.sparkSession.sparkContext.broadcast(
-            incoming_partitions
-        )
-        master_df = master_df.filter(f.col("date").isin(bc_incoming_partitions.value))
-        merge_condition = (
-            f.col(f"master.{primary_key}") == f.col(f"incoming.{primary_key}")
-        ) & (f.col("incoming.date").isin(bc_incoming_partitions.value))
-    else:
+
+        if context is not None:
+            context.log.info(
+                f"Processing {len(incoming_partitions)} date partitions: {incoming_partitions}"
+            )
+
+        partition_filter = f.col("date").isin(incoming_partitions)
+
+        master_df = master.toDF().filter(partition_filter)
         merge_condition = f.col(f"master.{primary_key}") == f.col(
             f"incoming.{primary_key}"
         )
 
-    master_ids = master_df.select(primary_key, "signature")
-    incoming_ids = incoming.select(primary_key, "signature")
+        bc_incoming_partitions = incoming.sparkSession.sparkContext.broadcast(
+            incoming_partitions
+        )
+        merge_condition = merge_condition & f.col("master.date").isin(
+            bc_incoming_partitions.value
+        )
+    else:
+        master_df = master.toDF()
+        merge_condition = f.col(f"master.{primary_key}") == f.col(
+            f"incoming.{primary_key}"
+        )
+
+    master_ids = master_df.select(
+        f.col(primary_key), f.col("signature").alias("master_signature")
+    )
+    incoming_ids = incoming.select(
+        f.col(primary_key), f.col("signature").alias("incoming_signature")
+    )
 
     updates_df = incoming_ids.join(master_ids, primary_key, "inner")
     inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
     deletes_df = master_ids.join(incoming_ids, primary_key, "left_anti")
 
-    # Might need to specify a predictable order, although by default it's insertion order
-    updates_signature = updates_df.agg(
-        sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
-            "combined_signature",
-        ),
-    ).first()["combined_signature"]
-    master_to_update_signature = master_ids.agg(
-        sha2(concat_ws("|", collect_list("signature")), 256).alias(
-            "combined_signature",
-        ),
-    ).first()["combined_signature"]
-
     inserts_count = inserts_df.count()
     deletes_count = deletes_df.count()
 
-    has_updates = master_to_update_signature != updates_signature
+    has_updates = (
+        updates_df.where(f.col("master_signature") != f.col("incoming_signature"))
+        .limit(1)
+        .count()
+        > 0
+    )
     has_insertions = inserts_count > 0
     has_deletions = deletes_count > 0
 

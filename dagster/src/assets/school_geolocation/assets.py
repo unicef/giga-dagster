@@ -28,6 +28,7 @@ from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingSte
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import DeploymentEnvironment, settings
+from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
     column_mapping_rename,
@@ -256,6 +257,10 @@ def geolocation_bronze(
         spark=spark,
         schema_reference=df,
     )
+
+    for column in config_expectations.TITLE_CASE_COLUMNS:
+        if column in df.columns:
+            df = df.withColumn(column, f.initcap(f.col(column)))
 
     ## at this point it's already gone
     context.log.info("BEFORE DF TO PANDAS")
