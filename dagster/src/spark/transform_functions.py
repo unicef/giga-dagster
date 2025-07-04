@@ -680,9 +680,9 @@ def connectivity_rt_dataset(
 
     # select relevant columns
     realtime_columns = [
-        "school_id_giga",
+        # "school_id_giga",
         # "country",
-        # "school_id_govt",
+        "school_id_govt",
         "connectivity_RT_ingestion_timestamp",
         "connectivity_RT_datasource",
         "connectivity_RT",
@@ -708,7 +708,7 @@ def merge_connectivity_to_master(
 
     master = master.drop(*columns_to_drop)
 
-    master = master.join(connectivity, on="school_id_giga", how="left")
+    master = master.join(connectivity, on="school_id_govt", how="left")
 
     master = master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
