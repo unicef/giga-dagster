@@ -10,6 +10,7 @@ from src.utils.datahub.add_platform_metadata import add_platform_metadata
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
+from src.utils.datahub.entity import delete_entity_with_references
 from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
@@ -231,75 +232,53 @@ class DeleteAssertionsConfig(Config):
 
 class ListAssertionsConfig(Config):
     status: RemovedStatusFilter = Field(
-        RemovedStatusFilter.NOT_SOFT_DELETED,
+        RemovedStatusFilter.ALL,
         description="Filter for the status of entities during search",
     )
 
+    batch_size: int = Field(100, description="Assertions to delete at a time")
+    max_iterations: int = Field(10, description="Number of batches to delete")
+
 
 @asset
 @capture_op_exceptions
-def datahub__list_assertions(
+def datahub__purge_assertions(
     context: OpExecutionContext, config: ListAssertionsConfig
 ) -> Output[list[str]]:
-    assertion_urns = list(
-        datahub_graph_client.get_urns_by_filter(
-            entity_types=["assertion"], status=config.status
+    total_deleted = 0
+    total_references_deleted = 0
+
+    for iteration in range(config.max_iterations):
+        # Get batch of assertion URNs
+        assertion_urns = datahub_graph_client.list_all_entity_urns(
+            entity_type="assertion", start=0, count=config.batch_size
         )
-    )
-    context.log.info(f"Number of listed entries: {len(assertion_urns)}")
 
-    return Output(
-        assertion_urns,
-        metadata={
-            "count": len(assertion_urns),
-            "preview": MetadataValue.json(assertion_urns[:10]),
-        },
-    )
+        # Break if no more assertions to delete
+        if not assertion_urns:
+            context.log.info(f"No more assertions found after {iteration} iterations")
+            break
 
+        logger.info(
+            f"Iteration {iteration + 1}: Processing {len(assertion_urns)} assertions"
+        )
 
-@asset
-@capture_op_exceptions
-def datahub__soft_delete_assertions(
-    context: OpExecutionContext,
-    datahub__list_assertions: list[str],
-) -> Output[list[str]]:
-    for i, urn in enumerate(datahub__list_assertions):
-        if (i + 1) % 100 == 0:
-            context.log.info(
-                f"Soft deleting {i + 1:,} of {len(datahub__list_assertions):,} assertions..."
-            )
-        datahub_graph_client.soft_delete_entity(urn)
+        # Delete each assertion and its references
+        for assertion_urn in assertion_urns:
+            ref_count = delete_entity_with_references(context, assertion_urn)
+            total_references_deleted += ref_count
+            total_deleted += 1
 
-    return Output(
-        datahub__list_assertions,
-        metadata={
-            "count": len(datahub__list_assertions),
-        },
+    context.log.info(
+        f"Purge complete: deleted {total_deleted} assertions and {total_references_deleted} references"
     )
 
-
-@asset
-@capture_op_exceptions
-def datahub__hard_delete_assertions(
-    context: OpExecutionContext,
-    datahub__soft_delete_assertions: list[str],
-    config: DeleteAssertionsConfig,
-) -> Output[None]:
-    if not config.hard:
-        context.log.warning("`hard`=False, skipping hard delete.")
-        return Output(None)
-
-    for i, urn in enumerate(datahub__soft_delete_assertions):
-        if (i + 1) % 100 == 0:
-            context.log.info(
-                f"Hard deleting {i + 1:,} of {len(datahub__soft_delete_assertions):,} assertions..."
-            )
-        datahub_graph_client.hard_delete_entity(urn)
-
     return Output(
-        None,
+        [],
         metadata={
-            "count": len(datahub__soft_delete_assertions),
+            "total_assertions_deleted": total_deleted,
+            "total_references_deleted": total_references_deleted,
+            "iterations_completed": iteration + 1 if "iteration" in locals() else 0,
         },
     )
 
@@ -369,7 +348,7 @@ def datahub__delete_entities(
 
         for idx, entity in enumerate(datahub__list_entities_to_delete):
             logger.info(
-                f"Hard deleting entity #{idx+1} out of {num_of_entities}: {entity}"
+                f"Hard deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
             datahub_graph_client.hard_delete_entity(urn=entity)
 
@@ -377,7 +356,7 @@ def datahub__delete_entities(
         logger.warning("Soft deleting entities...")
         for idx, entity in enumerate(datahub__list_entities_to_delete):
             logger.info(
-                f"Soft deleting entity #{idx+1} out of {num_of_entities}: {entity}"
+                f"Soft deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
             datahub_graph_client.soft_delete_entity(urn=entity)
 
