@@ -7,10 +7,14 @@ from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
+from src.utils.datahub.batch_processing import (
+    create_parallel_batches,
+    delete_assertion_batch,
+    process_batches_in_parallel,
+)
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
-from src.utils.datahub.entity import delete_entity_with_references
 from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
@@ -249,25 +253,29 @@ def datahub__purge_assertions(
     total_references_deleted = 0
 
     for iteration in range(config.max_iterations):
-        # Get batch of assertion URNs
-        assertion_urns = datahub_graph_client.list_all_entity_urns(
-            entity_type="assertion", start=0, count=config.batch_size
+        # Get all assertion URNs for this iteration
+        all_assertion_urns = datahub_graph_client.list_all_entity_urns(
+            entity_type="assertion", start=0, count=config.batch_size * 5
         )
 
-        # Break if no more assertions to delete
-        if not assertion_urns:
+        if not all_assertion_urns:
             context.log.info(f"No more assertions found after {iteration} iterations")
             break
 
+        # Create parallel batches
+        batches = create_parallel_batches(all_assertion_urns, num_parallel=5)
+
         logger.info(
-            f"Iteration {iteration + 1}: Processing {len(assertion_urns)} assertions"
+            f"Iteration {iteration + 1}: Processing {len(all_assertion_urns)} assertions in {len(batches)} parallel batches"
         )
 
-        # Delete each assertion and its references
-        for assertion_urn in assertion_urns:
-            ref_count = delete_entity_with_references(context, assertion_urn)
-            total_references_deleted += ref_count
-            total_deleted += 1
+        # Process batches in parallel
+        batch_deleted_total, batch_refs_deleted_total = process_batches_in_parallel(
+            context, batches, delete_assertion_batch, max_workers=len(batches)
+        )
+
+        total_deleted += batch_deleted_total
+        total_references_deleted += batch_refs_deleted_total
 
     context.log.info(
         f"Purge complete: deleted {total_deleted} assertions and {total_references_deleted} references"
