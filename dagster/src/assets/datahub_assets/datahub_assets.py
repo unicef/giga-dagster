@@ -243,6 +243,10 @@ class ListAssertionsConfig(Config):
 
     batch_size: int = Field(100, description="Assertions to delete at a time")
     max_iterations: int = Field(10, description="Number of batches to delete")
+    num_workers: int = Field(
+        5,
+        description="Number of worker threads to use for parallel processing",
+    )
 
 
 @asset
@@ -264,7 +268,9 @@ def datahub__purge_assertions(
             break
 
         # Create parallel batches
-        batches = create_parallel_batches(all_assertion_urns, num_parallel=5)
+        batches = create_parallel_batches(
+            all_assertion_urns, num_parallel=config.num_workers
+        )
 
         logger.info(
             f"Iteration {iteration + 1}: Processing {len(all_assertion_urns)} assertions in {len(batches)} parallel batches"
@@ -312,7 +318,9 @@ class ListPlatformEntitiesConfig(Config):
 def datahub__list_entity_count(
     context: OpExecutionContext,
 ) -> None:
-    total_assertions = get_entity_count_safe("assertion", batch_size=150)
+    total_assertions = get_entity_count_safe(
+        "assertion", batch_size=150
+    )  # fails if more than 200 batches
     context.log.info(f"Total assertions in DataHub: {total_assertions}")
 
 
