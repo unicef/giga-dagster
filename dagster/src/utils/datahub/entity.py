@@ -18,3 +18,62 @@ def delete_entity_with_references(context: OpExecutionContext, urn: str) -> int:
     logger.info(f"Hard deleted entity: {urn}")
 
     return reference_count
+
+
+def get_entity_count_safe(entity_type: str = "assertion", batch_size: int = 100):
+    """
+    Get the total count of entities using safe pagination to avoid timeouts.
+
+    Args:
+        entity_type: Type of entity to count (e.g., "assertion", "dataset")
+        batch_size: Small batch size to avoid timeouts (default: 100)
+
+    Returns:
+        Total count of entities
+    """
+    total_count = 0
+    start = 0
+
+    print(f"🔍 Counting {entity_type} entities with batch size {batch_size}...")
+
+    while True:
+        try:
+            print(f"  📊 Fetching batch starting at {start}")
+
+            # Get entities for this batch with small count to avoid timeout
+            entities = datahub_graph_client.list_all_entity_urns(
+                entity_type=entity_type,
+                start=start,
+                count=batch_size,
+            )
+
+            batch_count = len(entities)
+            total_count += batch_count
+
+            print(f"  ✅ Found {batch_count} entities (total so far: {total_count})")
+
+            # If we got fewer entities than requested, we've reached the end
+            if batch_count < batch_size:
+                print(f"🎯 Reached end of {entity_type} entities")
+                break
+
+            start += batch_size
+
+            # Safety check to prevent infinite loops
+            if start > 500000:  # Reasonable safety limit
+                print("⚠️ Reached safety limit, stopping count")
+                break
+
+        except Exception as e:
+            print(f"❌ Error fetching batch at start={start}: {e}")
+            # Try with even smaller batch size
+            if batch_size > 10:
+                batch_size = batch_size // 2
+                print(f"🔄 Retrying with smaller batch size: {batch_size}")
+                continue
+            else:
+                print("💥 Failed even with smallest batch size")
+                break
+
+    print(f"🎯 Final {entity_type} count: {total_count}")
+    return total_count

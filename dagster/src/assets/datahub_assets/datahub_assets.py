@@ -15,6 +15,7 @@ from src.utils.datahub.batch_processing import (
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
+from src.utils.datahub.entity import get_entity_count_safe
 from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
@@ -304,6 +305,15 @@ class ListPlatformEntitiesConfig(Config):
         [],
         description="List of specific URNs to filter entities by. If empty, all entities for the platform will be considered for deletion.",
     )
+
+
+@asset
+@capture_op_exceptions
+def datahub__list_entity_count(
+    context: OpExecutionContext,
+) -> None:
+    total_assertions = get_entity_count_safe("assertion", batch_size=150)
+    context.log.info(f"Total assertions in DataHub: {total_assertions}")
 
 
 @asset
