@@ -93,11 +93,9 @@ datahub__add_business_glossary_job = define_asset_job(
 
 datahub__purge_assertions_job = define_asset_job(
     name="datahub__purge_assertions_job",
-    description="Soft deletes all assertions by default; can be changed to hard delete via Launchpad.",
+    description="Deletes all assertions and references to them",
     selection=[
-        "datahub__list_assertions",
-        "datahub__soft_delete_assertions",
-        "datahub__hard_delete_assertions",
+        "datahub__purge_assertions",
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
