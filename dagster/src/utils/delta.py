@@ -6,7 +6,6 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.functions import collect_list, concat_ws, sha2
 from pyspark.sql.types import DataType, StructField, StructType
 
 from dagster import InputContext, OpExecutionContext, OutputContext
@@ -131,29 +130,27 @@ def build_deduped_merge_query(
             f"incoming.{primary_key}"
         )
 
-    master_ids = master_df.select(primary_key, "signature")
-    incoming_ids = incoming.select(primary_key, "signature")
+    master_ids = master_df.select(
+        primary_key, f.col("signature").alias("master_signature")
+    )
+    incoming_ids = incoming.select(
+        primary_key, f.col("signature").alias("incoming_signature")
+    )
 
     updates_df = incoming_ids.join(master_ids, primary_key, "inner")
     inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
-    deletes_df = master_ids.join(incoming_ids, primary_key, "left_anti")
+    deletes_df = master_df.select(primary_key).join(
+        incoming_ids, primary_key, "left_anti"
+    )
 
-    # Might need to specify a predictable order, although by default it's insertion order
-    updates_signature = updates_df.agg(
-        sha2(concat_ws("|", collect_list("incoming.signature")), 256).alias(
-            "combined_signature",
-        ),
-    ).first()["combined_signature"]
-    master_to_update_signature = master_ids.agg(
-        sha2(concat_ws("|", collect_list("signature")), 256).alias(
-            "combined_signature",
-        ),
-    ).first()["combined_signature"]
-
+    has_updates = (
+        updates_df.filter(f.col("master_signature") != f.col("incoming_signature"))
+        .limit(1)
+        .count()
+    ) > 0
     inserts_count = inserts_df.count()
     deletes_count = deletes_df.count()
 
-    has_updates = master_to_update_signature != updates_signature
     has_insertions = inserts_count > 0
     has_deletions = deletes_count > 0
 
