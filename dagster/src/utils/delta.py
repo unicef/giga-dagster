@@ -160,6 +160,7 @@ def build_deduped_merge_query(
         return None
 
     if context is not None:
+        context.log.info(f"{is_qos=}, {is_partial_dataset=}")
         context.log.info(f"{inserts_count=}, {deletes_count=}, {has_updates=}")
 
     query = master.alias("master").merge(incoming.alias("incoming"), merge_condition)
