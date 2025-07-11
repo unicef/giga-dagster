@@ -1,19 +1,16 @@
-from datetime import datetime
 from pathlib import Path
 from typing import Union
 
 import pandas as pd
 from delta import DeltaTable
 from pyspark import sql
-from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 
 from azure.core.exceptions import ResourceNotFoundError
 from dagster import InputContext, OutputContext
 from src.settings import settings
-from src.constants import DataTier
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import check_table_exists, execute_query_with_error_handler
+from src.utils.delta import execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import construct_full_table_name
 
@@ -40,7 +37,7 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         Handles the output by:
         1. Converting input to Spark DataFrame if needed
         2. Creating Delta table and writing data
-        3. Creating single-file output at computed filepath for compatibility
+        3. Creating compatible output using intelligent I/O routing
         """
         context.log.info("Handling IntermediaryDeltaIOManager output...")
         if output is None:
@@ -88,51 +85,113 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
             f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
 
-        # 2. Create single-file output at computed filepath for compatibility
-        self._save_single_file_output(context, spark_df)
+        # 2. Create compatible output using intelligent I/O routing
+        self._save_compatible_output(context, output)
 
-    def _save_single_file_output(
+    def _save_compatible_output(
         self,
         context: OutputContext,
-        spark_df: sql.DataFrame,
+        output: Union[sql.DataFrame, pd.DataFrame],
     ):
         """
-        Save the data as a single file at the computed filepath for compatibility with ADLSPandasIOManager.
+        Save the data using intelligent I/O routing based on data type and format.
 
-        This ensures drop-in replacement functionality by creating files at the same paths
-        that ADLSPandasIOManager would use.
+        This method:
+        - Uses single-file I/O for Pandas DataFrames
+        - Uses distributed I/O for Spark DataFrames with supported formats
+        - Falls back to single-file I/O for unsupported Spark formats (like Excel)
+
+        This ensures drop-in replacement functionality while optimizing performance.
         """
         # Get the filepath that would be used by ADLSPandasIOManager
         filepath = self._get_filepath(context)
-        context.log.info(f"Saving single file output to: {filepath}")
+        file_ext = Path(filepath).suffix.lower()
+        context.log.info(
+            f"Saving compatible output to: {filepath} (format: {file_ext})"
+        )
 
         try:
-            # Convert Spark DataFrame to Pandas for single-file upload
-            # For large datasets, this might be memory-intensive, but ensures compatibility
-            if spark_df.count() > 100000:  # Warn for large datasets
-                context.log.warning(
-                    f"Converting large Spark DataFrame ({spark_df.count()} rows) to Pandas for single-file upload. "
-                    "Consider using Spark output type for better performance."
+            if isinstance(output, pd.DataFrame):
+                # Pandas DataFrame: Always use single-file I/O
+                context.log.info("Using single-file I/O for Pandas DataFrame")
+                adls_client.upload_pandas_dataframe_as_file(
+                    context=context,
+                    data=output,
+                    filepath=str(filepath),
                 )
+                context.log.info(f"Successfully saved Pandas DataFrame to {filepath}")
 
-            pandas_converted = spark_df.toPandas()
-            adls_client.upload_pandas_dataframe_as_file(
-                context=context,
-                data=pandas_converted,
-                filepath=str(filepath),
-            )
-            context.log.info(f"Successfully saved single file output to {filepath}")
+            elif isinstance(output, sql.DataFrame):
+                # Spark DataFrame: Use intelligent routing based on format
+                distributed_formats = {".parquet", ".csv", ".json"}
+
+                if file_ext in distributed_formats:
+                    # Use distributed I/O for supported formats
+                    context.log.info(
+                        f"Using distributed I/O for Spark DataFrame (format: {file_ext})"
+                    )
+
+                    # Transform logical filepath to directory path
+                    # e.g., "my_data.parquet" -> "my_data/"
+                    directory_path = str(Path(filepath).with_suffix("")).rstrip(".")
+                    file_format = file_ext.lstrip(".")  # Remove the dot
+
+                    adls_client.upload_spark_dataframe_as_files(
+                        spark_df=output,
+                        directory_path=directory_path,
+                        file_format=file_format,
+                        mode="overwrite",
+                    )
+                    context.log.info(
+                        f"Successfully saved Spark DataFrame to distributed directory: {directory_path}"
+                    )
+
+                else:
+                    # Unsupported format for distributed I/O (e.g., Excel)
+                    # Fall back to single-file I/O via Pandas conversion
+                    context.log.warning(
+                        f"Format {file_ext} not supported for distributed I/O. "
+                        f"Converting Spark DataFrame to Pandas for single-file upload. "
+                        f"This may impact performance for large datasets."
+                    )
+
+                    # Check dataset size and warn if large
+                    row_count = output.count()
+                    if row_count > 100000:
+                        context.log.warning(
+                            f"Converting large Spark DataFrame ({row_count} rows) to Pandas. "
+                            "Consider using a supported distributed format (parquet, csv, json) for better performance."
+                        )
+
+                    pandas_converted = output.toPandas()
+                    adls_client.upload_pandas_dataframe_as_file(
+                        context=context,
+                        data=pandas_converted,
+                        filepath=str(filepath),
+                    )
+                    context.log.info(
+                        f"Successfully saved Spark DataFrame as single file to {filepath}"
+                    )
+
+            else:
+                raise ValueError(f"Unsupported output type: {type(output)}")
 
         except Exception as e:
-            context.log.error(f"Failed to save single file output: {e}")
+            context.log.error(f"Failed to save compatible output: {e}")
             # Don't raise the error to prevent the main Delta Table functionality from failing
+            context.log.info(
+                "Delta table write succeeded, but compatible output failed. Data is still available in Delta table."
+            )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         """
-        Loads input data with fallback strategy:
+        Loads input data with enhanced fallback strategy:
         1. First try to load from Delta table
-        2. If Delta table doesn't exist, try to load from file
-        3. Return Spark DataFrame in all cases
+        2. If Delta table doesn't exist, try distributed directory format
+        3. If directory doesn't exist, try single file format
+        4. Return Spark DataFrame in all cases
+
+        This provides backwards compatibility with assets materialized before the refactor.
         """
         context.log.info("Handling IntermediaryDeltaIOManager input...")
 
@@ -181,28 +240,130 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
             )
             return dt.toDF()
         except Exception as e:
-            context.log.warning(f"Could not load from Delta table: {e}. Trying file.")
+            context.log.warning(
+                f"Could not load from Delta table: {e}. Trying file-based fallback."
+            )
 
-        # Fallback to file-based loading
+        # Fallback to file-based loading with enhanced logic
         filepath = self._get_filepath(context)
+        file_ext = Path(filepath).suffix.lower()
+        context.log.info(
+            f"Attempting file-based fallback for: {filepath} (format: {file_ext})"
+        )
+        return self._load_from_file_fallback(context, filepath, file_ext, spark)
+
+    def _load_from_file_fallback(
+        self,
+        context: InputContext,
+        filepath: Path,
+        file_ext: str,
+        spark: sql.SparkSession,
+    ) -> sql.DataFrame:
+        """
+        Helper method to load input data from file-based fallbacks (distributed or single file).
+        """
         try:
-            context.log.info(f"Attempting to load from file: {filepath}")
+            # Enhanced fallback logic: try distributed first, then single file
+            distributed_formats = {".parquet", ".csv", ".json"}
 
-            # Try to load as Spark DataFrame from file
-            data = adls_client.download_csv_as_spark_dataframe(str(filepath), spark)
-            context.log.info(f"Successfully loaded from file: {filepath}")
-            return data
-
-        except ResourceNotFoundError:
-            # Handle reference files that might not exist
-            if "_reference_" in context.asset_key.to_user_string():
-                context.log.warning(
-                    f"Reference file {filepath} does not exist, returning empty DataFrame."
+            if file_ext in distributed_formats:
+                # Try distributed directory format first
+                directory_path = str(Path(filepath).with_suffix(""))
+                context.log.info(
+                    f"Checking for distributed directory: {directory_path}"
                 )
-                return spark.createDataFrame([], StructType())
-            raise
+
+                if adls_client.folder_exists(directory_path):
+                    context.log.info(
+                        f"Found distributed directory, loading from: {directory_path}"
+                    )
+                    file_format = file_ext.lstrip(".")  # Remove the dot
+
+                    data = adls_client.download_files_as_spark_dataframe(
+                        spark=spark,
+                        directory_path=directory_path,
+                        file_format=file_format,
+                    )
+                    context.log.info(
+                        f"Successfully loaded from distributed directory: {directory_path}"
+                    )
+                    return data
+                else:
+                    context.log.info(
+                        f"Distributed directory not found, trying single file: {filepath}"
+                    )
+
+            # Try single file format (either because format doesn't support distributed or directory doesn't exist)
+            try:
+                if file_ext == ".csv":
+                    # Use existing CSV loading method
+                    data = adls_client.download_csv_as_spark_dataframe(
+                        str(filepath), spark
+                    )
+                    context.log.info(
+                        f"Successfully loaded CSV from single file: {filepath}"
+                    )
+                    return data
+
+                elif file_ext in [".xls", ".xlsx"]:
+                    # Excel files: load as Pandas then convert to Spark
+                    context.log.info(
+                        f"Loading Excel file as Pandas then converting to Spark: {filepath}"
+                    )
+                    pandas_data = adls_client.download_csv_as_pandas_dataframe(
+                        str(filepath)
+                    )
+                    data = spark.createDataFrame(pandas_data)
+                    context.log.info(
+                        f"Successfully loaded Excel from single file: {filepath}"
+                    )
+                    return data
+
+                elif file_ext == ".json":
+                    # JSON files: try direct Spark loading
+                    adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+                    data = spark.read.option("multiLine", "true").json(adls_path)
+                    context.log.info(
+                        f"Successfully loaded JSON from single file: {filepath}"
+                    )
+                    return data
+
+                elif file_ext == ".parquet":
+                    # Parquet files: try direct Spark loading
+                    adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+                    data = spark.read.parquet(adls_path)
+                    context.log.info(
+                        f"Successfully loaded Parquet from single file: {filepath}"
+                    )
+                    return data
+
+                else:
+                    # Unsupported format: try generic Pandas loading then convert
+                    context.log.warning(
+                        f"Unsupported format {file_ext}, attempting Pandas conversion"
+                    )
+                    pandas_data = adls_client.download_csv_as_pandas_dataframe(
+                        str(filepath)
+                    )
+                    data = spark.createDataFrame(pandas_data)
+                    context.log.info(
+                        f"Successfully loaded unsupported format via Pandas conversion: {filepath}"
+                    )
+                    return data
+
+            except ResourceNotFoundError:
+                # Handle reference files that might not exist
+                if "_reference_" in context.asset_key.to_user_string():
+                    context.log.warning(
+                        f"Reference file {filepath} does not exist, returning empty DataFrame."
+                    )
+                    return spark.createDataFrame([], StructType())
+                raise
+
         except Exception as e:
-            context.log.error(f"Failed to load from file {filepath}: {e}")
+            context.log.error(
+                f"Failed to load from any fallback method for {filepath}: {e}"
+            )
             raise
 
     def _create_table_if_not_exists(
