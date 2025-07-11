@@ -301,11 +301,11 @@ def datahub__purge_assertions(
 class ListPlatformEntitiesConfig(Config):
     status: RemovedStatusFilter = Field(
         RemovedStatusFilter.NOT_SOFT_DELETED,
-        description="Filter for the status of entities during search",
+        description="Filter to list entities that are either hard, soft deleted, or both",
     )
     platform: str = Field(
         "",
-        description="Platform to filter entities by",
+        description="Platform to filter entities by e.g. 'deltaLake, hive, adlsGen2",
     )
     urns_to_keep: list[str] = Field(
         [],
@@ -369,18 +369,17 @@ def datahub__delete_entities(
 ):
     num_of_entities = len(datahub__list_entities_to_delete)
 
-    if config.hard:
-        logger.warning("Hard deleting entities...")
+    for idx, entity in enumerate(datahub__list_entities_to_delete):
+        if config.hard:
+            logger.warning("Hard deleting entities...")
 
-        for idx, entity in enumerate(datahub__list_entities_to_delete):
             logger.info(
                 f"Hard deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
             datahub_graph_client.hard_delete_entity(urn=entity)
 
-    else:
-        logger.warning("Soft deleting entities...")
-        for idx, entity in enumerate(datahub__list_entities_to_delete):
+        else:
+            logger.warning("Soft deleting entities...")
             logger.info(
                 f"Soft deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
