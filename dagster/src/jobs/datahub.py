@@ -93,7 +93,7 @@ datahub__add_business_glossary_job = define_asset_job(
 
 datahub__purge_assertions_job = define_asset_job(
     name="datahub__purge_assertions_job",
-    description="Deletes all assertions and references to them",
+    description="Hard deletes all assertions and references to them.",
     selection=[
         "datahub__purge_assertions",
     ],
@@ -102,7 +102,7 @@ datahub__purge_assertions_job = define_asset_job(
 
 datahub__purge_entities_job = define_asset_job(
     name="datahub__purge_entities_job",
-    description="Soft deletes all assertions by default; must specify platform via Launchpad.",
+    description="Deletes entities filtered by platform. Soft deletes by default.",
     selection=[
         "datahub__list_entities_to_delete",
         "datahub__delete_entities",
