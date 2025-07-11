@@ -165,7 +165,7 @@ def geolocation_metadata(
     return Output(None)
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
@@ -244,7 +244,14 @@ def geolocation_bronze(
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         # QoS Columns
         coco = CountryConverter()
-        country_code_2 = coco.convert(country_code, to="ISO2")
+        country_code_2_result = coco.convert(country_code, to="ISO2")
+        # Handle the case where convert returns a list or string
+        if isinstance(country_code_2_result, list):
+            country_code_2 = (
+                country_code_2_result[0] if country_code_2_result else country_code
+            )
+        else:
+            country_code_2 = country_code_2_result
         connectivity = connectivity_rt_dataset(s, country_code_2)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
@@ -276,7 +283,7 @@ def geolocation_bronze(
     )
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
@@ -359,14 +366,15 @@ def geolocation_data_quality_results(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 async def geolocation_data_quality_results_human_readable(
     context: OpExecutionContext,
     geolocation_bronze: sql.DataFrame,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
-) -> Output[pd.DataFrame]:
+    spark: PySparkResource,
+) -> Output[sql.DataFrame]:
     context.log.info("Get the file upload object from the database")
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -389,9 +397,9 @@ async def geolocation_data_quality_results_human_readable(
         geolocation_data_quality_results, uploaded_columns
     )
     bronze = geolocation_bronze.select(*uploaded_columns)
-    context.log.info("Convert the dataframe to a pands object to save it locally")
+    context.log.info("Convert the dataframe to human readable descriptions and upload")
 
-    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+    df_spark = convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_results=df,
         dataset_type=dataset_type,
         bronze=bronze,
@@ -399,59 +407,58 @@ async def geolocation_data_quality_results_human_readable(
         context=context,
     )
 
+    # Return Spark DataFrame instead of converting to Pandas
     return Output(
-        df_pandas,
+        df_spark,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": df_spark.count(),
+            "preview": get_table_preview(df_spark.limit(10).toPandas()),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 async def geolocation_dq_schools_passed_human_readable(
     context: OpExecutionContext,
     geolocation_data_quality_results_human_readable: sql.DataFrame,
     config: FileConfig,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     context.log.info("Filter and keep schools that do not have a critical error")
     df = geolocation_data_quality_results_human_readable.filter(
         geolocation_data_quality_results_human_readable.dq_has_critical_error == 0
     )
     df = df.drop("dq_has_critical_error", "failure_reason")
-    df_pandas = df.toPandas()
 
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": df.count(),
+            "preview": get_table_preview(df.limit(10).toPandas()),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 async def geolocation_dq_schools_failed_human_readable(
     context: OpExecutionContext,
     geolocation_data_quality_results_human_readable: sql.DataFrame,
     config: FileConfig,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     context.log.info("Filter and keep schools that have a critical error")
     df = geolocation_data_quality_results_human_readable.filter(
         geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
     )
-    df_pandas = df.toPandas()
 
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": df.count(),
+            "preview": get_table_preview(df.limit(10).toPandas()),
         },
     )
 
@@ -536,7 +543,7 @@ def geolocation_data_quality_report(
     return Output(dq_report)
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
@@ -572,7 +579,7 @@ def geolocation_dq_passed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
@@ -665,9 +672,28 @@ def geolocation_delete_staging(
     config: FileConfig,
 ) -> Output[None]:
     delete_row_ids = adls_file_client.download_json(config.filepath)
-    if isinstance(delete_row_ids, list):
+    if isinstance(delete_row_ids, dict):
+        # If it's a dict, we can't process it as row IDs
+        context.log.error(f"Expected list of row IDs, got dict: {delete_row_ids}")
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "error": "Invalid delete_row_ids format",
+            },
+        )
+    elif isinstance(delete_row_ids, list):
         # dedupe change IDs
         delete_row_ids = list(set(delete_row_ids))
+    else:
+        context.log.error(f"Expected list of row IDs, got: {type(delete_row_ids)}")
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "error": "Invalid delete_row_ids format",
+            },
+        )
 
     staging_step = StagingStep(
         context,

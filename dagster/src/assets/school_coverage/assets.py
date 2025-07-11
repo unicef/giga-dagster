@@ -48,7 +48,7 @@ from src.utils.schema import (
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import MetadataValue, OpExecutionContext, Output, asset, Generator, Any
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -58,7 +58,7 @@ def coverage_raw(
     adls_file_client: ADLSFileClient,
     config: FileConfig,
     spark: PySparkResource,
-) -> bytes:
+) -> Generator[Output[bytes], Any, Any]:
     df = adls_file_client.download_raw(config.filepath)
 
     datahub_emit_metadata_with_exception_catcher(
@@ -69,7 +69,7 @@ def coverage_raw(
     yield Output(df, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_data_quality_results(
     context: OpExecutionContext,
@@ -176,7 +176,7 @@ async def coverage_data_quality_results_summary(
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_passed_rows(
     context: OpExecutionContext,
@@ -210,7 +210,7 @@ def coverage_dq_passed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_dq_failed_rows(
     context: OpExecutionContext,
@@ -245,7 +245,7 @@ def coverage_dq_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.INTERMEDIARY_ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_INTERMEDIARY_IO_MANAGER.value)
 @capture_op_exceptions
 def coverage_bronze(
     context: OpExecutionContext,
@@ -356,7 +356,11 @@ def coverage_delete_staging(
     delete_row_ids = adls_file_client.download_json(config.filepath)
     if isinstance(delete_row_ids, list):
         # dedupe change IDs
-        delete_row_ids = list(set(delete_row_ids))
+        delete_row_ids = [str(x) for x in list(set(delete_row_ids))]
+    else:
+        raise ValueError(
+            "Expected delete_row_ids to be a list, but received a dictionary."
+        )
 
     staging_step = StagingStep(
         context,
