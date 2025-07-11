@@ -87,6 +87,90 @@ class ADLSFileClient(ConfigurableResource):
 
         return spark.read.csv(**reader_params, schema=schema)
 
+    def upload_spark_dataframe_as_files(
+        self,
+        spark_df: sql.DataFrame,
+        directory_path: str,
+        file_format: str,
+        mode: str = "overwrite",
+    ) -> None:
+        """
+        Write a Spark DataFrame to a directory in ADLS in a distributed manner.
+
+        Args:
+            spark_df: The Spark DataFrame to write
+            directory_path: The directory path in ADLS (without leading slash)
+            file_format: The file format (parquet, csv, json, etc.)
+            mode: Write mode (overwrite, append, etc.)
+        """
+        # Construct the full ADLS path using abfss protocol
+        full_adls_path = (
+            f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory_path.rstrip('/')}"
+        )
+
+        logger.info(
+            f"Writing Spark DataFrame to distributed directory: {full_adls_path}"
+        )
+
+        writer = spark_df.write.format(file_format).mode(mode)
+
+        # Add format-specific options
+        if file_format == "csv":
+            writer = writer.option("header", "true").option("escape", '"')
+        elif file_format == "json":
+            writer = writer.option("multiLine", "true")
+
+        writer.save(full_adls_path)
+        logger.info(f"Successfully wrote Spark DataFrame to {full_adls_path}")
+
+    def download_files_as_spark_dataframe(
+        self,
+        spark: SparkSession,
+        directory_path: str,
+        file_format: str,
+        schema: StructType | None = None,
+    ) -> sql.DataFrame:
+        """
+        Read a directory of part-files (previously written by Spark) into a single Spark DataFrame.
+
+        Args:
+            spark: The Spark session
+            directory_path: The directory path in ADLS (without leading slash)
+            file_format: The file format (parquet, csv, json, etc.)
+            schema: Optional schema for the DataFrame
+
+        Returns:
+            A Spark DataFrame containing all data from the directory
+        """
+        # Construct the full ADLS path using abfss protocol
+        full_adls_path = (
+            f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory_path.rstrip('/')}"
+        )
+
+        logger.info(
+            f"Reading Spark DataFrame from distributed directory: {full_adls_path}"
+        )
+
+        reader = spark.read.format(file_format)
+
+        # Add format-specific options
+        if file_format == "csv":
+            reader = (
+                reader.option("header", "true")
+                .option("escape", '"')
+                .option("multiLine", "true")
+            )
+        elif file_format == "json":
+            reader = reader.option("multiLine", "true")
+
+        # Apply schema if provided
+        if schema is not None:
+            reader = reader.schema(schema)
+
+        df = reader.load(full_adls_path)
+        logger.info(f"Successfully read Spark DataFrame from {full_adls_path}")
+        return df
+
     def upload_pandas_dataframe_as_file(
         self,
         context: OutputContext | OpExecutionContext,

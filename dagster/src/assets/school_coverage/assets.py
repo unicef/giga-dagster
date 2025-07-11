@@ -48,7 +48,7 @@ from src.utils.schema import (
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset, Generator, Any
+from dagster import Any, Generator, MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
