@@ -4,7 +4,9 @@ from dagster import OpExecutionContext
 from src.utils.datahub.graphql import datahub_graph_client
 
 
-def delete_entity_with_references(context: OpExecutionContext, urn: str) -> int:
+def delete_entity_with_references(
+    context: OpExecutionContext, urn: str, hard_delete: bool = True
+) -> int:
     """Delete an entity and its references, returning the number of references deleted."""
     reference_count, _ = datahub_graph_client.delete_references_to_urn(
         urn=urn,
@@ -14,8 +16,12 @@ def delete_entity_with_references(context: OpExecutionContext, urn: str) -> int:
     if reference_count > 0:
         context.log.info(f"Deleted {reference_count} references to {urn}")
 
-    datahub_graph_client.hard_delete_entity(urn=urn)
-    logger.info(f"Hard deleted entity: {urn}")
+    if hard_delete:
+        datahub_graph_client.hard_delete_entity(urn=urn)
+    else:
+        datahub_graph_client.soft_delete_entity(urn=urn)
+
+    logger.info(f"{"Hard" if hard_delete else "Soft"} deleted entity: {urn}")
 
     return reference_count
 
