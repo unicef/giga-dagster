@@ -1,12 +1,19 @@
 from datetime import datetime
+from pathlib import Path
+from typing import Union
 
+import pandas as pd
 from delta import DeltaTable
 from pyspark import sql
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 
-from dagster import OutputContext
+from azure.core.exceptions import ResourceNotFoundError
+from dagster import InputContext, OutputContext
 from src.settings import settings
+from src.constants import DataTier
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import execute_query_with_error_handler
+from src.utils.delta import check_table_exists, execute_query_with_error_handler
 from src.utils.op_config import FileConfig
 from src.utils.schema import construct_full_table_name
 
@@ -15,21 +22,25 @@ from .adls_delta import ADLSDeltaIOManager
 adls_client = ADLSFileClient()
 
 
-class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
+class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
     """
-    An ADLS Delta IO Manager designed for intermediary outputs where schema
-    validation against a predefined schema is not required, and data is
-    typically overwritten.
+    A unified ADLS Delta IO Manager that can handle both Pandas and Spark DataFrames.
 
-    Additionally, this IO manager saves a copy of the data as CSV files
-    in a timestamped folder to allow for historical tracking of intermediate results.
+    This manager:
+    1. Stores data primarily in Delta tables for queryability and robustness
+    2. Creates single-file outputs (CSV/JSON/Parquet) at computed filepaths for compatibility
+    3. Supports both Pandas and Spark DataFrame inputs/outputs with automatic conversion
+    4. Provides drop-in replacement functionality for ADLSPandasIOManager
     """
 
-    def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
+    def handle_output(
+        self, context: OutputContext, output: Union[sql.DataFrame, pd.DataFrame, None]
+    ):
         """
         Handles the output by:
-        1. Creating the schema and table if they don't exist and writing to Delta Table
-        2. Additionally saving the data as CSV files in a timestamped folder
+        1. Converting input to Spark DataFrame if needed
+        2. Creating Delta table and writing data
+        3. Creating single-file output at computed filepath for compatibility
         """
         context.log.info("Handling IntermediaryDeltaIOManager output...")
         if output is None:
@@ -37,6 +48,15 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
             return
 
         config = FileConfig(**context.step_context.op_config)
+        spark = self._get_spark_session()
+
+        # Convert to Spark DataFrame if needed
+        if isinstance(output, pd.DataFrame):
+            context.log.info("Converting Pandas DataFrame to Spark DataFrame")
+            spark_df = spark.createDataFrame(output)
+        else:
+            spark_df = output
+
         # Use asset key's last element as the base table name
         asset_name = context.asset_key.path[-1]
         country_code = config.country_code.lower()  # Ensure consistency
@@ -49,18 +69,16 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         full_table_name = f"{schema_tier_name}.{table_name}"
         context.log.info(f"Full table name: {full_table_name}")
 
-        # Skip truncation logic present in the base class handle_output
-        # if self._handle_truncate(context, output, config, full_table_name):
-        #     return
-
-        # 1. Create and save to Delta Table as before
+        # 1. Create and save to Delta Table
         self._create_schema_if_not_exists(schema_tier_name)
         # Use the overridden _create_table_if_not_exists specific to this class
-        self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
+        self._create_table_if_not_exists(
+            context, spark_df, schema_tier_name, table_name
+        )
 
         # Always overwrite for intermediary tables
         self._overwrite_data(
-            output,
+            spark_df,
             config.metastore_schema,  # Keep original schema for metadata purposes if needed
             full_table_name,  # Use the enforced full table name for the operation
             context,
@@ -70,45 +88,51 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
             f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
 
-        # 2. Additionally save as CSV files with timestamp
-        self._save_data_as_files(context, output, schema_tier_name, table_name)
+        # 2. Create single-file output at computed filepath for compatibility
+        self._save_single_file_output(context, spark_df)
 
-    def _save_data_as_files(
+    def _save_single_file_output(
         self,
         context: OutputContext,
-        data: sql.DataFrame,
-        schema_tier_name: str,
-        table_name: str,
+        spark_df: sql.DataFrame,
     ):
         """
-        Save the data as CSV files in a timestamped folder structure.
+        Save the data as a single file at the computed filepath for compatibility with ADLSPandasIOManager.
 
-        The folder structure will be:
-        /intermediary/{schema_tier_name}/{table_name}/{timestamp}/
+        This ensures drop-in replacement functionality by creating files at the same paths
+        that ADLSPandasIOManager would use.
         """
-        # Generate timestamp for this execution
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # Define the folder path with schema, table, and timestamp
-        folder_path = f"intermediary/{schema_tier_name}/{table_name}/{timestamp}"
-
-        context.log.info(f"Saving CSV files to folder: {folder_path}")
+        # Get the filepath that would be used by ADLSPandasIOManager
+        filepath = self._get_filepath(context)
+        context.log.info(f"Saving single file output to: {filepath}")
 
         try:
-            # Use the new method to upload the spark dataframe as CSV files
-            adls_client.upload_spark_dataframe_as_files(
-                context=context, data=data, folder_path=folder_path, file_format="csv"
-            )
+            # Convert Spark DataFrame to Pandas for single-file upload
+            # For large datasets, this might be memory-intensive, but ensures compatibility
+            if spark_df.count() > 100000:  # Warn for large datasets
+                context.log.warning(
+                    f"Converting large Spark DataFrame ({spark_df.count()} rows) to Pandas for single-file upload. "
+                    "Consider using Spark output type for better performance."
+                )
 
-            context.log.info(f"Successfully saved CSV files to {folder_path}")
+            pandas_converted = spark_df.toPandas()
+            adls_client.upload_pandas_dataframe_as_file(
+                context=context,
+                data=pandas_converted,
+                filepath=str(filepath),
+            )
+            context.log.info(f"Successfully saved single file output to {filepath}")
+
         except Exception as e:
-            context.log.error(f"Failed to save CSV files: {e}")
+            context.log.error(f"Failed to save single file output: {e}")
             # Don't raise the error to prevent the main Delta Table functionality from failing
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         """
-        Loads input data from an intermediary Delta table, ensuring the
-        'int_' prefix is used for the schema name.
+        Loads input data with fallback strategy:
+        1. First try to load from Delta table
+        2. If Delta table doesn't exist, try to load from file
+        3. Return Spark DataFrame in all cases
         """
         context.log.info("Handling IntermediaryDeltaIOManager input...")
 
@@ -116,15 +140,14 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         asset_name = context.asset_key.path[-1]
         context.log.info(f"Using asset name for base table: {asset_name}")
         spark = self._get_spark_session()
+
         # Config retrieval might need adjustment depending on how upstream config is passed
-        # Assuming config is available similarly to how it's accessed in the base class
         # Attempt to get config from upstream output context first
         upstream_config = {}
         if context.upstream_output:
             upstream_config = context.upstream_output.step_context.op_config
         else:
             # Fallback to current step context if no upstream (e.g., source asset)
-            # This might need refinement based on actual usage patterns
             upstream_config = context.step_context.op_config
             context.log.warning(
                 "No upstream output found, using current step config for schema name. "
@@ -149,13 +172,38 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         full_table_name = construct_full_table_name(schema_tier_name, table_name)
         context.log.info(f"Full table name for input: {full_table_name}")
 
-        dt = DeltaTable.forName(spark, full_table_name)
+        # Try to load from Delta table first
+        try:
+            # Check if table exists by trying to access it directly
+            dt = DeltaTable.forName(spark, full_table_name)
+            context.log.info(
+                f"Loaded {table_name} from Delta table at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+            )
+            return dt.toDF()
+        except Exception as e:
+            context.log.warning(f"Could not load from Delta table: {e}. Trying file.")
 
-        context.log.info(
-            f"Loaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
-        )
+        # Fallback to file-based loading
+        filepath = self._get_filepath(context)
+        try:
+            context.log.info(f"Attempting to load from file: {filepath}")
 
-        return dt.toDF()
+            # Try to load as Spark DataFrame from file
+            data = adls_client.download_csv_as_spark_dataframe(str(filepath), spark)
+            context.log.info(f"Successfully loaded from file: {filepath}")
+            return data
+
+        except ResourceNotFoundError:
+            # Handle reference files that might not exist
+            if "_reference_" in context.asset_key.to_user_string():
+                context.log.warning(
+                    f"Reference file {filepath} does not exist, returning empty DataFrame."
+                )
+                return spark.createDataFrame([], StructType())
+            raise
+        except Exception as e:
+            context.log.error(f"Failed to load from file {filepath}: {e}")
+            raise
 
     def _create_table_if_not_exists(
         self,
