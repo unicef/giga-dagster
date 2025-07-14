@@ -21,7 +21,7 @@ def delete_entity_with_references(
     else:
         datahub_graph_client.soft_delete_entity(urn=urn)
 
-    logger.info(f"{"Hard" if hard_delete else "Soft"} deleted entity: {urn}")
+    logger.info(f"{'Hard' if hard_delete else 'Soft'} deleted entity: {urn}")
 
     return reference_count
 
