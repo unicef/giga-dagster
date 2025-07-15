@@ -4,6 +4,7 @@ from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.filters import RemovedStatusFilter
 from loguru import logger
 from pydantic import Field
+from src.constants.datahub import EntityType
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
@@ -90,7 +91,7 @@ def datahub__ingest_github_coverage_workflow_notebooks(
     path = "Notebooks/"
     notebook_metadata_list = list_ipynb_from_github_repo(owner, repo, path, context)
 
-    for notebook_metadata in notebook_metadata_list:
+    for notebook_metadata in notebook_metadata_list:  # type: ignore
         run_notebook_ingestion = NotebookIngestionAction(
             notebook_metadata=notebook_metadata,
         )
@@ -235,10 +236,14 @@ class DeleteAssertionsConfig(Config):
     hard: bool = Field(False, description="Whether to hard delete assertions.")
 
 
-class ListAssertionsConfig(Config):
+class ListEntitiesConfig(Config):
     status: RemovedStatusFilter = Field(
         RemovedStatusFilter.ALL,
-        description="Filter for the status of entities during search",
+        description="Filter by soft deleted, hard deleted, or all",
+    )
+    entity_type: EntityType = Field(
+        EntityType.ASSERTION,
+        description="Type of entity to list (e.g., 'assertion', 'dataset', 'corpGroup)",
     )
 
     batch_size: int = Field(100, description="Assertions to delete at a time")
@@ -251,8 +256,8 @@ class ListAssertionsConfig(Config):
 
 @asset
 @capture_op_exceptions
-def datahub__purge_assertions(
-    context: OpExecutionContext, config: ListAssertionsConfig
+def datahub__purge_entities(
+    context: OpExecutionContext, config: ListEntitiesConfig
 ) -> Output[list[str]]:
     total_deleted = 0
     total_references_deleted = 0
@@ -260,7 +265,7 @@ def datahub__purge_assertions(
     for iteration in range(config.max_iterations):
         # Get all assertion URNs for this iteration
         all_assertion_urns = datahub_graph_client.list_all_entity_urns(
-            entity_type="assertion", start=0, count=config.batch_size * 5
+            entity_type=config.entity_type, start=0, count=config.batch_size * 5
         )
 
         if not all_assertion_urns:
@@ -293,7 +298,7 @@ def datahub__purge_assertions(
         metadata={
             "total_assertions_deleted": total_deleted,
             "total_references_deleted": total_references_deleted,
-            "iterations_completed": iteration + 1 if "iteration" in locals() else 0,
+            "iterations_completed": iteration + 1 if "iteration" in locals() else 0,  # type: ignore
         },
     )
 

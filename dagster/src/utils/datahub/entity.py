@@ -53,6 +53,10 @@ def get_entity_count_safe(entity_type: str = "assertion", batch_size: int = 100)
                 count=batch_size,
             )
 
+            if not entities:
+                print(f"🎯 No more {entity_type} entities found")
+                break
+
             batch_count = len(entities)
             total_count += batch_count
 
