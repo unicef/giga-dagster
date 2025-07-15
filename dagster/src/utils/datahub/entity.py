@@ -5,7 +5,7 @@ from src.utils.datahub.graphql import datahub_graph_client
 
 
 def delete_entity_with_references(
-    context: OpExecutionContext, urn: str, hard_delete: bool = False
+    context: OpExecutionContext, urn: str, hard_delete: bool = True
 ) -> int:
     """Delete an entity and its references, returning the number of references deleted."""
     reference_count, _ = datahub_graph_client.delete_references_to_urn(
