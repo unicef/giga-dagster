@@ -91,6 +91,8 @@ jobs:
                 releaseName: dagster-authproxy
                 namespace: $(kubernetesNamespace)
                 arguments: >
+                  --timeout 15m
+                  --debug
                   --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-authproxy"
                   --set image.tag=$(Build.SourceVersion)
                   --set ingress.enabled=true
@@ -98,6 +100,13 @@ jobs:
                   --set config.clientIdRef.secretRef=giga-dagster-authproxy-secrets
                   --set config.clientSecretRef.secretRef=giga-dagster-authproxy-secrets
                   --set config.tenantIdRef.secretRef=giga-dagster-authproxy-secrets
+
+            - script: |
+                kubectl get pods -n $(kubernetesNamespace) -l app.kubernetes.io/instance=dagster-authproxy
+                kubectl describe deployment dagster-authproxy-oauth2-proxy -n $(kubernetesNamespace) || true
+                kubectl logs -l app.kubernetes.io/instance=dagster-authproxy -n $(kubernetesNamespace) --tail=50 || true
+              displayName: Debug auth proxy deployment
+              condition: always()
 
             - task: HelmDeploy@0
               displayName: Helm deploy production-config auth proxy
