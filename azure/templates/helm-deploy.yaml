@@ -30,7 +30,7 @@ jobs:
                 chartType: 'Name'
                 releaseName: 'spark'
                 namespace: $(kubernetesNamespace)
-                arguments: 'spark --timeout 5m'
+                arguments: 'spark 274 --timeout 5m'
 
             - task: HelmDeploy@0
               displayName: Helm deploy Spark
