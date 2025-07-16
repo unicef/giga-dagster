@@ -72,6 +72,15 @@ jobs:
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
 
+            - task: HelmDeploy@0
+              displayName: 'Rollback pending auth proxy operations'
+              continueOnError: true
+              inputs:
+                command: 'rollback'
+                chartType: 'Name'
+                releaseName: 'dagster-authproxy'
+                namespace: $(kubernetesNamespace)
+                arguments: 'dagster-authproxy 150 --timeout 10m'
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
