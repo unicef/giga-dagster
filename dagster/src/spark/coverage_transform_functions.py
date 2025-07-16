@@ -238,11 +238,11 @@ if __name__ == "__main__":
     def test():
         from src.utils.spark import get_spark_session
 
-        #
-        file_url_fb = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
-        # file_url_itu = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_itu_20230927-091823.csv"
-        file_url_cov = f"{settings.AZURE_BLOB_CONNECTION_URI}/raw/school_geolocation_coverage_data/silver/coverage_data/UZB_school-coverage_master.csv"
-        # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
+        connection_uri = settings.AZURE_DFS_CONNECTION_URI
+        file_url_fb = f"{connection_uri}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_meta_20230927-091814.csv"
+        # file_url_itu = f"{connection_uri}/raw/school_geolocation_coverage_data/bronze/coverage_data/UZB_school-coverage_itu_20230927-091823.csv"
+        file_url_cov = f"{connection_uri}/raw/school_geolocation_coverage_data/silver/coverage_data/UZB_school-coverage_master.csv"
+        # file_url = f"{connection_uri}/adls-testing-raw/_test_BLZ_RAW.csv"
         spark = get_spark_session()
         fb = spark.read.csv(file_url_fb, header=True)
         # itu = spark.read.csv(file_url_itu, header=True)
