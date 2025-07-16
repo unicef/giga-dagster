@@ -33,3 +33,12 @@ stages:
                     chartType: Name
                     releaseName: spark
                     namespace: $(kubernetesNamespace)
+
+                - task: HelmDeploy@0
+                  displayName: Rollback Spark by 1 deployment
+                  inputs:
+                    command: rollback
+                    chartType: Name
+                    releaseName: spark
+                    namespace: $(kubernetesNamespace)
+                    arguments: --wait
