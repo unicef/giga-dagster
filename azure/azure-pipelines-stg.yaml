@@ -15,4 +15,4 @@ variables:
   - template: templates/variables.yaml
 
 stages:
-  - template: templates/helm-history.yaml
+  - template: templates/deploy-workflow.yaml
