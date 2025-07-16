@@ -4,9 +4,7 @@ from typing import Union
 import pandas as pd
 from delta import DeltaTable
 from pyspark import sql
-from pyspark.sql.types import StructType
 
-from azure.core.exceptions import ResourceNotFoundError
 from dagster import InputContext, OutputContext
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -233,9 +231,7 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
             )
             return dt.toDF()
         except Exception as e:
-            context.log.error(
-                f"Could not load from Delta table {full_table_name}: {e}"
-            )
+            context.log.error(f"Could not load from Delta table {full_table_name}: {e}")
             raise
 
     def _create_table_if_not_exists(

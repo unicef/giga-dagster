@@ -149,20 +149,17 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
 
 
 if __name__ == "__main__":
-    from datetime import datetime
-
     from src.settings import settings
     from src.utils.spark import get_spark_session
 
-    current_time = datetime.now()
-
-    #
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
-    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-
     spark = get_spark_session()
+
+    connection_uri = settings.AZURE_DFS_CONNECTION_URI
+    # file_url = f"{connection_uri}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url_master = f"{connection_uri}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{connection_uri}/updated_master_schema/reference/BLZ_master_reference.csv"
+    # file_url = f"{connection_uri}/adls-testing-raw/_test_BLZ_RAW.csv"
+
     df = spark.read.csv(file_url_master, header=True)
     # df.groupBy("admin1").agg(f.count("*").alias("total_count")).orderBy("total_count", ascending=False).show()
     # df = df.filter(df["admin1"] == "São Paulo")  # 18.4k rows

@@ -121,6 +121,10 @@ class Settings(BaseSettings):
         return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
     @property
+    def AZURE_DFS_CONNECTION_URI(self) -> str:
+        return f"abfss://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_DFS_SAS_HOST}"
+
+    @property
     def AZURE_STORAGE_CONNECTION_STRING(self) -> str:
         return f"BlobEndpoint=https://{self.AZURE_BLOB_SAS_HOST};SharedAccessSignature={self.AZURE_SAS_TOKEN}"
 
@@ -142,7 +146,7 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
-        return f"{self.AZURE_BLOB_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
+        return f"{self.AZURE_DFS_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
 
     @property
     def LAKEHOUSE_PATH(self) -> str:

@@ -93,13 +93,15 @@ def is_not_within_country(
 if __name__ == "__main__":
     from src.utils.spark import get_spark_session
 
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
-    file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
-    # file_url_master = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/master_updates/PHL/PHL_school_geolocation_coverage_master.csv"
-    # file_url_reference = f"{settings.AZURE_BLOB_CONNECTION_URI}/updated_master_schema/reference/BLZ_master_reference.csv"
-    # file_url = f"{settings.AZURE_BLOB_CONNECTION_URI}/adls-testing-raw/_test_BLZ_RAW.csv"
-
     spark = get_spark_session()
+
+    connection_uri = settings.AZURE_DFS_CONNECTION_URI
+    # file_url = f"{connection_uri}/bronze/school-geolocation-data/BLZ_school-geolocation_gov_20230207.csv"
+    file_url_master = f"{connection_uri}/updated_master_schema/master/BRA_school_geolocation_coverage_master.csv"
+    # file_url_master = f"{connection_uri}/updated_master_schema/master_updates/PHL/PHL_school_geolocation_coverage_master.csv"
+    # file_url_reference = f"{connection_uri}/updated_master_schema/reference/BLZ_master_reference.csv"
+    # file_url = f"{connection_uri}/adls-testing-raw/_test_BLZ_RAW.csv"
+
     master = spark.read.csv(file_url_master, header=True)
     # df = master.filter(master["admin1"] == "São Paulo")
     # df = master.filter(master["school_id_govt"] == "11000023")

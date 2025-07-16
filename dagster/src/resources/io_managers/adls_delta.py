@@ -103,7 +103,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         return (
             ic(table_name),
             ic(table_root_path),
-            ic(f"{settings.AZURE_BLOB_CONNECTION_URI}/{table_root_path}/{table_name}"),
+            ic(f"{settings.AZURE_DFS_CONNECTION_URI}/{table_root_path}/{table_name}"),
         )
 
     def _get_spark_session(self) -> SparkSession:

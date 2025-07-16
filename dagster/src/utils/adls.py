@@ -75,7 +75,7 @@ class ADLSFileClient(ConfigurableResource):
         spark: SparkSession,
         schema: StructType | None = None,
     ) -> sql.DataFrame:
-        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+        adls_path = f"{settings.AZURE_DFS_CONNECTION_URI}/{filepath}"
         reader_params = {
             "path": adls_path,
             "header": True,
@@ -103,9 +103,8 @@ class ADLSFileClient(ConfigurableResource):
             file_format: The file format (parquet, csv, json, etc.)
             mode: Write mode (overwrite, append, etc.)
         """
-        # Construct the full ADLS path using abfss protocol
         full_adls_path = (
-            f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory_path.rstrip('/')}"
+            f"{settings.AZURE_DFS_CONNECTION_URI}/{directory_path.rstrip('/')}"
         )
 
         logger.info(
@@ -142,9 +141,8 @@ class ADLSFileClient(ConfigurableResource):
         Returns:
             A Spark DataFrame containing all data from the directory
         """
-        # Construct the full ADLS path using abfss protocol
         full_adls_path = (
-            f"{settings.AZURE_BLOB_CONNECTION_URI}/{directory_path.rstrip('/')}"
+            f"{settings.AZURE_DFS_CONNECTION_URI}/{directory_path.rstrip('/')}"
         )
 
         logger.info(

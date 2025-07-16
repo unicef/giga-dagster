@@ -55,7 +55,7 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
         else:
             table_name = filepath.split("/")[-1].split("_")[1]
 
-        return f"{settings.AZURE_BLOB_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/{table_name}"
+        return f"{settings.AZURE_DFS_CONNECTION_URI}/{'/'.join(filepath.split('/')[:-1])}/{table_name}"
 
     @staticmethod
     def _get_type_transform_function(
