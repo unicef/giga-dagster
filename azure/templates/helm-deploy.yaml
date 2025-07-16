@@ -23,6 +23,16 @@ jobs:
                 namespace: $(kubernetesNamespace)
 
             - task: HelmDeploy@0
+              displayName: 'Rollback pending Spark operations'
+              continueOnError: true
+              inputs:
+                command: 'rollback'
+                chartType: 'Name'
+                releaseName: 'spark'
+                namespace: $(kubernetesNamespace)
+                arguments: 'spark --timeout 5m'
+
+            - task: HelmDeploy@0
               displayName: Helm deploy Spark
               inputs:
                 command: upgrade
