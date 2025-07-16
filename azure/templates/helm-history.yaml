@@ -1,0 +1,31 @@
+jobs:
+  - deployment: Deploy
+    displayName: Deploy Dagster
+    environment: $(kubernetesEnvironment)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - task: HelmDeploy@0
+              displayName: Add Dagster Helm Repo
+              inputs:
+                command: repo
+                arguments: add dagster https://dagster-io.github.io/helm
+                namespace: $(kubernetesNamespace)
+
+            - task: HelmDeploy@0
+              displayName: Add Bitnami Helm Repo
+              inputs:
+                command: repo
+                arguments: add bitnami https://charts.bitnami.com/bitnami
+                namespace: $(kubernetesNamespace)
+
+            - task: HelmDeploy@0
+              displayName: Check Spark deployment history
+              inputs:
+                command: history
+                chartType: Name
+                releaseName: spark
+                namespace: $(kubernetesNamespace)
