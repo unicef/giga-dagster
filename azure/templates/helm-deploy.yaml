@@ -22,15 +22,6 @@ jobs:
                 arguments: add bitnami https://charts.bitnami.com/bitnami
                 namespace: $(kubernetesNamespace)
 
-            - task: HelmDeploy@0
-              displayName: 'Rollback pending Spark operations'
-              continueOnError: true
-              inputs:
-                command: 'rollback'
-                chartType: 'Name'
-                releaseName: 'spark'
-                namespace: $(kubernetesNamespace)
-                arguments: 'spark 274 --timeout 5m'
 
             - task: HelmDeploy@0
               displayName: Helm deploy Spark
@@ -81,15 +72,6 @@ jobs:
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
 
-            - task: HelmDeploy@0
-              displayName: 'Rollback pending auth proxy operations'
-              continueOnError: true
-              inputs:
-                command: 'rollback'
-                chartType: 'Name'
-                releaseName: 'dagster-authproxy'
-                namespace: $(kubernetesNamespace)
-                arguments: 'dagster-authproxy 287 --timeout 10m'
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
