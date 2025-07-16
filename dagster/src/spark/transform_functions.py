@@ -466,7 +466,7 @@ def add_admin_columns(  # noqa: C901
         return df.withColumns(
             {
                 admin_level: f.lit("Unknown"),
-                f"{admin_level}_id_giga": f.lit(None),
+                f"{admin_level}_id_giga": f.lit(None).cast(StringType()),
             }
         )
 
