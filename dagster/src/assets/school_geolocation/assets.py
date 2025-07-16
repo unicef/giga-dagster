@@ -244,15 +244,8 @@ def geolocation_bronze(
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         # QoS Columns
         coco = CountryConverter()
-        country_code_2_result = coco.convert(country_code, to="ISO2")
-        # Handle the case where convert returns a list or string
-        if isinstance(country_code_2_result, list):
-            country_code_2 = (
-                country_code_2_result[0] if country_code_2_result else country_code
-            )
-        else:
-            country_code_2 = country_code_2_result
-        connectivity = connectivity_rt_dataset(s, country_code_2)
+        country_code_2 = coco.convert(country_code, to="ISO2")
+        connectivity = connectivity_rt_dataset(s, country_code_2)  # type: ignore
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
@@ -413,7 +406,7 @@ async def geolocation_data_quality_results_human_readable(
         metadata={
             **get_output_metadata(config),
             "row_count": df_spark.count(),
-            "preview": get_table_preview(df_spark.limit(10).toPandas()),
+            "preview": get_table_preview(df_spark.head(10)),
         },
     )
 
@@ -672,28 +665,9 @@ def geolocation_delete_staging(
     config: FileConfig,
 ) -> Output[None]:
     delete_row_ids = adls_file_client.download_json(config.filepath)
-    if isinstance(delete_row_ids, dict):
-        # If it's a dict, we can't process it as row IDs
-        context.log.error(f"Expected list of row IDs, got dict: {delete_row_ids}")
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "error": "Invalid delete_row_ids format",
-            },
-        )
-    elif isinstance(delete_row_ids, list):
+    if isinstance(delete_row_ids, list):
         # dedupe change IDs
         delete_row_ids = list(set(delete_row_ids))
-    else:
-        context.log.error(f"Expected list of row IDs, got: {type(delete_row_ids)}")
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "error": "Invalid delete_row_ids format",
-            },
-        )
 
     staging_step = StagingStep(
         context,
@@ -702,7 +676,7 @@ def geolocation_delete_staging(
         spark.spark_session,
         StagingChangeTypeEnum.DELETE,
     )
-    staging = staging_step(delete_row_ids)
+    staging = staging_step(delete_row_ids)  # type: ignore
 
     if staging is not None:
         datahub_emit_metadata_with_exception_catcher(

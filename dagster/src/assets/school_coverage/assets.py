@@ -59,8 +59,6 @@ def coverage_raw(
     config: FileConfig,
     spark: PySparkResource,
 ) -> Output[bytes]:  # type: ignore
-    # Certain type checkers don't like the yield statement here, so we ignore the type
-    # This is a workaround to maintain compatibility with Dagster's type system.
     df = adls_file_client.download_raw(config.filepath)
 
     datahub_emit_metadata_with_exception_catcher(
@@ -358,11 +356,7 @@ def coverage_delete_staging(
     delete_row_ids = adls_file_client.download_json(config.filepath)
     if isinstance(delete_row_ids, list):
         # dedupe change IDs
-        delete_row_ids = [str(x) for x in list(set(delete_row_ids))]
-    else:
-        raise ValueError(
-            "Expected delete_row_ids to be a list, but received a dictionary."
-        )
+        delete_row_ids = list(set(delete_row_ids))
 
     staging_step = StagingStep(
         context,
@@ -371,7 +365,7 @@ def coverage_delete_staging(
         spark.spark_session,
         StagingChangeTypeEnum.DELETE,
     )
-    staging = staging_step(delete_row_ids)
+    staging = staging_step(delete_row_ids)  # type: ignore
 
     if staging is not None:
         datahub_emit_metadata_with_exception_catcher(
