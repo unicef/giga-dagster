@@ -1,7 +1,7 @@
 from delta import DeltaTable
 from pyspark import sql
 
-from dagster import OutputContext
+from dagster import InputContext, OutputContext
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import execute_query_with_error_handler
@@ -13,7 +13,7 @@ from .adls_delta import ADLSDeltaIOManager
 adls_client = ADLSFileClient()
 
 
-class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
+class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
     """
     An ADLS Delta IO Manager designed for intermediary outputs where schema
     validation against a predefined schema is not required, and data is
@@ -26,7 +26,7 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         (using the DataFrame's schema) and then overwriting the table's contents.
         Schema evolution is handled by Delta Lake's overwriteSchema option.
         """
-        context.log.info("Handling IntermediaryDeltaIOManager output...")
+        context.log.info("Handling ADLSDeltaIntermediaryIOManager output...")
         if output is None:
             context.log.info("Output is None, skipping execution.")
             return
@@ -69,7 +69,7 @@ class IntermediaryADLSDeltaIOManager(ADLSDeltaIOManager):
         Loads input data from an intermediary Delta table, ensuring the
         'int_' prefix is used for the schema name.
         """
-        context.log.info("Handling IntermediaryDeltaIOManager input...")
+        context.log.info("Handling ADLSDeltaIntermediaryIOManager input...")
 
         # Use asset key's last element as the base table name
         asset_name = context.asset_key.path[-1]
