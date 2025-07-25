@@ -17,14 +17,30 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
     """
     An ADLS Delta IO Manager designed for intermediary outputs where schema
     validation against a predefined schema is not required, and data is
-    typically overwritten.
+    stored in unique tables based on asset name, file upload ID, and country code.
     """
+
+    def _generate_table_name(
+        self, asset_name: str, file_upload_id: str, country_code: str
+    ) -> str:
+        """
+        Generate a deterministic table name using asset name, file upload ID, and country code.
+
+        Args:
+            asset_name: Name of the asset
+            file_upload_id: Unique file upload identifier
+            country_code: Country code (will be lowercased for consistency)
+
+        Returns:
+            Formatted table name: {asset_name}_{file_upload_id}_{country_code}
+        """
+        return f"{asset_name}_{file_upload_id}_{country_code.lower()}"
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
         """
         Handles the output by creating the schema and table if they don't exist
-        (using the DataFrame's schema) and then overwriting the table's contents.
-        Schema evolution is handled by Delta Lake's overwriteSchema option.
+        (using the DataFrame's schema) and then writing the data to a deterministic
+        table name. Schema evolution is handled by Delta Lake's overwriteSchema option.
         """
         context.log.info("Handling ADLSDeltaIntermediaryIOManager output...")
         if output is None:
@@ -32,11 +48,15 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
             return
 
         config = FileConfig(**context.step_context.op_config)
-        # Use asset key's last element as the base table name
+
+        # Generate deterministic table name
         asset_name = context.asset_key.path[-1]
         country_code = config.country_code.lower()  # Ensure consistency
-        table_name = f"{asset_name}_{country_code}"
-        context.log.info(f"Using asset and country code for table: {table_name}")
+        file_upload_id = config.filename_components.id
+
+        table_name = self._generate_table_name(asset_name, file_upload_id, country_code)
+        context.log.info(f"Using deterministic table name: {table_name}")
+
         # Enforce an 'int_' prefix for the schema name, ignoring the configured tier
         schema_tier_name = f"int_{config.metastore_schema}"
         context.log.info(f"Enforcing intermediary schema: {schema_tier_name}")
@@ -44,15 +64,11 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         full_table_name = f"{schema_tier_name}.{table_name}"
         context.log.info(f"Full table name: {full_table_name}")
 
-        # Skip truncation logic present in the base class handle_output
-        # if self._handle_truncate(context, output, config, full_table_name):
-        #     return
-
         self._create_schema_if_not_exists(schema_tier_name)
         # Use the overridden _create_table_if_not_exists specific to this class
         self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
 
-        # Always overwrite for intermediary tables
+        # Write data to the deterministic table (overwrite since file_upload_id ensures uniqueness per run)
         self._overwrite_data(
             output,
             config.metastore_schema,  # Keep original schema for metadata purposes if needed
@@ -61,58 +77,55 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         )
 
         context.log.info(
-            f"Overwritten {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+            f"Written data to {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
         """
-        Loads input data from an intermediary Delta table, ensuring the
-        'int_' prefix is used for the schema name.
+        Loads input data from an intermediary Delta table by reconstructing the
+        deterministic table name from upstream asset information.
         """
         context.log.info("Handling ADLSDeltaIntermediaryIOManager input...")
 
-        # Use asset key's last element as the base table name
-        asset_name = context.asset_key.path[-1]
-        context.log.info(f"Using asset name for base table: {asset_name}")
-        spark = self._get_spark_session()
-        # Config retrieval might need adjustment depending on how upstream config is passed
-        # Assuming config is available similarly to how it's accessed in the base class
-        # Attempt to get config from upstream output context first
-        upstream_config = {}
-        if context.upstream_output:
-            upstream_config = context.upstream_output.step_context.op_config
-        else:
-            # Fallback to current step context if no upstream (e.g., source asset)
-            # This might need refinement based on actual usage patterns
-            upstream_config = context.step_context.op_config
-            context.log.warning(
-                "No upstream output found, using current step config for schema name. "
-                "This might be incorrect if the IO manager is used on a source asset."
-            )
-
-        # Ensure upstream_config is not None before creating FileConfig
-        if upstream_config is None:
+        # Reconstruct table name from upstream asset information
+        if not context.upstream_output:
             raise ValueError(
-                "Could not determine upstream configuration for IO Manager."
+                "No upstream output found. Cannot determine table name for intermediary IO manager."
             )
 
-        config = FileConfig(**upstream_config)
-        country_code = config.country_code.lower()  # Ensure consistency
-        # Construct the table name including the country code
-        table_name = f"{asset_name}_{country_code}"
-        context.log.info(f"Derived table name for input: {table_name}")
-        # Enforce the 'int_' prefix for the schema name
-        schema_tier_name = f"int_{config.metastore_schema}"
-        context.log.info(f"Enforcing intermediary schema for input: {schema_tier_name}")
+        # Get upstream asset information
+        upstream_asset_name = context.upstream_output.asset_key.path[-1]
 
-        full_table_name = construct_full_table_name(schema_tier_name, table_name)
-        context.log.info(f"Full table name for input: {full_table_name}")
+        # Get upstream config to extract file_upload_id and country_code
+        if (
+            not hasattr(context.upstream_output, "step_context")
+            or not context.upstream_output.step_context
+        ):
+            raise ValueError(
+                "Upstream step context not available. Cannot reconstruct table name for intermediary IO manager."
+            )
 
-        dt = DeltaTable.forName(spark, full_table_name)
+        upstream_config = FileConfig(**context.upstream_output.step_context.op_config)
+        file_upload_id = upstream_config.filename_components.id
+        country_code = upstream_config.country_code.lower()
+
+        # Generate the same table name format as handle_output
+        table_name = self._generate_table_name(
+            upstream_asset_name, file_upload_id, country_code
+        )
+
+        # Enforce the same 'int_' prefix for schema name
+        schema_tier_name = f"int_{upstream_config.metastore_schema}"
+        full_table_name = f"{schema_tier_name}.{table_name}"
 
         context.log.info(
-            f"Loaded {table_name} from {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+            f"Reconstructed table name from upstream context: {full_table_name}"
         )
+
+        spark = self._get_spark_session()
+        dt = DeltaTable.forName(spark, full_table_name)
+
+        context.log.info(f"Successfully loaded data from {full_table_name}")
 
         return dt.toDF()
 
