@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -284,7 +284,10 @@ def geolocation_data_quality_results(
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
+    id = config.filename_components.id
     dataset_type = "geolocation"
+
+    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     columns = get_schema_columns(s, schema_name)
     schema = StructType(columns)
@@ -320,6 +323,31 @@ def geolocation_data_quality_results(
     )
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
+
+    # Write to the legacy Delta Table to maintain query compatibility.
+    # In the backend, we will be using the new intermediary Delta Table.
+    dq_results_schema_name = f"{schema_name}_dq_results"
+    table_name = f"{id}_{country_code}_{current_timestamp}"
+
+    schema_columns = dq_results.schema.fields
+    for col in schema_columns:
+        col.nullable = True
+
+    dq_results_table_name = construct_full_table_name(
+        dq_results_schema_name,
+        table_name,
+    )
+
+    create_schema(s, dq_results_schema_name)
+    create_delta_table(
+        s,
+        dq_results_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_results=dq_results,
