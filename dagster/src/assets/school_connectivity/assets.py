@@ -372,6 +372,7 @@ def school_connectivity_realtime_schools(
     rt_schools_schema = StructType(
         [
             StructField("school_id_giga", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
             StructField("connectivity_RT", StringType(), True),
             StructField("connectivity_RT_ingestion_timestamp", TimestampType(), True),
             StructField("connectivity_RT_datasource", StringType(), True),
@@ -465,7 +466,8 @@ def school_connectivity_realtime_schools(
             current_connected_schs_table.alias("connected_schs_current")
             .merge(
                 schools_for_update.alias("connected_schs_updates"),
-                "connected_schs_current.school_id_giga = connected_schs_updates.school_id_giga",
+                "connected_schs_current.school_id_govt = connected_schs_updates.school_id_govt and "
+                "connected_schs_current.country_code = connected_schs_updates.country_code",
             )
             .whenMatchedUpdateAll()
             .whenNotMatchedInsertAll()

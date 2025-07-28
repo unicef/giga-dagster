@@ -712,7 +712,7 @@ def merge_connectivity_to_master(
 
     master = master.drop(*columns_to_drop)
 
-    master = master.join(connectivity, on="school_id_giga", how="left")
+    master = master.join(connectivity, on="school_id_govt", how="left")
 
     master = master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
@@ -892,6 +892,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
 
     columns_to_keep = [
         "school_id_giga",
+        "school_id_govt",
         "connectivity_RT",
         "connectivity_RT_ingestion_timestamp",
         "connectivity_RT_datasource",
