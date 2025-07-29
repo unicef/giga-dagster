@@ -706,13 +706,25 @@ def merge_connectivity_to_master(
     mode: str,
 ):
     connectivity_columns = [
-        col for col in connectivity.columns if col != "school_id_giga"
+        col
+        for col in connectivity.columns
+        if col in ("school_id_giga", "school_id_govt")
     ]
     columns_to_drop = [col for col in connectivity_columns if col in master.columns]
-
     master = master.drop(*columns_to_drop)
 
-    master = master.join(connectivity, on="school_id_govt", how="left")
+    connectivity = connectivity.withColumnsRenamed(
+        {
+            "school_id_govt": "school_id_govt_connectivity",
+            "school_id_giga": "school_id_giga_connectivity",
+        }
+    )
+
+    master = master.join(
+        connectivity,
+        on=[master.school_id_govt == connectivity.school_id_govt_connectivity],
+        how="left",
+    )
 
     master = master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
@@ -784,6 +796,14 @@ def merge_connectivity_to_master(
         ),
     )
 
+    master = master.drop(
+        *[
+            col
+            for col in master.columns
+            if col in ("school_id_govt_connectivity", "school_id_giga_connectivity")
+        ]
+    )
+
     return master
 
 
@@ -852,6 +872,17 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
         "school_id_giga",
         f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_qos")),
+    )
+
+    # ensure we fill the values of all the columns from across the sources
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "school_id_govt",
+        f.coalesce(
+            f.col("school_id_govt"),
+            f.col("school_id_govt_mlab"),
+            f.col("school_id_govt_qos"),
+        ),
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
@@ -927,6 +958,10 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
             "school_id_giga",
             f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_maps")),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "school_id_govt",
+            f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_maps")),
         )
         connectivity_rt_schools = connectivity_rt_schools.withColumn(
             "connectivity_RT_ingestion_timestamp",
