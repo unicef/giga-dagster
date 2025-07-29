@@ -708,7 +708,7 @@ def merge_connectivity_to_master(
     connectivity_columns = [
         col
         for col in connectivity.columns
-        if col in ("school_id_giga", "school_id_govt")
+        if col not in ("school_id_giga", "school_id_govt")
     ]
     columns_to_drop = [col for col in connectivity_columns if col in master.columns]
     master = master.drop(*columns_to_drop)
