@@ -17,24 +17,35 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
     """
     An ADLS Delta IO Manager designed for intermediary outputs where schema
     validation against a predefined schema is not required, and data is
-    stored in unique tables based on asset name, file upload ID, and country code.
+    stored in unique tables based on custom schema configuration or fallback naming.
     """
 
-    def _generate_table_name(
-        self, asset_name: str, file_upload_id: str, country_code: str
-    ) -> str:
+    def _get_schema_and_table_name(
+        self, config: FileConfig, asset_name: str
+    ) -> tuple[str, str]:
         """
-        Generate a deterministic table name using asset name, file upload ID, and country code.
+        Generate schema and table names using custom configuration or fallback naming.
 
         Args:
-            asset_name: Name of the asset
-            file_upload_id: Unique file upload identifier
-            country_code: Country code (will be lowercased for consistency)
+            config: FileConfig containing custom configuration
+            asset_name: Name of the asset as fallback
 
         Returns:
-            Formatted table name: {asset_name}_{file_upload_id}_{country_code}
+            Tuple of (schema_name, table_name)
         """
-        return f"{asset_name}_{file_upload_id}_{country_code.lower()}"
+        file_upload_id = config.filename_components.id
+        country_code = config.country_code.lower()
+
+        # Check if custom_schema_name is provided in configuration
+        if hasattr(config, "custom_schema_name") and config.custom_schema_name:
+            schema_name = config.custom_schema_name
+            table_name = f"{file_upload_id}_{country_code}"
+        else:
+            # Fallback: use asset name as schema name
+            schema_name = asset_name
+            table_name = f"{file_upload_id}_{country_code}"
+
+        return schema_name, table_name
 
     def handle_output(self, context: OutputContext, output: sql.DataFrame | None):
         """
@@ -49,35 +60,30 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
 
         config = FileConfig(**context.step_context.op_config)
 
-        # Generate deterministic table name
+        # Generate schema and table names
         asset_name = context.asset_key.path[-1]
-        country_code = config.country_code.lower()  # Ensure consistency
-        file_upload_id = config.filename_components.id
+        schema_name, table_name = self._get_schema_and_table_name(config, asset_name)
 
-        table_name = self._generate_table_name(asset_name, file_upload_id, country_code)
-        context.log.info(f"Using deterministic table name: {table_name}")
+        context.log.info(f"Using schema: {schema_name}")
+        context.log.info(f"Using table name: {table_name}")
 
-        # Enforce an 'int_' prefix for the schema name, ignoring the configured tier
-        schema_tier_name = f"int_{config.metastore_schema}"
-        context.log.info(f"Enforcing intermediary schema: {schema_tier_name}")
-
-        full_table_name = f"{schema_tier_name}.{table_name}"
+        full_table_name = f"{schema_name}.{table_name}"
         context.log.info(f"Full table name: {full_table_name}")
 
-        self._create_schema_if_not_exists(schema_tier_name)
+        self._create_schema_if_not_exists(schema_name)
         # Use the overridden _create_table_if_not_exists specific to this class
-        self._create_table_if_not_exists(context, output, schema_tier_name, table_name)
+        self._create_table_if_not_exists(context, output, schema_name, table_name)
 
         # Write data to the deterministic table (overwrite since file_upload_id ensures uniqueness per run)
         self._overwrite_data(
             output,
             config.metastore_schema,  # Keep original schema for metadata purposes if needed
-            full_table_name,  # Use the enforced full table name for the operation
+            full_table_name,  # Use the full table name for the operation
             context,
         )
 
         context.log.info(
-            f"Written data to {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_tier_name}.db in ADLS.",
+            f"Written data to {table_name} at {settings.SPARK_WAREHOUSE_DIR}/{schema_name}.db in ADLS.",
         )
 
     def load_input(self, context: InputContext) -> sql.DataFrame:
@@ -106,17 +112,12 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
             )
 
         upstream_config = FileConfig(**context.upstream_output.step_context.op_config)
-        file_upload_id = upstream_config.filename_components.id
-        country_code = upstream_config.country_code.lower()
 
-        # Generate the same table name format as handle_output
-        table_name = self._generate_table_name(
-            upstream_asset_name, file_upload_id, country_code
+        # Generate the same schema and table names as handle_output
+        schema_name, table_name = self._get_schema_and_table_name(
+            upstream_config, upstream_asset_name
         )
-
-        # Enforce the same 'int_' prefix for schema name
-        schema_tier_name = f"int_{upstream_config.metastore_schema}"
-        full_table_name = f"{schema_tier_name}.{table_name}"
+        full_table_name = f"{schema_name}.{table_name}"
 
         context.log.info(
             f"Reconstructed table name from upstream context: {full_table_name}"
@@ -133,7 +134,7 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         self,
         context: OutputContext,
         data: sql.DataFrame,
-        schema_name_for_tier: str,
+        schema_name: str,
         table_name: str,
     ):
         """
@@ -142,7 +143,7 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         Inherits Change Data Feed and retention properties from base class logic.
         """
         spark = self._get_spark_session()
-        full_table_name = construct_full_table_name(schema_name_for_tier, table_name)
+        full_table_name = construct_full_table_name(schema_name, table_name)
 
         # Use the schema directly from the input data
         columns = data.schema.fields
@@ -165,6 +166,4 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         # Assuming default retention is acceptable for intermediary, or adjust as needed
         # query = query.property("delta.logRetentionDuration", constants.default_retention_period)
 
-        execute_query_with_error_handler(
-            spark, query, schema_name_for_tier, table_name, context
-        )
+        execute_query_with_error_handler(spark, query, schema_name, table_name, context)
