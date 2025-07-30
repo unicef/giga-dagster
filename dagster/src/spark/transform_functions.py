@@ -774,7 +774,8 @@ def merge_connectivity_to_master(
         # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
         master = master.withColumn(
             "connectivity",
-            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
+            f.when(f.lower(f.col("connectivity_RT")) == "yes", "Yes")
+            .when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
             .when(f.lower(f.col("connectivity_govt")) == "no", "No")
             .when(f.lower(f.col("connectivity_govt")) == "unknown", "Unknown")
             .otherwise(f.lit(None).cast(StringType())),
@@ -783,7 +784,8 @@ def merge_connectivity_to_master(
         # this will run during updates if download_speed_govt is in the uploaded file without connectivity_govt
         master = master.withColumn(
             "connectivity",
-            f.when(f.col("download_speed_govt") > 0, "Yes")
+            f.when(f.lower(f.col("connectivity_RT")) == "yes", "Yes")
+            .when(f.col("download_speed_govt") > 0, "Yes")
             .when(f.col("download_speed_govt") == 0, "No")
             .otherwise(f.lit(None).cast(StringType())),
         )
