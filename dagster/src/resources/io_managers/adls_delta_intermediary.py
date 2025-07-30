@@ -113,12 +113,21 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
 
         upstream_config = FileConfig(**context.upstream_output.step_context.op_config)
 
+        # Debug logging to understand what config values we're getting
+        context.log.info(f"Upstream asset name: {upstream_asset_name}")
+        context.log.info(
+            f"Upstream config custom_schema_name: {getattr(upstream_config, 'custom_schema_name', 'NOT_SET')}"
+        )
+        context.log.info(f"Current asset name: {context.asset_key.path[-1]}")
+
         # Generate the same schema and table names as handle_output
         schema_name, table_name = self._get_schema_and_table_name(
             upstream_config, upstream_asset_name
         )
         full_table_name = f"{schema_name}.{table_name}"
 
+        context.log.info(f"Determined schema_name: {schema_name}")
+        context.log.info(f"Determined table_name: {table_name}")
         context.log.info(
             f"Reconstructed table name from upstream context: {full_table_name}"
         )
