@@ -1175,7 +1175,9 @@ dagsterDaemon:
   #   value: "one"
   # - name: ENV_TWO
   #   value: "two"
-  env: [ ]
+  env:
+    - name: DAGSTER_DAEMON_LOG_LEVEL
+      value: "CRITICAL"
 
   # Additional environment variables can be retrieved and set from ConfigMaps. See:
   # https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
