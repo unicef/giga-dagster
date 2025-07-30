@@ -93,16 +93,11 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
         """
         context.log.info("Handling ADLSDeltaIntermediaryIOManager input...")
 
-        # Reconstruct table name from upstream asset information
         if not context.upstream_output:
             raise ValueError(
                 "No upstream output found. Cannot determine table name for intermediary IO manager."
             )
 
-        # Get upstream asset information
-        upstream_asset_name = context.upstream_output.asset_key.path[-1]
-
-        # Get upstream config to extract file_upload_id and country_code
         if (
             not hasattr(context.upstream_output, "step_context")
             or not context.upstream_output.step_context
@@ -111,48 +106,28 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
                 "Upstream step context not available. Cannot reconstruct table name for intermediary IO manager."
             )
 
-        # Get the correct upstream asset config using the same technique as BaseConfigurableIOManager
-        # context.upstream_output.step_context.op_config contains the CURRENT asset's config when
-        # there are multiple upstream assets, so we need to look it up correctly
-        asset_identifier, *_ = (
-            context.get_asset_identifier()
-        )  # points to correct upstream
+        upstream_asset_name = context.upstream_output.asset_key.path[-1]
+        asset_identifier, *_ = context.get_asset_identifier()
         run_config = context.step_context.run_config
         upstream_op_config = run_config["ops"].get(asset_identifier)
 
         if upstream_op_config is None:
-            # Fallback to the original method if lookup fails
-            upstream_config = FileConfig(
-                **context.upstream_output.step_context.op_config
+            raise ValueError(
+                f"Upstream operation config not found for asset '{asset_identifier}'. "
+                "Cannot determine table name for intermediary IO manager."
             )
-        else:
-            upstream_config = FileConfig(**upstream_op_config["config"])
 
-        # Debug logging to understand what config values we're getting
-        context.log.info(f"Upstream asset name: {upstream_asset_name}")
-        context.log.info(f"Asset identifier: {asset_identifier}")
-        context.log.info(f"Found upstream_op_config: {upstream_op_config is not None}")
-        context.log.info(
-            f"Upstream config custom_schema_name: {getattr(upstream_config, 'custom_schema_name', 'NOT_SET')}"
-        )
-        context.log.info(f"Current asset name: {context.asset_key.path[-1]}")
+        upstream_config = FileConfig(**upstream_op_config["config"])
 
-        # Generate the same schema and table names as handle_output
         schema_name, table_name = self._get_schema_and_table_name(
             upstream_config, upstream_asset_name
         )
         full_table_name = f"{schema_name}.{table_name}"
 
-        context.log.info(f"Determined schema_name: {schema_name}")
-        context.log.info(f"Determined table_name: {table_name}")
-        context.log.info(
-            f"Reconstructed table name from upstream context: {full_table_name}"
-        )
+        context.log.info(f"Loading data from {full_table_name}")
 
         spark = self._get_spark_session()
         dt = DeltaTable.forName(spark, full_table_name)
-
-        context.log.info(f"Successfully loaded data from {full_table_name}")
 
         return dt.toDF()
 
