@@ -3,7 +3,6 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
-from country_converter import CountryConverter
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
@@ -32,8 +31,8 @@ from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
     column_mapping_rename,
-    connectivity_rt_dataset,
     create_bronze_layer_columns,
+    get_country_rt_schools,
     merge_connectivity_to_master as merge_connectivity_to_df,
     standardize_connectivity_type,
 )
@@ -242,10 +241,8 @@ def geolocation_bronze(
     context.log.info("After config metadata update")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # QoS Columns
-        coco = CountryConverter()
-        country_code_2 = coco.convert(country_code, to="ISO2")
-        connectivity = connectivity_rt_dataset(s, country_code_2)
+        # RT Columns
+        connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
