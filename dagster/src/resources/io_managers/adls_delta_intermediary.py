@@ -111,10 +111,27 @@ class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
                 "Upstream step context not available. Cannot reconstruct table name for intermediary IO manager."
             )
 
-        upstream_config = FileConfig(**context.upstream_output.step_context.op_config)
+        # Get the correct upstream asset config using the same technique as BaseConfigurableIOManager
+        # context.upstream_output.step_context.op_config contains the CURRENT asset's config when
+        # there are multiple upstream assets, so we need to look it up correctly
+        asset_identifier, *_ = (
+            context.get_asset_identifier()
+        )  # points to correct upstream
+        run_config = context.step_context.run_config
+        upstream_op_config = run_config["ops"].get(asset_identifier)
+
+        if upstream_op_config is None:
+            # Fallback to the original method if lookup fails
+            upstream_config = FileConfig(
+                **context.upstream_output.step_context.op_config
+            )
+        else:
+            upstream_config = FileConfig(**upstream_op_config["config"])
 
         # Debug logging to understand what config values we're getting
         context.log.info(f"Upstream asset name: {upstream_asset_name}")
+        context.log.info(f"Asset identifier: {asset_identifier}")
+        context.log.info(f"Found upstream_op_config: {upstream_op_config is not None}")
         context.log.info(
             f"Upstream config custom_schema_name: {getattr(upstream_config, 'custom_schema_name', 'NOT_SET')}"
         )
