@@ -24,8 +24,8 @@ from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
-from src.utils.get_nocodb_data import get_nocodb_table_as_key_value_mapping
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.nocodb.get_nocodb_data import get_nocodb_table_as_key_value_mapping
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
