@@ -798,13 +798,13 @@ def merge_connectivity_to_master(
         ),
     )
 
-    master = master.drop(
-        *[
-            col
-            for col in master.columns
-            if col in ("school_id_govt_connectivity", "school_id_giga_connectivity")
-        ]
-    )
+    master_cols_to_drop = [
+        col
+        for col in master.columns
+        if col in ("school_id_govt_connectivity", "school_id_giga_connectivity")
+    ]
+
+    master = master.drop(*master_cols_to_drop)
 
     return master
 
