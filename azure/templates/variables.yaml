@@ -37,6 +37,7 @@ variables:
   procoDbConnectionString: $(PROCO_DB_CONNECTION_STRING)
   nocoDBURL: $(NOCODB_BASE_URL)
   nocoDBToken: $(NOCODB_TOKEN)
+  nocoDBNameMappingsTableId: $(NOCODB_NAME_MAPPINGS_TABLE_ID)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)

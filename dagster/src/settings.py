@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     GIGAMETER_DB_CONNECTION_STRING: str = ""
     NOCODB_BASE_URL: str = ""
     NOCODB_TOKEN: str = ""
+    NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
 
     # Derived settings
     @property
