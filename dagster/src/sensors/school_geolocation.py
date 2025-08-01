@@ -75,6 +75,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
+                    custom_schema_name=f"{METASTORE_SCHEMA}_dq_results",
                 ),
                 "geolocation_data_quality_results_human_readable": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
