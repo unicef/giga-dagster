@@ -87,8 +87,8 @@ class FileConfig(Config):
     )
     custom_schema_name: str = Field(
         description="""
-        Custom schema name for intermediary tables. If provided, this will be used
-        instead of the default naming convention for intermediary IO managers.
+        Custom schema name for Delta tables. If provided, this will be used
+        instead of the default naming convention for the Delta Table IO manager.
         """,
         default=None,
     )
