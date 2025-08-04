@@ -13,9 +13,9 @@ from .adls_delta import ADLSDeltaIOManager
 adls_client = ADLSFileClient()
 
 
-class ADLSDeltaIntermediaryIOManager(ADLSDeltaIOManager):
+class ADLSDeltaTableIOManager(ADLSDeltaIOManager):
     """
-    An ADLS Delta IO Manager designed for intermediary outputs where schema
+    An ADLS Delta Table IO Manager designed for intermediary outputs where schema
     validation against a predefined schema is not required, and data is
     stored in unique tables based on custom schema configuration or fallback naming.
     """
