@@ -51,7 +51,7 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.sentry import capture_op_exceptions
-from src.utils.spark import compute_row_hash
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -404,8 +404,14 @@ def school_connectivity_realtime_schools(
         current_rt_schools,
         how="left",
         on=[
-            updated_rt_schools.school_id_giga
-            == current_rt_schools.school_id_giga_previous
+            (
+                updated_rt_schools.school_id_govt
+                == current_rt_schools.school_id_govt_previous
+            )
+            & (
+                updated_rt_schools.country_code
+                == current_rt_schools.country_code_previous
+            )
         ],
     )
 
@@ -524,6 +530,7 @@ def school_connectivity_realtime_master(
             s, construct_full_table_name("school_master", country_code)
         ).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
+        current_master = transform_types(current_master, schema_name, context)
 
         updated_master = current_master.join(
             updated_connectivity_schs,
@@ -562,8 +569,7 @@ def school_connectivity_realtime_master(
             current_master, updated_master, primary_key, column_names
         )
     else:
-        context.log.error(f"The master table for country {country_code} does not exist")
-        return None
+        raise ValueError(f"The master table for country {country_code} does not exist")
 
     context.log.info("Merge the updated RT data into the master table")
 
