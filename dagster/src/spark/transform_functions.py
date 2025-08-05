@@ -25,6 +25,10 @@ from src.constants import UploadMode
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.nocodb.get_nocodb_data import (
+    get_nocodb_table_as_key_value_mapping,
+    get_nocodb_table_id_from_name,
+)
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -90,20 +94,12 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
 def create_education_level(
     df: sql.DataFrame, mode: str, uploaded_columns: list[str]
 ) -> sql.DataFrame:
-    education_level_govt_mapping = {
-        "Other": "Unknown",
-        "Unknown": "Unknown",
-        "Pre-Primary, Primary and Secondary": "Pre-Primary, Primary and Secondary",
-        "Primary, Secondary and Post-Secondary": "Primary, Secondary and Post-Secondary",
-        "Basic": "Primary",
-        "Basic And Secondary": "Primary and Secondary",
-        "Pre-Primary": "Pre-Primary",
-        "Primary": "Primary",
-        "Secondary": "Secondary",
-        "Post-Secondary": "Post-Secondary",
-        "Pre-Primary And Primary": "Pre-Primary and Primary",
-        "Primary And Secondary": "Primary and Secondary",
-    }
+    education_level_nocodb_table_id = get_nocodb_table_id_from_name(
+        table_name="EducationLevelMapping"
+    )
+    education_level_govt_mapping = get_nocodb_table_as_key_value_mapping(
+        table_id=education_level_nocodb_table_id
+    )
 
     education_level_govt_mapping = {
         key.lower(): value for key, value in education_level_govt_mapping.items()
@@ -487,6 +483,7 @@ def add_admin_columns(  # noqa: C901
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
                 return row.get("name")
+        return None
         return None
 
     get_admin_native_udf = f.udf(get_admin_native, StringType())
