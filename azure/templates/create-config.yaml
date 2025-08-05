@@ -75,6 +75,7 @@ jobs:
                     NOCODB_BASE_URL: "$(nocoDBURL)"
                     NOCODB_TOKEN: "$(nocoDBToken)"
                     NOCODB_NAME_MAPPINGS_TABLE_ID: "$(nocoDBNameMappingsTableId)"
+                    TRINO_CONNECTION_STRING: "$(trinoConnectionString)"
                     SPARK_DRIVER_CORES: "$(sparkDriverCores)"
                     SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
                     GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"

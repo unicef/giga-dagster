@@ -38,6 +38,7 @@ variables:
   nocoDBURL: $(NOCODB_BASE_URL)
   nocoDBToken: $(NOCODB_TOKEN)
   nocoDBNameMappingsTableId: $(NOCODB_NAME_MAPPINGS_TABLE_ID)
+  trinoConnectionString: $(TRINO_CONNECTION_STRING)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)

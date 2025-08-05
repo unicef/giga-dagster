@@ -3,8 +3,10 @@ import re
 import uuid
 from itertools import chain
 
+import country_converter as coco
 import geopandas as gpd
 import pandas as pd
+from delta import DeltaTable
 from loguru import logger
 from pyspark import sql
 from pyspark.sql import (
@@ -22,6 +24,7 @@ from pyspark.sql.types import (
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
+from src.internal.connectivity_queries import get_qos_tables
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
@@ -29,6 +32,7 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
     get_nocodb_table_id_from_name,
 )
+from src.utils.schema import construct_full_table_name
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -484,7 +488,6 @@ def add_admin_columns(  # noqa: C901
             if row.geometry.contains(point):
                 return row.get("name")
         return None
-        return None
 
     get_admin_native_udf = f.udf(get_admin_native, StringType())
 
@@ -699,13 +702,25 @@ def merge_connectivity_to_master(
     mode: str,
 ):
     connectivity_columns = [
-        col for col in connectivity.columns if col != "school_id_giga"
+        col
+        for col in connectivity.columns
+        if col not in ("school_id_giga", "school_id_govt")
     ]
     columns_to_drop = [col for col in connectivity_columns if col in master.columns]
-
     master = master.drop(*columns_to_drop)
 
-    master = master.join(connectivity, on="school_id_giga", how="left")
+    connectivity = connectivity.withColumnsRenamed(
+        {
+            "school_id_govt": "school_id_govt_connectivity",
+            "school_id_giga": "school_id_giga_connectivity",
+        }
+    )
+
+    master = master.join(
+        connectivity,
+        on=[master.school_id_govt == connectivity.school_id_govt_connectivity],
+        how="left",
+    )
 
     master = master.withColumn(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
@@ -755,7 +770,8 @@ def merge_connectivity_to_master(
         # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
         master = master.withColumn(
             "connectivity",
-            f.when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
+            f.when(f.lower(f.col("connectivity_RT")) == "yes", "Yes")
+            .when(f.lower(f.col("connectivity_govt")) == "yes", "Yes")
             .when(f.lower(f.col("connectivity_govt")) == "no", "No")
             .when(f.lower(f.col("connectivity_govt")) == "unknown", "Unknown")
             .otherwise(f.lit(None).cast(StringType())),
@@ -764,7 +780,8 @@ def merge_connectivity_to_master(
         # this will run during updates if download_speed_govt is in the uploaded file without connectivity_govt
         master = master.withColumn(
             "connectivity",
-            f.when(f.col("download_speed_govt") > 0, "Yes")
+            f.when(f.lower(f.col("connectivity_RT")) == "yes", "Yes")
+            .when(f.col("download_speed_govt") > 0, "Yes")
             .when(f.col("download_speed_govt") == 0, "No")
             .otherwise(f.lit(None).cast(StringType())),
         )
@@ -777,7 +794,233 @@ def merge_connectivity_to_master(
         ),
     )
 
+    master_cols_to_drop = [
+        col
+        for col in master.columns
+        if col in ("school_id_govt_connectivity", "school_id_giga_connectivity")
+    ]
+
+    master = master.drop(*master_cols_to_drop)
+
     return master
+
+
+def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=True):
+    from src.internal.connectivity_queries import (
+        get_all_gigameter_schools,
+        get_all_mlab_schools,
+        get_qos_schools_by_country,
+        get_rt_schools,
+    )
+
+    gigameter_schools = get_all_gigameter_schools()
+    context.log.info(
+        f"Total number of gigameter schools is {gigameter_schools.shape[0]}"
+    )
+    mlab_schools = get_all_mlab_schools()
+    context.log.info(f"Total number of mlab schools is {mlab_schools.shape[0]}")
+
+    qos_schema_tables_df = get_qos_tables()
+    qos_schema_tables = qos_schema_tables_df["Table"].to_list()
+    qos_countries = [
+        table
+        for table in qos_schema_tables
+        if coco.convert(table, to="short_name") != "not found"
+    ]
+    qos_schools = pd.DataFrame()
+    for country_code in qos_countries:
+        context.log.info(f"Fetching QoS data for {country_code.upper()}")
+        country_qos_schools = get_qos_schools_by_country(country_iso3_code=country_code)
+        context.log.info(
+            f"Pulled {country_qos_schools.shape[0]} schools for {country_code.upper()}"
+        )
+        qos_schools = pd.concat([qos_schools, country_qos_schools])
+
+    context.log.info(f"Total number of QoS schools is {qos_schools.shape[0]}")
+
+    gigameter_schools_df = spark.createDataFrame(gigameter_schools)
+    mlab_schools_df = spark.createDataFrame(mlab_schools)
+    mlab_schools_df = mlab_schools_df.withColumnsRenamed(
+        {col: f"{col}_mlab" for col in mlab_schools_df.columns}
+    )
+    qos_schools_df = spark.createDataFrame(qos_schools)
+    qos_schools_df = qos_schools_df.withColumnsRenamed(
+        {col: f"{col}_qos" for col in qos_schools_df.columns}
+    )
+
+    connectivity_rt_schools = gigameter_schools_df.join(
+        mlab_schools_df,
+        how="outer",
+        on=[
+            (gigameter_schools_df.school_id_govt == mlab_schools_df.school_id_govt_mlab)
+            & (gigameter_schools_df.country_code == mlab_schools_df.country_code_mlab)
+        ],
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "school_id_govt",
+        f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_mlab")),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.join(
+        qos_schools_df,
+        how="outer",
+        on=[
+            (
+                connectivity_rt_schools.school_id_govt
+                == qos_schools_df.school_id_govt_qos
+            )
+            & (connectivity_rt_schools.country_code == qos_schools_df.country_code_qos)
+        ],
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "school_id_govt",
+        f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_qos")),
+    )
+
+    # ensure we fill all the values of the columns from across the sources
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "school_id_giga",
+        f.coalesce(
+            f.col("school_id_giga"),
+            f.col("school_id_giga_mlab"),
+            f.col("school_id_giga_qos"),
+        ),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "country_code",
+        f.coalesce(
+            f.col("country_code"),
+            f.col("country_code_mlab"),
+            f.col("country_code_qos"),
+        ),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "connectivity_RT_ingestion_timestamp",
+        f.least(
+            f.col("first_measurement_timestamp"),
+            f.col("first_measurement_timestamp_mlab"),
+            f.col("first_measurement_timestamp_qos"),
+        ),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "connectivity_RT_datasource",
+        f.regexp_replace(
+            f.concat_ws(
+                ", ",
+                f.trim(f.col("source")),
+                f.trim(f.col("source_mlab")),
+                f.trim(f.col("source_qos")),
+            ),
+            "^, |, $",
+            "",
+        ),
+    )
+
+    connectivity_rt_schools = connectivity_rt_schools.withColumn(
+        "connectivity_RT", f.lit("Yes")
+    )
+
+    columns_to_keep = [
+        "school_id_giga",
+        "school_id_govt",
+        "connectivity_RT",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_RT_datasource",
+        "country_code",
+    ]
+    connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
+    connectivity_rt_schools = connectivity_rt_schools.filter(
+        f.col("school_id_giga").isNotNull()
+    )
+
+    if not table_exists:
+        context.log.info(
+            "Creating RT schools table for the first time, adding RT data from giga maps"
+        )
+        gigamaps_rt_schs = get_rt_schools()
+        gigamaps_rt_schs_df = spark.createDataFrame(gigamaps_rt_schs)
+        gigamaps_rt_schs_df = gigamaps_rt_schs_df.withColumnsRenamed(
+            {col: f"{col}_maps" for col in gigamaps_rt_schs_df.columns}
+        )
+
+        context.log.info("Add giga maps RT data to RT schools from all sources")
+
+        connectivity_rt_schools = connectivity_rt_schools.join(
+            gigamaps_rt_schs_df,
+            how="outer",
+            on=[
+                (
+                    connectivity_rt_schools.school_id_govt
+                    == gigamaps_rt_schs_df.school_id_govt_maps
+                )
+                & (
+                    connectivity_rt_schools.country_code
+                    == gigamaps_rt_schs_df.country_code_maps
+                )
+            ],
+        )
+
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "school_id_giga",
+            f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_maps")),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "school_id_govt",
+            f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_maps")),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT_ingestion_timestamp",
+            f.when(
+                f.col("country_code_maps") == "BRA",
+                f.coalesce(
+                    f.col("connectivity_rt_ingestion_timestamp_maps"),
+                    f.col("connectivity_RT_ingestion_timestamp"),
+                ),
+            ).otherwise(
+                f.coalesce(
+                    f.col("connectivity_rt_ingestion_timestamp"),
+                    f.col("connectivity_RT_ingestion_timestamp_maps"),
+                )
+            ),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT_datasource",
+            f.when(f.col("country_code_maps") == "BRA", f.lit("qos")).otherwise(
+                f.col("connectivity_RT_datasource")
+            ),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "country_code",
+            f.coalesce(f.col("country_code"), f.col("country_code_maps")),
+        )
+        connectivity_rt_schools = connectivity_rt_schools.withColumn(
+            "connectivity_RT", f.lit("Yes")
+        )
+
+        connectivity_rt_schools = connectivity_rt_schools.select(*columns_to_keep)
+        connectivity_rt_schools = connectivity_rt_schools.filter(
+            f.col("connectivity_RT_datasource").isNotNull()
+        )
+
+    return connectivity_rt_schools
+
+
+def get_country_rt_schools(spark: SparkSession, country_code: str) -> sql.DataFrame:
+    schema_name = "pipeline_tables"
+    table_name = "school_connectivity_realtime_schools"
+
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    all_rt_schools = DeltaTable.forName(spark, full_table_name).toDF()
+    country_rt_schools = all_rt_schools.filter(f.col("country_code") == country_code)
+    country_rt_schools = country_rt_schools.drop("country_code")
+    return country_rt_schools
 
 
 if __name__ == "__main__":
