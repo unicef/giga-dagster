@@ -75,7 +75,7 @@ def get_nocodb_table_as_pandas_dataframe(table_id, where=None, fields=None):
         (i.e., df.iloc[:, 3:]).
     """
 
-    rows_list = get_nocodb_table_rows(table_id)
+    rows_list = get_nocodb_table_rows(table_id, where=where, fields=fields)
     if not rows_list:
         return pd.DataFrame()
 
@@ -139,4 +139,4 @@ def get_nocodb_table_id_from_name(table_name):
     if nocodb_response:
         return nocodb_response[0]["table_id"]
     else:
-        raise ValueError(f"Issue retrieiving the table_id for table {table_name}")
+        raise ValueError(f"Unable to retrieve the table_id for table {table_name}")
