@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     NOCODB_BASE_URL: str = ""
     NOCODB_TOKEN: str = ""
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
+    TRINO_CONNECTION_STRING: str = ""
 
     # Derived settings
     @property
