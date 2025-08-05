@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     PROCO_DB_CONNECTION_STRING: str = ""
     GIGAMAPS_DB_CONNECTION_STRING: str = ""
     GIGAMETER_DB_CONNECTION_STRING: str = ""
+    NOCODB_BASE_URL: str = ""
+    NOCODB_TOKEN: str = ""
+    NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
 
     # Derived settings
     @property
