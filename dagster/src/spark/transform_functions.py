@@ -855,35 +855,42 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     connectivity_rt_schools = gigameter_schools_df.join(
         mlab_schools_df,
         how="outer",
-        on=[gigameter_schools_df.school_id_giga == mlab_schools_df.school_id_giga_mlab],
+        on=[
+            (gigameter_schools_df.school_id_govt == mlab_schools_df.school_id_govt_mlab)
+            & (gigameter_schools_df.country_code == mlab_schools_df.country_code_mlab)
+        ],
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "school_id_giga",
-        f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_mlab")),
+        "school_id_govt",
+        f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_mlab")),
     )
 
     connectivity_rt_schools = connectivity_rt_schools.join(
         qos_schools_df,
         how="outer",
         on=[
-            connectivity_rt_schools.school_id_giga == qos_schools_df.school_id_giga_qos
+            (
+                connectivity_rt_schools.school_id_govt
+                == qos_schools_df.school_id_govt_qos
+            )
+            & (connectivity_rt_schools.country_code == qos_schools_df.country_code_qos)
         ],
     )
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "school_id_giga",
-        f.coalesce(f.col("school_id_giga"), f.col("school_id_giga_qos")),
+        "school_id_govt",
+        f.coalesce(f.col("school_id_govt"), f.col("school_id_govt_qos")),
     )
 
-    # ensure we fill the values of all the columns from across the sources
+    # ensure we fill all the values of the columns from across the sources
 
     connectivity_rt_schools = connectivity_rt_schools.withColumn(
-        "school_id_govt",
+        "school_id_giga",
         f.coalesce(
-            f.col("school_id_govt"),
-            f.col("school_id_govt_mlab"),
-            f.col("school_id_govt_qos"),
+            f.col("school_id_giga"),
+            f.col("school_id_giga_mlab"),
+            f.col("school_id_giga_qos"),
         ),
     )
 
@@ -952,8 +959,14 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
             gigamaps_rt_schs_df,
             how="outer",
             on=[
-                connectivity_rt_schools.school_id_giga
-                == gigamaps_rt_schs_df.school_id_giga_maps
+                (
+                    connectivity_rt_schools.school_id_govt
+                    == gigamaps_rt_schs_df.school_id_govt_maps
+                )
+                & (
+                    connectivity_rt_schools.country_code
+                    == gigamaps_rt_schs_df.country_code_maps
+                )
             ],
         )
 
