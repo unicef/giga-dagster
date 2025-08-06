@@ -7,11 +7,6 @@ from pydantic import Field
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
-from src.utils.datahub.batch_processing import (
-    create_parallel_batches,
-    delete_assertion_batch,
-    process_batches_in_parallel,
-)
 from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
@@ -236,17 +231,8 @@ class DeleteAssertionsConfig(Config):
 
 
 class ListAssertionsConfig(Config):
-    status: RemovedStatusFilter = Field(
-        RemovedStatusFilter.ALL,
-        description="Filter for the status of entities during search",
-    )
-
     batch_size: int = Field(100, description="Assertions to delete at a time")
     max_iterations: int = Field(10, description="Number of batches to delete")
-    num_workers: int = Field(
-        5,
-        description="Number of worker threads to use for parallel processing",
-    )
 
 
 @asset
@@ -260,29 +246,21 @@ def datahub__purge_assertions(
     for iteration in range(config.max_iterations):
         # Get all assertion URNs for this iteration
         all_assertion_urns = datahub_graph_client.list_all_entity_urns(
-            entity_type="assertion", start=0, count=config.batch_size * 5
+            entity_type="assertion", start=0, count=config.batch_size
         )
 
-        if not all_assertion_urns:
-            context.log.info(f"No more assertions found after {iteration} iterations")
-            break
+        if all_assertion_urns:
+            for urn in all_assertion_urns:
+                datahub_graph_client.delete_references_to_urn(urn=urn, dry_run=False)
+                total_references_deleted += 1
 
-        # Create parallel batches
-        batches = create_parallel_batches(
-            all_assertion_urns, num_parallel=config.num_workers
+                datahub_graph_client.hard_delete_entity(urn=urn)
+                total_deleted += 1
+
+        context.log.info(
+            f"Iteration {iteration + 1}/{config.max_iterations}: "
+            f"{total_references_deleted} references."
         )
-
-        logger.info(
-            f"Iteration {iteration + 1}: Processing {len(all_assertion_urns)} assertions in {len(batches)} parallel batches"
-        )
-
-        # Process batches in parallel
-        batch_deleted_total, batch_refs_deleted_total = process_batches_in_parallel(
-            context, batches, delete_assertion_batch, max_workers=len(batches)
-        )
-
-        total_deleted += batch_deleted_total
-        total_references_deleted += batch_refs_deleted_total
 
     context.log.info(
         f"Purge complete: deleted {total_deleted} assertions and {total_references_deleted} references"
@@ -293,7 +271,6 @@ def datahub__purge_assertions(
         metadata={
             "total_assertions_deleted": total_deleted,
             "total_references_deleted": total_references_deleted,
-            "iterations_completed": iteration + 1 if "iteration" in locals() else 0,
         },
     )
 
