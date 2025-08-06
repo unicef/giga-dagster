@@ -6,12 +6,7 @@ from pyspark.sql import (
     functions as f,
 )
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
     row_level_checks,
-)
-from src.utils.datahub.create_validation_tab import (
-    datahub_emit_assertions_with_exception_catcher,
 )
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
@@ -47,11 +42,6 @@ def adhoc__standalone_master_data_quality_checks(
             context=context,
         ),
         "Row level checks completed",
-    )
-    dq_summary = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(s, dq_checked),
-        df_bronze=dq_checked,
-        df_data_quality_checks=dq_checked,
     )
 
     latest_version = (dt.history().orderBy(f.col("version").desc()).first()).version
@@ -95,9 +85,6 @@ def adhoc__standalone_master_data_quality_checks(
     schema_reference = get_schema_columns_datahub(s, config.metastore_schema)
     datahub_emit_metadata_with_exception_catcher(
         context=context, config=config, spark=spark, schema_reference=schema_reference
-    )
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=dq_summary
     )
 
     return Output(
