@@ -32,9 +32,6 @@ from src.spark.transform_functions import (
     add_missing_columns,
 )
 from src.utils.adls import ADLSFileClient
-from src.utils.datahub.create_validation_tab import (
-    datahub_emit_assertions_with_exception_catcher,
-)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -648,9 +645,7 @@ def adhoc__publish_master_to_gold(
         spark=spark,
         schema_reference=schema_reference,
     )
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=adhoc__master_dq_checks_summary
-    )
+
     upstream_filepaths = [
         f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{config.country_code.lower()}",
         f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{config.country_code.lower()}",

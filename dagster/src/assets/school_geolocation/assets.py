@@ -43,9 +43,6 @@ from src.utils.adls import (
 from src.utils.data_quality_descriptions import (
     convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
-from src.utils.datahub.create_validation_tab import (
-    datahub_emit_assertions_with_exception_catcher,
-)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -511,9 +508,6 @@ async def geolocation_data_quality_results_summary(
         df_data_quality_checks=dq_results,
     )
 
-    datahub_emit_assertions_with_exception_catcher(
-        context=context, dq_summary_statistics=dq_summary_statistics
-    )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
