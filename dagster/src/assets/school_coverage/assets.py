@@ -1,5 +1,3 @@
-from io import BytesIO
-
 from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from icecream import ic
@@ -37,13 +35,13 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.db.primary import get_db_context
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
+from src.utils.spark import spark_loader
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
@@ -87,15 +85,21 @@ def coverage_data_quality_results(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
-    with BytesIO(coverage_raw) as buffer:
-        buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath, context=context)
+    # Check if it's an Excel file that needs raw bytes
+    from pathlib import Path
+
+    ext = Path(config.filepath).suffix.lower()
+
+    if ext in [".xlsx", ".xls"]:
+        # Excel files require raw_bytes parameter
+        df_raw = spark_loader(s, config.filepath, raw_bytes=coverage_raw)
+    else:
+        # Non-Excel files can be loaded directly from ADLS
+        df_raw = spark_loader(s, config.filepath)
 
     source = config.filename_components.source
     country_code = config.country_code
     dataset_type = f"coverage_{source}"
-
-    df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
         df_raw,
         file_upload.column_to_schema_mapping,
@@ -144,11 +148,17 @@ async def coverage_data_quality_results_summary(
 ) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
-    with BytesIO(coverage_raw) as buffer:
-        buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath, context=context)
+    # Check if it's an Excel file that needs raw bytes
+    from pathlib import Path
 
-    df_raw = s.createDataFrame(pdf)
+    ext = Path(config.filepath).suffix.lower()
+
+    if ext in [".xlsx", ".xls"]:
+        # Excel files require raw_bytes parameter
+        df_raw = spark_loader(s, config.filepath, raw_bytes=coverage_raw)
+    else:
+        # Non-Excel files can be loaded directly from ADLS
+        df_raw = spark_loader(s, config.filepath)
     dq_summary_statistics = aggregate_report_json(
         df_aggregated=aggregate_report_spark_df(s, coverage_data_quality_results),
         df_bronze=df_raw,
