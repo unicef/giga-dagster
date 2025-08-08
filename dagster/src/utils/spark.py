@@ -1,14 +1,21 @@
 import subprocess
+from io import BytesIO
+from pathlib import Path
 from uuid import uuid4
 
 import pyarrow_hotfix  # noqa: F401, pylint: disable=unused-import
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
-from pyspark.sql import SparkSession, types
+from pyspark.sql import (
+    DataFrame as SparkDataFrame,
+    SparkSession,
+    types,
+)
 from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
+from src.exceptions import UnsupportedFiletypeException
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.schema import get_schema_columns
@@ -93,6 +100,54 @@ def get_spark_session() -> SparkSession:
     )
     spark = configure_spark_with_delta_pip(builder)
     return spark.getOrCreate()
+
+
+def spark_loader(
+    spark: SparkSession, filepath: str, raw_bytes: bytes = None
+) -> SparkDataFrame:
+    """
+    Load a file from ADLS directly into a Spark DataFrame, with fallback to pandas for Excel files.
+
+    Args:
+        spark: Active Spark session
+        filepath: Relative path to file in ADLS (e.g., "raw/data/file.csv")
+        raw_bytes: Raw file bytes (required for Excel files, optional for others as fallback)
+
+    Returns:
+        Spark DataFrame containing the file data
+
+    Raises:
+        UnsupportedFiletypeException: If file type is not supported
+        ValueError: If Excel file is provided without raw_bytes
+    """
+    ext = Path(filepath).suffix.lower()
+
+    # Excel files: Use pandas fallback approach (memory-intensive but necessary)
+    if ext in [".xlsx", ".xls"]:
+        if raw_bytes is None:
+            raise ValueError(
+                "Excel files require raw_bytes parameter for pandas fallback"
+            )
+
+        # Import here to avoid circular dependencies
+        from src.utils.pandas import pandas_loader
+
+        with BytesIO(raw_bytes) as buffer:
+            buffer.seek(0)
+            pdf = pandas_loader(buffer, filepath)
+            return spark.createDataFrame(pdf)
+
+    # All other formats: Use native Spark readers
+    adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+
+    if ext == ".csv":
+        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+    elif ext == ".json":
+        return spark.read.json(adls_path, multiLine=True)
+    elif ext == ".parquet":
+        return spark.read.parquet(adls_path)
+    else:
+        raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
 
 
 def count_nulls_for_column(df: sql.DataFrame, column_name: str) -> sql.DataFrame:

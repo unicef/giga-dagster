@@ -1,5 +1,4 @@
 from datetime import datetime
-from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -50,7 +49,6 @@ from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
@@ -59,6 +57,7 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
+from src.utils.spark import spark_loader
 
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
@@ -186,12 +185,18 @@ def geolocation_bronze(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
-    with BytesIO(geolocation_raw) as buffer:
-        buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath).map(str)
+    # Check if it's an Excel file that needs raw bytes
+    from pathlib import Path
 
-    pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
-    df = s.createDataFrame(pdf)
+    ext = Path(config.filepath).suffix.lower()
+
+    if ext in [".xlsx", ".xls"]:
+        # Excel files require raw_bytes parameter
+        df = spark_loader(s, config.filepath, raw_bytes=geolocation_raw)
+    else:
+        # Non-Excel files can be loaded directly from ADLS
+        df = spark_loader(s, config.filepath)
+
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
