@@ -83,3 +83,4 @@ def run_query(query, access_token):
 
     print("Status Code:", response.status_code)
     print("Response Text:", response.text)
+    return response

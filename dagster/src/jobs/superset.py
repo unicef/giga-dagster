@@ -21,10 +21,14 @@ def fetch_and_run_query(context: OpExecutionContext):
                 "sql": table["Query to Create"],
             }
             context.log.info(f"running query: {table['Title']}")
-            run_query(query_to_delete, access_token)
+            x = run_query(query_to_delete, access_token)
+            context.log.info(f"status code: {x.status_code}")
+            context.log.info(f"response: {x.text}")
             time.sleep(5)
             # TODO: change this to poll and wait for the result here
-            run_query(query_to_create, access_token)
+            x = run_query(query_to_create, access_token)
+            context.log.info(f"status code: {x.status_code}")
+            context.log.info(f"response: {x.text}")
             time.sleep(90)
     else:
         context.log.error(
