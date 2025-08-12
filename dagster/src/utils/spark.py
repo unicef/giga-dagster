@@ -61,8 +61,13 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
-    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
-        settings.AZURE_SAS_TOKEN
+    # f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
+    #     settings.AZURE_SAS_TOKEN
+    # ),
+    f"fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
+    f"fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
+    f"fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN.strip(
+        "?"
     ),
 }
 
