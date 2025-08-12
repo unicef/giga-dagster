@@ -42,6 +42,13 @@ def duplicate_name_level_110_check(
     added_columns = ["lat_110", "long_110"]
     columns_to_drop = [col for col in added_columns if col not in df_columns]
 
+    df = df.withColumn(
+        "dq_duplicate_name_level_within_110m_radius",
+        f.when(
+            f.col("latitude").isNull() | f.col("longitude").isNull(), f.lit(None)
+        ).otherwise(f.col("dq_duplicate_name_level_within_110m_radius")),
+    )
+
     return df.drop(*columns_to_drop)
 
 
@@ -105,6 +112,13 @@ def similar_name_level_within_110_check(
         f.when(f.col("school_name_similar").isNull(), 0).otherwise(1),
     )
 
+    df = df.withColumn(
+        "dq_duplicate_similar_name_same_level_within_110m_radius",
+        f.when(
+            f.col("latitude").isNull() | f.col("logitude").isNull(), f.lit(None)
+        ).otherwise(f.col("dq_duplicate_similar_name_same_level_within_110m_radius")),
+    )
+
     added_columns = [
         "lat_110",
         "long_110",
@@ -140,9 +154,17 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
     df = df.withColumn(
         "dq_is_school_density_greater_than_5",
         f.when(
+            # only set to 1 if lat/lon exist
             f.col("school_density") > 5,
             1,
         ).otherwise(0),
+    )
+
+    df = df.withColumn(
+        "dq_is_school_density_greater_than_5",
+        f.when(f.col("latitude").isNull() | f.col("longitude"), f.lit(None)).otherwise(
+            f.col("dq_is_school_density_greater_than_5")
+        ),
     )
 
     return df.drop("hex8", "school_density")
