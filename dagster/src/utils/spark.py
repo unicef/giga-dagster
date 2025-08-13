@@ -65,7 +65,7 @@ spark_common_config = {
     #     settings.AZURE_SAS_TOKEN
     # ),
     f"fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
-    f"fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.FixedSASTokenProvider",
+    f"fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.SimpleSASTokenProvider",
     f"fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN.strip(
         "?"
     ),
