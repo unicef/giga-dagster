@@ -28,10 +28,16 @@ def duplicate_set_checks(
     column_actions = {}
     for column_set in config_column_list:
         set_name = "_".join(column_set)
-        column_actions[f"dq_duplicate_set-{set_name}"] = f.when(
-            f.count("*").over(Window.partitionBy(column_set)) > 1,
-            1,
-        ).otherwise(0)
+        column_actions[f"dq_duplicate_set-{set_name}"] = (
+            f.when(
+                f.col("latitude").isNull() | f.col("longitude").isNull(), f.lit(None)
+            )
+            .when(
+                f.count("*").over(Window.partitionBy(column_set)) > 1,
+                1,
+            )
+            .otherwise(0)
+        )
 
     df = df.withColumns(column_actions)
     return df.drop("location_id")
