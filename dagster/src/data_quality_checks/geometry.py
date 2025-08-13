@@ -115,7 +115,7 @@ def similar_name_level_within_110_check(
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(
-            f.col("latitude").isNull() | f.col("logitude").isNull(), f.lit(None)
+            f.col("latitude").isNull() | f.col("longitude").isNull(), f.lit(None)
         ).otherwise(f.col("dq_duplicate_similar_name_same_level_within_110m_radius")),
     )
 
