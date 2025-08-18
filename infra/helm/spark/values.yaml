@@ -151,6 +151,12 @@ master:
   ## @param master.daemonMemoryLimit Set the memory limit for the master daemon
   ##
   daemonMemoryLimit: ""
+  ## @param master.memoryLimit Set the maximum memory the master is allowed to use
+  ##
+  memoryLimit: 2Gi
+  ## @param master.coreLimit Set the maximum number of cores that the master can use
+  ##
+  coreLimit: 1
   ## @param master.configOptions Use a string to set the config options for in the form "-Dx=y"
   ##
   configOptions: ""
@@ -302,13 +308,17 @@ master:
     ##    cpu: 250m
     ##    memory: 256Mi
     ##
-    limits: { }
+    limits:
+      cpu: 250m
+      memory: 2Gi
     ## Examples:
     ## requests:
     ##    cpu: 250m
     ##    memory: 256Mi
     ##
-    requests: { }
+    requests:
+      cpu: 50m
+      memory: 512Mi
   ## Configure extra options for liveness probe
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes
   ## @param master.livenessProbe.enabled Enable livenessProbe
@@ -422,10 +432,10 @@ worker:
   daemonMemoryLimit: ""
   ## @param worker.memoryLimit Set the maximum memory the worker is allowed to use
   ##
-  memoryLimit: 2731M
-  ## @param worker.coreLimit Se the maximum number of cores that the worker can use
+  memoryLimit: 6Gi
+  ## @param worker.coreLimit Set the maximum number of cores that the worker can use
   ##
-  coreLimit: 2
+  coreLimit: 4
   ## @param worker.dir Set a custom working directory for the application
   ##
   dir: ""
@@ -591,13 +601,17 @@ worker:
     ##    cpu: 250m
     ##    memory: 256Mi
     ##
-    limits: { }
+    limits:
+      cpu: 4.0
+      memory: 6Gi
     ## Examples:
     ## requests:
     ##    cpu: 250m
     ##    memory: 256Mi
     ##
-    requests: { }
+    requests:
+      cpu: 1.0
+      memory: 1300Mi
   ## Configure extra options for liveness probe
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes
   ## @param worker.livenessProbe.enabled Enable livenessProbe
