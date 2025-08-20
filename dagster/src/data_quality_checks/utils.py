@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+import pandas as pd
 from jinja2 import BaseLoader, Environment
 from pyspark import sql
 from pyspark.sql import (
@@ -44,6 +45,10 @@ from src.data_quality_checks.standard import standard_checks
 from src.settings import settings
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.nocodb.get_nocodb_data import (
+    get_nocodb_table_as_pandas_dataframe,
+    get_nocodb_table_id_from_name,
+)
 from src.utils.schema import get_schema_columns
 
 
@@ -520,63 +525,98 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str]
+    df: sql.DataFrame, uploaded_columns: list[str], mode: str
 ):
-    all_dq_columns = [col for col in df.columns if col.startswith("dq_")]
-
-    assertions_creation_update = ["dq_is_not_update", "dq_is_not_create"]
-
-    assertions_critical = ["dq_is_null_mandatory", "dq_duplicate"]
-
-    assertions_location_based = [
-        "dq_is_not_within_country",
-        "dq_duplicate_all_except_school_code",
-        "dq_duplicate_similar_name_same_level_within_110m_radius",
-        "dq_duplicate_name_level_within_110m_radius",
-        "dq_is_school_density_greater_than_5",
-    ]
-
-    assertions_location_based.extend(
-        [col for col in all_dq_columns if col.startswith("dq_duplicate_set")]
+    dq_column_name_table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
+        table_id=dq_column_name_table_id
     )
 
-    assertions_optional = [
-        "dq_is_invalid_domain",
-        "dq_is_invalid_range",
-        "dq_precision",
-        "dq_is_null_optional",
-        "dq_is_not_numeric",
-        "dq_is_not_alphanumeric",
-    ]
+    mode_column = f"{mode.title()} DQ"
 
+    dq_table_mandatory = dq_column_name_table[
+        dq_column_name_table[mode_column].str.lower() != "always"
+    ]
+    dq_table_optional = dq_column_name_table.loc[
+        dq_column_name_table[mode_column].str.lower() == "if in file"
+    ]
+    dq_table_optional = dq_table_optional[
+        dq_table_optional["Column Checked"].isin(uploaded_columns)
+    ]
+    # TODO: # check the dq_table for any combination columns e.g education_level and school_id and add these to the table
+    dq_table_all = pd.concat([dq_table_mandatory, dq_table_optional])
+
+    dq_columns_list = dq_table_all.sort_values("Related Check ID")[
+        "DQ Table Column Name"
+    ].tolist()
     admin_columns = ["admin1", "admin2", "admin3", "admin4"]
+    columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
+    df = df.select(*columns_to_keep)
 
-    columns_to_keep = [*uploaded_columns, *admin_columns]
+    # column name mappings
+    human_readable_mappings = dq_table_all.set_index("DQ Table Column Name")[
+        "Human Readable Name"
+    ].to_dict()
+    # df = df.withColumnsRenamed(human_readable_mappings)
+    return df, human_readable_mappings
 
-    dq_columns_list = [
-        col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
-    ]
-
-    for dq_col in all_dq_columns:
-        if dq_col.split("-")[0] not in [*assertions_critical, *assertions_optional]:
-            continue
-
-        assertion, column = dq_col.split("-")
-        if assertion in assertions_critical and column in uploaded_columns:
-            dq_columns_list.append(dq_col)
-
-        if assertion in assertions_optional and column in uploaded_columns:
-            dq_columns_list.append(dq_col)
-
-    if "latitude" in uploaded_columns or "longitude" in uploaded_columns:
-        dq_columns_list.extend(assertions_location_based)
-
-    columns_to_keep.extend(["dq_has_critical_error", "failure_reason"])
-    columns_to_keep.extend(dq_columns_list)
-
-    columns_to_keep = [col for col in columns_to_keep if col in df.columns]
-
-    return df.select(*columns_to_keep)
+    # all_dq_columns = [col for col in df.columns if col.startswith("dq_")]
+    #
+    # assertions_creation_update = ["dq_is_not_update", "dq_is_not_create"]
+    #
+    # assertions_critical = ["dq_is_null_mandatory", "dq_duplicate"]
+    #
+    # assertions_location_based = [
+    #     "dq_is_not_within_country",
+    #     "dq_duplicate_all_except_school_code",
+    #     "dq_duplicate_similar_name_same_level_within_110m_radius",
+    #     "dq_duplicate_name_level_within_110m_radius",
+    #     "dq_is_school_density_greater_than_5",
+    # ]
+    #
+    # assertions_location_based.extend(
+    #     [col for col in all_dq_columns if col.startswith("dq_duplicate_set")]
+    # )
+    #
+    # assertions_optional = [
+    #     "dq_is_invalid_domain",
+    #     "dq_is_invalid_range",
+    #     "dq_precision",
+    #     "dq_is_null_optional",
+    #     "dq_is_not_numeric",
+    #     "dq_is_not_alphanumeric",
+    # ]
+    #
+    # admin_columns = ["admin1", "admin2", "admin3", "admin4"]
+    #
+    # columns_to_keep = [*uploaded_columns, *admin_columns]
+    #
+    # dq_columns_list = [
+    #     col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
+    # ]
+    #
+    # for dq_col in all_dq_columns:
+    #     if dq_col.split("-")[0] not in [*assertions_critical, *assertions_optional]:
+    #         continue
+    #
+    #     assertion, column = dq_col.split("-")
+    #     if assertion in assertions_critical and column in uploaded_columns:
+    #         dq_columns_list.append(dq_col)
+    #
+    #     if assertion in assertions_optional and column in uploaded_columns:
+    #         dq_columns_list.append(dq_col)
+    #
+    # if "latitude" in uploaded_columns or "longitude" in uploaded_columns:
+    #     dq_columns_list.extend(assertions_location_based)
+    #
+    # columns_to_keep.extend(["dq_has_critical_error", "failure_reason"])
+    # columns_to_keep.extend(dq_columns_list)
+    #
+    # columns_to_keep = [col for col in columns_to_keep if col in df.columns]
+    #
+    # return df.select(*columns_to_keep)
 
 
 def row_level_checks(

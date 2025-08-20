@@ -39,9 +39,6 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
-from src.utils.data_quality_descriptions import (
-    convert_dq_checks_to_human_readeable_descriptions_and_upload,
-)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -396,22 +393,25 @@ async def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    dataset_type = "geolocation"
+    # dataset_type = "geolocation"
+    mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
-    df = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns
+    df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns, mode
     )
-    bronze = geolocation_bronze.select(*uploaded_columns)
-    context.log.info("Convert the dataframe to a pands object to save it locally")
+    df = df.withColumnsRenamed(human_readable_mappings)
+    # bronze = geolocation_bronze.select(*uploaded_columns)
+    context.log.info("Convert the dataframe to a pandas object to save it locally")
+    df_pandas = df.toPandas()
 
-    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        dq_results=df,
-        dataset_type=dataset_type,
-        bronze=bronze,
-        config=config,
-        context=context,
-    )
+    # df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
+    #     dq_results=df,
+    #     dataset_type=dataset_type,
+    #     bronze=bronze,
+    #     config=config,
+    #     context=context,
+    # )
 
     return Output(
         df_pandas,
@@ -492,7 +492,7 @@ async def geolocation_data_quality_results_summary(
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
-    dq_results = dq_geolocation_extract_relevant_columns(
+    dq_results, _ = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
     )
 

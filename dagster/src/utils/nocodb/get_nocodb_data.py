@@ -28,11 +28,11 @@ def get_nocodb_table_rows(table_id, offset=0, limit=100, where=None, fields=None
     is_last_page = False
 
     if where and fields:
-        params_base = {where: where, fields: fields}
+        params_base = {"where": where, "fields": fields}
     elif where:
-        params_base = {where: where}
+        params_base = {"where": where}
     elif fields:
-        params_base = {fields: fields}
+        params_base = {"fields": fields}
     else:
         params_base = {}
 
