@@ -537,7 +537,7 @@ def dq_geolocation_extract_relevant_columns(
     mode_column = f"{mode.title()} DQ"
 
     dq_table_mandatory = dq_column_name_table[
-        dq_column_name_table[mode_column].str.lower() != "always"
+        dq_column_name_table[mode_column].str.lower() == "always"
     ]
     dq_table_optional = dq_column_name_table.loc[
         dq_column_name_table[mode_column].str.lower() == "if in file"
