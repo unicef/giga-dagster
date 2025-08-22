@@ -374,7 +374,6 @@ def geolocation_data_quality_results(
 @capture_op_exceptions
 async def geolocation_data_quality_results_human_readable(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
@@ -393,7 +392,6 @@ async def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    # dataset_type = "geolocation"
     mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
@@ -401,27 +399,18 @@ async def geolocation_data_quality_results_human_readable(
         geolocation_data_quality_results, uploaded_columns, mode
     )
     # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
-    for column in human_readable_mappings.keys():
-        if column in df.columns:
-            df = df.withColumn(
-                column,
-                f.when(f.col(column) == 1, "No").otherwise(
-                    f.when(f.col(column) == 0, "Yes")
-                ),
-            )
+    dq_column_names = [col for col in df.columns if col.startswith("dq_")]
+    for column in dq_column_names:
+        df = df.withColumn(
+            column,
+            f.when(f.col(column) == 1, "No").otherwise(
+                f.when(f.col(column) == 0, "Yes")
+            ),
+        )
 
     df = df.withColumnsRenamed(human_readable_mappings)
-    # bronze = geolocation_bronze.select(*uploaded_columns)
     context.log.info("Convert the dataframe to a pandas object to save it locally")
     df_pandas = df.toPandas()
-
-    # df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
-    #     dq_results=df,
-    #     dataset_type=dataset_type,
-    #     bronze=bronze,
-    #     config=config,
-    #     context=context,
-    # )
 
     return Output(
         df_pandas,
