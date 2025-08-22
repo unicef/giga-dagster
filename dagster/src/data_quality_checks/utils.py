@@ -8,13 +8,6 @@ from pyspark.sql import (
     functions as f,
     window as w,
 )
-from pyspark.sql.types import (
-    ArrayType,
-    IntegerType,
-    StringType,
-    StructField,
-    StructType,
-)
 
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
@@ -90,93 +83,35 @@ def aggregate_report_spark_df(
     )
 
     # Processing for Human Readable Report
+    agg_df = agg_df.withColumn("dq_column", f.col("assertion"))
     agg_df = agg_df.withColumn("column", (f.split(f.col("assertion"), "-").getItem(1)))
     agg_df = agg_df.withColumn(
         "assertion",
         (f.split(f.col("assertion"), "-").getItem(0)),
     )
-    # agg_df.show()
 
-    # descriptions
-    configs_df = spark.createDataFrame(config.DATA_QUALITY_CHECKS_DESCRIPTIONS)
-    # configs_df.show(truncate=False)
+    # get data descriptions from nocodb
+    dq_column_name_table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
+        table_id=dq_column_name_table_id
+    )
 
-    # Range
-    r_rows = [
-        (key, value["min"], value.get("max"))
-        for key, value in config.VALUES_RANGE_ALL.items()
-    ]
-    range_schema = StructType(
-        [
-            StructField("column", StringType(), True),
-            StructField("min", IntegerType(), True),
-            StructField("max", IntegerType(), True),
-        ],
+    dq_column_name_table["merge_col"] = dq_column_name_table[
+        "DQ Table Column Name"
+    ].map(lambda v: v.replace("dq_", ""))
+    dq_column_name_table = dq_column_name_table.rename(
+        columns={"DQ Check Category": "type", "Human Readable Name": "description"}
     )
-    range_df = spark.createDataFrame(r_rows, schema=range_schema)
-    # range_df.show(truncate=False)
+    dq_column_name_df = spark.createDataFrame(dq_column_name_table)
 
-    # Domain
-    d_rows = list(config.VALUES_DOMAIN_ALL.items())
-    domain_schema = StructType(
-        [
-            StructField("column", StringType(), True),
-            StructField("set", ArrayType(StringType(), True), True),
-        ],
+    report = agg_df.join(
+        dq_column_name_df.select(*["type", "description", "merge_col"]),
+        agg_df["dq_column"] == dq_column_name_df["merge_col"],
+        how="left",
     )
-    domain_df = spark.createDataFrame(d_rows, schema=domain_schema)
-    # domain_df.show(truncate=False)
 
-    # Precision
-    p_rows = [(key, value["min"]) for key, value in config.PRECISION.items()]
-    precision_schema = StructType(
-        [
-            StructField("column", StringType(), True),
-            StructField("precision", IntegerType(), True),
-        ],
-    )
-    precision_df = spark.createDataFrame(p_rows, schema=precision_schema)
-    # precision_df.show()
-
-    # Report Construction
-    report = agg_df.join(configs_df, "assertion", "left")
-    report = report.join(range_df, "column", "left")
-    report = report.join(domain_df, "column", "left")
-    report = report.join(precision_df, "column", "left")
-    report = report.withColumn(
-        "description",
-        f.when(f.col("column").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{\\}", f.col("column")),
-        ),
-    )
-    report = report.withColumn(
-        "description",
-        f.when(f.col("min").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{min\\}", f.col("min")),
-        ),
-    )
-    report = report.withColumn(
-        "description",
-        f.when(f.col("max").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{max\\}", f.col("max")),
-        ),
-    )
-    report = report.withColumn(
-        "description",
-        f.when(f.col("set").isNull(), f.col("description")).otherwise(
-            f.regexp_replace(
-                "description",
-                "\\{set\\}",
-                f.array_join(f.col("set"), ", "),
-            ),
-        ),
-    )
-    report = report.withColumn(
-        "description",
-        f.when(f.col("precision").isNull(), f.col("description")).otherwise(
-            f.regexp_replace("description", "\\{precision\\}", f.col("precision")),
-        ),
-    )
     report = report.select(
         "type",
         "assertion",
@@ -229,25 +164,9 @@ def aggregate_report_json(
         "timestamp": timestamp,
     }
 
-    # get the checks related to critical checks
-    critial_column_dq_checks = [
-        "dq_duplicate-school_id_govt",
-        "dq_duplicate-school_id_giga",
-        "dq_is_invalid_range-latitude",
-        "dq_is_invalid_range-longitude",
-        "dq_is_not_within_country",
-    ]
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
-        f.when(
-            (f.col("assertion") == "is_null_mandatory")
-            | (
-                f.concat(
-                    f.lit("dq_"), f.col("assertion"), f.lit("-"), f.col("column")
-                ).isin(critial_column_dq_checks)
-            ),
-            1,
-        ).otherwise(0),
+        f.when(f.col("type") == "critical checks", 1).otherwise(0),
     )
 
     critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
@@ -300,12 +219,14 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "dq_duplicate-school_id_govt",
         "dq_duplicate_all_except_school_code",
         "dq_duplicate_name_level_within_110m_radius",
+        "dq_duplicate_set-location_id",
         "dq_duplicate_set-education_level_location_id",
         "dq_duplicate_set-school_id_govt_school_name_education_level_location_id",
         "dq_duplicate_set-school_name_education_level_location_id",
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         "dq_has_critical_error",
         "dq_is_not_within_country",
+        "dq_is_not_alphanumeric-school_name",
         "dq_is_null_connectivity_type_when_connectivity_govt",
         "dq_is_null_mandatory-school_id_govt",
         "dq_is_null_optional-computer_availability",
@@ -407,6 +328,12 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         ],
         "count_duplicate_education_level_location_id": agg_df_pd.at[
             "duplicate_set-education_level_location_id", "count_schools"
+        ],
+        "count_duplicate_location_id": agg_df_pd.at[
+            "duplicate_set-location_id", "count_schools"
+        ],
+        "count_invalid_school_name": agg_df_pd.at[
+            "is_not_alphanumeric-school_name", "count_schools"
         ],
         "count_duplicate_name_level_within_110m_radius": agg_df_pd.at[
             "duplicate_name_level_within_110m_radius", "count_schools"
@@ -551,6 +478,7 @@ def dq_geolocation_extract_relevant_columns(
     dq_columns_list = dq_table_all.sort_values("Related Check ID")[
         "DQ Table Column Name"
     ].tolist()
+    dq_columns_list = ["dq_has_critical_error", *dq_columns_list]
     admin_columns = ["admin1", "admin2", "admin3", "admin4"]
     columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
     columns_to_keep = [col for col in columns_to_keep if col in df.columns]
@@ -562,62 +490,6 @@ def dq_geolocation_extract_relevant_columns(
     ].to_dict()
     # df = df.withColumnsRenamed(human_readable_mappings)
     return df, human_readable_mappings
-
-    # all_dq_columns = [col for col in df.columns if col.startswith("dq_")]
-    #
-    # assertions_creation_update = ["dq_is_not_update", "dq_is_not_create"]
-    #
-    # assertions_critical = ["dq_is_null_mandatory", "dq_duplicate"]
-    #
-    # assertions_location_based = [
-    #     "dq_is_not_within_country",
-    #     "dq_duplicate_all_except_school_code",
-    #     "dq_duplicate_similar_name_same_level_within_110m_radius",
-    #     "dq_duplicate_name_level_within_110m_radius",
-    #     "dq_is_school_density_greater_than_5",
-    # ]
-    #
-    # assertions_location_based.extend(
-    #     [col for col in all_dq_columns if col.startswith("dq_duplicate_set")]
-    # )
-    #
-    # assertions_optional = [
-    #     "dq_is_invalid_domain",
-    #     "dq_is_invalid_range",
-    #     "dq_precision",
-    #     "dq_is_null_optional",
-    #     "dq_is_not_numeric",
-    #     "dq_is_not_alphanumeric",
-    # ]
-    #
-    # admin_columns = ["admin1", "admin2", "admin3", "admin4"]
-    #
-    # columns_to_keep = [*uploaded_columns, *admin_columns]
-    #
-    # dq_columns_list = [
-    #     col for col in all_dq_columns if col.split("-")[0] in assertions_creation_update
-    # ]
-    #
-    # for dq_col in all_dq_columns:
-    #     if dq_col.split("-")[0] not in [*assertions_critical, *assertions_optional]:
-    #         continue
-    #
-    #     assertion, column = dq_col.split("-")
-    #     if assertion in assertions_critical and column in uploaded_columns:
-    #         dq_columns_list.append(dq_col)
-    #
-    #     if assertion in assertions_optional and column in uploaded_columns:
-    #         dq_columns_list.append(dq_col)
-    #
-    # if "latitude" in uploaded_columns or "longitude" in uploaded_columns:
-    #     dq_columns_list.extend(assertions_location_based)
-    #
-    # columns_to_keep.extend(["dq_has_critical_error", "failure_reason"])
-    # columns_to_keep.extend(dq_columns_list)
-    #
-    # columns_to_keep = [col for col in columns_to_keep if col in df.columns]
-    #
-    # return df.select(*columns_to_keep)
 
 
 def row_level_checks(

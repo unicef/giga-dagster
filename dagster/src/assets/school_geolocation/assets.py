@@ -402,12 +402,13 @@ async def geolocation_data_quality_results_human_readable(
     )
     # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
     for column in human_readable_mappings.keys():
-        df = df.withColumn(
-            column,
-            f.when(f.col(column) == 1, "No").otherwise(
-                f.when(f.col(column) == 0, "Yes")
-            ),
-        )
+        if column in df.columns:
+            df = df.withColumn(
+                column,
+                f.when(f.col(column) == 1, "No").otherwise(
+                    f.when(f.col(column) == 0, "Yes")
+                ),
+            )
 
     df = df.withColumnsRenamed(human_readable_mappings)
     # bronze = geolocation_bronze.select(*uploaded_columns)
