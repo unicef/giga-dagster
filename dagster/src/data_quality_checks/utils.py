@@ -553,6 +553,7 @@ def dq_geolocation_extract_relevant_columns(
     ].tolist()
     admin_columns = ["admin1", "admin2", "admin3", "admin4"]
     columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
+    columns_to_keep = [col for col in columns_to_keep if col in df.columns]
     df = df.select(*columns_to_keep)
 
     # column name mappings

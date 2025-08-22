@@ -490,10 +490,11 @@ async def geolocation_data_quality_results_summary(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
+    mode = config.mode
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns
+        geolocation_data_quality_results, uploaded_columns, mode=mode
     )
 
     dq_summary_statistics = aggregate_report_json(
