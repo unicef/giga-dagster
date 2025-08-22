@@ -400,6 +400,15 @@ async def geolocation_data_quality_results_human_readable(
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns, mode
     )
+    # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
+    for column in human_readable_mappings.keys():
+        df = df.withColumn(
+            column,
+            f.when(f.col(column) == 1, "No").otherwise(
+                f.when(f.col(column) == 0, "Yes")
+            ),
+        )
+
     df = df.withColumnsRenamed(human_readable_mappings)
     # bronze = geolocation_bronze.select(*uploaded_columns)
     context.log.info("Convert the dataframe to a pandas object to save it locally")
