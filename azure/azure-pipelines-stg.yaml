@@ -3,7 +3,7 @@ trigger:
   branches:
     include:
       - staging
-
+      - temp/alternative-azure
 pr: none
 
 pool:
