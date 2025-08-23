@@ -79,29 +79,29 @@ jobs:
             #         CATALOG_BASE: "$(catalogBase)"
             #         DATABASE_ID: "$(databaseId)"
 
-            # - task: Kubernetes@1
-            #   displayName: Create authproxy secrets
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: inline
-            #     command: apply
-            #     useConfigurationFile: true
-            #     inline: |
-            #       apiVersion: v1
-            #       kind: Secret
-            #       metadata:
-            #         name: giga-dagster-authproxy-secrets
-            #         labels:
-            #           app.kubernetes.io/name: giga-dagster-oauth2-proxy
-            #           app.kubernetes.io/part-of: giga-dataops-platform
-            #           app.kubernetes.io/component: dagster
-            #       stringData:
-            #         AZURE_CLIENT_ID: "$(azureAdClientId)"
-            #         AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-            #         AZURE_TENANT_ID: "$(azureAdTenantId)"
-            #         cookie-secret: "$(cookieSecret)"
-            #         OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
-            #         OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
+            - task: Kubernetes@1
+              displayName: Create authproxy secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-authproxy-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster-oauth2-proxy
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                    AZURE_CLIENT_ID: "$(azureAdClientId)"
+                    AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
+                    AZURE_TENANT_ID: "$(azureAdTenantId)"
+                    cookie-secret: "$(cookieSecret)"
+                    OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
+                    OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
             # - task: Kubernetes@1
             #   displayName: Create Spark secrets
