@@ -45,13 +45,13 @@ stages:
     jobs:
       - template: create-config.yaml
 
-  # - stage: Deploy
-  #   displayName: Deploy Dagster
-  #   dependsOn:
-  #     - BuildAndPushDagster
-  #     - BuildAndPushAuthProxy
-  #     - BuildAndPushSpark
-  #     - BuildAndPushHive
-  #     - CreateConfig
-  #   jobs:
-  #     - template: helm-deploy.yaml
+  - stage: Deploy
+    displayName: Deploy Dagster
+    # dependsOn:
+      # - BuildAndPushDagster
+      # - BuildAndPushAuthProxy
+      # - BuildAndPushSpark
+      # - BuildAndPushHive
+      # - CreateConfig
+    jobs:
+      - template: helm-deploy.yaml
