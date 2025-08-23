@@ -102,6 +102,9 @@ jobs:
                     cookie-secret: "$(cookieSecret)"
                     OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
                     OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
+                # AZURE_CLIENT_ID: "$(azureAdClientId)"
+                # AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
+                # AZURE_TENANT_ID: "$(azureAdTenantId)"
 
             # - task: Kubernetes@1
             #   displayName: Create Spark secrets
