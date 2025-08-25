@@ -162,9 +162,9 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
 
     df = df.withColumn(
         "dq_is_school_density_greater_than_5",
-        f.when(f.col("latitude").isNull() | f.col("longitude"), f.lit(None)).otherwise(
-            f.col("dq_is_school_density_greater_than_5")
-        ),
+        f.when(
+            f.col("latitude").isNull() | f.col("longitude").isNull(), f.lit(None)
+        ).otherwise(f.col("dq_is_school_density_greater_than_5")),
     )
 
     return df.drop("hex8", "school_density")
