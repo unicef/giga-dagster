@@ -30,7 +30,11 @@ def duplicate_set_checks(
         set_name = "_".join(column_set)
         column_actions[f"dq_duplicate_set-{set_name}"] = (
             f.when(
-                f.col("latitude").isNull() | f.col("longitude").isNull(), f.lit(None)
+                f.col("latitude").isNull()
+                | f.isnan(f.col("latitude"))
+                | f.col("longitude").isNull()
+                | f.isnan(f.col("latitude")),
+                f.lit(None),
             )
             .when(
                 f.count("*").over(Window.partitionBy(column_set)) > 1,
