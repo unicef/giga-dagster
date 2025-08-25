@@ -173,14 +173,11 @@ def aggregate_report_json(
     critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
     critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
 
+    df_aggregated = df_aggregated[df_aggregated.is_critical_dq_check != 1]
     df_aggregated = df_aggregated.drop("is_critical_dq_check")
 
     # Initialize an empty dictionary for the transformed data
-    agg_array = (
-        df_aggregated[df_aggregated.is_critical_dq_check != 1]
-        .toPandas()
-        .to_dict(orient="records")
-    )
+    agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary, "critical_checks": critical_checks_summary}
 
     # Iterate through each JSON line
