@@ -6,6 +6,10 @@ from pyspark.sql import functions as f
 from dagster import OpExecutionContext
 from src.spark.config_expectations import Config
 from src.utils.adls import ADLSFileClient
+from src.utils.nocodb.get_nocodb_data import (
+    get_nocodb_table_as_key_value_mapping,
+    get_nocodb_table_id_from_name,
+)
 from src.utils.op_config import FileConfig
 
 
@@ -287,3 +291,16 @@ def handle_rename_dq_has_critical_error_column(
     }
 
     return full_human_readable_mapping
+
+
+def rename_dq_has_critical_error_columns_nocodb() -> dict[str, str]:
+    dq_checks_table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    dq_checks_mapping = get_nocodb_table_as_key_value_mapping(
+        table_id=dq_checks_table_id,
+        key_column="DQ Table Column Name",
+        value_column="Human Readable Name",
+    )
+
+    return dq_checks_mapping
