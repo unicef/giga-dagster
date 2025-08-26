@@ -34,7 +34,7 @@ def duplicate_set_checks(
                 | f.isnan(f.col("latitude"))
                 | f.col("longitude").isNull()
                 | f.isnan(f.col("latitude")),
-                f.lit(None),
+                f.lit(None).cast("int"),
             )
             .when(
                 f.count("*").over(Window.partitionBy(column_set)) > 1,

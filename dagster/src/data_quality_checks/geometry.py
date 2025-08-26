@@ -49,7 +49,7 @@ def duplicate_name_level_110_check(
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
             | f.isnan(f.col("latitude")),
-            f.lit(None),
+            f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_name_level_within_110m_radius")),
     )
 
@@ -123,7 +123,7 @@ def similar_name_level_within_110_check(
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
             | f.isnan(f.col("latitude")),
-            f.lit(None),
+            f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_similar_name_same_level_within_110m_radius")),
     )
 
@@ -175,7 +175,7 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
             | f.isnan(f.col("latitude")),
-            f.lit(None),
+            f.lit(None).cast("int"),
         ).otherwise(f.col("dq_is_school_density_greater_than_5")),
     )
 
