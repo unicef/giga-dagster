@@ -98,6 +98,10 @@ def is_not_within_country(
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_is_not_within_country")),
     )
+    df = df.withColumn(
+        "dq_is_not_within_country", f.col("dq_is_not_within_country").cast("int")
+    )
+
     return df
 
 
