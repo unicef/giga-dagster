@@ -6,10 +6,6 @@ from pyspark.sql import functions as f
 from dagster import OpExecutionContext
 from src.spark.config_expectations import Config
 from src.utils.adls import ADLSFileClient
-from src.utils.nocodb.get_nocodb_data import (
-    get_nocodb_table_as_key_value_mapping,
-    get_nocodb_table_id_from_name,
-)
 from src.utils.op_config import FileConfig
 
 
@@ -273,11 +269,13 @@ def handle_rename_dq_has_critical_error_column(
         )
 
     human_readeable_extended_master_geolocation_columns_mapping = {
-        "dq_duplicate-school_id_govt": "Column school_id_govt has a duplicate",
-        "dq_duplicate-school_id_giga": "Column school_id_giga has a duplicate",
-        "dq_is_invalid_range-latitude": "Column latitude is not between -90 and 90",
-        "dq_is_invalid_range-longitude": "Column longitude is not between -180 and 180",
-        "dq_is_not_within_country": "Coordinates is not within the country",
+        "dq_duplicate-school_id_govt": "school_id_govt has a duplicate",
+        "dq_duplicate-school_id_giga": "school_id_giga has a duplicate",
+        "dq_is_invalid_range-latitude": "latitude is not between -90 and 90",
+        "dq_is_invalid_range-longitude": "longitude is not between -180 and 180",
+        "dq_is_null_optional-latitude": "latitude is missing",
+        "dq_is_null_optional-longitude": "longitude is missing",
+        "dq_is_not_within_country": "location is not within the country",
     }
     human_readeable_create_update_checks_mapping = {
         "dq_is_not_create": "Tried creating a new school_id_giga that already exists - must use UPDATE instead",
@@ -291,16 +289,3 @@ def handle_rename_dq_has_critical_error_column(
     }
 
     return full_human_readable_mapping
-
-
-def rename_dq_has_critical_error_columns_nocodb() -> dict[str, str]:
-    dq_checks_table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
-    )
-    dq_checks_mapping = get_nocodb_table_as_key_value_mapping(
-        table_id=dq_checks_table_id,
-        key_column="DQ Table Column Name",
-        value_column="Human Readable Name",
-    )
-
-    return dq_checks_mapping

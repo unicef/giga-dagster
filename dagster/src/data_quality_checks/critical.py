@@ -4,7 +4,7 @@ from pyspark.sql import functions as f
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.utils.data_quality_descriptions import (
-    rename_dq_has_critical_error_columns_nocodb,
+    handle_rename_dq_has_critical_error_column,
 )
 from src.utils.logger import get_context_with_fallback_logger
 
@@ -51,7 +51,9 @@ def critical_error_checks(
             ]
         )
 
-    full_human_readable_mapping = rename_dq_has_critical_error_columns_nocodb()
+    full_human_readable_mapping = handle_rename_dq_has_critical_error_column(
+        config_column_list
+    )
 
     df = df.withColumns(
         {
@@ -74,12 +76,6 @@ def critical_error_checks(
                 ],
             ),
         }
-    )
-
-    print(
-        df.select(
-            *["dq_has_critical_error", "latitude", "dq_is_null_optional-latitude"]
-        ).toPandas()
     )
     rest_columns = df.columns
     dataset_has_school_id_giga = "school_id_giga" in rest_columns
@@ -114,12 +110,6 @@ def critical_error_checks(
     df = df.select(*ordered_columns).orderBy(
         f.col("dq_has_critical_error").desc(),
         *order_by_columns,
-    )
-
-    print(
-        df.select(
-            *["dq_has_critical_error", "latitude", "dq_is_null_optional-latitude"]
-        ).toPandas()
     )
 
     return df
