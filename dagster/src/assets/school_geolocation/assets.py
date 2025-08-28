@@ -52,6 +52,7 @@ from src.utils.schema import (
     construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
+    get_schema_table,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -523,6 +524,7 @@ async def geolocation_data_quality_results_summary(
 def geolocation_data_quality_report(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
+    geolocation_raw: bytes,
     config: FileConfig,
     spark: PySparkResource,
 ):
@@ -537,10 +539,37 @@ def geolocation_data_quality_report(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
+    with BytesIO(geolocation_raw) as buffer:
+        buffer.seek(0)
+        original_df = pandas_loader(buffer, config.filepath).map(str)
+
+    original_df_columns = original_df.columns
+    uploaded_columns = file_upload.column_to_schema_mapping.values()
+
+    uploaded_columns_not_used = list(set(original_df_columns) - set(uploaded_columns))
+    uploaded_columns_not_used = "/n".join(uploaded_columns_not_used)
+
+    schema = get_schema_table(spark.spark_session, config.metastore_schema)
+    important_columns_df = schema.filter(f.col("is_important"))
+    important_columns_list = [
+        row[0] for row in important_columns_df.select("name").collect()
+    ]
+
+    important_columns_not_uploaded = list(
+        set(important_columns_list) - set(uploaded_columns)
+    )
+    important_columns_not_uploaded = [
+        col for col in important_columns_not_uploaded if not col.startswith("admin")
+    ]
+    important_columns_not_uploaded = "/n".join(important_columns_not_uploaded)
+
     upload_details = {
         "country_code": file_upload.country,
         "file_name": file_upload.original_filename,
+        "uploaded_columns_not_used": uploaded_columns_not_used,
+        "important_columns_not_uploaded": important_columns_not_uploaded,
     }
+
     dq_report = aggregate_report_statistics(
         geolocation_data_quality_results, upload_details
     )

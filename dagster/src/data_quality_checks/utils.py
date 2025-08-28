@@ -278,6 +278,10 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
     stats = {
         "country": upload_details["country_code"],
         "file_name": upload_details["file_name"],
+        "uploaded_columns_not_used": upload_details["uploaded_columns_not_used"],
+        "important_columns_not_uploaded": upload_details[
+            "important_columns_not_uploaded"
+        ],
         "count_schools_raw_file": count_schools_raw_file,
         "count_schools_dropped": agg_df_pd.at["has_critical_error", "count_schools"],
         "count_schools_passed": count_schools_raw_file
