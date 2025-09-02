@@ -36,11 +36,11 @@ def adhoc__publish_health_master_to_gold(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
-    health_master: bytes,
+    adhoc__load_health_master_csv: bytes,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
-    with BytesIO(health_master) as buffer:
+    with BytesIO(adhoc__load_health_master_csv) as buffer:
         buffer.seek(0)
         pdf = pd.read_csv(buffer)
 
