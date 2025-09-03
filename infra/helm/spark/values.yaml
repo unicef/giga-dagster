@@ -153,10 +153,10 @@ master:
   daemonMemoryLimit: ""
   ## @param master.memoryLimit Set the maximum memory the master is allowed to use
   ##
-  memoryLimit: 2Gi
+  memoryLimit: 6Gi
   ## @param master.coreLimit Set the maximum number of cores that the master can use
   ##
-  coreLimit: 1
+  coreLimit: 2
   ## @param master.configOptions Use a string to set the config options for in the form "-Dx=y"
   ##
   configOptions: ""
@@ -309,16 +309,16 @@ master:
     ##    memory: 256Mi
     ##
     limits:
-      cpu: 250m
-      memory: 2Gi
+      cpu: 2
+      memory: 6Gi
     ## Examples:
     ## requests:
     ##    cpu: 250m
     ##    memory: 256Mi
     ##
     requests:
-      cpu: 50m
-      memory: 512Mi
+      cpu: 200m
+      memory: 500Mi
   ## Configure extra options for liveness probe
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes
   ## @param master.livenessProbe.enabled Enable livenessProbe
@@ -435,7 +435,7 @@ worker:
   memoryLimit: 6Gi
   ## @param worker.coreLimit Set the maximum number of cores that the worker can use
   ##
-  coreLimit: 4
+  coreLimit: 2
   ## @param worker.dir Set a custom working directory for the application
   ##
   dir: ""
@@ -602,7 +602,7 @@ worker:
     ##    memory: 256Mi
     ##
     limits:
-      cpu: 4.0
+      cpu: 2
       memory: 6Gi
     ## Examples:
     ## requests:
@@ -610,8 +610,8 @@ worker:
     ##    memory: 256Mi
     ##
     requests:
-      cpu: 1.0
-      memory: 1300Mi
+      cpu: 200m
+      memory: 500Mi
   ## Configure extra options for liveness probe
   ## ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/#configure-probes
   ## @param worker.livenessProbe.enabled Enable livenessProbe

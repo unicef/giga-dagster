@@ -52,9 +52,9 @@ class Settings(BaseSettings):
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
     SPARK_DRIVER_CORES: int = 1
-    SPARK_DRIVER_MEMORY_MB: int = 1536
-    SPARK_EXECUTOR_CORES: int = 2
-    SPARK_EXECUTOR_MEMORY_MB: int = 4096
+    SPARK_DRIVER_MEMORY_MB: int = 1024
+    SPARK_EXECUTOR_CORES: int = 1
+    SPARK_EXECUTOR_MEMORY_MB: int = 2048
     LICENSE_LIST: list[str] = ["Open Source", "Giga Analysis", "CC-BY-4.0"]
     WAREHOUSE_USERNAME: str = ""
     LAKEHOUSE_USERNAME: str = ""
