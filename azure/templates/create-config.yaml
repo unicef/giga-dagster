@@ -143,7 +143,7 @@ jobs:
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
                   stringData:
-                      METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
+                      METASTORE_WAREHOUSE_DIR: "abfss://$(azureBlobContainerName)@$(azureStorageAccountName).dfs.core.windows.net/warehouse"
                       AZURE_SAS_TOKEN: "$(azureSasTokenEscaped)"
                       STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                       STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
