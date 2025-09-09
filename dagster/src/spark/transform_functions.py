@@ -26,7 +26,7 @@ from src.settings import settings
 from src.spark.udf_dependencies import get_point
 from src.utils.logger import get_context_with_fallback_logger
 
-ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
+ACCOUNT_URL = "https://saunigiga.dfs.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
 azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 container_name = azure_blob_container_name

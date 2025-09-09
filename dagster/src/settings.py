@@ -110,7 +110,7 @@ class Settings(BaseSettings):
 
     @property
     def AZURE_BLOB_SAS_HOST(self) -> str:
-        return f"{self.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+        return f"{self.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net"
 
     @property
     def AZURE_DFS_SAS_HOST(self) -> str:
