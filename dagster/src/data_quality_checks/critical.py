@@ -26,12 +26,22 @@ def critical_error_checks(
 
     # other critical checks per dataset
     if dataset_type in ["master", "geolocation"]:
+        dq_location_columns = (
+            [
+                "dq_is_null_mandatory-latitude",
+                "dq_is_null_mandatory-longitude",
+            ]
+            if dataset_type == "master"
+            else [
+                "dq_is_null_optional-latitude",
+                "dq_is_null_optional-longitude",
+            ]
+        )
         critical_column_dq_checks.extend(
             [
                 "dq_duplicate-school_id_govt",
                 "dq_duplicate-school_id_giga",
-                "dq_is_null_optional-latitude",
-                "dq_is_null_optional-longitude",
+                *dq_location_columns,
                 "dq_is_invalid_range-latitude",
                 "dq_is_invalid_range-longitude",
                 "dq_is_not_within_country",
