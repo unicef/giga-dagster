@@ -426,10 +426,10 @@ dagster-user-deployments:
         # If `readinessProbe` has no `exec` field, then the following default will be used:
         # exec:
         #   command: ["dagster", "api", "grpc-health-check", "-p", "{{ $deployment.port }}"]
-        periodSeconds: 20
-        timeoutSeconds: 10
+        periodSeconds: 40
+        timeoutSeconds: 20
         successThreshold: 1
-        failureThreshold: 15  # Allow roughly 300 seconds to start up by default
+        failureThreshold: 5
 
       # As of 0.14.0, liveness probes are disabled by default. If you want to enable them, it's recommended to also
       # enable startup probes.
