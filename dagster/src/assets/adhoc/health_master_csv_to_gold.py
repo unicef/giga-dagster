@@ -68,11 +68,18 @@ def adhoc__health_master_data_transforms(
 
     sdf = s.createDataFrame(df)
 
+    context.log.info(f"schema: {sdf.schema.simpleString()}")
+    context.log.info(f"row count: {sdf.count()}")
+
     # add missing columns
     sdf = add_missing_columns(sdf, schema_columns)
+    context.log.info(f"schema: {sdf.schema.simpleString()}")
+    context.log.info(f"row count: {sdf.count()}")
 
     # add health_giga_id
     sdf = create_health_id_giga(sdf)
+    context.log.info(f"schema: {sdf.schema.simpleString()}")
+    context.log.info(f"row count: {sdf.count()}")
 
     # add admin columns
     sdf = add_admin_columns(
@@ -80,11 +87,18 @@ def adhoc__health_master_data_transforms(
         country_code_iso3=config.country_code,
         admin_level="admin1",
     )
+    context.log.info(f"schema: {sdf.schema.simpleString()}")
+    context.log.info(f"row count: {sdf.count()}")
 
     df = sdf.toPandas()
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
 
     # drop duplicates
-    df = df.drop_duplicates("health_giga_id")
+    df = df.drop_duplicates("health_id_giga")
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
+
     return Output(
         df,
         metadata={
