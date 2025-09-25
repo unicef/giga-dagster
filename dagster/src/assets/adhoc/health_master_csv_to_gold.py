@@ -59,8 +59,14 @@ def adhoc__health_master_data_transforms(
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
 
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
+
     # drop columns which are not in the schema
     df = df[[col for col in df.columns if col in schema_columns]]
+
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
 
     for col, dtype in df.dtypes.items():
         if dtype == "object":
