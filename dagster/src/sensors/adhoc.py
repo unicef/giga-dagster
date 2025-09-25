@@ -262,7 +262,7 @@ def health_master__gold_csv_to_deltatable_sensor(
                 source_filepath=str(path),
                 destination_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
                 metastore_schema=metastore_schema,
-                tier=DataTier.TRANSFORMS
+                tier=DataTier.TRANSFORMS,
             ),
             "adhoc__publish_health_master_to_gold": OpDestinationMapping(
                 source_filepath=str(path),
