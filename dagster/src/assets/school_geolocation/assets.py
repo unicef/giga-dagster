@@ -400,7 +400,11 @@ async def geolocation_data_quality_results_human_readable(
         geolocation_data_quality_results, uploaded_columns, mode
     )
     # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
-    dq_column_names = [col for col in df.columns if col.startswith("dq_")]
+    dq_column_names = [
+        col
+        for col in df.columns
+        if (col.startswith("dq_") and col != "dq_has_critical_error")
+    ]
     for column in dq_column_names:
         df = df.withColumn(
             column,
@@ -458,6 +462,8 @@ async def geolocation_dq_schools_failed_human_readable(
     df = geolocation_data_quality_results_human_readable.filter(
         geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
     )
+
+    df = df.drop("dq_has_critical_error")
     df_pandas = df.toPandas()
 
     return Output(
