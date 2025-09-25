@@ -54,8 +54,6 @@ def adhoc__health_master_data_transforms(
     s: SparkSession = spark.spark_session
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
-    schema_columns = [x.name for x in schema_columns]
-
     with BytesIO(adhoc__load_health_master_csv) as buffer:
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
@@ -63,7 +61,7 @@ def adhoc__health_master_data_transforms(
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
 
-    df = df[[column for column in df.columns if column in schema_columns]]
+    df = df[[column.name for column in schema_columns if column.name in df.columns]]
     for column, dtype in df.dtypes.items():
         if dtype == "object":
             df[column] = df[column].astype("string")
