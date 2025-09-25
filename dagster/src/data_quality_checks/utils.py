@@ -477,8 +477,28 @@ def dq_geolocation_extract_relevant_columns(
     dq_table_optional = dq_table_optional[
         dq_table_optional["Column Checked"].isin(uploaded_columns)
     ]
-    # TODO: # check the dq_table for any combination columns e.g education_level and school_id and add these to the table
-    dq_table_all = pd.concat([dq_table_mandatory, dq_table_optional])
+
+    # get dq checks that involve multiple columns
+    dq_table_optional_combination = dq_table_optional[
+        dq_table_optional["Column Checked"]
+        .str.strip()
+        .str.split(",")
+        .str.len()
+        .fillna(0)
+        .astype(int)
+        > 1
+    ]
+    dq_table_optional_combination = dq_table_optional_combination[
+        dq_table_optional_combination["Column Checked"].map(
+            lambda columns: {
+                col.strip() for col in columns.split(",").strip()
+            }.issubset(uploaded_columns)
+        )
+    ]
+
+    dq_table_all = pd.concat(
+        [dq_table_mandatory, dq_table_optional, dq_table_optional_combination]
+    )
 
     dq_columns_list = dq_table_all.sort_values("Related Check ID")[
         "DQ Table Column Name"
