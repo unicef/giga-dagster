@@ -95,6 +95,47 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     return df.drop("identifier_concat")
 
 
+def create_health_id_giga(df: sql.DataFrame) -> sql.DataFrame:
+    # Create health_id_giga column if not exists, otherwise use provided values
+    df = df.withColumn(
+        "health_id_giga", f.coalesce(f.col("health_id_giga"), f.lit(None))
+    )
+
+    health_id_giga_prereqs = [
+        "facility_name",
+        "latitude",
+        "longitude",
+    ]
+    for column in health_id_giga_prereqs:
+        if column not in df.columns:
+            return df.withColumn("health_id_giga", f.lit(None))
+
+    df = df.withColumn(
+        "identifier_concat",
+        f.concat(
+            f.col("facility_name").cast(StringType()),
+            f.col("latitude").cast(StringType()),
+            f.col("longitude").cast(StringType()),
+        ),
+    )
+
+    # Use existing health_id_giga if provided, otherwise use system-generated value
+    df = df.withColumn(
+        "health_id_giga",
+        f.coalesce(
+            f.col("health_id_giga"),
+            f.when(
+                (f.col("facility_name").isNull())
+                | (f.col("latitude").isNull())
+                | (f.col("longitude").isNull()),
+                f.lit(None),
+            ).otherwise(generate_uuid_udf(f.col("identifier_concat"))),
+        ),
+    )
+
+    return df.drop("identifier_concat")
+
+
 def create_education_level(
     df: sql.DataFrame, mode: str, uploaded_columns: list[str]
 ) -> sql.DataFrame:
