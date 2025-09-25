@@ -270,7 +270,7 @@ def health_master__gold_csv_to_deltatable_sensor(
             dataset_type="health-master",
             metadata=metadata,
             file_size_bytes=size,
-            domain=DOMAIN,
+            domain="health",
             country_code=country_code,
         )
 
