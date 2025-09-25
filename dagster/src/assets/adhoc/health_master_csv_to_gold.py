@@ -54,6 +54,7 @@ def adhoc__health_master_data_transforms(
     s: SparkSession = spark.spark_session
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
+    schema_columns = [x.name for x in schema_columns]
 
     with BytesIO(adhoc__load_health_master_csv) as buffer:
         buffer.seek(0)
@@ -62,46 +63,25 @@ def adhoc__health_master_data_transforms(
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
 
-    # drop columns which are not in the schema
-    df = df[[col for col in df.columns if col in schema_columns]]
-
-    context.log.info(f"columns: {df.columns.tolist()}")
-    context.log.info(f"row count: {len(df)}")
-
-    for col, dtype in df.dtypes.items():
+    df = df[[column for column in df.columns if column in schema_columns]]
+    for column, dtype in df.dtypes.items():
         if dtype == "object":
-            df[col] = df[col].astype("string")
+            df[column] = df[column].astype("string")
 
     sdf = s.createDataFrame(df)
 
-    context.log.info(f"schema: {sdf.schema.simpleString()}")
-    context.log.info(f"row count: {sdf.count()}")
-
-    # add missing columns
     sdf = add_missing_columns(sdf, schema_columns)
-    context.log.info(f"schema: {sdf.schema.simpleString()}")
-    context.log.info(f"row count: {sdf.count()}")
-
-    # add health_giga_id
     sdf = create_health_id_giga(sdf)
-    context.log.info(f"schema: {sdf.schema.simpleString()}")
-    context.log.info(f"row count: {sdf.count()}")
 
-    # add admin columns
     sdf = add_admin_columns(
         df=sdf,
         country_code_iso3=config.country_code,
         admin_level="admin1",
     )
-    context.log.info(f"schema: {sdf.schema.simpleString()}")
-    context.log.info(f"row count: {sdf.count()}")
 
     df = sdf.toPandas()
-    context.log.info(f"columns: {df.columns.tolist()}")
-    context.log.info(f"row count: {len(df)}")
-
-    # drop duplicates
     df = df.drop_duplicates("health_id_giga")
+
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
 
