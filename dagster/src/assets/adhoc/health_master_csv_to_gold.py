@@ -74,6 +74,12 @@ def adhoc__health_master_data_transforms(
         admin_level="admin1",
     )
 
+    sdf = add_admin_columns(
+        df=sdf,
+        country_code_iso3=config.country_code,
+        admin_level="admin2",
+    )
+
     df = sdf.toPandas()
     df = df.drop_duplicates("health_id_giga")
 
