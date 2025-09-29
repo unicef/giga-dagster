@@ -1,8 +1,8 @@
 from io import BytesIO
 
+import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
-import numpy as np
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -10,19 +10,18 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType
 from src.resources import ResourceKey
+from src.spark.transform_functions import (
+    add_admin_columns,
+    add_missing_columns,
+    create_health_id_giga,
+)
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.sentry import capture_op_exceptions
-from src.utils.logger import ContextLoggerWithLoguruFallback
-from src.spark.transform_functions import (
-    add_missing_columns,
-    create_health_id_giga,
-    add_admin_columns
-)
 from src.utils.schema import (
     get_schema_columns,
 )
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import (
     OpExecutionContext,
@@ -49,8 +48,6 @@ def adhoc__health_master_data_transforms(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
-
-    logger = ContextLoggerWithLoguruFallback(context)
     s: SparkSession = spark.spark_session
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
@@ -84,11 +81,7 @@ def adhoc__health_master_data_transforms(
     context.log.info(f"row count: {len(df)}")
 
     return Output(
-        df,
-        metadata={
-            **get_output_metadata(config),
-            "preview": get_table_preview(df)
-        }
+        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
     )
 
 
@@ -99,8 +92,6 @@ def adhoc__publish_health_master_to_gold(
     config: FileConfig,
     adhoc__health_master_data_transforms: sql.DataFrame,
 ) -> Output[sql.DataFrame]:
-    s: SparkSession = spark.spark_session
-
     df = adhoc__health_master_data_transforms
 
     context.log.info("original schema")

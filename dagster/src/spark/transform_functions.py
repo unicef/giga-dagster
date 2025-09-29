@@ -135,6 +135,7 @@ def create_health_id_giga(df: sql.DataFrame) -> sql.DataFrame:
 
     return df.drop("identifier_concat")
 
+
 def create_education_level(
     df: sql.DataFrame, mode: str, uploaded_columns: list[str]
 ) -> sql.DataFrame:

@@ -14,12 +14,12 @@ from dagster import (
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     custom_dataset_create_bronze_job,
+    health_master__convert_gold_csv_to_deltatable_job,
     school_master__convert_gold_csv_to_deltatable_job,
     school_master__dq_checks_job,
     school_master__generate_silver_tables_job,
     school_qos__convert_csv_to_deltatable_job,
     school_qos_raw__convert_csv_to_deltatable_job,
-    health_master__convert_gold_csv_to_deltatable_job,
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -219,6 +219,7 @@ def school_master__gold_csv_to_deltatable_sensor(
         yield SkipReason("No files found to process.")
     else:
         yield from run_requests
+
 
 @sensor(
     job=health_master__convert_gold_csv_to_deltatable_job,
