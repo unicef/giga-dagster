@@ -50,8 +50,14 @@ def completeness_checks(
     # optional columns
     for column in df.columns:
         if column not in config_column_list and column not in dq_columns:
+            # for latitude and longitude we need to check if isnan too because they are "double" columns
+            null_check = (
+                (f.isnull(f.col(column)) | f.isnan(f.col(column)))
+                if column in ("latitude", "longitude")
+                else f.isnull(f.col(column))
+            )
             column_actions[f"dq_is_null_optional-{column}"] = f.when(
-                f.isnull(f.col(column)),
+                null_check,
                 1,
             ).otherwise(0)
 

@@ -51,27 +51,23 @@ def adhoc__health_master_data_transforms(
     s: SparkSession = spark.spark_session
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
-
     with BytesIO(adhoc__load_health_master_csv) as buffer:
         buffer.seek(0)
         df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
 
-    # drop columns which are not in the schema
-    df = df[[col for col in df.columns if col in schema_columns]]
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
 
-    for col, dtype in df.dtypes.items():
+    df = df[[column.name for column in schema_columns if column.name in df.columns]]
+    for column, dtype in df.dtypes.items():
         if dtype == "object":
-            df[col] = df[col].astype("string")
+            df[column] = df[column].astype("string")
 
     sdf = s.createDataFrame(df)
 
-    # add missing columns
     sdf = add_missing_columns(sdf, schema_columns)
-
-    # add health_giga_id
     sdf = create_health_id_giga(sdf)
 
-    # add admin columns
     sdf = add_admin_columns(
         df=sdf,
         country_code_iso3=config.country_code,
@@ -79,9 +75,11 @@ def adhoc__health_master_data_transforms(
     )
 
     df = sdf.toPandas()
+    df = df.drop_duplicates("health_id_giga")
 
-    # drop duplicates
-    df = df.drop_duplicates("health_giga_id")
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
+
     return Output(
         df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
     )

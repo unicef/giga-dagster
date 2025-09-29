@@ -246,6 +246,7 @@ def health_master__gold_csv_to_deltatable_sensor(
             continue
 
         country_code = path.parent.name
+        stem = path.stem
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
@@ -257,6 +258,12 @@ def health_master__gold_csv_to_deltatable_sensor(
                 destination_filepath=str(path),
                 metastore_schema=metastore_schema,
                 tier=DataTier.RAW,
+            ),
+            "adhoc__health_master_data_transforms": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/school-master/transforms/{stem}.csv",
+                metastore_schema=metastore_schema,
+                tier=DataTier.TRANSFORMS,
             ),
             "adhoc__publish_health_master_to_gold": OpDestinationMapping(
                 source_filepath=str(path),
