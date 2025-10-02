@@ -22,6 +22,7 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.sentry import capture_op_exceptions
+from pyspark.sql.functions import concat_ws, sha2
 
 from dagster import (
     OpExecutionContext,
@@ -79,6 +80,7 @@ def adhoc__health_master_data_transforms(
         country_code_iso3=config.country_code,
         admin_level="admin2",
     )
+    sdf = sdf.withColumn("signature", sha2(concat_ws("|", *sorted(sdf.columns)), 256))
 
     df = sdf.toPandas()
     df = df.drop_duplicates("health_id_giga")
