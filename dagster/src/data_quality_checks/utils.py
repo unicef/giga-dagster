@@ -273,6 +273,8 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
     agg_df_pd = agg_df.toPandas()
     agg_df_pd.set_index("assertion", inplace=True)
 
+    columns_in_dataset = agg_df_pd.index.tolist()
+
     # extract required statistics
     count_unique_schools_ids = df.select("school_id_govt").distinct().count()
     stats = {
@@ -287,9 +289,25 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "count_schools_passed": count_schools_raw_file
         - agg_df_pd.at["has_critical_error", "count_schools"],
         "count_schools_no_location": agg_df_pd.at["missing_location", "count_schools"],
+        "percent_schools_no_location": round(
+            (
+                100
+                * agg_df_pd.at["missing_location", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_schools_outside_country": agg_df_pd.at[
             "is_not_within_country", "count_schools"
         ],
+        "percent_schools_outside_country": round(
+            (
+                100
+                * agg_df_pd.at["is_not_within_country", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_unique_school_id_govt": count_unique_schools_ids,
         "percent_unique_school_ids": round(
             (100 * count_unique_schools_ids / count_schools_raw_file), 2
@@ -300,21 +318,63 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "count_duplicate_school_id": agg_df_pd.at[
             "duplicate-school_id_govt", "count_schools"
         ],
+        "count_invalid_school_name": agg_df_pd.at[
+            "is_not_alphanumeric-school_name", "count_schools"
+        ],
+        "percent_invalid_school_name": round(
+            (
+                100
+                * agg_df_pd.at["is_not_alphanumeric-school_name", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_null_school_name": agg_df_pd.at[
             "is_null_optional-school_name", "count_schools"
         ],
+        "percent_null_school_name": round(
+            (
+                100
+                * agg_df_pd.at["is_null_optional-school_name", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_null_education_level_govt": agg_df_pd.at[
             "is_null_optional-education_level_govt", "count_schools"
         ],
+        "percent_null_education_level_govt": round(
+            (
+                100
+                * agg_df_pd.at["is_null_optional-education_level_govt", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_null_connectivity_govt": agg_df_pd.at[
             "is_null_optional-connectivity_govt", "count_schools"
         ],
+        "percent_null_connectivity_govt": round(
+            (
+                100
+                * agg_df_pd.at["is_null_optional-connectivity_govt", "count_schools"]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_null_connectivity_type_govt_when_connectivity": agg_df_pd.at[
             "is_null_connectivity_type_when_connectivity_govt", "count_schools"
         ],
-        "count_null_computer_availability": agg_df_pd.at[
-            "is_null_optional-computer_availability", "count_schools"
-        ],
+        "percent_null_connectivity_type_govt_when_connectivity": round(
+            (
+                100
+                * agg_df_pd.at[
+                    "is_null_connectivity_type_when_connectivity_govt", "count_schools"
+                ]
+                / count_schools_raw_file
+            ),
+            2,
+        ),
         "count_school_density_greater_than_5": agg_df_pd.at[
             "is_school_density_greater_than_5", "count_schools"
         ],
@@ -337,9 +397,6 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "count_duplicate_location_id": agg_df_pd.at[
             "duplicate_set-location_id", "count_schools"
         ],
-        "count_invalid_school_name": agg_df_pd.at[
-            "is_not_alphanumeric-school_name", "count_schools"
-        ],
         "count_duplicate_name_level_within_110m_radius": agg_df_pd.at[
             "duplicate_name_level_within_110m_radius", "count_schools"
         ],
@@ -352,66 +409,49 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         ],
     }
 
-    # counts in education_level_govt
-    education_level_counts = (
-        df.groupBy("education_level_govt").count().toPandas().fillna("Unknown")
-    )
-    if not (
-        education_level_counts.shape[0] == 1
-        and education_level_counts.at[
-            (education_level_counts["education_level_govt"] == "Unknown").index[0],
-            "count",
-        ]
-        == count_schools_raw_file
-    ):
-        education_level_counts.columns = [None] * len(education_level_counts.columns)
-        education_level_counts_string = education_level_counts.to_string(index=False)
-        education_level_counts_string = education_level_counts_string.split("\n", 1)[1]
-        stats["education_level_govt_counts"] = education_level_counts_string
+    def add_null_count_and_pct(dq_column_name):
+        col_base_name = dq_column_name.split("-")[-1]
+        counts_name = f"count_null_{col_base_name}"
+        pct_name = f"percent_null_{col_base_name}"
 
-    # counts in education_level_govt
-    connectivity_govt_counts = (
-        df.groupBy("connectivity_govt").count().toPandas().fillna("Unknown")
-    )
-    if not (
-        connectivity_govt_counts.shape[0] == 1
-        and connectivity_govt_counts.at[
-            (connectivity_govt_counts["connectivity_govt"] == "Unknown").index[0],
-            "count",
-        ]
-        == count_schools_raw_file
-    ):
-        connectivity_govt_counts.columns = [None] * len(education_level_counts.columns)
-        connectivity_govt_counts_string = connectivity_govt_counts.to_string(
-            index=False
-        )
-        connectivity_govt_counts_string = connectivity_govt_counts_string.split(
-            "\n", 1
-        )[1]
-        stats["connectivity_govt_counts"] = connectivity_govt_counts_string
+        column_count = agg_df_pd.at["dq_column_name", "count_schools"]
+        stats[counts_name] = column_count
+        stats[pct_name] = round(100 * column_count / count_schools_raw_file, 2)
 
-    # counts in connectivity_type_govt
-    connectivity_type_counts = (
-        df.groupBy("connectivity_type_govt").count().toPandas().fillna("Unknown")
-    )
-    if not (
-        connectivity_type_counts.shape[0] == 1
-        and connectivity_type_counts.at[
-            (connectivity_type_counts["connectivity_type_govt"] == "Unknown").index[0],
-            "count",
-        ]
-        == count_schools_raw_file
-    ):
-        connectivity_type_counts.columns = [None] * len(
-            connectivity_type_counts.columns
-        )
-        connectivity_type_counts_string = connectivity_type_counts.to_string(
-            index=False
-        )
-        connectivity_type_counts_string = connectivity_type_counts_string.split(
-            "\n", 1
-        )[1]
-        stats["connectivity_type_govt_counts"] = connectivity_type_counts_string
+    cols_null_counts_to_add = [
+        "computer_availability",
+        "num_computers",
+        "num_students",
+        "num_teachers",
+    ]
+
+    for column in cols_null_counts_to_add:
+        if column in columns_in_dataset:
+            add_null_count_and_pct(column)
+
+    def add_column_counts_summary(column):
+        column_counts = df.groupBy(column).count().toPandas().fillna("Unknown")
+        if not (list(column_counts[column].unique()) == ["Unknown"]):
+            # Ensure there is no column header
+            column_counts.columns = [None] * len(column_counts.columns)
+            column_counts_string = column_counts.to_string(index=False)
+            column_counts_string = column_counts_string.split("\n", 1)[1]
+            stats[f"{column}_counts"] = column_counts_string
+
+    cols_for_counts_summary = [
+        "education_level_govt",
+        "connectivity_govt",
+        "connectivity_type_govt",
+        "computer_availability",
+        "electricity_availability",
+        "water_availability",
+        "school_area_type",
+        "school_funding_type",
+    ]
+
+    for column in cols_for_counts_summary:
+        if column in columns_in_dataset:
+            add_column_counts_summary(column)
 
     report_template_string = get_report_template()
     report_template = Environment(loader=BaseLoader()).from_string(

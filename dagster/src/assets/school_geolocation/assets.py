@@ -553,7 +553,6 @@ def geolocation_data_quality_report(
     uploaded_columns = file_upload.column_to_schema_mapping.values()
 
     uploaded_columns_not_used = list(set(original_df_columns) - set(uploaded_columns))
-    uploaded_columns_not_used = "/n".join(uploaded_columns_not_used)
 
     schema = get_schema_table(spark.spark_session, config.metastore_schema)
     important_columns_df = schema.filter(f.col("is_important"))
@@ -567,7 +566,6 @@ def geolocation_data_quality_report(
     important_columns_not_uploaded = [
         col for col in important_columns_not_uploaded if not col.startswith("admin")
     ]
-    important_columns_not_uploaded = "/n".join(important_columns_not_uploaded)
 
     upload_details = {
         "country_code": file_upload.country,
