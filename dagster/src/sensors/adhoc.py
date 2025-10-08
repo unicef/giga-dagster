@@ -14,6 +14,7 @@ from dagster import (
 from src.constants import DataTier, constants
 from src.jobs.adhoc import (
     custom_dataset_create_bronze_job,
+    health_master__convert_gold_csv_to_deltatable_job,
     school_master__convert_gold_csv_to_deltatable_job,
     school_master__dq_checks_job,
     school_master__generate_silver_tables_job,
@@ -205,6 +206,83 @@ def school_master__gold_csv_to_deltatable_sensor(
 
         last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
 
+        context.log.info(f"FILE: {path}")
+        run_requests.append(
+            RunRequest(
+                run_key=f"{path}:{last_modified}",
+                run_config=RunConfig(ops=run_ops),
+                tags={"country": country_code},
+            ),
+        )
+
+    if len(run_requests) == 0:
+        yield SkipReason("No files found to process.")
+    else:
+        yield from run_requests
+
+
+@sensor(
+    job=health_master__convert_gold_csv_to_deltatable_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def health_master__gold_csv_to_deltatable_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    run_requests = []
+
+    for file_data in adls_file_client.list_paths_generator(
+        f"{constants.gold_source_folder}/health-master", recursive=True
+    ):
+        adls_filepath = file_data.name
+        path = Path(adls_filepath)
+
+        if (
+            file_data.is_directory
+            or len(path.parent.name) != 3
+            or path.suffix.lower() != ".csv"
+        ):
+            context.log.warning(f"Skipping {adls_filepath}")
+            continue
+
+        country_code = path.parent.name
+        stem = path.stem
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
+        size = properties.size
+        metastore_schema = "health_master"
+
+        ops_destination_mapping = {
+            "adhoc__load_health_master_csv": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=metastore_schema,
+                tier=DataTier.RAW,
+            ),
+            "adhoc__health_master_data_transforms": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.gold_folder}/dq-results/health-master/transforms/{stem}.csv",
+                metastore_schema=metastore_schema,
+                tier=DataTier.TRANSFORMS,
+            ),
+            "adhoc__publish_health_master_to_gold": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                metastore_schema=metastore_schema,
+                tier=DataTier.GOLD,
+            ),
+        }
+
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type="health-master",
+            metadata=metadata,
+            file_size_bytes=size,
+            domain="health",
+            country_code=country_code,
+        )
+
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
         context.log.info(f"FILE: {path}")
         run_requests.append(
             RunRequest(

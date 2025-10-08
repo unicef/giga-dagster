@@ -3,7 +3,6 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
-from country_converter import CountryConverter
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
@@ -32,16 +31,13 @@ from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
     column_mapping_rename,
-    connectivity_rt_dataset,
     create_bronze_layer_columns,
+    get_country_rt_schools,
     merge_connectivity_to_master as merge_connectivity_to_df,
     standardize_connectivity_type,
 )
 from src.utils.adls import (
     ADLSFileClient,
-)
-from src.utils.data_quality_descriptions import (
-    convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
@@ -56,6 +52,7 @@ from src.utils.schema import (
     construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
+    get_schema_table,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -239,10 +236,8 @@ def geolocation_bronze(
     context.log.info("After config metadata update")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # QoS Columns
-        coco = CountryConverter()
-        country_code_2 = coco.convert(country_code, to="ISO2")
-        connectivity = connectivity_rt_dataset(s, country_code_2)
+        # RT Columns
+        connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
@@ -380,7 +375,6 @@ def geolocation_data_quality_results(
 @capture_op_exceptions
 async def geolocation_data_quality_results_human_readable(
     context: OpExecutionContext,
-    geolocation_bronze: sql.DataFrame,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
@@ -399,22 +393,29 @@ async def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    dataset_type = "geolocation"
+    mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
-    df = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns
+    df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns, mode
     )
-    bronze = geolocation_bronze.select(*uploaded_columns)
-    context.log.info("Convert the dataframe to a pands object to save it locally")
+    # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
+    dq_column_names = [
+        col
+        for col in df.columns
+        if (col.startswith("dq_") and col != "dq_has_critical_error")
+    ]
+    for column in dq_column_names:
+        df = df.withColumn(
+            column,
+            f.when(f.col(column) == 1, "No").otherwise(
+                f.when(f.col(column) == 0, "Yes")
+            ),
+        )
 
-    df_pandas = convert_dq_checks_to_human_readeable_descriptions_and_upload(
-        dq_results=df,
-        dataset_type=dataset_type,
-        bronze=bronze,
-        config=config,
-        context=context,
-    )
+    df = df.withColumnsRenamed(human_readable_mappings)
+    context.log.info("Convert the dataframe to a pandas object to save it locally")
+    df_pandas = df.toPandas()
 
     return Output(
         df_pandas,
@@ -461,6 +462,8 @@ async def geolocation_dq_schools_failed_human_readable(
     df = geolocation_data_quality_results_human_readable.filter(
         geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
     )
+
+    df = df.drop("dq_has_critical_error")
     df_pandas = df.toPandas()
 
     return Output(
@@ -493,10 +496,11 @@ async def geolocation_data_quality_results_summary(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
+    mode = config.metadata["mode"]
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
-    dq_results = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns
+    dq_results, _ = dq_geolocation_extract_relevant_columns(
+        geolocation_data_quality_results, uploaded_columns, mode=mode
     )
 
     dq_summary_statistics = aggregate_report_json(
@@ -526,6 +530,7 @@ async def geolocation_data_quality_results_summary(
 def geolocation_data_quality_report(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
+    geolocation_raw: bytes,
     config: FileConfig,
     spark: PySparkResource,
 ):
@@ -540,10 +545,35 @@ def geolocation_data_quality_report(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
+    with BytesIO(geolocation_raw) as buffer:
+        buffer.seek(0)
+        original_df = pandas_loader(buffer, config.filepath).map(str)
+
+    original_df_columns = original_df.columns
+    uploaded_columns = file_upload.column_to_schema_mapping.values()
+
+    uploaded_columns_not_used = list(set(original_df_columns) - set(uploaded_columns))
+
+    schema = get_schema_table(spark.spark_session, config.metastore_schema)
+    important_columns_df = schema.filter(f.col("is_important"))
+    important_columns_list = [
+        row[0] for row in important_columns_df.select("name").collect()
+    ]
+
+    important_columns_not_uploaded = list(
+        set(important_columns_list) - set(uploaded_columns)
+    )
+    important_columns_not_uploaded = [
+        col for col in important_columns_not_uploaded if not col.startswith("admin")
+    ]
+
     upload_details = {
         "country_code": file_upload.country,
         "file_name": file_upload.original_filename,
+        "uploaded_columns_not_used": uploaded_columns_not_used,
+        "important_columns_not_uploaded": important_columns_not_uploaded,
     }
+
     dq_report = aggregate_report_statistics(
         geolocation_data_quality_results, upload_details
     )

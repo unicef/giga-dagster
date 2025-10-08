@@ -70,7 +70,7 @@ spec:
           {{- end }}
       initContainers:
         - name: init-wait-db
-          image: bitnami/postgresql:9.6.24-debian-10-r70
+          image: bitnamilegacy/postgresql:9.6.24
           command:
             - /bin/sh
             - -c

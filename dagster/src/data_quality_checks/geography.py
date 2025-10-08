@@ -87,6 +87,21 @@ def is_not_within_country(
             f.col("latitude"), f.col("longitude"), f.col("dq_is_not_within_country")
         ),
     )
+
+    df = df.withColumn(
+        "dq_is_not_within_country",
+        f.when(
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude")),
+            f.lit(None).cast("int"),
+        ).otherwise(f.col("dq_is_not_within_country")),
+    )
+    df = df.withColumn(
+        "dq_is_not_within_country", f.col("dq_is_not_within_country").cast("int")
+    )
+
     return df
 
 

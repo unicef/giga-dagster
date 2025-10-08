@@ -476,6 +476,7 @@ class Config(BaseSettings):
         ["school_id_govt", "school_name", "education_level", "location_id"],
         ["school_name", "education_level", "location_id"],
         ["education_level", "location_id"],
+        ["location_id"],
     ]
 
     PRECISION: dict[str, dict[str, int]] = {
