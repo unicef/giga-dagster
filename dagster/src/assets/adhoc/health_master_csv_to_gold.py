@@ -8,6 +8,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
+from pyspark.sql.functions import concat_ws, sha2
 from pyspark.sql.types import NullType
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
@@ -22,7 +23,6 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.sentry import capture_op_exceptions
-from pyspark.sql.functions import concat_ws, sha2
 
 from dagster import (
     OpExecutionContext,
