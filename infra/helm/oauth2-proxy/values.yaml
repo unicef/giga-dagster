@@ -279,7 +279,7 @@ revisionHistoryLimit: 10
 ## PodDisruptionBudget settings
 ## ref: https://kubernetes.io/docs/concepts/workloads/pods/disruptions/
 podDisruptionBudget:
-  enabled: true
+  enabled: false
   minAvailable: 1
 
 # Configure Kubernetes security context for pod
