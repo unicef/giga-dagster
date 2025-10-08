@@ -1,5 +1,4 @@
 import os
-
 import requests
 from nocodb import NocoDB
 
@@ -28,17 +27,21 @@ def get_access_token():
     response = requests.post(
         f"{SUPERSET_URL}/api/v1/security/login", json=login_payload, headers=headers
     )
+    auth_data = None
     if response.status_code == 200:
         auth_data = response.json()
-        access_token = auth_data["access_token"]
-        refresh_token = auth_data["refresh_token"]  # If supported
-        print("New Access Token:", access_token)
-        print("Refresh Token:", refresh_token)
-        return access_token
     else:
         print("Failed to authenticate:", response.status_code, response.text)
-        return None
+    return auth_data
 
+def refresh_access_token(refresh_token):
+    headers = {
+        'Authorization': f'Bearer {refresh_token}'
+    }
+    response = requests.post(
+        f"{SUPERSET_URL}/api/v1/security/refresh", headers=headers
+    )
+    return response
 
 def get_saved_query(access_token):
     headers = {
@@ -83,3 +86,4 @@ def run_query(query, access_token):
 
     print("Status Code:", response.status_code)
     print("Response Text:", response.text)
+    return response
