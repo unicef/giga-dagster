@@ -667,9 +667,10 @@ def custom_dataset_sensor(
             country_code=stem,
         )
 
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
         context.log.info(f"FILE: {path}")
         yield RunRequest(
-            run_key=str(path),
+            run_key=f"{path}:{last_modified}",
             run_config=RunConfig(ops=run_ops),
         )
         count += 1
