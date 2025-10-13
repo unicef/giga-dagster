@@ -49,7 +49,7 @@ networks:
 services:
   dagster-storage:
     <<: *common-config
-    image: bitnami/postgresql:14.10.0-debian-11-r31
+    image: public.ecr.aws/bitnami/postgresql:14.10.0-debian-11-r31
     env_file: ./dagster/.env
     volumes:
       - dagster-storage:/bitnami/postgresql
@@ -128,7 +128,7 @@ services:
 
   hms-database:
     <<: *common-config
-    image: bitnami/postgresql:14.10.0-debian-11-r31
+    image: public.ecr.aws/bitnami/postgresql:14.10.0-debian-11-r31
     env_file: ./hive/.env
     environment:
       POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}

@@ -829,7 +829,7 @@ rabbitmq:
   enabled: false
 
   image:
-    repository: "bitnami/rabbitmq"
+    repository: "public.ecr.aws/bitnami/rabbitmq"
     tag: "3.8.12"
     pullPolicy: IfNotPresent
 
@@ -844,7 +844,7 @@ rabbitmq:
   volumePermissions:
     enabled: true
     image:
-      repository: bitnami/minideb
+      repository: public.ecr.aws/bitnami/minideb
       tag: stretch
       pullPolicy: IfNotPresent
 
