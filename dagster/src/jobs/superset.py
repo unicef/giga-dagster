@@ -2,7 +2,12 @@ import time
 
 from dagster import OpExecutionContext, job, op
 
-from ..resources.superset import fetch_saved_query, get_access_token, refresh_access_token, run_query
+from ..resources.superset import (
+    fetch_saved_query,
+    get_access_token,
+    refresh_access_token,
+    run_query,
+)
 
 
 @op
