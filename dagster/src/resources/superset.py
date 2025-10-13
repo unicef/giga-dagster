@@ -34,6 +34,12 @@ def get_access_token():
         print("Failed to authenticate:", response.status_code, response.text)
     return auth_data
 
+
+def refresh_access_token(refresh_token):
+    headers = {"Authorization": f"Bearer {refresh_token}"}
+    response = requests.post(f"{SUPERSET_URL}/api/v1/security/refresh", headers=headers)
+    return response
+
 def refresh_access_token(refresh_token):
     headers = {
         'Authorization': f'Bearer {refresh_token}'
