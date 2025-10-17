@@ -16,12 +16,12 @@ qos_school_connectivity__automated_data_checks_job = define_asset_job(
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
 
-qos_availability_create_silver_job = define_asset_job(
-    name="qos_availability_create_silver_job",
+qos_availability__convert_gold_csv_to_deltatable_job = define_asset_job(
+    name="qos_availability_convert_gold_csv_to_deltatable_job",
     selection=AssetSelection.keys(
         "qos_availability_raw",
-        "qos_availability_bronze",
-        "qos_availability_silver",
+        "qos_availability_transforms",
+        "publish_qos_availability_to_gold",
     ),
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
