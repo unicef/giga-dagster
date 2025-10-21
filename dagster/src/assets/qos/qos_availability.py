@@ -30,13 +30,13 @@ def qos_availability_raw(
     return Output(raw, metadata=get_output_metadata(config))
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 def qos_availability_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
     qos_availability_raw: bytes,
-) -> Output[sql.DataFrame]:
+) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
     with BytesIO(qos_availability_raw) as buffer:
@@ -55,9 +55,7 @@ def qos_availability_transforms(
         "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
     }
     df = df.withColumns(column_actions)
-
-    context.log.info("table schema")
-    context.log.info(df.schema.simpleString())
+    df = df.toPandas()
 
     return Output(
         df,
