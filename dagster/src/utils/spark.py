@@ -232,7 +232,7 @@ def transform_types(
     context.log.info(f"Master columns: {master_columns}")
     context.log.info(f"Reference columns columns: {reference_columns}")
 
-    if schema_name in ["qos", "qos_raw"]:
+    if schema_name in ["qos", "qos_raw", "qos_availability"]:
         columns = [c for c in columns if c.name in df.columns]
 
     context.log.info(

@@ -2,6 +2,7 @@ from io import BytesIO
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark import sql
+from numpy import nan
 from pyspark.sql import (
     SparkSession,
     functions as F,
@@ -12,6 +13,7 @@ from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.spark import transform_types
 
 from dagster import (
     OpExecutionContext,
@@ -41,21 +43,23 @@ def qos_availability_transforms(
 
     with BytesIO(qos_availability_raw) as buffer:
         buffer.seek(0)
-        pdf = pd.read_csv(buffer)
+        df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
 
-    df = s.createDataFrame(pdf)
-    df = df.drop_duplicates()
-    df = df.withColumn("date", f.to_date("timestamp"))
-    df = df.withColumn(
-        "gigasync_id",
-        f.sha2(f.concat_ws("_", f.col("school_id_giga"), f.col("timestamp")), 256),
-    )
-
+    sdf = s.createDataFrame(df)
     column_actions = {
-        "signature": f.sha2(f.concat_ws("|", *df.columns), 256),
+        "signature": f.sha2(f.concat_ws("|", *sdf.columns), 256),
+        "gigasync_id": f.sha2(
+            f.concat_ws(
+                "_",
+                f.col("school_id_giga"),
+                f.col("timestamp"),
+            ),
+            256,
+        ),
+        "date": f.to_date(f.col("timestamp")),
     }
-    df = df.withColumns(column_actions)
-    df = df.toPandas()
+    sdf = sdf.withColumns(column_actions).drop_duplicates(["gigasync_id"])
+    df = sdf.toPandas()
 
     return Output(
         df,
@@ -73,7 +77,11 @@ def publish_qos_availability_to_gold(
     config: FileConfig,
     qos_availability_transforms: sql.DataFrame,
 ) -> Output[sql.DataFrame]:
-    df = qos_availability_transforms
+    df = transform_types(
+        qos_availability_transforms,
+        config.metastore_schema,
+        context,
+    )
 
     context.log.info("original schema")
     context.log.info(df.schema.simpleString())
