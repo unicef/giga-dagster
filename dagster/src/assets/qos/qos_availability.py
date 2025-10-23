@@ -5,7 +5,6 @@ from pyspark import sql
 from numpy import nan
 from pyspark.sql import (
     SparkSession,
-    functions as F,
     functions as f,
 )
 from pyspark.sql.types import NullType
@@ -53,6 +52,7 @@ def qos_availability_transforms(
                 "_",
                 f.col("school_id_giga"),
                 f.col("timestamp"),
+                f.col("device_id"),
             ),
             256,
         ),
