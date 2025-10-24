@@ -1,8 +1,7 @@
 from pathlib import Path
-
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
-from src.jobs.qos import qos_availability_create_silver_job
+from src.jobs.qos import qos_availability__convert_gold_csv_to_deltatable_job
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.filename import deconstruct_adhoc_filename_components
@@ -15,7 +14,7 @@ METASTORE_SCHEMA = f"{DOMAIN}_{DATASET_TYPE}"
 
 
 @sensor(
-    job=qos_availability_create_silver_job,
+    job=qos_availability__convert_gold_csv_to_deltatable_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
 def qos_availability__raw_file_uploads_sensor(
@@ -34,32 +33,29 @@ def qos_availability__raw_file_uploads_sensor(
         country_code = filename_components.country_code
         adls_filepath = file_data.name
         path = Path(adls_filepath)
+        stem = path.stem
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
-        table_name = "availability"
 
         ops_destination_mapping = {
             "qos_availability_raw": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=str(path),
                 metastore_schema=METASTORE_SCHEMA,
-                table_name=table_name,
                 tier=DataTier.RAW,
             ),
-            "qos_availability_bronze": OpDestinationMapping(
+            "qos_availability_transforms": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.bronze_folder}/qos.db/availability",
-                metastore_schema="qos_bronze",
-                table_name=table_name,
-                tier=DataTier.BRONZE,
+                destination_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.TRANSFORMS,
             ),
-            "qos_availability_silver": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{constants.silver_folder}/qos.db/availability",
-                metastore_schema="qos_silver",
-                table_name=table_name,
-                tier=DataTier.SILVER,
+            "publish_qos_availability_to_gold": OpDestinationMapping(
+                source_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{METASTORE_SCHEMA}.db/{country_code}",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.GOLD,
             ),
         }
 
