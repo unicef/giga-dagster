@@ -1,43 +1,43 @@
 stages:
-  - stage: BuildAndPushDagster
-    displayName: Build and push Dagster user code image
-    jobs:
-      - template: build-and-push.yaml
-        parameters:
-          displayName: Dagster user code
-          repository: giga-dagster
-          dockerfile: $(Build.SourcesDirectory)/dagster/prod.Dockerfile
+  # - stage: BuildAndPushDagster
+  #   displayName: Build and push Dagster user code image
+  #   jobs:
+  #     - template: build-and-push.yaml
+  #       parameters:
+  #         displayName: Dagster user code
+  #         repository: giga-dagster
+  #         dockerfile: $(Build.SourcesDirectory)/dagster/prod.Dockerfile
 
-  - stage: BuildAndPushAuthProxy
-    displayName: Build and push auth proxy image
-    dependsOn: [ ]
-    jobs:
-      - template: build-and-push.yaml
-        parameters:
-          displayName: auth proxy
-          repository: giga-dagster-authproxy
-          dockerfile: $(Build.SourcesDirectory)/oauth2-proxy/prod.Dockerfile
+  # - stage: BuildAndPushAuthProxy
+  #   displayName: Build and push auth proxy image
+  #   dependsOn: [ ]
+  #   jobs:
+  #     - template: build-and-push.yaml
+  #       parameters:
+  #         displayName: auth proxy
+  #         repository: giga-dagster-authproxy
+  #         dockerfile: $(Build.SourcesDirectory)/oauth2-proxy/prod.Dockerfile
 
-  - stage: BuildAndPushSpark
-    displayName: Build and push Spark image
-    dependsOn: [ ]
-    jobs:
-      - template: build-and-push.yaml
-        parameters:
-          displayName: Spark
-          repository: giga-dagster-spark
-          dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
-          buildContext: $(Build.SourcesDirectory)
+  # - stage: BuildAndPushSpark
+  #   displayName: Build and push Spark image
+  #   dependsOn: [ ]
+  #   jobs:
+  #     - template: build-and-push.yaml
+  #       parameters:
+  #         displayName: Spark
+  #         repository: giga-dagster-spark
+  #         dockerfile: $(Build.SourcesDirectory)/spark/prod.Dockerfile
+  #         buildContext: $(Build.SourcesDirectory)
 
-  - stage: BuildAndPushHive
-    displayName: Build and push Hive Metastore image
-    dependsOn: [ ]
-    jobs:
-      - template: build-and-push.yaml
-        parameters:
-          displayName: Hive Metastore
-          repository: giga-dagster-hive-metastore
-          dockerfile: $(Build.SourcesDirectory)/hive/prod.Dockerfile
+  # - stage: BuildAndPushHive
+  #   displayName: Build and push Hive Metastore image
+  #   dependsOn: [ ]
+  #   jobs:
+  #     - template: build-and-push.yaml
+  #       parameters:
+  #         displayName: Hive Metastore
+  #         repository: giga-dagster-hive-metastore
+  #         dockerfile: $(Build.SourcesDirectory)/hive/prod.Dockerfile
 
   - stage: CreateConfig
     displayName: Create/update K8s configuration resources
@@ -45,13 +45,13 @@ stages:
     jobs:
       - template: create-config.yaml
 
-  - stage: Deploy
-    displayName: Deploy Dagster
-    dependsOn:
-      - BuildAndPushDagster
-      - BuildAndPushAuthProxy
-      - BuildAndPushSpark
-      - BuildAndPushHive
-      - CreateConfig
-    jobs:
-      - template: helm-deploy.yaml
+  # - stage: Deploy
+  #   displayName: Deploy Dagster
+  #   dependsOn:
+  #     - BuildAndPushDagster
+  #     - BuildAndPushAuthProxy
+  #     - BuildAndPushSpark
+  #     - BuildAndPushHive
+  #     - CreateConfig
+  #   jobs:
+  #     - template: helm-deploy.yaml
