@@ -1,4 +1,5 @@
 import os
+
 import requests
 from nocodb import NocoDB
 
@@ -40,14 +41,6 @@ def refresh_access_token(refresh_token):
     response = requests.post(f"{SUPERSET_URL}/api/v1/security/refresh", headers=headers)
     return response
 
-def refresh_access_token(refresh_token):
-    headers = {
-        'Authorization': f'Bearer {refresh_token}'
-    }
-    response = requests.post(
-        f"{SUPERSET_URL}/api/v1/security/refresh", headers=headers
-    )
-    return response
 
 def get_saved_query(access_token):
     headers = {
