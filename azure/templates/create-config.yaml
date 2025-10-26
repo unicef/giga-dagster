@@ -16,158 +16,151 @@ jobs:
                 arguments: secret oi-dagster-secrets-$(deployEnv) -o yaml --ignore-not-found
 
             - task: Kubernetes@1
-              displayName: Verify verify PDBs
+              displayName: Create configmap
               inputs:
                 namespace: $(kubernetesNamespace)
-                command: get
-                arguments: pdb -A
-              
-            # - task: Kubernetes@1
-            #   displayName: Create configmap
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: configuration
-            #     command: apply
-            #     useConfigurationFile: true
-            #     configuration: infra/k8s/configmap.yaml
+                configurationType: configuration
+                command: apply
+                useConfigurationFile: true
+                configuration: infra/k8s/configmap.yaml
 
-            # - task: Kubernetes@1
-            #   displayName: Create Dagster secrets
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: inline
-            #     command: apply
-            #     useConfigurationFile: true
-            #     inline: |
-            #       apiVersion: v1
-            #       kind: Secret
-            #       metadata:
-            #         name: giga-dagster-secrets
-            #         labels:
-            #           app.kubernetes.io/name: giga-dagster
-            #           app.kubernetes.io/part-of: giga-dataops-platform
-            #           app.kubernetes.io/component: dagster
-            #       stringData:
-            #         POSTGRESQL_USERNAME: "$(postgresqlUsername)"
-            #         POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
-            #         AAD_AZURE_TENANT_ID: "$(aadAzureTenantId)"
-            #         AAD_AZURE_CLIENT_ID: "$(aadAzureClientId)"
-            #         AAD_AZURE_CLIENT_SECRET: "$(aadAzureClientSecret)"
-            #         AZURE_SAS_TOKEN: "$(azureSasToken)"
-            #         AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
-            #         AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
-            #         SUPERSET_USERNAME: "$(supersetUsername)"
-            #         SUPERSET_PASSWORD: "$(supersetPassword)"
-            #         SUPERSET_URL: "$(supersetUrl)"
-            #         DATAHUB_OIDC_REDIRECT_URL: "$(datahubOidcRedirectUrl)"
-            #         DATAHUB_OIDC_CLIENT_ID: "$(datahubOidcClientId)"
-            #         DATAHUB_OIDC_CLIENT_SECRET: "$(datahubOidcClientSecret)"
-            #         DATAHUB_OIDC_TENANT_ID: "$(datahubOidcTenantId)"
-            #         DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
-            #         DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
-            #         SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
-            #         SLACK_WEBHOOK: "$(slackWebHook)"
-            #         COMMIT_SHA: "$(Build.SourceVersion)"
-            #         DEPLOY_ENV: "$(deployEnv)"
-            #         SENTRY_DSN: "$(sentryDsn)"
-            #         EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
-            #         EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
-            #         INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
-            #         INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
-            #         INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
-            #         GIGAMAPS_DB_CONNECTION_STRING: "$(gigamapsDbConnectionString)"
-            #         GIGAMETER_DB_CONNECTION_STRING: "$(gigameterDbConnectionString)"
-            #         MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
-            #         PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
-            #         NOCODB_BASE_URL: "$(nocoDBURL)"
-            #         NOCODB_TOKEN: "$(nocoDBToken)"
-            #         NOCODB_NAME_MAPPINGS_TABLE_ID: "$(nocoDBNameMappingsTableId)"
-            #         TRINO_CONNECTION_STRING: "$(trinoConnectionString)"
-            #         SPARK_DRIVER_CORES: "$(sparkDriverCores)"
-            #         SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
-            #         GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
-            #         CATALOG_TOKEN: "$(catalogToken)"
-            #         CATALOG_BASE: "$(catalogBase)"
-            #         DATABASE_ID: "$(databaseId)"
+            - task: Kubernetes@1
+              displayName: Create Dagster secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                    POSTGRESQL_USERNAME: "$(postgresqlUsername)"
+                    POSTGRESQL_PASSWORD: "$(postgresqlPassword)"
+                    AAD_AZURE_TENANT_ID: "$(aadAzureTenantId)"
+                    AAD_AZURE_CLIENT_ID: "$(aadAzureClientId)"
+                    AAD_AZURE_CLIENT_SECRET: "$(aadAzureClientSecret)"
+                    AZURE_SAS_TOKEN: "$(azureSasToken)"
+                    AZURE_STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
+                    AZURE_BLOB_CONTAINER_NAME: "$(azureBlobContainerName)"
+                    SUPERSET_USERNAME: "$(supersetUsername)"
+                    SUPERSET_PASSWORD: "$(supersetPassword)"
+                    SUPERSET_URL: "$(supersetUrl)"
+                    DATAHUB_OIDC_REDIRECT_URL: "$(datahubOidcRedirectUrl)"
+                    DATAHUB_OIDC_CLIENT_ID: "$(datahubOidcClientId)"
+                    DATAHUB_OIDC_CLIENT_SECRET: "$(datahubOidcClientSecret)"
+                    DATAHUB_OIDC_TENANT_ID: "$(datahubOidcTenantId)"
+                    DATAHUB_ACCESS_TOKEN: "$(datahubAccessToken)"
+                    DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
+                    SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
+                    SLACK_WEBHOOK: "$(slackWebHook)"
+                    COMMIT_SHA: "$(Build.SourceVersion)"
+                    DEPLOY_ENV: "$(deployEnv)"
+                    SENTRY_DSN: "$(sentryDsn)"
+                    EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
+                    EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
+                    INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
+                    INGESTION_POSTGRESQL_PASSWORD: "$(ingestionPortalPostgresqlPassword)"
+                    INGESTION_POSTGRESQL_DATABASE: "$(ingestionPortalPostgresqlDatabase)"
+                    GIGAMAPS_DB_CONNECTION_STRING: "$(gigamapsDbConnectionString)"
+                    GIGAMETER_DB_CONNECTION_STRING: "$(gigameterDbConnectionString)"
+                    MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
+                    PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
+                    NOCODB_BASE_URL: "$(nocoDBURL)"
+                    NOCODB_TOKEN: "$(nocoDBToken)"
+                    NOCODB_NAME_MAPPINGS_TABLE_ID: "$(nocoDBNameMappingsTableId)"
+                    TRINO_CONNECTION_STRING: "$(trinoConnectionString)"
+                    SPARK_DRIVER_CORES: "$(sparkDriverCores)"
+                    SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
+                    GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
+                    CATALOG_TOKEN: "$(catalogToken)"
+                    CATALOG_BASE: "$(catalogBase)"
+                    DATABASE_ID: "$(databaseId)"
 
-            # - task: Kubernetes@1
-            #   displayName: Create authproxy secrets
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: inline
-            #     command: apply
-            #     useConfigurationFile: true
-            #     inline: |
-            #       apiVersion: v1
-            #       kind: Secret
-            #       metadata:
-            #         name: giga-dagster-authproxy-secrets
-            #         labels:
-            #           app.kubernetes.io/name: giga-dagster-oauth2-proxy
-            #           app.kubernetes.io/part-of: giga-dataops-platform
-            #           app.kubernetes.io/component: dagster
-            #       stringData:
-            #         AZURE_CLIENT_ID: "$(azureAdClientId)"
-            #         AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
-            #         AZURE_TENANT_ID: "$(azureAdTenantId)"
-            #         cookie-secret: "$(cookieSecret)"
-            #         OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
-            #         OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
+            - task: Kubernetes@1
+              displayName: Create authproxy secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-authproxy-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster-oauth2-proxy
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                    AZURE_CLIENT_ID: "$(azureAdClientId)"
+                    AZURE_CLIENT_SECRET: "$(azureAdClientSecret)"
+                    AZURE_TENANT_ID: "$(azureAdTenantId)"
+                    cookie-secret: "$(cookieSecret)"
+                    OAUTH2_PROXY_REDIRECT_URL: "https://$(ingressHost)/auth/callback"
+                    OAUTH2_PROXY_OIDC_ISSUER_URL: "https://login.microsoftonline.com/$(azureAdTenantId)/v2.0"
 
-            # - task: Kubernetes@1
-            #   displayName: Create Spark secrets
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: inline
-            #     command: apply
-            #     useConfigurationFile: true
-            #     inline: |
-            #       apiVersion: v1
-            #       kind: Secret
-            #       metadata:
-            #         name: giga-dagster-spark-secrets
-            #         labels:
-            #           app.kubernetes.io/name: giga-dagster-spark
-            #           app.kubernetes.io/part-of: giga-dataops-platform
-            #           app.kubernetes.io/component: dagster
-            #       stringData:
-            #         SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
-            #         rpc-authentication-secret: "$(sparkRpcAuthSecret)"
-            #         SPARK_SSL_NEED_CLIENT_AUTH: "yes"
-            #         SPARK_PUBLIC_DNS: "$(ingressHost)"
-            #         SPARK_UI_PROXYBASE: "/spark"
+            - task: Kubernetes@1
+              displayName: Create Spark secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-spark-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster-spark
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                    SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
+                    rpc-authentication-secret: "$(sparkRpcAuthSecret)"
+                    SPARK_SSL_NEED_CLIENT_AUTH: "yes"
+                    SPARK_PUBLIC_DNS: "$(ingressHost)"
+                    SPARK_UI_PROXYBASE: "/spark"
 
-            # - task: Kubernetes@1
-            #   displayName: Create Hive Metastore secrets
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: inline
-            #     command: apply
-            #     useConfigurationFile: true
-            #     inline: |
-            #       apiVersion: v1
-            #       kind: Secret
-            #       metadata:
-            #         name: giga-dagster-hive-secrets
-            #         labels:
-            #           app.kubernetes.io/name: giga-dagster-hive-metastore
-            #           app.kubernetes.io/part-of: giga-dataops-platform
-            #           app.kubernetes.io/component: dagster
-            #       stringData:
-            #           METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
-            #           AZURE_SAS_TOKEN: "$(azureSasTokenEscaped)"
-            #           STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
-            #           STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
-            #           HMS_POSTGRESQL_USERNAME: "$(hmsPostgresqlUsername)"
-            #           HMS_POSTGRESQL_PASSWORD: "$(hmsPostgresqlPassword)"
-            #           HMS_POSTGRESQL_DATABASE: "metastore_db"
+            - task: Kubernetes@1
+              displayName: Create Hive Metastore secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: inline
+                command: apply
+                useConfigurationFile: true
+                inline: |
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: giga-dagster-hive-secrets
+                    labels:
+                      app.kubernetes.io/name: giga-dagster-hive-metastore
+                      app.kubernetes.io/part-of: giga-dataops-platform
+                      app.kubernetes.io/component: dagster
+                  stringData:
+                      METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
+                      AZURE_SAS_TOKEN: "$(azureSasTokenEscaped)"
+                      STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
+                      STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
+                      HMS_POSTGRESQL_USERNAME: "$(hmsPostgresqlUsername)"
+                      HMS_POSTGRESQL_PASSWORD: "$(hmsPostgresqlPassword)"
+                      HMS_POSTGRESQL_DATABASE: "metastore_db"
 
-            # - task: Kubernetes@1
-            #   displayName: Create PDB/HPA rules
-            #   condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
-            #   inputs:
-            #     namespace: $(kubernetesNamespace)
-            #     configurationType: configuration
-            #     command: apply
-            #     useConfigurationFile: true
-            #     configuration: infra/k8s/dagster-prd.yaml
+            - task: Kubernetes@1
+              displayName: Create PDB/HPA rules
+              condition: or(eq(variables.environment, 'stg'), eq(variables.environment, 'prd'))
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: configuration
+                command: apply
+                useConfigurationFile: true
+                configuration: infra/k8s/dagster-prd.yaml
