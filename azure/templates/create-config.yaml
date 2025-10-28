@@ -164,3 +164,7 @@ jobs:
                 command: apply
                 useConfigurationFile: true
                 configuration: infra/k8s/dagster-prd.yaml
+                arguments: >
+                  --prune
+                  -l app.kubernetes.io/part-of=giga-dataops-platform
+                  --prune-allowlist=policy/v1/PodDisruptionBudget
