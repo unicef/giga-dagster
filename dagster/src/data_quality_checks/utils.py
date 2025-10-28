@@ -514,11 +514,8 @@ def dq_geolocation_extract_relevant_columns(
     dq_table_optional = dq_column_name_table.loc[
         dq_column_name_table[mode_column].str.lower() == "if in file"
     ]
-    dq_table_optional = dq_table_optional[
-        dq_table_optional["Column Checked"].isin(uploaded_columns)
-    ]
 
-    # get dq checks that involve multiple columns
+    # get relevant dq checks from the checks that involve multiple columns
     dq_table_optional_combination = dq_table_optional[
         dq_table_optional["Column Checked"]
         .str.strip()
@@ -528,12 +525,18 @@ def dq_geolocation_extract_relevant_columns(
         .astype(int)
         > 1
     ]
+
     dq_table_optional_combination = dq_table_optional_combination[
         dq_table_optional_combination["Column Checked"].map(
-            lambda columns: {
-                col.strip() for col in columns.split(",").strip()
-            }.issubset(uploaded_columns)
+            lambda columns: {col.strip() for col in columns.split(",")}.issubset(
+                uploaded_columns
+            )
         )
+    ]
+
+    # for the other optional checks, filter out for the relevant columns
+    dq_table_optional = dq_table_optional[
+        dq_table_optional["Column Checked"].isin(uploaded_columns)
     ]
 
     dq_table_all = pd.concat(
@@ -553,7 +556,7 @@ def dq_geolocation_extract_relevant_columns(
     human_readable_mappings = dq_table_all.set_index("DQ Table Column Name")[
         "Human Readable Name"
     ].to_dict()
-    # df = df.withColumnsRenamed(human_readable_mappings)
+
     return df, human_readable_mappings
 
 
