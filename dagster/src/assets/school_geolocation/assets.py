@@ -215,23 +215,16 @@ def geolocation_bronze(
     geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_geolocation_base = geolocation_base.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     context.log.info("Casted Geolocation")
     context.log.info(casted_geolocation_base)
 
     casted_bronze = df.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
+
     context.log.info("Casted Bronze")
     context.log.info(casted_bronze)
 
