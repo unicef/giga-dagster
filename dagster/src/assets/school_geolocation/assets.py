@@ -198,9 +198,7 @@ def geolocation_bronze(
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(
-        df,
-    )
+    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
