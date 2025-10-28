@@ -497,7 +497,7 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str], mode: str, context
+    df: sql.DataFrame, uploaded_columns: list[str], mode: str
 ):
     dq_column_name_table_id = get_nocodb_table_id_from_name(
         table_name="SchoolGeolocationMasterDQChecks"
@@ -526,10 +526,6 @@ def dq_geolocation_extract_relevant_columns(
         > 1
     ]
 
-    context.log.info(
-        f"The size of the dq_table_optional_combination table is {dq_table_optional_combination.shape}"
-    )
-
     dq_table_optional_combination = dq_table_optional_combination[
         dq_table_optional_combination["Column Checked"].map(
             lambda columns: {col.strip() for col in columns.split(",")}.issubset(
@@ -542,16 +538,6 @@ def dq_geolocation_extract_relevant_columns(
     dq_table_optional = dq_table_optional[
         dq_table_optional["Column Checked"].isin(uploaded_columns)
     ]
-
-    context.log.info(
-        f"The size of the dq_table_optional_combination table after filtering is {dq_table_optional_combination.shape}"
-    )
-
-    relevant_columns = dq_table_optional_combination["DQ Table Column Name"].tolist()
-
-    context.log.info(
-        f"The columns of the dq_table_optional_combination table are \n: {relevant_columns}"
-    )
 
     dq_table_all = pd.concat(
         [dq_table_mandatory, dq_table_optional, dq_table_optional_combination]
