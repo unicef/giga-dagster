@@ -397,7 +397,7 @@ async def geolocation_data_quality_results_human_readable(
 
     context.log.info("Create a new dataframe with only the relevant columns")
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode
+        geolocation_data_quality_results, uploaded_columns, mode, context
     )
     # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
     dq_column_names = [
