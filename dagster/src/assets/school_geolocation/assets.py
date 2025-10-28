@@ -183,13 +183,24 @@ def geolocation_bronze(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
+    column_to_schema_mapping = file_upload.column_to_schema_mapping
+    school_id_govt_name = [
+        column_name
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name == "school_id_govt"
+    ][0]
+
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath).map(str)
+        pdf = pandas_loader(
+            buffer, config.filepath, dtype_mapping={school_id_govt_name: str}
+        ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
+    df, column_mapping = column_mapping_rename(
+        df,
+    )
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
