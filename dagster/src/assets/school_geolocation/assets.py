@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import LongType, StringType, StructType
+from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -183,13 +183,22 @@ def geolocation_bronze(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
+    column_to_schema_mapping = file_upload.column_to_schema_mapping
+    school_id_govt_name = [
+        column_name
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name == "school_id_govt"
+    ][0]
+
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath).map(str)
+        pdf = pandas_loader(
+            buffer, config.filepath, dtype_mapping={school_id_govt_name: str}
+        ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
+    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
@@ -206,23 +215,16 @@ def geolocation_bronze(
     geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_geolocation_base = geolocation_base.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     context.log.info("Casted Geolocation")
     context.log.info(casted_geolocation_base)
 
     casted_bronze = df.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
+
     context.log.info("Casted Bronze")
     context.log.info(casted_bronze)
 
@@ -303,18 +305,10 @@ def geolocation_data_quality_results(
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
     casted_bronze = geolocation_bronze.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")

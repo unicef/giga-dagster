@@ -7,7 +7,10 @@ import pandas as pd
 from delta.tables import DeltaTable
 from loguru import logger
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from pyspark.sql.types import StructType
 
 import azure.core.exceptions
@@ -83,7 +86,16 @@ class ADLSFileClient(ConfigurableResource):
             "multiLine": True,
         }
         if schema is None:
-            return spark.read.csv(**reader_params)
+            df = spark.read.csv(**reader_params)
+            # We always want school_id_govt to be treated as a string. Especially important if the data has leading zeroes which will be dropped if it is coalesced to an integer
+            if "school_id_govt" in df.columns:
+                df = df.withColumn(
+                    "school_id_govt", f.col("school_id_govt").cast("string")
+                )
+                schema = df.schema
+                return spark.read.csv(**reader_params, schema=schema)
+            else:
+                return spark.read.csv(**reader_params)
 
         return spark.read.csv(**reader_params, schema=schema)
 
