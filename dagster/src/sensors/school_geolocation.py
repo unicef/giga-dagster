@@ -101,7 +101,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_data_quality_report": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    source_filepath=str(path),
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-report/{country_code}/{stem}.txt",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
