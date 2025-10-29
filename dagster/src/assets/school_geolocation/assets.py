@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import LongType, StringType, StructType
+from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -305,18 +305,10 @@ def geolocation_data_quality_results(
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
     casted_bronze = geolocation_bronze.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
