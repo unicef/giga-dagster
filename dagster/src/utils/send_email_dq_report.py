@@ -4,7 +4,7 @@ from typing import Any
 import requests
 import sentry_sdk
 from models.file_upload import FileUpload
-from requests import HTTPError, JSONDecodeError
+from requests import JSONDecodeError
 from sqlalchemy import select
 
 from dagster import OpExecutionContext
@@ -34,22 +34,28 @@ async def send_email_dq_report(
         upload_date_str = upload_date.isoformat()
     else:
         upload_date_str = str(upload_date)
-    
+
     # Format data quality check timestamp if present
     dq_results_formatted = dq_results.copy()
-    if isinstance(dq_results_formatted.get("summary", {}).get("timestamp"), datetime.datetime):
-        dq_results_formatted["summary"]["timestamp"] = dq_results_formatted["summary"]["timestamp"].isoformat()
-    elif "summary" in dq_results_formatted and isinstance(dq_results_formatted["summary"].get("timestamp"), str):
+    if isinstance(
+        dq_results_formatted.get("summary", {}).get("timestamp"), datetime.datetime
+    ):
+        dq_results_formatted["summary"]["timestamp"] = dq_results_formatted["summary"][
+            "timestamp"
+        ].isoformat()
+    elif "summary" in dq_results_formatted and isinstance(
+        dq_results_formatted["summary"].get("timestamp"), str
+    ):
         # Already a string, keep it as is
         pass
-    
+
     metadata = {
         "dataset": dataset_type,
         "uploadDate": upload_date_str,
         "uploadId": upload_id,
         "dataQualityCheck": dq_results_formatted,
     }
-    
+
     # Add country if provided (required for PDF generation)
     if country_code:
         metadata["country"] = country_code
@@ -84,11 +90,13 @@ async def send_email_dq_report(
                 )
 
                 # Create attachment dict with base64-encoded content
-                attachments = [{
-                    "Content-type": "application/pdf",
-                    "Filename": pdf_filename,
-                    "content": pdf_base64,  # Already base64-encoded from email service
-                }]
+                attachments = [
+                    {
+                        "Content-type": "application/pdf",
+                        "Filename": pdf_filename,
+                        "content": pdf_base64,  # Already base64-encoded from email service
+                    }
+                ]
                 logger.info(f"PDF generated successfully: {pdf_filename}")
             else:
                 logger.warning(f"Failed to generate PDF: {pdf_res.status_code}")
@@ -137,7 +145,11 @@ async def send_email_dq_report_with_config(
         upload_date = file_upload.created
         upload_id = file_upload.id
         uploader_email = file_upload.uploader_email
-        country_code = config.country_code if hasattr(config, 'country_code') else file_upload.country
+        country_code = (
+            config.country_code
+            if hasattr(config, "country_code")
+            else file_upload.country
+        )
 
         await send_email_dq_report(
             dq_results=dq_results,
