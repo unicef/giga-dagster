@@ -6,7 +6,7 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
@@ -16,7 +16,6 @@ from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
 from src.utils.db.trino import get_db_context as get_trino_context
-from sqlalchemy import text, select
 from src.utils.delta import (
     build_deduped_delete_query,
     build_deduped_merge_query,
@@ -93,132 +92,194 @@ class StagingStep:
         )
 
     def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
+        staging = self._process_staging_changes(upstream_df)
+        if staging is None:
+            return None
+
+        self._update_approval_request_status(staging)
+        self._emit_lineage()
+
+        return staging
+
+    def _process_staging_changes(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame | None:
+        """Process staging changes based on silver table existence."""
         if self.silver_table_exists:
-            if not self.staging_table_exists:
-                # If silver table exists and no staging table exists, clone it to staging
-                self.create_staging_table_from_silver()
-
-            self.sync_schema_staging()
-
-            # If silver table exists and staging table exists, merge files for review to existing staging table
-            if self.change_type != StagingChangeTypeEnum.DELETE:
-                staging = self.standard_transforms(upstream_df)
-                staging = self.upsert_rows(staging)
-            else:
-                staging = self.delete_rows(upstream_df)
-
+            return self._process_with_silver_table(upstream_df)
         else:
-            # If silver table does not exist, merge files for review into one spark dataframe
-            if self.change_type == StagingChangeTypeEnum.UPDATE:
-                staging = self.standard_transforms(upstream_df)
+            return self._process_without_silver_table(upstream_df)
 
-                if self.staging_table_exists:
-                    self.sync_schema_staging()
-                    staging = self.upsert_rows(staging)
-                else:
-                    self.create_empty_staging_table()
-                    (
-                        staging.write.option("mergeSchema", "true")
-                        .format("delta")
-                        .mode("append")
-                        .saveAsTable(self.staging_table_name)
-                    )
+    def _process_with_silver_table(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame:
+        """Process staging changes when silver table exists."""
+        if not self.staging_table_exists:
+            # If silver table exists and no staging table exists, clone it to staging
+            self.create_staging_table_from_silver()
 
-                self.context.log.info(f"Full {staging.count()=}")
-            else:
-                return None  # Cannot delete rows when silver and staging tables do not exist
+        self.sync_schema_staging()
 
-        # State check: Verify changes were made before setting enabled=True
-        # Query Trino for row count before updating DB
-        pre_update_row_count = None
+        # If silver table exists and staging table exists, merge files for review to existing staging table
+        if self.change_type != StagingChangeTypeEnum.DELETE:
+            staging = self.standard_transforms(upstream_df)
+            staging = self.upsert_rows(staging)
+        else:
+            staging = self.delete_rows(upstream_df)
+
+        return staging
+
+    def _process_without_silver_table(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame | None:
+        """Process staging changes when silver table does not exist."""
+        if self.change_type != StagingChangeTypeEnum.UPDATE:
+            return (
+                None  # Cannot delete rows when silver and staging tables do not exist
+            )
+
+        staging = self.standard_transforms(upstream_df)
+
         if self.staging_table_exists:
-            try:
-                with get_trino_context() as trino_db:
-                    result = trino_db.execute(
-                        text(f"SELECT COUNT(*) as count FROM {self.staging_table_name}")
-                    )
-                    pre_update_row_count = result.scalar()
-                    self.context.log.info(
-                        f"Pre-update staging row count: {pre_update_row_count}"
-                    )
-            except Exception as e:
-                self.context.log.warning(
-                    f"Failed to query staging row count: {e}. Proceeding with DB update."
-                )
+            self.sync_schema_staging()
+            staging = self.upsert_rows(staging)
+        else:
+            self.create_empty_staging_table()
+            (
+                staging.write.option("mergeSchema", "true")
+                .format("delta")
+                .mode("append")
+                .saveAsTable(self.staging_table_name)
+            )
 
+        self.context.log.info(f"Full {staging.count()=}")
+        return staging
+
+    def _get_pre_update_row_count(self) -> int | None:
+        """Get row count from staging table before update."""
+        if not self.staging_table_exists:
+            return None
+
+        try:
+            with get_trino_context() as trino_db:
+                # Table name is constructed from trusted config sources, not user input
+                result = trino_db.execute(
+                    text(f"SELECT COUNT(*) as count FROM {self.staging_table_name}")  # nosec B608
+                )
+                row_count = result.scalar()
+                self.context.log.info(f"Pre-update staging row count: {row_count}")
+                return row_count
+        except Exception as e:
+            self.context.log.warning(
+                f"Failed to query staging row count: {e}. Proceeding with DB update."
+            )
+            return None
+
+    def _update_approval_request_status(self, staging: sql.DataFrame) -> None:
+        """Update ApprovalRequest status if conditions are met."""
+        pre_update_row_count = self._get_pre_update_row_count()
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+
         with get_db_context() as db:
             try:
-                # Check current enabled state before updating
-                current_request = db.scalar(
-                    select(ApprovalRequest).where(
-                        (ApprovalRequest.country == self.country_code)
-                        & (ApprovalRequest.dataset == formatted_dataset)
-                    )
+                current_request = self._get_current_approval_request(
+                    db, formatted_dataset
                 )
-
-                # Only update if currently disabled and changes were made
                 if current_request is None:
                     self.context.log.warning(
                         f"No ApprovalRequest found for {self.country_code} - {formatted_dataset}"
                     )
-                    return staging
+                    return
 
-                if current_request.enabled:
-                    self.context.log.info(
-                        f"ApprovalRequest already enabled for {self.country_code} - {formatted_dataset}. Skipping update."
-                    )
-                elif (
-                    pre_update_row_count is not None and pre_update_row_count == 0
-                    and self.change_type == StagingChangeTypeEnum.UPDATE
+                if not self._should_update_enabled(
+                    current_request, pre_update_row_count, formatted_dataset
                 ):
-                    self.context.log.info(
-                        f"No changes detected (row count: {pre_update_row_count}). Skipping enabled=True update."
-                    )
-                else:
-                    # Idempotent update: only set enabled=True if currently False
-                    result = db.execute(
-                        update(ApprovalRequest)
-                        .where(
-                            (ApprovalRequest.country == self.country_code)
-                            & (ApprovalRequest.dataset == formatted_dataset)
-                            & (ApprovalRequest.enabled == False)  # Only update if False
-                        )
-                        .values(
-                            {
-                                ApprovalRequest.enabled: True,
-                                ApprovalRequest.is_merge_processing: False,
-                            }
-                        ),
-                    )
-                    if result.rowcount > 0:
-                        db.commit()
-                        self.context.log.info(
-                            f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
-                        )
-                    else:
-                        self.context.log.info(
-                            f"No rows updated (already enabled or state changed). Skipping commit."
-                        )
-            except Exception as e:
-                self.context.log.error(
-                    f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {e}"
-                )
-                db.rollback()
-                # Try to rollback Delta changes if possible
-                if self.staging_table_exists:
-                    try:
-                        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
-                        # Log warning but don't fail - Delta operations are atomic
-                        self.context.log.warning(
-                            f"Delta table changes may have been committed. Manual review may be needed."
-                        )
-                    except Exception as delta_err:
-                        self.context.log.warning(
-                            f"Could not access Delta table for rollback: {delta_err}"
-                        )
-                raise
+                    return
 
+                self._execute_enabled_update(db, formatted_dataset)
+            except Exception as e:
+                self._handle_update_error(db, e, formatted_dataset)
+
+    def _get_current_approval_request(self, db, formatted_dataset: str):
+        """Get current ApprovalRequest from database."""
+        return db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == self.country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+    def _should_update_enabled(
+        self, current_request, pre_update_row_count: int | None, formatted_dataset: str
+    ) -> bool:
+        """Check if enabled flag should be updated."""
+        if current_request.enabled:
+            self.context.log.info(
+                f"ApprovalRequest already enabled for {self.country_code} - {formatted_dataset}. Skipping update."
+            )
+            return False
+
+        if (
+            pre_update_row_count is not None
+            and pre_update_row_count == 0
+            and self.change_type == StagingChangeTypeEnum.UPDATE
+        ):
+            self.context.log.info(
+                f"No changes detected (row count: {pre_update_row_count}). Skipping enabled=True update."
+            )
+            return False
+
+        return True
+
+    def _execute_enabled_update(self, db, formatted_dataset: str) -> None:
+        """Execute update to set enabled=True."""
+        result = db.execute(
+            update(ApprovalRequest)
+            .where(
+                (ApprovalRequest.country == self.country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+                & (~ApprovalRequest.enabled)  # Only update if False
+            )
+            .values(
+                {
+                    ApprovalRequest.enabled: True,
+                    ApprovalRequest.is_merge_processing: False,
+                }
+            ),
+        )
+        if result.rowcount > 0:
+            db.commit()
+            self.context.log.info(
+                f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
+            )
+        else:
+            self.context.log.info(
+                "No rows updated (already enabled or state changed). Skipping commit."
+            )
+
+    def _handle_update_error(
+        self, db, error: Exception, formatted_dataset: str
+    ) -> None:
+        """Handle errors during ApprovalRequest update."""
+        self.context.log.error(
+            f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {error}"
+        )
+        db.rollback()
+        # Try to rollback Delta changes if possible
+        if self.staging_table_exists:
+            try:
+                # Log warning but don't fail - Delta operations are atomic
+                self.context.log.warning(
+                    "Delta table changes may have been committed. Manual review may be needed."
+                )
+            except Exception as delta_err:
+                self.context.log.warning(
+                    f"Could not access Delta table for rollback: {delta_err}"
+                )
+        raise
+
+    def _emit_lineage(self) -> None:
+        """Emit lineage information."""
         # Get files for review in a separate DB context
         with get_db_context() as db:
             files_for_review = db.scalars(
@@ -234,8 +295,6 @@ class StagingStep:
             dataset_urn=self.config.datahub_destination_dataset_urn,
             context=self.context,
         )
-
-        return staging
 
     @property
     def silver_table_exists(self) -> bool:

@@ -13,7 +13,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import NullType, StructType
-from sqlalchemy import update, select
+from sqlalchemy import select, update
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -752,6 +752,9 @@ async def adhoc__reset_geolocation_staging_table(
     staging_tier_schema_name = construct_schema_name_for_tier(
         f"school_{dataset_type}", DataTier.STAGING
     )
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        f"school_{dataset_type}", DataTier.SILVER
+    )
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
     )
@@ -889,6 +892,9 @@ async def adhoc__reset_coverage_staging_table(
     )
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, country_code
+    )
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        f"school_{dataset_type}", DataTier.SILVER
     )
 
     # Check if staging table exists

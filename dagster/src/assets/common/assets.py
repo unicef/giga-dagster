@@ -17,7 +17,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from sqlalchemy import update
+from sqlalchemy import select, update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
