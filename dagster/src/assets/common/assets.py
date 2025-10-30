@@ -274,6 +274,33 @@ def reset_staging_table(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    # State check: Verify enabled=False and is_merge_processing=False before reset
+    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    with get_db_context() as db:
+        current_request = db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+        if current_request is None:
+            context.log.warning(
+                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
+            )
+        elif current_request.enabled:
+            context.log.warning(
+                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
+                f"Expected enabled=False before reset."
+            )
+            return
+        elif current_request.is_merge_processing:
+            context.log.warning(
+                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
+                f"Expected is_merge_processing=False before reset."
+            )
+            return
+
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
 
     try:
@@ -297,20 +324,54 @@ def reset_staging_table(
 
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
     with get_db_context() as db:
-        with db.begin():
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+        try:
+            with db.begin():
+                # Idempotent update: only set enabled=False if currently True
+                result = db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.is_merge_processing: False,
+                            ApprovalRequest.enabled: False,
+                        }
+                    )
                 )
-                .values(
-                    {
-                        ApprovalRequest.is_merge_processing: False,
-                        ApprovalRequest.enabled: False,
-                    }
-                )
+                if result.rowcount == 0:
+                    context.log.warning(
+                        f"No ApprovalRequest updated for {country_code} - {formatted_dataset}. "
+                        f"Record may not exist or already in target state."
+                    )
+        except Exception as e:
+            context.log.error(
+                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
+            # Try to revert enabled flag if possible
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                            }
+                        )
+                    )
+                    context.log.warning(
+                        f"Reverted enabled=True for {country_code} - {formatted_dataset} due to reset failure."
+                    )
+            except Exception as revert_err:
+                context.log.error(
+                    f"Failed to revert enabled flag: {revert_err}. Manual intervention may be needed."
+                )
+            raise
 
 
 def _handle_null_columns(schema_columns, primary_key, silver_columns):

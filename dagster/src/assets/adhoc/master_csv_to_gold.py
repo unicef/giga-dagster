@@ -13,7 +13,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import NullType, StructType
-from sqlalchemy import update
+from sqlalchemy import update, select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -771,12 +771,36 @@ async def adhoc__reset_geolocation_staging_table(
         )
         return None
 
-    staging_table_path = config.destination_filepath
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.SILVER
-    )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    # State check: Verify enabled=False and is_merge_processing=False before reset
+    formatted_dataset = f"School {dataset_type.capitalize()}"
+    with get_db_context() as db:
+        current_request = db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+        if current_request is None:
+            context.log.warning(
+                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
+            )
+        elif current_request.enabled:
+            context.log.warning(
+                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
+                f"Expected enabled=False before reset."
+            )
+            return
+        elif current_request.is_merge_processing:
+            context.log.warning(
+                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
+                f"Expected is_merge_processing=False before reset."
+            )
+            return
+
+    staging_table_path = config.destination_filepath
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
 
     try:
@@ -799,20 +823,54 @@ async def adhoc__reset_geolocation_staging_table(
 
     formatted_dataset = f"School {dataset_type.capitalize()}"
     with get_db_context() as db:
-        with db.begin():
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+        try:
+            with db.begin():
+                # Idempotent update: only set enabled=False if currently True
+                result = db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.is_merge_processing: False,
+                            ApprovalRequest.enabled: False,
+                        }
+                    )
                 )
-                .values(
-                    {
-                        ApprovalRequest.is_merge_processing: False,
-                        ApprovalRequest.enabled: False,
-                    }
-                )
+                if result.rowcount == 0:
+                    context.log.warning(
+                        f"No ApprovalRequest updated for {country_code} - {formatted_dataset}. "
+                        f"Record may not exist or already in target state."
+                    )
+        except Exception as e:
+            context.log.error(
+                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
+            # Try to revert enabled flag if possible
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                            }
+                        )
+                    )
+                    context.log.warning(
+                        f"Reverted enabled=True for {country_code} - {formatted_dataset} due to reset failure."
+                    )
+            except Exception as revert_err:
+                context.log.error(
+                    f"Failed to revert enabled flag: {revert_err}. Manual intervention may be needed."
+                )
+            raise
 
 
 @asset(deps=["adhoc__publish_silver_coverage"])
@@ -848,12 +906,36 @@ async def adhoc__reset_coverage_staging_table(
         )
         return None
 
-    staging_table_path = config.destination_filepath
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.SILVER
-    )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    # State check: Verify enabled=False and is_merge_processing=False before reset
+    formatted_dataset = f"School {dataset_type.capitalize()}"
+    with get_db_context() as db:
+        current_request = db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+        if current_request is None:
+            context.log.warning(
+                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
+            )
+        elif current_request.enabled:
+            context.log.warning(
+                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
+                f"Expected enabled=False before reset."
+            )
+            return
+        elif current_request.is_merge_processing:
+            context.log.warning(
+                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
+                f"Expected is_merge_processing=False before reset."
+            )
+            return
+
+    staging_table_path = config.destination_filepath
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
 
     try:
@@ -876,20 +958,54 @@ async def adhoc__reset_coverage_staging_table(
 
     formatted_dataset = f"School {dataset_type.capitalize()}"
     with get_db_context() as db:
-        with db.begin():
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+        try:
+            with db.begin():
+                # Idempotent update: only set enabled=False if currently True
+                result = db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.is_merge_processing: False,
+                            ApprovalRequest.enabled: False,
+                        }
+                    )
                 )
-                .values(
-                    {
-                        ApprovalRequest.is_merge_processing: False,
-                        ApprovalRequest.enabled: False,
-                    }
-                )
+                if result.rowcount == 0:
+                    context.log.warning(
+                        f"No ApprovalRequest updated for {country_code} - {formatted_dataset}. "
+                        f"Record may not exist or already in target state."
+                    )
+        except Exception as e:
+            context.log.error(
+                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
+            # Try to revert enabled flag if possible
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                            }
+                        )
+                    )
+                    context.log.warning(
+                        f"Reverted enabled=True for {country_code} - {formatted_dataset} due to reset failure."
+                    )
+            except Exception as revert_err:
+                context.log.error(
+                    f"Failed to revert enabled flag: {revert_err}. Manual intervention may be needed."
+                )
+            raise
 
 
 @asset

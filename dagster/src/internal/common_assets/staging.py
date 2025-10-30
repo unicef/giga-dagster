@@ -15,6 +15,8 @@ from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
+from src.utils.db.trino import get_db_context as get_trino_context
+from sqlalchemy import text, select
 from src.utils.delta import (
     build_deduped_delete_query,
     build_deduped_merge_query,
@@ -126,23 +128,99 @@ class StagingStep:
             else:
                 return None  # Cannot delete rows when silver and staging tables do not exist
 
+        # State check: Verify changes were made before setting enabled=True
+        # Query Trino for row count before updating DB
+        pre_update_row_count = None
+        if self.staging_table_exists:
+            try:
+                with get_trino_context() as trino_db:
+                    result = trino_db.execute(
+                        text(f"SELECT COUNT(*) as count FROM {self.staging_table_name}")
+                    )
+                    pre_update_row_count = result.scalar()
+                    self.context.log.info(
+                        f"Pre-update staging row count: {pre_update_row_count}"
+                    )
+            except Exception as e:
+                self.context.log.warning(
+                    f"Failed to query staging row count: {e}. Proceeding with DB update."
+                )
+
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
         with get_db_context() as db:
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == self.country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+            try:
+                # Check current enabled state before updating
+                current_request = db.scalar(
+                    select(ApprovalRequest).where(
+                        (ApprovalRequest.country == self.country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
                 )
-                .values(
-                    {
-                        ApprovalRequest.enabled: True,
-                        ApprovalRequest.is_merge_processing: False,
-                    }
-                ),
-            )
-            db.commit()
 
+                # Only update if currently disabled and changes were made
+                if current_request is None:
+                    self.context.log.warning(
+                        f"No ApprovalRequest found for {self.country_code} - {formatted_dataset}"
+                    )
+                    return staging
+
+                if current_request.enabled:
+                    self.context.log.info(
+                        f"ApprovalRequest already enabled for {self.country_code} - {formatted_dataset}. Skipping update."
+                    )
+                elif (
+                    pre_update_row_count is not None and pre_update_row_count == 0
+                    and self.change_type == StagingChangeTypeEnum.UPDATE
+                ):
+                    self.context.log.info(
+                        f"No changes detected (row count: {pre_update_row_count}). Skipping enabled=True update."
+                    )
+                else:
+                    # Idempotent update: only set enabled=True if currently False
+                    result = db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == self.country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                            & (ApprovalRequest.enabled == False)  # Only update if False
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                                ApprovalRequest.is_merge_processing: False,
+                            }
+                        ),
+                    )
+                    if result.rowcount > 0:
+                        db.commit()
+                        self.context.log.info(
+                            f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
+                        )
+                    else:
+                        self.context.log.info(
+                            f"No rows updated (already enabled or state changed). Skipping commit."
+                        )
+            except Exception as e:
+                self.context.log.error(
+                    f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {e}"
+                )
+                db.rollback()
+                # Try to rollback Delta changes if possible
+                if self.staging_table_exists:
+                    try:
+                        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
+                        # Log warning but don't fail - Delta operations are atomic
+                        self.context.log.warning(
+                            f"Delta table changes may have been committed. Manual review may be needed."
+                        )
+                    except Exception as delta_err:
+                        self.context.log.warning(
+                            f"Could not access Delta table for rollback: {delta_err}"
+                        )
+                raise
+
+        # Get files for review in a separate DB context
+        with get_db_context() as db:
             files_for_review = db.scalars(
                 select(FileUpload).where(
                     (FileUpload.country == self.country_code)
