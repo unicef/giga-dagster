@@ -17,6 +17,7 @@ async def send_email_base(
     subject: str,
     recipients: list[str],
     context: OpExecutionContext = None,
+    attachments: list[dict] | None = None,
 ):
     logger = get_context_with_fallback_logger(context)
 
@@ -50,6 +51,7 @@ async def send_email_base(
                 subject=subject,
                 html_part=html,
                 text_part=text,
+                attachments=attachments,
             ).dict(),
         )
         if res.is_error:
