@@ -39,15 +39,21 @@ def school_connectivity_update_schools_connectivity_sensor(
         size = properties.size
 
         ops_destination_mapping = {
+            "school_connectivity_realtime_silver": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.GOLD,
+            ),
             "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.GOLD,
             ),
             "connectivity_broadcast_master_release_notes": OpDestinationMapping(
-                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.GOLD,
             ),

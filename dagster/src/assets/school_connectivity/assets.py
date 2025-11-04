@@ -569,7 +569,7 @@ def school_connectivity_realtime_silver(
 
         updated_silver = updated_silver.drop(*updated_connectivity_schs.columns)
 
-        new_master = partial_in_cluster_merge(
+        new_silver = partial_in_cluster_merge(
             current_silver, updated_silver, primary_key, column_names
         )
     else:
@@ -577,7 +577,7 @@ def school_connectivity_realtime_silver(
 
     context.log.info("Merge the updated RT data into the silver table")
 
-    new_silver = compute_row_hash(new_master)
+    new_silver = compute_row_hash(new_silver)
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
