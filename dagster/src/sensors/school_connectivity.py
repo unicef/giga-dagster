@@ -43,7 +43,7 @@ def school_connectivity_update_schools_connectivity_sensor(
                 source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
                 metastore_schema=METASTORE_SCHEMA,
-                tier=DataTier.GOLD,
+                tier=DataTier.SILVER,
             ),
             "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
