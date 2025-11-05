@@ -11,7 +11,6 @@ from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 DATASET_TYPE = "geolocation"
 DOMAIN = "school"
-METASTORE_SCHEMA = "school_master"
 
 
 @sensor(
@@ -42,19 +41,19 @@ def school_connectivity_update_schools_connectivity_sensor(
             "school_connectivity_realtime_silver": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
-                metastore_schema=METASTORE_SCHEMA,
+                metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
             "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
-                metastore_schema=METASTORE_SCHEMA,
+                metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
             "connectivity_broadcast_master_release_notes": OpDestinationMapping(
                 source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.lower()}",
-                metastore_schema=METASTORE_SCHEMA,
+                metastore_schema="school_master",
                 tier=DataTier.GOLD,
             ),
         }
