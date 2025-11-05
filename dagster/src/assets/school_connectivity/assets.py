@@ -25,7 +25,7 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.internal.common_assets.master_release_notes import send_master_release_notes
-from src.internal.merge import full_in_cluster_merge, partial_in_cluster_merge
+from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -569,7 +569,7 @@ def school_connectivity_realtime_silver(
 
         updated_silver = updated_silver.drop(*updated_connectivity_schs.columns)
 
-        new_silver = partial_in_cluster_merge(
+        new_silver = full_in_cluster_merge(
             current_silver, updated_silver, primary_key, column_names
         )
     else:
