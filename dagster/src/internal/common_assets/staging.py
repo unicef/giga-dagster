@@ -182,23 +182,47 @@ class StagingStep:
 
         with get_db_context() as db:
             try:
-                current_request = self._get_current_approval_request(
-                    db, formatted_dataset
-                )
-                if current_request is None:
-                    self.context.log.warning(
-                        f"No ApprovalRequest found for {self.country_code} - {formatted_dataset}"
+                with db.begin():
+                    current_request = self._get_current_approval_request(
+                        db, formatted_dataset
                     )
-                    return
+                    if current_request is None:
+                        self.context.log.warning(
+                            f"No ApprovalRequest found for {self.country_code} - {formatted_dataset}"
+                        )
+                        return
 
-                if not self._should_update_enabled(
-                    current_request, pre_update_row_count, formatted_dataset
-                ):
-                    return
+                    if not self._should_update_enabled(
+                        current_request, pre_update_row_count, formatted_dataset
+                    ):
+                        return
 
-                self._execute_enabled_update(db, formatted_dataset)
+                    result = db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == self.country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                            & (~ApprovalRequest.enabled)  # Only update if False
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                                ApprovalRequest.is_merge_processing: False,
+                            }
+                        ),
+                    )
+                    if result.rowcount > 0:
+                        self.context.log.info(
+                            f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
+                        )
+                    else:
+                        self.context.log.info(
+                            "No rows updated (already enabled or state changed). Skipping commit."
+                        )
             except Exception as e:
-                self._handle_update_error(db, e, formatted_dataset)
+                self.context.log.error(
+                    f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {e}"
+                )
 
     def _get_current_approval_request(self, db, formatted_dataset: str):
         """Get current ApprovalRequest from database."""
@@ -230,53 +254,6 @@ class StagingStep:
             return False
 
         return True
-
-    def _execute_enabled_update(self, db, formatted_dataset: str) -> None:
-        """Execute update to set enabled=True."""
-        result = db.execute(
-            update(ApprovalRequest)
-            .where(
-                (ApprovalRequest.country == self.country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-                & (~ApprovalRequest.enabled)  # Only update if False
-            )
-            .values(
-                {
-                    ApprovalRequest.enabled: True,
-                    ApprovalRequest.is_merge_processing: False,
-                }
-            ),
-        )
-        if result.rowcount > 0:
-            db.commit()
-            self.context.log.info(
-                f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
-            )
-        else:
-            self.context.log.info(
-                "No rows updated (already enabled or state changed). Skipping commit."
-            )
-
-    def _handle_update_error(
-        self, db, error: Exception, formatted_dataset: str
-    ) -> None:
-        """Handle errors during ApprovalRequest update."""
-        self.context.log.error(
-            f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {error}"
-        )
-        db.rollback()
-        # Try to rollback Delta changes if possible
-        if self.staging_table_exists:
-            try:
-                # Log warning but don't fail - Delta operations are atomic
-                self.context.log.warning(
-                    "Delta table changes may have been committed. Manual review may be needed."
-                )
-            except Exception as delta_err:
-                self.context.log.warning(
-                    f"Could not access Delta table for rollback: {delta_err}"
-                )
-        raise
 
     def _emit_lineage(self) -> None:
         """Emit lineage information."""

@@ -332,6 +332,7 @@ def reset_staging_table(
                     .where(
                         (ApprovalRequest.country == country_code)
                         & (ApprovalRequest.dataset == formatted_dataset)
+                        & (ApprovalRequest.enabled)
                     )
                     .values(
                         {
@@ -349,28 +350,6 @@ def reset_staging_table(
             context.log.error(
                 f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
-            # Try to revert enabled flag if possible
-            try:
-                with db.begin():
-                    db.execute(
-                        update(ApprovalRequest)
-                        .where(
-                            (ApprovalRequest.country == country_code)
-                            & (ApprovalRequest.dataset == formatted_dataset)
-                        )
-                        .values(
-                            {
-                                ApprovalRequest.enabled: True,
-                            }
-                        )
-                    )
-                    context.log.warning(
-                        f"Reverted enabled=True for {country_code} - {formatted_dataset} due to reset failure."
-                    )
-            except Exception as revert_err:
-                context.log.error(
-                    f"Failed to revert enabled flag: {revert_err}. Manual intervention may be needed."
-                )
             raise
 
 
