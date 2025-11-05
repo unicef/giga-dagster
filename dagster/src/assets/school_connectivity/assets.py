@@ -604,6 +604,7 @@ def school_connectivity_realtime_master(
     spark: PySparkResource,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
+    school_connectivity_realtime_silver: sql.DataFrame,
 ):
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
