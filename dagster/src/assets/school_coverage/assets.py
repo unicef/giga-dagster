@@ -89,7 +89,7 @@ def coverage_data_quality_results(
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
-        file_upload = FileUploadConfig.from_orm(file_upload)
+        file_upload = FileUploadConfig.model_validate(file_upload)
 
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)

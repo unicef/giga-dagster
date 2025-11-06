@@ -7,7 +7,6 @@ from datahub.metadata.schema_classes import (
     StringTypeClass,
 )
 from models import TypeMapping, TypeMappings
-from pydantic import BaseSettings
 from pyspark.sql.types import (
     BooleanType,
     DoubleType,
@@ -21,7 +20,7 @@ from pyspark.sql.types import (
 from src.settings import settings
 
 
-class Constants(BaseSettings):
+class Constants:
     UPLOAD_PATH_PREFIX: str = f"{settings.LAKEHOUSE_PATH}/raw/uploads"
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 

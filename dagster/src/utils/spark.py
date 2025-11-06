@@ -1,7 +1,7 @@
 import subprocess
 from uuid import uuid4
 
-import pyarrow_hotfix  # noqa: F401, pylint: disable=unused-import
+# import pyarrow_hotfix  # noqa: F401, pylint: disable=unused-import
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql

@@ -4,7 +4,7 @@ from math import isnan
 
 import numpy as np
 import pandas as pd
-from h3 import geo_to_h3
+from h3.api.basic_int import latlng_to_cell as geo_to_h3
 from pyspark.sql.functions import pandas_udf, udf
 
 from src.spark.config_expectations import config

@@ -4,7 +4,8 @@ from functools import lru_cache
 from pathlib import Path
 
 from datahub.metadata.schema_classes import FabricTypeClass
-from pydantic import BaseSettings, PostgresDsn
+from pydantic import PostgresDsn
+from pydantic_settings import BaseSettings
 
 
 class Environment(StrEnum):
@@ -22,9 +23,7 @@ class DeploymentEnvironment(StrEnum):
 
 
 class Settings(BaseSettings):
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
     # Settings required to be in .env
     AZURE_SAS_TOKEN: str
@@ -170,10 +169,10 @@ class Settings(BaseSettings):
     @property
     def INGESTION_DATABASE_CONNECTION_DICT(self) -> dict:
         return {
-            "user": self.INGESTION_POSTGRESQL_USERNAME,
+            "username": self.INGESTION_POSTGRESQL_USERNAME,
             "password": self.INGESTION_POSTGRESQL_PASSWORD,
             "host": self.INGESTION_DB_HOST,
-            "port": str(self.INGESTION_DB_PORT),
+            "port": self.INGESTION_DB_PORT,
             "path": f"/{self.INGESTION_POSTGRESQL_DATABASE}",
         }
 

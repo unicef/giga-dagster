@@ -9,8 +9,7 @@ class MlabSchools(BaseModel):
     source: str
     country_code: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class GigaMeterSchools(BaseModel):
@@ -19,8 +18,7 @@ class GigaMeterSchools(BaseModel):
     school_id_govt: int
     source: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class RTSchools(BaseModel):
@@ -30,5 +28,4 @@ class RTSchools(BaseModel):
     country_code: str
     country: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}

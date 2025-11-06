@@ -1,7 +1,8 @@
 import json
 from datetime import datetime
+from typing import Optional
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 
 from dagster import Config
 
@@ -11,29 +12,31 @@ class FileUploadConfig(Config):
     created: str
     uploader_id: str
     uploader_email: str
-    dq_report_path: str = Field(None)
+    dq_report_path: Optional[str] = Field(default=None)
     country: str
     dataset: str
-    source: str = Field(None)
+    source: Optional[str] = Field(default=None)
     original_filename: str
     column_to_schema_mapping: dict[str, str]
     column_license: dict[str, str]
     upload_path: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
-    @validator("created", pre=True)
+    @field_validator("created", mode="before")
+    @classmethod
     def parse_created(cls, v: datetime):
         return v.isoformat()
 
-    @validator("column_to_schema_mapping", pre=True)
+    @field_validator("column_to_schema_mapping", mode="before")
+    @classmethod
     def parse_column_to_schema_mapping(cls, v: str | dict):
         if isinstance(v, str):
             return json.loads(v)
         return v
 
-    @validator("column_license", pre=True)
+    @field_validator("column_license", mode="before")
+    @classmethod
     def parse_column_license(cls, v: str | dict):
         if isinstance(v, str):
             return json.loads(v)

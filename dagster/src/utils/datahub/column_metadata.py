@@ -22,7 +22,7 @@ def get_column_licenses(config: FileConfig) -> dict[str, str]:
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
-        file_upload = FileUploadConfig.from_orm(file_upload)
+        file_upload = FileUploadConfig.model_validate(file_upload)
 
     return file_upload.column_license
 

@@ -64,7 +64,7 @@ async def send_email_dq_report_with_config(
                     f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
                 )
 
-            file_upload = FileUploadConfig.from_orm(file_upload)
+            file_upload = FileUploadConfig.model_validate(file_upload)
 
         domain = config.domain
         type = file_upload.dataset

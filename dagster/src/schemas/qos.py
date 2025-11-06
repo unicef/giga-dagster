@@ -38,8 +38,7 @@ class ApiConfiguration(Config):
     school_id_key: str | None
     size: int | None
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class SchoolListConfig(ApiConfiguration):

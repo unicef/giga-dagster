@@ -36,7 +36,7 @@ class FileConfig(Config):
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
         """,
     )
-    database_data: str = Field(
+    database_data: Optional[str] = Field(
         default=None,
         description="""
         The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
@@ -51,7 +51,7 @@ class FileConfig(Config):
         For regular assets, simply pass in the destination path as a string.
         """,
     )
-    dq_target_filepath: str = Field(
+    dq_target_filepath: Optional[str] = Field(
         description="""
         The path of the file inside the ADLS container where we run data quality checks on.
         """,
@@ -76,10 +76,10 @@ class FileConfig(Config):
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
         """,
     )
-    domain: str = Field(
+    domain: Optional[str] = Field(
         default=None,
     )
-    table_name: str = Field(
+    table_name: Optional[str] = Field(
         description="""
         The name of the table which refers to this dataset. Used if the output format is a Delta Table
         """,

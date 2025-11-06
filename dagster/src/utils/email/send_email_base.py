@@ -50,7 +50,7 @@ async def send_email_base(
                 subject=subject,
                 html_part=html,
                 text_part=text,
-            ).dict(),
+            ).model_dump(),
         )
         if res.is_error:
             logger.error(res.json())

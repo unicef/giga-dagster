@@ -8,8 +8,7 @@ class GraphGroup(BaseModel):
     description: str | None
     display_name: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class GraphIdentity(BaseModel):
@@ -17,8 +16,7 @@ class GraphIdentity(BaseModel):
     issuer_assigned_id: str | None
     sign_in_type: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class GraphUser(BaseModel):
@@ -34,8 +32,7 @@ class GraphUser(BaseModel):
     other_mails: list[EmailStr] | None
     identities: list[GraphIdentity] | None
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 
 class DatabaseUser(BaseModel):

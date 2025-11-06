@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -23,5 +23,5 @@ class MasterDataReleaseNotificationRenderRequest(BaseModel):
 class GenericEmailRequest(BaseModel):
     recipients: list[str]
     subject: str
-    html_part: str | None = Field(None)
-    text_part: str | None = Field(None)
+    html_part: Optional[str] = Field(default=None)
+    text_part: Optional[str] = Field(default=None)

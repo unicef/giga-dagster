@@ -1,9 +1,7 @@
 from datetime import date
 
-from pydantic import BaseSettings
 
-
-class Config(BaseSettings):
+class Config:
     SIMILARITY_RATIO_CUTOFF: float = 0.7
     date_today: date = date.today()
     current_year: int = date_today.year

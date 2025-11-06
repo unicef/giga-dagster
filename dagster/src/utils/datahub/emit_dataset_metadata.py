@@ -130,7 +130,7 @@ def define_schema_properties(
     if isinstance(schema_reference, sql.DataFrame):
         for field in schema_reference.schema.fields:
             is_field_type_found = False
-            for v in constants.TYPE_MAPPINGS.dict().values():
+            for v in constants.TYPE_MAPPINGS.model_dump().values():
                 if field.dataType == v["pyspark"]():
                     type_class = v["datahub"]()
                     native_type = str(v["native"])

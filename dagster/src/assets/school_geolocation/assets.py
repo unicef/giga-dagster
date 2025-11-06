@@ -181,7 +181,7 @@ def geolocation_bronze(
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
-        file_upload = FileUploadConfig.from_orm(file_upload)
+        file_upload = FileUploadConfig.model_validate(file_upload)
 
     column_to_schema_mapping = file_upload.column_to_schema_mapping
     school_id_govt_name = [
@@ -383,7 +383,7 @@ async def geolocation_data_quality_results_human_readable(
             )
 
     context.log.info("Obtain the list of uploaded columns")
-    file_upload = FileUploadConfig.from_orm(file_upload)
+    file_upload = FileUploadConfig.model_validate(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
@@ -487,7 +487,7 @@ async def geolocation_data_quality_results_summary(
             raise FileNotFoundError(
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
-    file_upload = FileUploadConfig.from_orm(file_upload)
+    file_upload = FileUploadConfig.model_validate(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     mode = config.metadata["mode"]
@@ -537,7 +537,7 @@ def geolocation_data_quality_report(
                 f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
             )
 
-        file_upload = FileUploadConfig.from_orm(file_upload)
+        file_upload = FileUploadConfig.model_validate(file_upload)
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
