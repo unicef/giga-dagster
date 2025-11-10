@@ -1,6 +1,7 @@
 import os
-
+import time
 import requests
+from requests.exceptions import ConnectionError, Timeout
 from nocodb import NocoDB
 
 SUPERSET_URL = os.getenv("SUPERSET_URL")
@@ -17,7 +18,7 @@ except Exception:
 
 def get_access_token():
     """Authenticate and return token"""
-    # url = f"{SUPERSET_URL}/api/v1/security/login"
+    url = f"{SUPERSET_URL}/api/v1/security/login"
     login_payload = {
         "username": USERNAME,  # Replace with your Superset username
         "password": PASSWORD,  # Replace with your Superset password
@@ -25,13 +26,15 @@ def get_access_token():
         "refresh": True,  # Ensures you get a refreshable access token
     }
     headers = {"Content-Type": "application/json"}
-    response = requests.post(
-        f"{SUPERSET_URL}/api/v1/security/login", json=login_payload, headers=headers
-    )
-    auth_data = None
+    response = requests.post(url, json=login_payload, headers=headers)
     if response.status_code == 200:
-        auth_data = response.json()
+        return response.json()
     else:
+        auth_data = {
+            "error": True,
+            "status_code": response.status_code,
+            "response_text": response.text
+        }
         print("Failed to authenticate:", response.status_code, response.text)
     return auth_data
 
@@ -71,18 +74,38 @@ def fetch_saved_query():
 
 
 def run_query(query, access_token):
+    timeout = 600
+    max_retries = 3
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
     sql_payload = {"database_id": DATABASE_ID, "sql": query["sql"]}
+    url = f"{SUPERSET_URL}/api/v1/sqllab/execute/"
 
-    print("running query", query["label"])
-
-    response = requests.post(
-        f"{SUPERSET_URL}/api/v1/sqllab/execute/", json=sql_payload, headers=headers
-    )
-
-    print("Status Code:", response.status_code)
-    print("Response Text:", response.text)
-    return response
+    start_time = time.time()
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            print(f"Running query: {query['label']}")
+            response = requests.post(url, json=sql_payload, headers=headers, timeout=timeout)
+            duration = time.time() - start_time
+            return {
+                "status_code": response.status_code,
+                "response_text": response.text,
+                "duration": duration,
+                "attempts": attempt + 1,
+            }
+        except (ConnectionError, Timeout) as e:
+            attempt += 1
+            print(f"[Attempt {attempt}] Connection error: {e}")
+            if attempt >= max_retries:
+                duration = time.time() - start_time
+                return {
+                    "status_code": "error",
+                    "response_text": str(e),
+                    "duration": duration,
+                    "attempts": attempt,
+                    "error": True,
+                }
+            time.sleep(10 * attempt)

@@ -1,7 +1,7 @@
 import time
-
+import os
 from dagster import OpExecutionContext, job, op
-
+import requests
 from ..resources.superset import (
     fetch_saved_query,
     get_access_token,
@@ -9,19 +9,42 @@ from ..resources.superset import (
     run_query,
 )
 
+@op
+def post_query_durations_to_slack(context: OpExecutionContext, results):
+    slack_webhook = os.getenv("SLACK_WORKFLOW_WEBHOOK")
+    if not slack_webhook:
+        context.log.warning("No SLACK_WORKFLOW_WEBHOOK configured")
+        return
+
+    lines = []
+    for r in results:
+        duration = round(r["duration"], 2)
+        status = r.get("status_code", "ERR")
+        lines.append(f"{r['title']} - {duration}s | status {status}")
+
+    deployment_environment = os.getenv("DEPLOY_ENV")
+    if deployment_environment == "stg":
+        payload = {"text": "*Refresh Table - Staging*\n" + "\n".join(lines)}
+    elif deployment_environment == "prd":
+        payload = {"text": "*Refresh Table - Production*\n" + "\n".join(lines)}
+    resp = requests.post(slack_webhook, json=payload)
+    context.log.info(f"posted to Slack ({resp.status_code})")
 
 @op
 def fetch_and_run_query(context: OpExecutionContext):
-    access_token = None
-    refresh_token = None
-    auth_data = get_access_token()
+    results = []
+    try:
+        access_token = None
+        refresh_token = None
+        auth_data = get_access_token()
 
-    if auth_data:
         access_token = auth_data.get("access_token")
         refresh_token = auth_data.get("refresh_token")
-
-    if access_token:
-        context.log.info("successfully authenticated with Superset")
+        if access_token:
+            context.log.info("successfully authenticated with Superset")
+        else:
+            context.log.info("unable to authenticate with Superset")
+            raise
         response = fetch_saved_query()
         for table in response:
             query_to_delete = {
@@ -34,14 +57,19 @@ def fetch_and_run_query(context: OpExecutionContext):
             }
             context.log.info(f"running query: {table['Title']}")
             x = run_query(query_to_delete, access_token)
-            context.log.info(f"status code: {x.status_code}")
-            context.log.info(f"response: {x.text}")
+            context.log.info(f"status code: {x.get('status_code')}")
+            context.log.info(f"response: {x.get('response_text')}")
             time.sleep(5)
-            # TODO: change this to poll and wait for the result here
             x = run_query(query_to_create, access_token)
-            context.log.info(f"status code: {x.status_code}")
-            context.log.info(f"response: {x.text}")
+            context.log.info(f"status code: {x.get('status_code')}")
+            context.log.info(f"response: {x.get('response_text')}")
             time.sleep(90)
+
+            x["title"] = table["Title"]
+            results.append(x)
+
+            if x.get('status_code') != 200:
+                return results
             response = refresh_access_token(refresh_token)
             if response.status_code == 200:
                 auth_data = response.json()
@@ -50,12 +78,12 @@ def fetch_and_run_query(context: OpExecutionContext):
                 context.log.error(
                     "error in authenticating with Superset so unable to run the query now"
                 )
-    else:
-        context.log.error(
-            "error in authenticating with Superset so this will be ignored now"
-        )
-
+    except Exception as e:
+        context.log.error(e)
+        return results
+    return results
 
 @job
 def refresh_table():
-    fetch_and_run_query()
+    results = fetch_and_run_query()
+    post_query_durations_to_slack(results)
