@@ -4,7 +4,7 @@ from math import isnan
 
 import numpy as np
 import pandas as pd
-from h3.api.basic_int import latlng_to_cell as geo_to_h3
+from h3 import latlng_to_cell as geo_to_h3
 from pyspark.sql.functions import pandas_udf, udf
 
 from src.spark.config_expectations import config
@@ -48,7 +48,7 @@ def h3_geo_to_h3_udf(latitude: float, longitude: float) -> str:
     if latitude is None or longitude is None:
         return "0"
 
-    return geo_to_h3(latitude, longitude, resolution=8)
+    return geo_to_h3(latitude, longitude, 8)
 
 
 BOUNDARY_DISTANCE_THRESHOLD = 150
