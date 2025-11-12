@@ -44,6 +44,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.giga_spatial_processor import GigaSpatialProcessor
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
@@ -261,6 +262,13 @@ def geolocation_bronze(
     df_pandas = df.toPandas()
     context.log.info("AFTER DF TO PANDAS")
     context.log.info(df_pandas)
+
+    # calculate Giga Spatial Columns
+    new_cols = GigaSpatialProcessor(context=context).get_gigaspatial_calculated_cols(
+        df=df_pandas[["latitude", "longitude"]], country=country_code
+    )
+    context.log.info("NEW COLS AFTER GIGA SPATIAL PROCESSOR")
+    context.log.info(new_cols)
 
     return Output(
         df_pandas,

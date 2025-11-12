@@ -176,3 +176,5 @@ metastore_db/
 
 # Kubernetes/Helm
 secrets.yaml
+
+gigaspatial_data/
