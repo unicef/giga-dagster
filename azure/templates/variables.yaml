@@ -48,4 +48,5 @@ variables:
   catalogToken: $(CATALOG_TOKEN)
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
+  slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
   system.debug: true
