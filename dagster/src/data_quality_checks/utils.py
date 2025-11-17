@@ -548,7 +548,30 @@ def dq_geolocation_extract_relevant_columns(
     ].tolist()
     dq_columns_list = ["dq_has_critical_error", "failure_reason", *dq_columns_list]
     admin_columns = ["admin1", "admin2", "admin3", "admin4"]
-    columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
+    giga_saptial_columns = [
+        "uninhabited",
+        "suspect",
+        "rurban",
+        "duplicate_50_flag",
+        "duplicate_50_count",
+        "duplicate_50_group_id",
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "pop_within_5km",
+        "pop_within_10km",
+        "schools_within_1km",
+        "schools_within_2km",
+        "schools_within_3km",
+        "schools_within_5km",
+        "schools_within_10km",
+    ]
+    columns_to_keep = [
+        *uploaded_columns,
+        *admin_columns,
+        *dq_columns_list,
+        *giga_saptial_columns,
+    ]
     columns_to_keep = [col for col in columns_to_keep if col in df.columns]
     df = df.select(*columns_to_keep)
 

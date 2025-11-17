@@ -263,12 +263,26 @@ def geolocation_bronze(
     context.log.info("AFTER DF TO PANDAS")
     context.log.info(df_pandas)
 
+    cols_to_pass = ["latitude", "longitude"]
     # calculate Giga Spatial Columns
+    if "school_id_govt" in df_pandas.columns:
+        cols_to_pass.append("school_id_govt")
     new_cols = GigaSpatialProcessor(context=context).get_gigaspatial_calculated_cols(
-        df=df_pandas[["latitude", "longitude"]], country=country_code
+        df=df_pandas[cols_to_pass], country=country_code
     )
     context.log.info("NEW COLS AFTER GIGA SPATIAL PROCESSOR")
     context.log.info(new_cols)
+
+    if new_cols is not None and not new_cols.empty:
+        merge_keys = ["latitude", "longitude"]
+        if (
+            "school_id_govt" in df_pandas.columns
+            and "school_id_govt" in new_cols.columns
+        ):
+            merge_keys.append("school_id_govt")
+        df_pandas = df_pandas.merge(
+            new_cols, on=merge_keys, how="left", suffixes=("", "_giga")
+        )
 
     return Output(
         df_pandas,
