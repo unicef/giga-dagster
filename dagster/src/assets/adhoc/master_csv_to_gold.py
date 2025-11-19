@@ -828,13 +828,12 @@ async def adhoc__reset_geolocation_staging_table(
     with get_db_context() as db:
         try:
             with db.begin():
-                # Idempotent update: only set enabled=False if currently True
+                # Ensure enabled=False and is_merge_processing=False after reset
                 result = db.execute(
                     update(ApprovalRequest)
                     .where(
                         (ApprovalRequest.country == country_code)
                         & (ApprovalRequest.dataset == formatted_dataset)
-                        & (ApprovalRequest.enabled)
                     )
                     .values(
                         {
@@ -845,8 +844,7 @@ async def adhoc__reset_geolocation_staging_table(
                 )
                 if result.rowcount == 0:
                     context.log.warning(
-                        f"No ApprovalRequest updated for {country_code} - {formatted_dataset}. "
-                        f"Record may not exist or already in target state."
+                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
                     )
         except Exception as e:
             context.log.error(
@@ -945,13 +943,12 @@ async def adhoc__reset_coverage_staging_table(
     with get_db_context() as db:
         try:
             with db.begin():
-                # Idempotent update: only set enabled=False if currently True
+                # Ensure enabled=False and is_merge_processing=False after reset
                 result = db.execute(
                     update(ApprovalRequest)
                     .where(
                         (ApprovalRequest.country == country_code)
                         & (ApprovalRequest.dataset == formatted_dataset)
-                        & (ApprovalRequest.enabled)
                     )
                     .values(
                         {
@@ -962,8 +959,7 @@ async def adhoc__reset_coverage_staging_table(
                 )
                 if result.rowcount == 0:
                     context.log.warning(
-                        f"No ApprovalRequest updated for {country_code} - {formatted_dataset}. "
-                        f"Record may not exist or already in target state."
+                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
                     )
         except Exception as e:
             context.log.error(

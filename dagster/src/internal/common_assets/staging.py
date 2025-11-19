@@ -113,9 +113,17 @@ class StagingStep:
     def _process_with_silver_table(
         self, upstream_df: sql.DataFrame | list[str]
     ) -> sql.DataFrame:
-        """Process staging changes when silver table exists."""
+        """Process staging changes when silver table exists.
+
+        The staging table contains a working copy of the entire silver table plus
+        any pending changes (upserts/deletes) that are awaiting approval. This allows
+        reviewers to see the complete dataset with pending changes applied, not just
+        the diff of pending changes.
+
+        When changes are approved, the staging table is merged back to silver.
+        """
         if not self.staging_table_exists:
-            # If silver table exists and no staging table exists, clone it to staging
+            # Clone entire silver table to staging to create a working copy
             self.create_staging_table_from_silver()
 
         self.sync_schema_staging()
@@ -288,6 +296,12 @@ class StagingStep:
         )
 
     def create_staging_table_from_silver(self):
+        """Create staging table as a complete clone of the silver table.
+
+        This creates a working copy containing all rows from silver. Subsequent changes
+        will be applied to this staging table via upserts/deletes. The staging table
+        represents what the silver table will look like after approval.
+        """
         self.context.log.info("Creating staging from silver if not exists...")
         silver = (
             DeltaTable.forName(self.spark, self.silver_table_name)
