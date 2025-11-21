@@ -47,9 +47,9 @@ def school_master_coverage__raw_file_uploads_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
-            size = properties.size
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+            props = adls_file_client.get_file_metadata(filepath=adls_filepath)
+            size = props.size
 
             ops_destination_mapping = {
                 "coverage_raw": OpDestinationMapping(
@@ -148,8 +148,7 @@ def school_master_coverage__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -245,9 +244,7 @@ def school_master_coverage__admin_delete_rows_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
-
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
             ops_destination_mapping = {
                 "coverage_delete_staging": OpDestinationMapping(
                     source_filepath=str(path),

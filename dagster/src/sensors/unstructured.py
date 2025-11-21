@@ -45,9 +45,9 @@ def unstructured__emit_metadata_to_datahub_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
-            size = properties.size
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+            props = adls_file_client.get_file_metadata(filepath=adls_filepath)
+            size = props.size
 
             ops_destination_mapping = {
                 "unstructured_raw": OpDestinationMapping(
@@ -99,10 +99,10 @@ def generalized_unstructured__emit_metadata_to_datahub_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
 
-        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        metadata = properties.metadata
-        size = properties.size
-        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
+        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = props.size
+        last_modified = props.last_modified.strftime("%Y%m%d-%H%M%S")
 
         ops_destination_mapping = {
             "generalized_unstructured_raw": OpDestinationMapping(

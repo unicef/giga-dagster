@@ -1,7 +1,7 @@
 import io
+import json
 
 import country_converter as coco
-import fiona
 import geopandas as gpd
 from pyspark import sql
 from pyspark.sql import functions as f
@@ -36,12 +36,17 @@ def get_country_geometry(country_code_iso3: str):
             download_stream = blob_client.download_blob()
             download_stream.readinto(file_blob)
             file_blob.seek(0)
-            # setting OGR_GEOJSON_MAX_OBJ_SIZE to 0 ensures we can read geojson files of any size
-            with fiona.Env(OGR_GEOJSON_MAX_OBJ_SIZE="0"):
-                gdf_boundaries = gpd.read_file(file_blob)
-                gdf_boundaries = gdf_boundaries[
-                    gdf_boundaries["worldview"].str.contains("US|all")
-                ].reset_index(drop=True)
+
+            raw = file_blob.getvalue()
+            geojson = json.loads(raw.decode("utf-8"))
+
+            # This ALWAYS works, never depends on Fiona autodetection
+            gdf_boundaries = gpd.GeoDataFrame.from_features(
+                geojson["features"], crs="EPSG:4326"
+            )
+            gdf_boundaries = gdf_boundaries[
+                gdf_boundaries["worldview"].str.contains("US|all")
+            ].reset_index(drop=True)
         country_geometry = gdf_boundaries
     except ValueError as e:
         if str(e) == "Must be a coordinate pair or Point":
