@@ -85,6 +85,13 @@ class FileConfig(Config):
         """,
         default=None,
     )
+    custom_schema_name: str = Field(
+        description="""
+        Custom schema name for Delta tables. If provided, this will be used
+        instead of the default naming convention for the Delta Table IO manager.
+        """,
+        default=None,
+    )
 
     @property
     def filepath_object(self) -> Path:
@@ -137,6 +144,7 @@ class OpDestinationMapping(BaseModel):
     metastore_schema: str
     tier: DataTier
     table_name: Optional[str] = None
+    custom_schema_name: Optional[str] = None
 
 
 def generate_run_ops(
@@ -158,6 +166,7 @@ def generate_run_ops(
             metastore_schema=op_mapping.metastore_schema,
             tier=op_mapping.tier,
             table_name=op_mapping.table_name,
+            custom_schema_name=op_mapping.custom_schema_name,
             dataset_type=dataset_type,
             metadata=metadata,
             file_size_bytes=file_size_bytes,

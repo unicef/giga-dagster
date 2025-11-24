@@ -63,6 +63,7 @@ def school_master_coverage__raw_file_uploads_sensor(
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
+                    custom_schema_name=f"school_coverage_{filename_components.source}_dq_results",
                 ),
                 "coverage_data_quality_results_summary": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
