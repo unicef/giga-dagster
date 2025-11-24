@@ -258,6 +258,7 @@ def geolocation_bronze(
 
     ## at this point it's already gone
     context.log.info("BEFORE DF TO PANDAS")
+    context.log.info(f"The number of partitions is: {df.rdd.getNumPartitions()}")
     df_pandas = df.toPandas()
     context.log.info("AFTER DF TO PANDAS")
     context.log.info(df_pandas)
