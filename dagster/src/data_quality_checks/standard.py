@@ -50,8 +50,14 @@ def completeness_checks(
     # optional columns
     for column in df.columns:
         if column not in config_column_list and column not in dq_columns:
+            # for latitude and longitude we need to check if isnan too because they are "double" columns
+            null_check = (
+                (f.isnull(f.col(column)) | f.isnan(f.col(column)))
+                if column in ("latitude", "longitude")
+                else f.isnull(f.col(column))
+            )
             column_actions[f"dq_is_null_optional-{column}"] = f.when(
-                f.isnull(f.col(column)),
+                null_check,
                 1,
             ).otherwise(0)
 
@@ -125,7 +131,7 @@ def format_validation_checks(df, context: OpExecutionContext = None):
     for column, dtype in config.DATA_TYPES:
         if column in df.columns and dtype == "STRING":
             column_actions[f"dq_is_not_alphanumeric-{column}"] = f.when(
-                f.regexp_extract(f.col(column), ".+", 0) != "",
+                f.regexp_extract(f.col(column), ".*[A-Za-z0-9].*", 0) != "",
                 0,
             ).otherwise(1)
         if column in df.columns and dtype in [

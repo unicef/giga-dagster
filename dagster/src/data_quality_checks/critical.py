@@ -1,6 +1,3 @@
-from functools import reduce
-from operator import add
-
 from pyspark import sql
 from pyspark.sql import functions as f
 
@@ -23,29 +20,41 @@ def critical_error_checks(
     logger.info("Running critical error checks...")
 
     # all mandatory columns included in critical error checks
-    critial_column_dq_checks = [
+    critical_column_dq_checks = [
         f"dq_is_null_mandatory-{column}" for column in config_column_list
     ]
 
     # other critical checks per dataset
     if dataset_type in ["master", "geolocation"]:
-        critial_column_dq_checks.extend(
+        dq_location_columns = (
+            [
+                "dq_is_null_mandatory-latitude",
+                "dq_is_null_mandatory-longitude",
+            ]
+            if dataset_type == "master"
+            else [
+                "dq_is_null_optional-latitude",
+                "dq_is_null_optional-longitude",
+            ]
+        )
+        critical_column_dq_checks.extend(
             [
                 "dq_duplicate-school_id_govt",
                 "dq_duplicate-school_id_giga",
+                *dq_location_columns,
                 "dq_is_invalid_range-latitude",
                 "dq_is_invalid_range-longitude",
                 "dq_is_not_within_country",
             ]
         )
         if mode == UploadMode.CREATE.value:
-            critial_column_dq_checks.append("dq_is_not_create")
+            critical_column_dq_checks.append("dq_is_not_create")
         elif mode == UploadMode.UPDATE.value:
-            critial_column_dq_checks.append("dq_is_not_update")
+            critical_column_dq_checks.append("dq_is_not_update")
     elif dataset_type in ["reference", "coverage", "coverage_fb", "coverage_itu"]:
-        critial_column_dq_checks.append("dq_duplicate-school_id_giga")
+        critical_column_dq_checks.append("dq_duplicate-school_id_giga")
     elif dataset_type == "qos":
-        critial_column_dq_checks.extend(
+        critical_column_dq_checks.extend(
             [
                 "dq_duplicate-school_id_giga",
                 # "dq_duplicate-school_id_govt",
@@ -58,10 +67,14 @@ def critical_error_checks(
 
     df = df.withColumns(
         {
-            "dq_has_critical_error": f.when(
-                reduce(add, [f.col(c) for c in critial_column_dq_checks]) > 0,
-                1,
-            ).otherwise(0),
+            "dq_has_critical_error": f.greatest(
+                *[
+                    f.when(f.isnan(f.col(c)) | f.col(c).isNull(), f.lit(0)).otherwise(
+                        f.col(c)
+                    )
+                    for c in critical_column_dq_checks
+                ]
+            ).cast("int"),
             "failure_reason": f.concat_ws(
                 ", ",
                 *[
@@ -69,7 +82,7 @@ def critical_error_checks(
                         f.col(c) == 1,
                         f.lit(full_human_readable_mapping.get(c, c[3:])),
                     )
-                    for c in critial_column_dq_checks
+                    for c in critical_column_dq_checks
                 ],
             ),
         }

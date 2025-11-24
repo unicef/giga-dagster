@@ -1,19 +1,28 @@
 from io import BytesIO
 
+import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from numpy import nan
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
 )
+from pyspark.sql.functions import concat_ws, sha2
 from pyspark.sql.types import NullType
 from src.resources import ResourceKey
+from src.spark.transform_functions import (
+    add_admin_columns,
+    add_missing_columns,
+    create_health_id_giga,
+)
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.spark import transform_types
+from src.utils.schema import (
+    get_schema_columns,
+)
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import (
     OpExecutionContext,
@@ -23,7 +32,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
-def qos_availability_raw(
+def adhoc__load_health_master_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
     config: FileConfig,
@@ -33,56 +42,65 @@ def qos_availability_raw(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-def qos_availability_transforms(
+@capture_op_exceptions
+def adhoc__health_master_data_transforms(
     context: OpExecutionContext,
+    adhoc__load_health_master_csv: bytes,
     spark: PySparkResource,
     config: FileConfig,
-    qos_availability_raw: bytes,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
-    with BytesIO(qos_availability_raw) as buffer:
+    schema_columns = get_schema_columns(s, config.metastore_schema)
+    with BytesIO(adhoc__load_health_master_csv) as buffer:
         buffer.seek(0)
-        df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
+        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
+
+    df = df[[column.name for column in schema_columns if column.name in df.columns]]
+    for column, dtype in df.dtypes.items():
+        if dtype == "object":
+            df[column] = df[column].astype("string")
 
     sdf = s.createDataFrame(df)
-    column_actions = {
-        "signature": f.sha2(f.concat_ws("|", *sdf.columns), 256),
-        "gigasync_id": f.sha2(
-            f.concat_ws(
-                "_",
-                f.col("school_id_giga"),
-                f.col("timestamp"),
-                f.col("device_id"),
-            ),
-            256,
-        ),
-        "date": f.to_date(f.col("timestamp")),
-    }
-    sdf = sdf.withColumns(column_actions).drop_duplicates(["gigasync_id"])
+
+    sdf = add_missing_columns(sdf, schema_columns)
+    sdf = create_health_id_giga(sdf)
+
+    sdf = add_admin_columns(
+        df=sdf,
+        country_code_iso3=config.country_code,
+        admin_level="admin1",
+    )
+
+    sdf = add_admin_columns(
+        df=sdf,
+        country_code_iso3=config.country_code,
+        admin_level="admin2",
+    )
+    sdf = sdf.withColumn("signature", sha2(concat_ws("|", *sorted(sdf.columns)), 256))
+
     df = sdf.toPandas()
+    df = df.drop_duplicates("health_id_giga")
+
+    context.log.info(f"columns: {df.columns.tolist()}")
+    context.log.info(f"row count: {len(df)}")
 
     return Output(
-        df,
-        metadata={
-            **get_output_metadata(config),
-            "preview": get_table_preview(df),
-        },
+        df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
     )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
-def publish_qos_availability_to_gold(
+def adhoc__publish_health_master_to_gold(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
-    qos_availability_transforms: sql.DataFrame,
+    adhoc__health_master_data_transforms: sql.DataFrame,
 ) -> Output[sql.DataFrame]:
-    df = transform_types(
-        qos_availability_transforms,
-        config.metastore_schema,
-        context,
-    )
+    df = adhoc__health_master_data_transforms
 
     context.log.info("original schema")
     context.log.info(df.schema.simpleString())

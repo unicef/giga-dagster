@@ -269,11 +269,13 @@ def handle_rename_dq_has_critical_error_column(
         )
 
     human_readeable_extended_master_geolocation_columns_mapping = {
-        "dq_duplicate-school_id_govt": "Column school_id_govt has a duplicate",
-        "dq_duplicate-school_id_giga": "Column school_id_giga has a duplicate",
-        "dq_is_invalid_range-latitude": "Column latitude is not between -90 and 90",
-        "dq_is_invalid_range-longitude": "Column longitude is not between -180 and 180",
-        "dq_is_not_within_country": "Coordinates is not within the country",
+        "dq_duplicate-school_id_govt": "school_id_govt has a duplicate",
+        "dq_duplicate-school_id_giga": "school_id_giga has a duplicate",
+        "dq_is_invalid_range-latitude": "latitude is not between -90 and 90",
+        "dq_is_invalid_range-longitude": "longitude is not between -180 and 180",
+        "dq_is_null_optional-latitude": "latitude is missing",
+        "dq_is_null_optional-longitude": "longitude is missing",
+        "dq_is_not_within_country": "location is not within the country",
     }
     human_readeable_create_update_checks_mapping = {
         "dq_is_not_create": "Tried creating a new school_id_giga that already exists - must use UPDATE instead",

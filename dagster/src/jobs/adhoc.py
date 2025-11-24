@@ -43,6 +43,16 @@ school_master__dq_checks_job = define_asset_job(
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
 
+health_master__convert_gold_csv_to_deltatable_job = define_asset_job(
+    name="health_master__convert_gold_csv_to_deltatable_job",
+    selection=[
+        "adhoc__load_health_master_csv",
+        "adhoc__health_master_data_transforms",
+        "adhoc__publish_health_master_to_gold",
+    ],
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
+
 custom_dataset_create_bronze_job = define_asset_job(
     name="custom_dataset_create_bronze_job",
     selection=[

@@ -2,6 +2,7 @@ from datetime import datetime
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
+from datahub.specific.dataset import DatasetPatchBuilder
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import (
@@ -9,7 +10,13 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.functions import udf
-from src.constants import DataTier
+from pyspark.sql.types import (
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
+from src.constants import DataTier, constants
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -17,20 +24,34 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
+from src.internal.common_assets.master_release_notes import send_master_release_notes
+from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
+from src.spark.transform_functions import (
+    add_missing_columns,
+    get_all_connectivity_rt_schools,
+)
+from src.utils.adls import (
+    ADLSFileClient,
+)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
+from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
+from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.qos_apis.school_connectivity import query_school_connectivity_data
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
+    get_primary_key,
+    get_schema_columns,
     get_schema_columns_datahub,
 )
 from src.utils.sentry import capture_op_exceptions
+from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -334,3 +355,277 @@ def qos_school_connectivity_gold(
             "preview": get_table_preview(qos_school_connectivity_dq_passed_rows),
         },
     )
+
+
+@asset
+@capture_op_exceptions
+def school_connectivity_realtime_schools(
+    context: OpExecutionContext,
+    adls_file_client: ADLSFileClient,
+    spark: PySparkResource,
+):
+    s: SparkSession = spark.spark_session
+
+    schema_name = "pipeline_tables"
+    table_name = "school_connectivity_realtime_schools"
+
+    rt_schools_schema = StructType(
+        [
+            StructField("school_id_giga", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
+            StructField("connectivity_RT", StringType(), True),
+            StructField("connectivity_RT_ingestion_timestamp", TimestampType(), True),
+            StructField("connectivity_RT_datasource", StringType(), True),
+            StructField("country_code", StringType(), True),
+        ]
+    )
+
+    table_exists = check_table_exists(s, schema_name, table_name)
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    context.log.info("Determine if table exists")
+    if table_exists:
+        current_rt_schools = DeltaTable.forName(s, full_table_name).toDF()
+    else:
+        current_rt_schools = s.createDataFrame(
+            s.sparkContext.emptyRDD(), schema=rt_schools_schema
+        )
+
+    context.log.info("Get the updated list of schools with realtime connectivity")
+    updated_rt_schools = get_all_connectivity_rt_schools(context, s, table_exists)
+    context.log.info(f"{updated_rt_schools.count()} schools have realtime data")
+
+    current_rt_schools = current_rt_schools.withColumnsRenamed(
+        {col: f"{col}_previous" for col in current_rt_schools.columns}
+    )
+
+    context.log.info("Determine the schools whose connectivity needs to be updated")
+    schools_for_update = updated_rt_schools.join(
+        current_rt_schools,
+        how="left",
+        on=[
+            (
+                updated_rt_schools.school_id_govt
+                == current_rt_schools.school_id_govt_previous
+            )
+            & (
+                updated_rt_schools.country_code
+                == current_rt_schools.country_code_previous
+            )
+        ],
+    )
+
+    schools_for_update = schools_for_update.withColumn(
+        "to_update",
+        f.when(f.col("connectivity_RT_previous").isNull(), True).when(
+            f.col("connectivity_RT_datasource")
+            != f.col("connectivity_RT_datasource_previous"),
+            True,
+        ),
+    )
+
+    schools_for_update = schools_for_update.filter(f.col("to_update"))
+    schools_for_update = schools_for_update.select(*rt_schools_schema.fieldNames())
+
+    context.log.info(
+        f"{schools_for_update.count()} schools will have their connectivity updated"
+    )
+    schools_for_update_pandas = schools_for_update.toPandas()
+
+    if not schools_for_update_pandas.empty:
+        context.log.info(
+            "Split the schools that need updating by country and create files for each of them"
+        )
+        countries_to_update = schools_for_update_pandas["country_code"].unique()
+        current_timestamp_string = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for country_code in countries_to_update:
+            file_name = (
+                f"{country_code}_connectivity_update_{current_timestamp_string}.csv"
+            )
+            adls_file_path = f"{constants.connectivity_updates_folder}/{file_name}"
+            country_connected_schs = schools_for_update_pandas[
+                schools_for_update_pandas["country_code"] == country_code
+            ]
+            adls_file_client.upload_raw(
+                context=None,
+                data=country_connected_schs.to_csv(index=False).encode(),
+                filepath=adls_file_path,
+            )
+
+        context.log.info("Create the schema and table if not exists")
+
+        if not table_exists:
+            create_schema(s, schema_name)
+            create_delta_table(
+                s,
+                schema_name,
+                table_name,
+                rt_schools_schema.fields,
+                context,
+                if_not_exists=True,
+            )
+
+        context.log.info("Update the table with realtime connected schools")
+        current_connected_schs_table = DeltaTable.forName(s, full_table_name)
+
+        (
+            current_connected_schs_table.alias("connected_schs_current")
+            .merge(
+                schools_for_update.alias("connected_schs_updates"),
+                "connected_schs_current.school_id_govt = connected_schs_updates.school_id_govt and "
+                "connected_schs_current.country_code = connected_schs_updates.country_code",
+            )
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute()
+        )
+
+    return Output(
+        None,
+        metadata={
+            "row_count": schools_for_update.count(),
+            "preview": get_table_preview(schools_for_update),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
+def school_connectivity_realtime_master(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+):
+    s: SparkSession = spark.spark_session
+    schema_name = config.metastore_schema
+    file_path = config.filepath
+    country_code = config.country_code
+    schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
+    primary_key = get_primary_key(s, schema_name)
+
+    context.log.info(f"Updating data for country {country_code} from {file_path}")
+    updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
+        file_path
+    )
+    context.log.info(
+        f"{updated_connectivity_schs_df.shape[0]} schools will have RT updated"
+    )
+
+    updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
+    updated_connectivity_schs = updated_connectivity_schs.withColumn(
+        "connectivity", f.lit("Yes")
+    )
+
+    updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
+        {col: f"{col}_updated" for col in updated_connectivity_schs.columns}
+    )
+
+    if check_table_exists(s, schema_name, country_code, DataTier.GOLD):
+        context.log.info(
+            f"The master table for {country_code} exists and will be updated"
+        )
+        current_master = DeltaTable.forName(
+            s, construct_full_table_name("school_master", country_code)
+        ).toDF()
+        current_master = add_missing_columns(current_master, schema_columns)
+        current_master = transform_types(current_master, schema_name, context)
+
+        updated_master = current_master.join(
+            updated_connectivity_schs,
+            on=[
+                current_master.school_id_giga
+                == updated_connectivity_schs.school_id_giga_updated
+            ],
+            how="left",
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity",
+            f.coalesce(f.col("connectivity_updated"), f.col("connectivity")),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT",
+            f.coalesce(f.col("connectivity_RT_updated"), f.col("connectivity_RT")),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT_datasource",
+            f.coalesce(
+                f.col("connectivity_RT_datasource_updated"),
+                f.col("connectivity_RT_datasource"),
+            ),
+        )
+        updated_master = updated_master.withColumn(
+            "connectivity_RT_ingestion_timestamp",
+            f.coalesce(
+                f.col("connectivity_RT_ingestion_timestamp"),
+                f.col("connectivity_RT_ingestion_timestamp_updated"),
+            ),
+        )
+
+        updated_master = updated_master.drop(*updated_connectivity_schs.columns)
+
+        new_master = full_in_cluster_merge(
+            current_master, updated_master, primary_key, column_names
+        )
+    else:
+        raise ValueError(f"The master table for country {country_code} does not exist")
+
+    context.log.info("Merge the updated RT data into the master table")
+
+    new_master = compute_row_hash(new_master)
+
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
+    return Output(
+        new_master,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": new_master.count(),
+            "preview": get_table_preview(new_master),
+        },
+    )
+
+
+@asset
+@capture_op_exceptions
+async def connectivity_broadcast_master_release_notes(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    school_connectivity_realtime_master: sql.DataFrame,
+) -> Output[None]:
+    metadata = await send_master_release_notes(
+        context, config, spark, school_connectivity_realtime_master
+    )
+    if metadata is None:
+        return Output(None)
+
+    with get_rest_emitter() as emitter:
+        context.log.info(f"{config.datahub_destination_dataset_urn=}")
+
+        for patch_mcp in (
+            DatasetPatchBuilder(config.datahub_destination_dataset_urn)
+            .add_custom_properties(
+                {
+                    "Dataset Version": str(metadata["version"]),
+                    "Row Count": f'{metadata["rows"]:,}',
+                    "Rows Added": f'{metadata["added"]:,}',
+                    "Rows Updated": f'{metadata["modified"]:,}',
+                    "Rows Deleted": f'{metadata["deleted"]:,}',
+                }
+            )
+            .build()
+        ):
+            try:
+                emitter.emit(patch_mcp, lambda e, s: context.log.info(f"{e=}\n{s=}"))
+            except Exception as e:
+                context.log.error(str(e))
+
+    return Output(None, metadata=metadata)

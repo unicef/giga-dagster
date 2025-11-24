@@ -2,59 +2,52 @@ from pathlib import Path
 
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
-from src.jobs.qos import qos_availability__convert_gold_csv_to_deltatable_job
+from src.jobs.school_connectivity import (
+    school_connectivity__update_master_realtime_schools_job,
+)
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
-from src.utils.filename import deconstruct_adhoc_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
-DATASET_TYPE = "availability"
-DOMAIN = "qos"
-DOMAIN_DATASET_TYPE = f"{DOMAIN}-{DATASET_TYPE}"
-METASTORE_SCHEMA = f"{DOMAIN}_{DATASET_TYPE}"
+DATASET_TYPE = "geolocation"
+DOMAIN = "school"
+METASTORE_SCHEMA = "school_master"
 
 
 @sensor(
-    job=qos_availability__convert_gold_csv_to_deltatable_job,
+    job=school_connectivity__update_master_realtime_schools_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def qos_availability__raw_file_uploads_sensor(
-    context: SensorEvaluationContext,
-    adls_file_client: ADLSFileClient,
+def school_connectivity_update_schools_connectivity_sensor(
+    context: SensorEvaluationContext, adls_file_client: ADLSFileClient
 ):
     count = 0
-    source_directory = f"{constants.raw_folder}/{DOMAIN_DATASET_TYPE}"
+    source_directory = constants.connectivity_updates_folder
+
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
     ):
         if file_data.is_directory:
             continue
 
-        filename_components = deconstruct_adhoc_filename_components(file_data.name)
-        country_code = filename_components.country_code
         adls_filepath = file_data.name
         path = Path(adls_filepath)
-        stem = path.stem
+
+        country_code, *_ = path.stem.split("_")
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
 
         ops_destination_mapping = {
-            "qos_availability_raw": OpDestinationMapping(
+            "school_connectivity_realtime_master": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=str(path),
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 metastore_schema=METASTORE_SCHEMA,
-                tier=DataTier.RAW,
+                tier=DataTier.GOLD,
             ),
-            "qos_availability_transforms": OpDestinationMapping(
-                source_filepath=str(path),
-                destination_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
-                metastore_schema=METASTORE_SCHEMA,
-                tier=DataTier.TRANSFORMS,
-            ),
-            "publish_qos_availability_to_gold": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{METASTORE_SCHEMA}.db/{country_code}",
+            "connectivity_broadcast_master_release_notes": OpDestinationMapping(
+                source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.GOLD,
             ),
@@ -66,11 +59,11 @@ def qos_availability__raw_file_uploads_sensor(
             metadata=metadata,
             file_size_bytes=size,
             domain=DOMAIN,
+            dq_target_filepath=None,
             country_code=country_code,
         )
 
         context.log.info(f"FILE: {path}")
-
         yield RunRequest(
             run_key=str(path),
             run_config=RunConfig(ops=run_ops),

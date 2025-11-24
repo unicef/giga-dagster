@@ -72,6 +72,10 @@ jobs:
                     GIGAMETER_DB_CONNECTION_STRING: "$(gigameterDbConnectionString)"
                     MLAB_DB_CONNECTION_STRING: "$(mlabDbConnectionString)"
                     PROCO_DB_CONNECTION_STRING: "$(procoDbConnectionString)"
+                    NOCODB_BASE_URL: "$(nocoDBURL)"
+                    NOCODB_TOKEN: "$(nocoDBToken)"
+                    NOCODB_NAME_MAPPINGS_TABLE_ID: "$(nocoDBNameMappingsTableId)"
+                    TRINO_CONNECTION_STRING: "$(trinoConnectionString)"
                     SPARK_DRIVER_CORES: "$(sparkDriverCores)"
                     SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
                     GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"
@@ -160,3 +164,7 @@ jobs:
                 command: apply
                 useConfigurationFile: true
                 configuration: infra/k8s/dagster-prd.yaml
+                arguments: >
+                  --prune
+                  -l app.kubernetes.io/part-of=giga-dataops-platform
+                  --prune-allowlist=policy/v1/PodDisruptionBudget
