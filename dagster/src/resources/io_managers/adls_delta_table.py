@@ -107,14 +107,15 @@ class ADLSDeltaTableIOManager(ADLSDeltaIOManager):
             )
 
         upstream_asset_name = context.upstream_output.asset_key.path[-1]
-        asset_identifier, *_ = context.get_asset_identifier()
         run_config = context.step_context.run_config
-        upstream_op_config = run_config["ops"].get(asset_identifier)
+        # Use upstream_asset_name to look up the correct upstream config
+        upstream_op_config = run_config["ops"].get(upstream_asset_name)
 
         if upstream_op_config is None:
             raise ValueError(
-                f"Upstream operation config not found for asset '{asset_identifier}'. "
-                "Cannot determine table name for intermediary IO manager."
+                f"Upstream operation config not found for asset "
+                f"'{upstream_asset_name}'. Cannot determine table name for "
+                "intermediary IO manager."
             )
 
         upstream_config = FileConfig(**upstream_op_config["config"])

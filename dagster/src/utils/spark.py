@@ -61,6 +61,12 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
+    # Delta Lake optimization settings to reduce file fragmentation
+    "spark.databricks.delta.optimizeWrite.enabled": "true",  # Auto-compact files during writes
+    "spark.databricks.delta.autoCompact.enabled": "true",  # Auto-compact after writes
+    "spark.sql.files.maxPartitionBytes": "134217728",  # 128MB per partition (larger files)
+    "spark.sql.files.maxRecordsPerFile": "0",  # No limit on records per file
+    "spark.sql.shuffle.partitions": "4",  # Reduce shuffle partitions for small datasets
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
@@ -135,19 +141,40 @@ def spark_loader(
         with BytesIO(raw_bytes) as buffer:
             buffer.seek(0)
             pdf = pandas_loader(buffer, filepath)
+            # Convert all values to strings to match original behavior
+            # This ensures consistent data types and prevents mixed-type issues
+            pdf = pdf.map(str)
+            # Strip whitespace from column names to match original behavior
+            pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
             return spark.createDataFrame(pdf)
 
     # All other formats: Use native Spark readers
     adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
 
     if ext == ".csv":
-        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+        df = spark.read.csv(
+            adls_path, header=True, escape='"', multiLine=True, inferSchema=False
+        )
     elif ext == ".json":
-        return spark.read.json(adls_path, multiLine=True)
+        df = spark.read.json(adls_path, multiLine=True)
     elif ext == ".parquet":
-        return spark.read.parquet(adls_path)
+        df = spark.read.parquet(adls_path)
     else:
         raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
+
+    # Strip whitespace from column names to match original pandas behavior
+    # This ensures column mapping works correctly with stripped names
+    df = df.toDF(*[col_name.strip() for col_name in df.columns])
+
+    # For non-CSV files, convert all columns to strings to match original
+    # pandas .map(str) behavior that was applied to all file types
+    if ext != ".csv":
+        from pyspark.sql.functions import col as spark_col
+
+        string_cols = [spark_col(c).cast("string").alias(c) for c in df.columns]
+        df = df.select(*string_cols)
+
+    return df
 
 
 def count_nulls_for_column(df: sql.DataFrame, column_name: str) -> sql.DataFrame:

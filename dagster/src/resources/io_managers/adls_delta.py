@@ -161,7 +161,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             spark, query, schema_name_for_tier, table_name, context
         )
 
-    def _upsert_data(
+    def _upsert_data(  # noqa: C901
         self,
         data: sql.DataFrame,
         schema_name: str,
@@ -170,6 +170,22 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     ):
         spark = self._get_spark_session()
         is_qos = schema_name in ["qos", "qos_raw", "qos_availability"]
+
+        # Optimization: Coalesce small datasets to reduce file fragmentation
+        # For datasets < 100K rows, use a single partition to minimize files
+        row_count = data.count()
+        if row_count < 100000:
+            if context is not None:
+                context.log.info(
+                    f"Coalescing {row_count} rows into single partition to "
+                    "reduce file fragmentation"
+                )
+            data = data.coalesce(1)
+        elif row_count < 1000000:
+            # For medium datasets, use 2-4 partitions
+            data = data.coalesce(4)
+            if context is not None:
+                context.log.info(f"Coalescing {row_count} rows into 4 partitions")
 
         if is_qos:
             gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
@@ -232,6 +248,34 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if query is not None:
             query.execute()
+
+            # Auto-optimize if table has too many small files
+            # This is a best-effort operation that should not fail the upsert
+            try:
+                from src.utils.delta_optimize import (
+                    optimize_delta_table,
+                    should_optimize_table,
+                )
+
+                if should_optimize_table(
+                    spark,
+                    full_table_name,
+                    max_files_threshold=50,
+                    context=context,
+                ):
+                    if context is not None:
+                        context.log.info(
+                            f"Auto-optimizing {full_table_name} due to file "
+                            "fragmentation"
+                        )
+                    optimize_delta_table(spark, full_table_name, context=context)
+            except Exception as e:
+                # Log the error but don't fail the upsert operation
+                if context is not None:
+                    context.log.warning(
+                        f"Auto-optimization failed for {full_table_name}: {e}. "
+                        "This does not affect the data write operation."
+                    )
 
     def _overwrite_data(
         self,
