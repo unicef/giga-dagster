@@ -25,14 +25,11 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
-from src.settings import DeploymentEnvironment, settings
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
     column_mapping_rename,
     create_bronze_layer_columns,
-    get_country_rt_schools,
-    merge_connectivity_to_master as merge_connectivity_to_df,
     standardize_connectivity_type,
 )
 from src.utils.adls import (
@@ -233,10 +230,11 @@ def geolocation_bronze(
     config.metadata.update({"column_mapping": column_mapping})
     context.log.info("After config metadata update")
 
-    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # RT Columns
-        connectivity = get_country_rt_schools(s, country_code)
-        df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
+    # TEMPORARILY DISABLED FOR TESTING - connectivity feature not in original branch
+    # if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+    #     # RT Columns
+    #     connectivity = get_country_rt_schools(s, country_code)
+    #     df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
 
     # standardize the connectivity type
     df = standardize_connectivity_type(df, mode, uploaded_columns)
