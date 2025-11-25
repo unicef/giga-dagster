@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     SPARK_MASTER_HOST: str = "spark-master"
     COMMIT_SHA: str = ""
     DATAHUB_METADATA_SERVER: str = ""
-    DEFAULT_MAX_RUNTIME: int = int(timedelta(hours=1).total_seconds())
+    DEFAULT_MAX_RUNTIME: int = int(timedelta(hours=2).total_seconds())
     EMAIL_RENDERER_SERVICE: str = ""
     GITHUB_ACCESS_TOKEN: str = ""
     INGESTION_DB_PORT: int = 5432
