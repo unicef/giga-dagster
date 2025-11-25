@@ -191,6 +191,9 @@ def geolocation_bronze(
         # Non-Excel files can be loaded directly from ADLS
         df = spark_loader(s, config.filepath)
 
+    # Log partition count for monitoring parallelization
+    context.log.info(f"Loaded DataFrame with {df.rdd.getNumPartitions()} partitions")
+
     df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)

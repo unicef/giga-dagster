@@ -122,6 +122,10 @@ def spark_loader(
     """
     ext = Path(filepath).suffix.lower()
 
+    # Calculate optimal partition count for parallelization
+    # Use 2-3x the number of available cores for better load balancing
+    num_partitions = spark.sparkContext.defaultParallelism * 2
+
     # Excel files: Use pandas fallback approach (memory-intensive but necessary)
     if ext in [".xlsx", ".xls"]:
         if raw_bytes is None:
@@ -135,16 +139,25 @@ def spark_loader(
         with BytesIO(raw_bytes) as buffer:
             buffer.seek(0)
             pdf = pandas_loader(buffer, filepath)
-            return spark.createDataFrame(pdf)
+            df = spark.createDataFrame(pdf)
+
+            # Repartition to enable parallel processing across all workers
+            # Without this, pandas conversion creates single partition
+            return df.repartition(num_partitions)
 
     # All other formats: Use native Spark readers
     adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
 
     if ext == ".csv":
-        return spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+        df = spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
+        # Repartition CSV data to ensure parallel processing
+        return df.repartition(num_partitions)
     elif ext == ".json":
-        return spark.read.json(adls_path, multiLine=True)
+        df = spark.read.json(adls_path, multiLine=True)
+        # Repartition JSON data to ensure parallel processing
+        return df.repartition(num_partitions)
     elif ext == ".parquet":
+        # Parquet files typically have good partitioning already
         return spark.read.parquet(adls_path)
     else:
         raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
