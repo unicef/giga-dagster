@@ -61,6 +61,15 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
+    # Adaptive Query Execution for better performance
+    "spark.sql.adaptive.enabled": "true",
+    "spark.sql.adaptive.coalescePartitions.enabled": "true",
+    "spark.sql.adaptive.skewJoin.enabled": "true",
+    "spark.sql.adaptive.localShuffleReader.enabled": "true",
+    # Optimize shuffle partitions (2x max cores for better parallelism)
+    "spark.sql.shuffle.partitions": "48",
+    # Enable broadcast joins for small tables (10MB threshold)
+    "spark.sql.autoBroadcastJoinThreshold": "10485760",
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
@@ -123,8 +132,9 @@ def spark_loader(
     ext = Path(filepath).suffix.lower()
 
     # Calculate optimal partition count for parallelization
-    # Use 2-3x the number of available cores for better load balancing
-    num_partitions = spark.sparkContext.defaultParallelism * 2
+    # Use 4x the number of available cores for better load balancing
+    # Minimum of 24 partitions to ensure good distribution across workers
+    num_partitions = max(spark.sparkContext.defaultParallelism * 4, 24)
 
     # Excel files: Use pandas fallback approach (memory-intensive but necessary)
     if ext in [".xlsx", ".xls"]:
