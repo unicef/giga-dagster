@@ -248,11 +248,48 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         column_names = [col.name for col in columns]
         context.log.info(f"columns: {column_names}")
 
-        # Repartition before writing for better read performance downstream
-        # Use 3x parallelism with minimum of 24 partitions
-        num_partitions = max(data.sparkSession.sparkContext.defaultParallelism * 3, 24)
-        context.log.info(f"Repartitioning to {num_partitions} partitions before write")
-        data = data.repartition(num_partitions)
+        # Adaptive repartitioning based on current partition count (avoids expensive count())
+        # For small datasets, fewer partitions = faster writes to ADLS
+        # For large datasets, more partitions = better parallelism
+        current_partitions = data.rdd.getNumPartitions()
+        default_parallelism = data.sparkSession.sparkContext.defaultParallelism
+
+        # Use current partition count as a proxy for data size
+        # If data already has few partitions, it's likely small
+        if current_partitions <= default_parallelism:
+            # Small dataset: use moderate partitioning
+            num_partitions = min(current_partitions * 2, default_parallelism * 2)
+            context.log.info(
+                f"Small dataset ({current_partitions} current partitions): "
+                f"using {num_partitions} partitions for write"
+            )
+        else:
+            # Large dataset: keep existing partitions (already well-distributed)
+            optimal_partitions = default_parallelism * 3
+            if current_partitions < optimal_partitions:
+                num_partitions = optimal_partitions
+                context.log.info(
+                    f"Large dataset ({current_partitions} current partitions): "
+                    f"increasing to {num_partitions} for better parallelism"
+                )
+            else:
+                # Already well-partitioned, keep as-is to avoid shuffle
+                num_partitions = current_partitions
+                context.log.info(
+                    f"Large dataset ({current_partitions} current partitions): "
+                    f"keeping existing partitions (already well-distributed)"
+                )
+
+        # Only repartition if it would actually change the partition count
+        if num_partitions != current_partitions:
+            data = data.repartition(num_partitions)
+            context.log.info(
+                f"Repartitioned from {current_partitions} to {num_partitions} partitions"
+            )
+        else:
+            context.log.info(
+                f"Keeping existing {current_partitions} partitions (already optimal)"
+            )
 
         # overwrite the table with the new data
         context.log.info(f"the table {full_table_name} overwriting with new data")
@@ -262,6 +299,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             .option("overwriteSchema", "true")  # ensure schema updates are applied
             .option("optimizeWrite", "true")  # Enable write optimization
             .option("autoOptimize.optimizeWrite", "true")  # Auto-optimize on write
+            .option(
+                "maxRecordsPerFile", "10000"
+            )  # Limit records per file for small datasets
             .partitionBy(*partition_columns)
             .saveAsTable(full_table_name)
         )

@@ -61,15 +61,20 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
-    # Adaptive Query Execution for better performance
+    # Delta Lake write optimizations
+    "spark.databricks.delta.optimizeWrite.enabled": "true",
+    "spark.databricks.delta.autoCompact.enabled": "true",
+    "spark.databricks.delta.merge.enableLowShuffle": "true",
+    "spark.databricks.delta.merge.optimizeInsertOnlyMerge.enabled": "true",
     "spark.sql.adaptive.enabled": "true",
     "spark.sql.adaptive.coalescePartitions.enabled": "true",
     "spark.sql.adaptive.skewJoin.enabled": "true",
     "spark.sql.adaptive.localShuffleReader.enabled": "true",
-    # Optimize shuffle partitions (2x max cores for better parallelism)
     "spark.sql.shuffle.partitions": "48",
-    # Enable broadcast joins for small tables (10MB threshold)
     "spark.sql.autoBroadcastJoinThreshold": "10485760",
+    # Reduce file write overhead for ADLS
+    "spark.sql.files.maxRecordsPerFile": "50000",
+    "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
