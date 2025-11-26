@@ -293,15 +293,34 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         # overwrite the table with the new data
         context.log.info(f"the table {full_table_name} overwriting with new data")
+
+        # Adaptive maxRecordsPerFile: only limit for large datasets
+        write_options = {
+            "overwriteSchema": "true",
+            "optimizeWrite": "true",
+            "autoOptimize.optimizeWrite": "true",
+        }
+
+        estimated_rows = num_partitions * 5000
+
+        if estimated_rows > 100000:
+            # Large dataset: limit records per file to prevent huge files
+            write_options["maxRecordsPerFile"] = "100000"
+            context.log.info(
+                f"Large dataset (~{estimated_rows} rows): "
+                f"limiting to 100K records per file"
+            )
+        else:
+            # Small dataset: let Spark decide file sizes naturally
+            context.log.info(
+                f"Small dataset (~{estimated_rows} rows): "
+                f"no maxRecordsPerFile limit"
+            )
+
         (
             data.write.format("delta")
             .mode("overwrite")
-            .option("overwriteSchema", "true")  # ensure schema updates are applied
-            .option("optimizeWrite", "true")  # Enable write optimization
-            .option("autoOptimize.optimizeWrite", "true")  # Auto-optimize on write
-            .option(
-                "maxRecordsPerFile", "10000"
-            )  # Limit records per file for small datasets
+            .options(**write_options)
             .partitionBy(*partition_columns)
             .saveAsTable(full_table_name)
         )
