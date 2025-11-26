@@ -248,12 +248,20 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         column_names = [col.name for col in columns]
         context.log.info(f"columns: {column_names}")
 
+        # Repartition before writing for better read performance downstream
+        # Use 3x parallelism with minimum of 24 partitions
+        num_partitions = max(data.sparkSession.sparkContext.defaultParallelism * 3, 24)
+        context.log.info(f"Repartitioning to {num_partitions} partitions before write")
+        data = data.repartition(num_partitions)
+
         # overwrite the table with the new data
         context.log.info(f"the table {full_table_name} overwriting with new data")
         (
             data.write.format("delta")
             .mode("overwrite")
             .option("overwriteSchema", "true")  # ensure schema updates are applied
+            .option("optimizeWrite", "true")  # Enable write optimization
+            .option("autoOptimize.optimizeWrite", "true")  # Auto-optimize on write
             .partitionBy(*partition_columns)
             .saveAsTable(full_table_name)
         )
