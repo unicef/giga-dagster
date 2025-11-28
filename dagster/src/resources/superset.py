@@ -1,8 +1,9 @@
 import os
 import time
+
 import requests
-from requests.exceptions import ConnectionError, Timeout
 from nocodb import NocoDB
+from requests.exceptions import ConnectionError, Timeout
 
 SUPERSET_URL = os.getenv("SUPERSET_URL")
 USERNAME = os.getenv("SUPERSET_USERNAME")
@@ -33,7 +34,7 @@ def get_access_token():
         auth_data = {
             "error": True,
             "status_code": response.status_code,
-            "response_text": response.text
+            "response_text": response.text,
         }
         print("Failed to authenticate:", response.status_code, response.text)
     return auth_data
@@ -88,7 +89,9 @@ def run_query(query, access_token):
     while attempt < max_retries:
         try:
             print(f"Running query: {query['label']}")
-            response = requests.post(url, json=sql_payload, headers=headers, timeout=timeout)
+            response = requests.post(
+                url, json=sql_payload, headers=headers, timeout=timeout
+            )
             duration = time.time() - start_time
             return {
                 "status_code": response.status_code,

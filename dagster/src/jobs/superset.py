@@ -1,13 +1,17 @@
-import time
 import os
-from dagster import OpExecutionContext, job, op
+import time
+
 import requests
+
+from dagster import OpExecutionContext, job, op
+
 from ..resources.superset import (
     fetch_saved_query,
     get_access_token,
     refresh_access_token,
     run_query,
 )
+
 
 @op
 def post_query_durations_to_slack(context: OpExecutionContext, results):
@@ -29,6 +33,7 @@ def post_query_durations_to_slack(context: OpExecutionContext, results):
         payload = {"text": "*Refresh Table - Production*\n" + "\n".join(lines)}
     resp = requests.post(slack_webhook, json=payload)
     context.log.info(f"posted to Slack ({resp.status_code})")
+
 
 @op
 def fetch_and_run_query(context: OpExecutionContext):
@@ -68,7 +73,7 @@ def fetch_and_run_query(context: OpExecutionContext):
             x["title"] = table["Title"]
             results.append(x)
 
-            if x.get('status_code') != 200:
+            if x.get("status_code") != 200:
                 return results
             response = refresh_access_token(refresh_token)
             if response.status_code == 200:
@@ -82,6 +87,7 @@ def fetch_and_run_query(context: OpExecutionContext):
         context.log.error(e)
         return results
     return results
+
 
 @job
 def refresh_table():
