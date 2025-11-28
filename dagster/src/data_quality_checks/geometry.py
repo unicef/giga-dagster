@@ -3,7 +3,7 @@ from pyspark.sql import (
     Window,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, FloatType, StringType
+from pyspark.sql.types import FloatType
 
 from dagster import OpExecutionContext
 from src.spark.user_defined_functions import (
@@ -83,32 +83,33 @@ def similar_name_level_within_110_check(
     )
 
     # Group school names by location and education level for schools with duplicates
-    school_names_grouped = df.filter(
-        df["duplicate_level_within_110m_radius"] == 1
-    ).groupBy("education_level", "lat_110", "long_110").agg(
-        f.collect_list("school_name").alias("school_names")
+    school_names_grouped = (
+        df.filter(df["duplicate_level_within_110m_radius"] == 1)
+        .groupBy("education_level", "lat_110", "long_110")
+        .agg(f.collect_list("school_name").alias("school_names"))
     )
 
     # Find similar names within each group using vectorized comparison
     school_names_grouped = school_names_grouped.withColumn(
-        "similar_names_list",
-        find_similar_names_in_group_udf(f.col("school_names"))
+        "similar_names_list", find_similar_names_in_group_udf(f.col("school_names"))
     )
 
     # Explode the list of similar names to get individual rows
     df_similar = school_names_grouped.select(
-        "education_level", "lat_110", "long_110",
-        f.explode("similar_names_list").alias("school_name_similar")
+        "education_level",
+        "lat_110",
+        "long_110",
+        f.explode("similar_names_list").alias("school_name_similar"),
     )
 
     # Join to original dataset and tag entries with similar names
     df = df.join(
         df_similar,
-        (df["school_name"] == df_similar["school_name_similar"]) &
-        (df["education_level"] == df_similar["education_level"]) &
-        (df["lat_110"] == df_similar["lat_110"]) &
-        (df["long_110"] == df_similar["long_110"]),
-        how="left"
+        (df["school_name"] == df_similar["school_name_similar"])
+        & (df["education_level"] == df_similar["education_level"])
+        & (df["lat_110"] == df_similar["lat_110"])
+        & (df["long_110"] == df_similar["long_110"]),
+        how="left",
     )
 
     df = df.withColumn(
