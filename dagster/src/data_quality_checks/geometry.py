@@ -9,8 +9,6 @@ from dagster import OpExecutionContext
 from src.spark.user_defined_functions import (
     find_similar_names_in_group_udf,
     h3_geo_to_h3_udf,
-    has_similar_name_check_udf,
-    point_110_udf,
 )
 from src.utils.logger import (
     ContextLoggerWithLoguruFallback,
@@ -27,8 +25,8 @@ def duplicate_name_level_110_check(
 
     df_columns = df.columns
 
-    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
-    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
+    df = df.withColumn("lat_110", f.round(f.col("latitude") * 1000) / 1000)
+    df = df.withColumn("long_110", f.round(f.col("longitude") * 1000) / 1000)
     window_spec1 = Window.partitionBy(
         "school_name",
         "education_level",
@@ -69,8 +67,8 @@ def similar_name_level_within_110_check(
 
     # Generate Lat 110, Long 110
     column_actions = {
-        "lat_110": point_110_udf(f.col("latitude")),
-        "long_110": point_110_udf(f.col("longitude")),
+        "lat_110": f.round(f.col("latitude") * 1000) / 1000,
+        "long_110": f.round(f.col("longitude") * 1000) / 1000,
     }
     df = df.withColumns(column_actions)
 

@@ -44,12 +44,15 @@ def point_110_udf(value) -> float | None:
     return int(1000 * float(value)) / 1000
 
 
-@udf
-def h3_geo_to_h3_udf(latitude: float, longitude: float) -> str:
-    if latitude is None or longitude is None:
-        return "0"
+@pandas_udf(StringType())
+def h3_geo_to_h3_udf(latitude: pd.Series, longitude: pd.Series) -> pd.Series:
+    def convert_to_h3(lat, lon):
+        if pd.isna(lat) or pd.isna(lon):
+            return "0"
+        return geo_to_h3(lat, lon, resolution=8)
 
-    return geo_to_h3(latitude, longitude, resolution=8)
+    vectorized_h3 = np.vectorize(convert_to_h3)
+    return pd.Series(vectorized_h3(latitude.values, longitude.values), index=latitude.index)
 
 
 BOUNDARY_DISTANCE_THRESHOLD = 150
