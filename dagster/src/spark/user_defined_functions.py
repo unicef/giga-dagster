@@ -52,7 +52,9 @@ def h3_geo_to_h3_udf(latitude: pd.Series, longitude: pd.Series) -> pd.Series:
         return geo_to_h3(lat, lon, resolution=8)
 
     vectorized_h3 = np.vectorize(convert_to_h3)
-    return pd.Series(vectorized_h3(latitude.values, longitude.values), index=latitude.index)
+    return pd.Series(
+        vectorized_h3(latitude.values, longitude.values), index=latitude.index
+    )
 
 
 BOUNDARY_DISTANCE_THRESHOLD = 150
@@ -112,6 +114,7 @@ def find_similar_names_in_group_udf(names: pd.Series) -> pd.Series:
     For each group's list of names, return list of similar names.
     Runs once per group instead of N² times using vectorized pandas operations.
     """
+
     def check_group(name_list):
         if name_list is None or len(name_list) == 0:
             return []
@@ -121,11 +124,14 @@ def find_similar_names_in_group_udf(names: pd.Series) -> pd.Series:
         for i, name1 in enumerate(name_list):
             if name1 is None:
                 continue
-            for name2 in name_list[i+1:]:
+            for name2 in name_list[i + 1 :]:
                 if name2 is None:
                     continue
-                if (name1 != name2 and
-                    SequenceMatcher(a=name1, b=name2).ratio() > config.SIMILARITY_RATIO_CUTOFF):
+                if (
+                    name1 != name2
+                    and SequenceMatcher(a=name1, b=name2).ratio()
+                    > config.SIMILARITY_RATIO_CUTOFF
+                ):
                     similar.add(name1)
                     similar.add(name2)
 
