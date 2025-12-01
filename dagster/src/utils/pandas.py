@@ -12,7 +12,12 @@ def pandas_loader(data: BytesIO, filepath: str, dtype_mapping=None) -> pd.DataFr
     ext = Path(filepath).suffix
 
     if ext == ".csv":
-        return pd.read_csv(data, dtype=dtype_mapping)
+        return pd.read_csv(
+            data,
+            dtype=dtype_mapping,
+            encoding='utf-8',
+            encoding_errors='replace'
+        )
     if ext == ".xlsx":
         return pd.read_excel(data, engine="openpyxl", dtype=dtype_mapping)
     if ext == ".xls":
