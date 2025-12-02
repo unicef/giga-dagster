@@ -4,10 +4,14 @@ from pathlib import Path
 import chardet
 import pandas as pd
 
+from dagster import OpExecutionContext
 from src.exceptions import UnsupportedFiletypeException
+from src.utils.logger import get_context_with_fallback_logger
 
 
-def pandas_loader(data: BytesIO, filepath: str, dtype_mapping=None) -> pd.DataFrame:
+def pandas_loader(
+    data: BytesIO, filepath: str, dtype_mapping=None, context: OpExecutionContext = None
+) -> pd.DataFrame:
     if dtype_mapping is None:
         dtype_mapping = {}
     ext = Path(filepath).suffix
@@ -18,18 +22,16 @@ def pandas_loader(data: BytesIO, filepath: str, dtype_mapping=None) -> pd.DataFr
         # Detect encoding
         raw_data = data.read()
         detected = chardet.detect(raw_data)
-        encoding = detected['encoding'] or 'utf-8'
-        confidence = detected['confidence']
+        encoding = detected["encoding"] or "utf-8"
+        confidence = detected["confidence"]
 
-        logger.info(f"Loading CSV file {filepath} with detected encoding: {encoding} (confidence: {confidence:.2f})")
+        logger.info(
+            f"Loading CSV file {filepath} with detected encoding: {encoding} (confidence: {confidence:.2f})"
+        )
 
         # Reset pointer and read CSV
         data.seek(0)
-        return pd.read_csv(
-            data,
-            dtype=dtype_mapping,
-            encoding=encoding
-        )
+        return pd.read_csv(data, dtype=dtype_mapping, encoding=encoding)
     if ext == ".xlsx":
         return pd.read_excel(data, engine="openpyxl", dtype=dtype_mapping)
     if ext == ".xls":
