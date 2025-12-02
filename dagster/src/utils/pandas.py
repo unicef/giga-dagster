@@ -1,6 +1,7 @@
 from io import BytesIO
 from pathlib import Path
 
+import chardet
 import pandas as pd
 
 from src.exceptions import UnsupportedFiletypeException
@@ -12,11 +13,22 @@ def pandas_loader(data: BytesIO, filepath: str, dtype_mapping=None) -> pd.DataFr
     ext = Path(filepath).suffix
 
     if ext == ".csv":
+        logger = get_context_with_fallback_logger(context)
+
+        # Detect encoding
+        raw_data = data.read()
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding'] or 'utf-8'
+        confidence = detected['confidence']
+
+        logger.info(f"Loading CSV file {filepath} with detected encoding: {encoding} (confidence: {confidence:.2f})")
+
+        # Reset pointer and read CSV
+        data.seek(0)
         return pd.read_csv(
             data,
             dtype=dtype_mapping,
-            encoding='utf-8',
-            encoding_errors='replace'
+            encoding=encoding
         )
     if ext == ".xlsx":
         return pd.read_excel(data, engine="openpyxl", dtype=dtype_mapping)
