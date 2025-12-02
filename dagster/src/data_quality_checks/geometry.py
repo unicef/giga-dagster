@@ -25,8 +25,8 @@ def duplicate_name_level_110_check(
 
     df_columns = df.columns
 
-    df = df.withColumn("lat_110", f.round(f.col("latitude") * 1000) / 1000)
-    df = df.withColumn("long_110", f.round(f.col("longitude") * 1000) / 1000)
+    df = df.withColumn("lat_110", f.floor(f.col("latitude") * 1000) / 1000)
+    df = df.withColumn("long_110", f.floor(f.col("longitude") * 1000) / 1000)
     window_spec1 = Window.partitionBy(
         "school_name",
         "education_level",
@@ -67,8 +67,8 @@ def similar_name_level_within_110_check(
 
     # Generate Lat 110, Long 110
     column_actions = {
-        "lat_110": f.round(f.col("latitude") * 1000) / 1000,
-        "long_110": f.round(f.col("longitude") * 1000) / 1000,
+        "lat_110": f.floor(f.col("latitude") * 1000) / 1000,
+        "long_110": f.floor(f.col("longitude") * 1000) / 1000,
     }
     df = df.withColumns(column_actions)
 
