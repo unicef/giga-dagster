@@ -187,6 +187,7 @@ class StagingStep:
         """Update ApprovalRequest status if conditions are met."""
         pre_update_row_count = self._get_pre_update_row_count()
         formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        result = None
 
         with get_db_context() as db:
             try:
@@ -229,7 +230,7 @@ class StagingStep:
                         )
 
                 # Post-delete validation: Verify delete CDF entries were created
-                if self.change_type == StagingChangeTypeEnum.DELETE and result.rowcount > 0:
+                if result is not None and self.change_type == StagingChangeTypeEnum.DELETE and result.rowcount > 0:
                     self._validate_delete_cdf()
 
             except Exception as e:
