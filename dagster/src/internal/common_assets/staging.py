@@ -227,6 +227,11 @@ class StagingStep:
                         self.context.log.info(
                             "No rows updated (already enabled or state changed). Skipping commit."
                         )
+
+                # Post-delete validation: Verify delete CDF entries were created
+                if self.change_type == StagingChangeTypeEnum.DELETE and result.rowcount > 0:
+                    self._validate_delete_cdf()
+
             except Exception as e:
                 self.context.log.error(
                     f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {e}"
@@ -262,6 +267,51 @@ class StagingStep:
             return False
 
         return True
+
+    def _validate_delete_cdf(self) -> None:
+        """Validate that delete CDF entries were created after delete operation."""
+        try:
+            with get_trino_context() as trino_db:
+                # Query CDF for delete entries
+                # Table name is constructed from trusted config sources, not user input
+                result = trino_db.execute(
+                    text(
+                        f"SELECT COUNT(*) as count FROM {self.staging_table_name} "  # nosec B608
+                        f"FOR SYSTEM_VERSION AS OF (SELECT MAX(version) FROM "
+                        f"{self.staging_table_name}.\"$history\") "
+                        f"WHERE _change_type = 'delete'"
+                    )
+                )
+                delete_count = result.scalar()
+
+                if delete_count == 0:
+                    self.context.log.error(
+                        f"Delete CDF validation failed: No delete entries found in CDF "
+                        f"for {self.country_code}. This indicates the delete operation "
+                        f"may not have been successful despite enabled=True being set."
+                    )
+                    # Rollback enabled flag
+                    formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+                    with get_db_context() as db:
+                        with db.begin():
+                            db.execute(
+                                update(ApprovalRequest)
+                                .where(
+                                    (ApprovalRequest.country == self.country_code)
+                                    & (ApprovalRequest.dataset == formatted_dataset)
+                                )
+                                .values({ApprovalRequest.enabled: False})
+                            )
+                    raise RuntimeError("Delete CDF empty after delete operation")
+                else:
+                    self.context.log.info(
+                        f"Delete CDF validation passed: Found {delete_count} delete entries."
+                    )
+        except Exception as e:
+            self.context.log.error(
+                f"Failed to validate delete CDF: {e}. Manual verification recommended."
+            )
+            raise
 
     def _emit_lineage(self) -> None:
         """Emit lineage information."""
