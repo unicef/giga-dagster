@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from h3 import geo_to_h3
 from pyspark.sql.functions import pandas_udf, udf
+from pyspark.sql.types import ArrayType, StringType
 
 from src.spark.config_expectations import config
 
@@ -43,12 +44,17 @@ def point_110_udf(value) -> float | None:
     return int(1000 * float(value)) / 1000
 
 
-@udf
-def h3_geo_to_h3_udf(latitude: float, longitude: float) -> str:
-    if latitude is None or longitude is None:
-        return "0"
+@pandas_udf(StringType())
+def h3_geo_to_h3_udf(latitude: pd.Series, longitude: pd.Series) -> pd.Series:
+    def convert_to_h3(lat, lon):
+        if pd.isna(lat) or pd.isna(lon):
+            return "0"
+        return geo_to_h3(lat, lon, resolution=8)
 
-    return geo_to_h3(latitude, longitude, resolution=8)
+    vectorized_h3 = np.vectorize(convert_to_h3)
+    return pd.Series(
+        vectorized_h3(latitude.values, longitude.values), index=latitude.index
+    )
 
 
 BOUNDARY_DISTANCE_THRESHOLD = 150
@@ -100,3 +106,35 @@ def has_similar_name_check_udf(school_name, school_name_2) -> int:
         return 1
 
     return 0
+
+
+@pandas_udf(ArrayType(StringType()))
+def find_similar_names_in_group_udf(names: pd.Series) -> pd.Series:
+    """
+    For each group's list of names, return list of similar names.
+    Runs once per group instead of N² times using vectorized pandas operations.
+    """
+
+    def check_group(name_list):
+        if name_list is None or len(name_list) == 0:
+            return []
+
+        similar = set()
+        # Compare each pair of names in the group
+        for i, name1 in enumerate(name_list):
+            if name1 is None:
+                continue
+            for name2 in name_list[i + 1 :]:
+                if name2 is None:
+                    continue
+                if (
+                    name1 != name2
+                    and SequenceMatcher(a=name1, b=name2).ratio()
+                    > config.SIMILARITY_RATIO_CUTOFF
+                ):
+                    similar.add(name1)
+                    similar.add(name2)
+
+        return list(similar)
+
+    return names.apply(check_group)
