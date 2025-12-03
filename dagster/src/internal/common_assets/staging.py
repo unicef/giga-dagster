@@ -260,10 +260,11 @@ class StagingStep:
         if (
             pre_update_row_count is not None
             and pre_update_row_count == 0
-            and self.change_type == StagingChangeTypeEnum.UPDATE
+            and self.change_type in [StagingChangeTypeEnum.UPDATE, StagingChangeTypeEnum.DELETE]
         ):
+            change_type_label = "changes" if self.change_type == StagingChangeTypeEnum.UPDATE else "rows to delete"
             self.context.log.info(
-                f"No changes detected (row count: {pre_update_row_count}). Skipping enabled=True update."
+                f"No {change_type_label} detected (row count: {pre_update_row_count}). Skipping enabled=True update."
             )
             return False
 
