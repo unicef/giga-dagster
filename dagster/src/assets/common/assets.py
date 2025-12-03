@@ -218,6 +218,12 @@ def silver(
 
     df_passed = manual_review_dedupe_strat(df_passed)
 
+    # Extract delete IDs before merge for post-merge verification
+    deletes_df = df_passed.filter(f.col("_change_type") == "delete")
+    delete_ids = [row[primary_key] for row in deletes_df.select(primary_key).collect()]
+    has_deletes = len(delete_ids) > 0
+    context.log.info(f"Approved deletes count: {len(delete_ids)}")
+
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
         s.catalog.refreshTable(silver_table_name)
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
@@ -225,6 +231,29 @@ def silver(
         new_silver = partial_cdf_in_cluster_merge(
             current_silver, df_passed, column_names, primary_key, context
         )
+
+        # Post-merge verification: Verify approved deletes were actually removed
+        if has_deletes:
+            remaining_deletes = new_silver.filter(
+                new_silver[primary_key].isin(delete_ids)
+            )
+            remaining_count = remaining_deletes.count()
+
+            if remaining_count > 0:
+                context.log.error(
+                    f"Delete verification failed: {remaining_count} out of {len(delete_ids)} "
+                    f"approved delete rows still exist in silver table. "
+                    f"Sample IDs: {[row[primary_key] for row in remaining_deletes.limit(5).collect()]}"
+                )
+                from dagster import DagsterExecutionInterruptError
+                raise DagsterExecutionInterruptError(
+                    f"Deletes not applied: {remaining_count} rows still in silver table"
+                )
+            else:
+                context.log.info(
+                    f"Delete verification passed: All {len(delete_ids)} approved deletes "
+                    f"successfully removed from silver table."
+                )
     else:
         new_silver = df_passed
 
