@@ -93,7 +93,7 @@ def coverage_data_quality_results(
 
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath)
+        pdf = pandas_loader(buffer, config.filepath, context=context)
 
     source = config.filename_components.source
     schema_name = config.metastore_schema
@@ -174,7 +174,7 @@ async def coverage_data_quality_results_summary(
 
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath)
+        pdf = pandas_loader(buffer, config.filepath, context=context)
 
     df_raw = s.createDataFrame(pdf)
     dq_summary_statistics = aggregate_report_json(

@@ -193,7 +193,10 @@ def geolocation_bronze(
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
-            buffer, config.filepath, dtype_mapping={school_id_govt_name: str}
+            buffer,
+            config.filepath,
+            dtype_mapping={school_id_govt_name: str},
+            context=context,
         ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
@@ -541,7 +544,7 @@ def geolocation_data_quality_report(
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        original_df = pandas_loader(buffer, config.filepath).map(str)
+        original_df = pandas_loader(buffer, config.filepath, context=context).map(str)
 
     original_df_columns = original_df.columns
     uploaded_columns = file_upload.column_to_schema_mapping.values()
