@@ -419,6 +419,24 @@ class StagingStep:
         self.context.log.info("Performing delete...")
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
 
+        # Pre-delete validation: Check if target rows exist in staging table
+        staging_df = staging_dt.toDF()
+        existing_rows = staging_df.filter(
+            staging_df[self.primary_key].isin(df)
+        )
+        existing_count = existing_rows.count()
+
+        if existing_count == 0:
+            self.context.log.warning(
+                f"No target rows found in staging table for deletion. "
+                f"Skipping delete operation for {len(df)} row IDs."
+            )
+            return staging_dt.toDF()
+
+        self.context.log.info(
+            f"Found {existing_count} out of {len(df)} row IDs in staging table for deletion."
+        )
+
         query = build_deduped_delete_query(staging_dt, df, self.primary_key)
 
         if query is not None:
