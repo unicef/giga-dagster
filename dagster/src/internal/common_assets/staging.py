@@ -230,7 +230,11 @@ class StagingStep:
                         )
 
                 # Post-delete validation: Verify delete CDF entries were created
-                if result is not None and self.change_type == StagingChangeTypeEnum.DELETE and result.rowcount > 0:
+                if (
+                    result is not None
+                    and self.change_type == StagingChangeTypeEnum.DELETE
+                    and result.rowcount > 0
+                ):
                     self._validate_delete_cdf()
 
             except Exception as e:
@@ -260,9 +264,14 @@ class StagingStep:
         if (
             pre_update_row_count is not None
             and pre_update_row_count == 0
-            and self.change_type in [StagingChangeTypeEnum.UPDATE, StagingChangeTypeEnum.DELETE]
+            and self.change_type
+            in [StagingChangeTypeEnum.UPDATE, StagingChangeTypeEnum.DELETE]
         ):
-            change_type_label = "changes" if self.change_type == StagingChangeTypeEnum.UPDATE else "rows to delete"
+            change_type_label = (
+                "changes"
+                if self.change_type == StagingChangeTypeEnum.UPDATE
+                else "rows to delete"
+            )
             self.context.log.info(
                 f"No {change_type_label} detected (row count: {pre_update_row_count}). Skipping enabled=True update."
             )
@@ -280,7 +289,7 @@ class StagingStep:
                     text(
                         f"SELECT COUNT(*) as count FROM {self.staging_table_name} "  # nosec B608
                         f"FOR SYSTEM_VERSION AS OF (SELECT MAX(version) FROM "
-                        f"{self.staging_table_name}.\"$history\") "
+                        f'{self.staging_table_name}."$history") '
                         f"WHERE _change_type = 'delete'"
                     )
                 )
@@ -293,7 +302,9 @@ class StagingStep:
                         f"may not have been successful despite enabled=True being set."
                     )
                     # Rollback enabled flag
-                    formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+                    formatted_dataset = (
+                        f"School {self.config.dataset_type.capitalize()}"
+                    )
                     with get_db_context() as db:
                         with db.begin():
                             db.execute(
@@ -473,9 +484,7 @@ class StagingStep:
 
         # Pre-delete validation: Check if target rows exist in staging table
         staging_df = staging_dt.toDF()
-        existing_rows = staging_df.filter(
-            staging_df[self.primary_key].isin(df)
-        )
+        existing_rows = staging_df.filter(staging_df[self.primary_key].isin(df))
         existing_count = existing_rows.count()
 
         if existing_count == 0:

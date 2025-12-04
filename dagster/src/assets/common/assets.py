@@ -246,6 +246,7 @@ def silver(
                     f"Sample IDs: {[row[primary_key] for row in remaining_deletes.limit(5).collect()]}"
                 )
                 from dagster import DagsterExecutionInterruptError
+
                 raise DagsterExecutionInterruptError(
                     f"Deletes not applied: {remaining_count} rows still in silver table"
                 )
