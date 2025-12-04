@@ -23,6 +23,7 @@ from src.settings import settings
 
 class Constants(BaseSettings):
     UPLOAD_PATH_PREFIX: str = f"{settings.LAKEHOUSE_PATH}/raw/uploads"
+    UPLOAD_METADATA_PATH_PREFIX: str = f"{settings.LAKEHOUSE_PATH}/raw/upload_metadata"
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     connectivity_updates_folder = f"{settings.LAKEHOUSE_PATH}/raw/connectivity_updates"

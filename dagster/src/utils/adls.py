@@ -22,6 +22,7 @@ from azure.storage.filedatalake import (
     PathProperties,
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
+from src.constants.constants_class import constants
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
@@ -33,6 +34,25 @@ _adls = _client.get_file_system_client(file_system=settings.AZURE_BLOB_CONTAINER
 
 
 class ADLSFileClient(ConfigurableResource):
+    @staticmethod
+    def _get_metadata_path(filepath: str) -> str:
+        # Normalize paths by stripping leading slashes for comparison
+        normalized_filepath = filepath.lstrip("/")
+        normalized_prefix = constants.UPLOAD_PATH_PREFIX.lstrip("/")
+        normalized_metadata_prefix = constants.UPLOAD_METADATA_PATH_PREFIX.lstrip("/")
+
+        if normalized_filepath.startswith(normalized_prefix):
+            return (
+                normalized_filepath.replace(
+                    normalized_prefix, normalized_metadata_prefix, 1
+                )
+                + ".metadata.json"
+            )
+
+        file_path = Path(filepath)
+        metadata_file_path = f"{file_path.stem}.metadata.json"
+        return str(file_path.parent / metadata_file_path)
+
     @staticmethod
     def download_raw(filepath: str) -> bytes:
         file_client = _adls.get_file_client(filepath)
@@ -59,18 +79,16 @@ class ADLSFileClient(ConfigurableResource):
                 raise e
 
         # 2. Create sidecar metadata path
-        file_path = Path(filepath)
-        sidecar_name = f"{file_path.name}.metadata.json"
-        sidecar_path = str(file_path.parent / sidecar_name)
+        metadata_blob_path = ADLSFileClient._get_metadata_path(filepath)
 
         # 3. Upload metadata JSON sidecar
         json_bytes = json.dumps(metadata, indent=2).encode()
-        file_client_sidecar = _adls.get_file_client(sidecar_path)
+        file_client_sidecar = _adls.get_file_client(metadata_blob_path)
         with BytesIO(json_bytes) as buffer:
             buffer.seek(0)
             file_client_sidecar.upload_data(buffer.read(), overwrite=True)
 
-        logger.info(f"Successfully uploaded metadata sidecar to {sidecar_path}")
+        logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
 
     def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
         file_client = _adls.get_file_client(filepath)
@@ -144,7 +162,7 @@ class ADLSFileClient(ConfigurableResource):
         if isinstance(context, OutputContext):
             config = FileConfig(**context.step_context.op_config)
 
-        metadata = config.metadata or {}
+        metadata = config.metadata
         metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
 
         # 1. upload file without metadata
@@ -153,17 +171,15 @@ class ADLSFileClient(ConfigurableResource):
             file_client.upload_data(buffer.read(), overwrite=True)
 
         # 2. create metadata sidecar file
-        file_path = Path(filepath)
-        sidecar_name = f"{file_path.name}.metadata.json"
-        sidecar_path = str(file_path.parent / sidecar_name)
+        metadata_blob_path = self._get_metadata_path(filepath)
 
-        sidecar_client = _adls.get_file_client(sidecar_path)
+        metadata_client = _adls.get_file_client(metadata_blob_path)
         json_bytes = json.dumps(metadata, indent=2).encode()
         with BytesIO(json_bytes) as buffer:
             buffer.seek(0)
-            sidecar_client.upload_data(buffer.read(), overwrite=True)
+            metadata_client.upload_data(buffer.read(), overwrite=True)
 
-        logger.info(f"Successfully uploaded metadata sidecar to {sidecar_path}")
+        logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
         return None
 
     def download_delta_table_as_spark_dataframe(
@@ -211,27 +227,25 @@ class ADLSFileClient(ConfigurableResource):
         Fallback to ADLS blob properties (legacy).
         Returns a dict or None.
         """
-        file_path = Path(filepath)
-        sidecar_name = f"{file_path.name}.metadata.json"
-        sidecar_path = str(file_path.parent / sidecar_name)
+        metadata_blob_path = self._get_metadata_path(filepath)
 
         # 1. Try JSON sidecar first
         try:
-            data = self.download_json(sidecar_path)
+            data = self.download_json(metadata_blob_path)
             if data is not None:
-                logger.debug(f"Found metadata sidecar at: {sidecar_path}")
+                logger.debug(f"Found metadata sidecar at: {metadata_blob_path}")
                 return data
         except Exception as e:
             logger.debug(
-                f"No metadata sidecar found at: {sidecar_path} ({e}), falling back to blob props"
+                f"No metadata sidecar found at: {metadata_blob_path} ({e}), falling back to blob props"
             )
 
         # 2. Fallback to ADLS properties
         try:
-            props = self.get_file_metadata(filepath)
-            # props.metadata is dict-like
-            if getattr(props, "metadata", None):
-                return dict(props.metadata)
+            properties = self.get_file_metadata(filepath)
+            # properties.metadata is dict-like
+            if getattr(properties, "metadata", None):
+                return dict(properties.metadata)
         except Exception as exc:
             logger.debug(f"Failed to fetch blob metadata for {filepath}: {exc}")
 
