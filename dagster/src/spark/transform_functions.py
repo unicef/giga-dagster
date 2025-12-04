@@ -34,7 +34,9 @@ from src.utils.nocodb.get_nocodb_data import (
 )
 from src.utils.schema import construct_full_table_name
 
-ACCOUNT_URL = f"https://{settings.AZURE_DFS_SAS_HOST}/"
+# Note: BlobServiceClient requires blob endpoint, not DFS endpoint
+# ABFSS protocol (DFS endpoint) is only for Spark/Hadoop operations
+ACCOUNT_URL = f"https://{settings.AZURE_BLOB_SAS_HOST}/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
 azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 container_name = azure_blob_container_name
