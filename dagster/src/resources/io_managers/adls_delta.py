@@ -317,13 +317,59 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                 f"no maxRecordsPerFile limit"
             )
 
-        (
+        # Log write configuration details
+        context.log.info(f"Starting Delta write with options: {write_options}")
+        context.log.info(f"Writing {num_partitions} partitions to {full_table_name}")
+        if partition_columns:
+            context.log.info(f"Physical partitioning by columns: {partition_columns}")
+
+        # Log DataFrame schema
+        context.log.info(f"DataFrame schema: {[f.name for f in data.schema.fields]}")
+
+        import time
+
+        write_start = time.time()
+
+        # Create write operation
+        writer = (
             data.write.format("delta")
             .mode("overwrite")
             .options(**write_options)
             .partitionBy(*partition_columns)
-            .saveAsTable(full_table_name)
         )
+
+        # Log that write is starting
+        context.log.info(f"⏳ Executing Delta write to {full_table_name}...")
+
+        # Execute the write
+        writer.saveAsTable(full_table_name)
+
+        write_duration = time.time() - write_start
+        context.log.info(
+            f"✓ Delta write completed in {write_duration:.2f} seconds "
+            f"({write_duration/60:.2f} minutes)"
+        )
+
+        # Log post-write statistics
+        spark = data.sparkSession
+        try:
+            dt = DeltaTable.forName(spark, full_table_name)
+            row_count = dt.toDF().count()
+            context.log.info(f"✓ Table {full_table_name} now contains {row_count} rows")
+
+            # Get file statistics from Delta history
+            history = dt.history(1).select("operationMetrics").collect()
+            if history and history[0]["operationMetrics"]:
+                metrics = history[0]["operationMetrics"]
+                num_files = metrics.get("numFiles", "unknown")
+                num_output_bytes = metrics.get(
+                    "numOutputBytes", metrics.get("numOutputRows", "unknown")
+                )
+                context.log.info(
+                    f"✓ Write metrics: {num_files} files, " f"{num_output_bytes} bytes"
+                )
+        except Exception as e:
+            context.log.warning(f"Could not retrieve post-write statistics: {e}")
 
     def _handle_truncate(
         self,

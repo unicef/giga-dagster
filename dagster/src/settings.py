@@ -125,7 +125,7 @@ class Settings(BaseSettings):
 
     @property
     def AZURE_BLOB_CONNECTION_URI(self) -> str:
-        return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
+        return f"abfss://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_DFS_SAS_HOST}"
 
     @property
     def AZURE_STORAGE_CONNECTION_STRING(self) -> str:
