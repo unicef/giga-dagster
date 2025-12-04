@@ -77,9 +77,12 @@ spark_common_config = {
     "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
     # Enable verbose logging for Delta operations
     "spark.databricks.delta.logLevel": "INFO",
-    # ABFSS authentication configuration (using SAS token directly)
+    # ABFSS authentication configuration (DFS endpoint for new operations)
     # Note: For container-level SAS tokens, we use the container-specific config
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN,
+    # WASBS authentication configuration (Blob endpoint for backward compatibility)
+    # Needed to access existing Delta tables that were created with WASBS protocol
+    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": settings.AZURE_SAS_TOKEN,
 }
 
 if settings.IN_PRODUCTION:
