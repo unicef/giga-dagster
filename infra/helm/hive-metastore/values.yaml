@@ -115,8 +115,6 @@ envSecrets:
   - name: giga-dagster-hive-secrets
 
 postgresql:
-  global:
-    imageRegistry: "public.ecr.aws"
   image:
     tag: 9.6.24-debian-10-r70
   global:
