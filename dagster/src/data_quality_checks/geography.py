@@ -20,7 +20,9 @@ azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 
 DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
-ACCOUNT_URL = f"https://{settings.AZURE_DFS_SAS_HOST}/"
+# Note: BlobServiceClient requires blob endpoint, not DFS endpoint
+# ABFSS protocol (DFS endpoint) is only for Spark/Hadoop operations
+ACCOUNT_URL = f"https://{settings.AZURE_BLOB_SAS_HOST}/"
 DIRECTORY_LOCATION_GADM = "raw/geospatial-data/gadm_files/version4.1/"
 DIRECTORY_LOCATION_MAPBOX = "admin_data/admin0/"
 container_name = azure_blob_container_name

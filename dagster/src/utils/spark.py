@@ -77,12 +77,9 @@ spark_common_config = {
     "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
     # Enable verbose logging for Delta operations
     "spark.databricks.delta.logLevel": "INFO",
-    # ABFSS authentication configuration
-    f"fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
-    f"fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
-    f"fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": (
-        settings.AZURE_SAS_TOKEN
-    ),
+    # ABFSS authentication configuration (using SAS token directly)
+    # Note: For container-level SAS tokens, we use the container-specific config
+    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN,
 }
 
 if settings.IN_PRODUCTION:
