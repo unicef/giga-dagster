@@ -75,7 +75,12 @@ spark_common_config = {
     # Reduce file write overhead for ADLS
     "spark.sql.files.maxRecordsPerFile": "50000",
     "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
-    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
+    # Enable verbose logging for Delta operations
+    "spark.databricks.delta.logLevel": "INFO",
+    # ABFSS authentication configuration
+    f"fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
+    f"fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
+    f"fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
 }
