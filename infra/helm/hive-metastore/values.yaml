@@ -117,6 +117,11 @@ envSecrets:
 postgresql:
   image:
     tag: 9.6.24-debian-10-r70
+  global:
+    imageRegistry: "public.ecr.aws"
+  volumePermissions:
+    image:
+      tag: 11-debian-11-r96
   auth:
     username: giga-hms
     database: metastore_db
