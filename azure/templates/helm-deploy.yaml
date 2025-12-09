@@ -48,6 +48,8 @@ jobs:
                 chartPath: $(Build.SourcesDirectory)/infra/helm/hive-metastore
                 releaseName: hive-metastore
                 namespace: $(kubernetesNamespace)
+                recreate: true
+                force: true
                 arguments: >
                   --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-hive-metastore"
                   --set image.tag="$(Build.SourceVersion)"
