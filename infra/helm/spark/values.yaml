@@ -119,6 +119,15 @@ image:
 ##
 hostNetwork: false
 
+## Azure Storage Configuration
+## These values are used to configure Azure Blob Storage / ADLS Gen2 authentication
+##
+azure:
+  ## @param azure.storageAccountName Azure Storage Account Name (set from environment)
+  storageAccountName: ""
+  ## @param azure.containerName Azure Blob Container Name (set from environment)
+  containerName: ""
+
 ## @section Spark master parameters
 ##
 
@@ -280,10 +289,16 @@ master:
   lifecycleHooks: { }
   ## @param master.extraVolumes Optionally specify extra list of additional volumes for the master pod(s)
   ##
-  extraVolumes: [ ]
+  extraVolumes:
+    - name: hadoop-config
+      configMap:
+        name: '{{ include "common.names.fullname" . }}-hadoop-config'
   ## @param master.extraVolumeMounts Optionally specify extra list of additional volumeMounts for the master container(s)
   ##
-  extraVolumeMounts: [ ]
+  extraVolumeMounts:
+    - name: hadoop-config
+      mountPath: /opt/bitnami/spark/conf/core-site.xml
+      subPath: core-site.xml
   ## @param master.extraVolumeClaimTemplates Optionally specify extra list of volumesClaimTemplates for the master statefulset
   ##
   extraVolumeClaimTemplates: [ ]
@@ -573,10 +588,16 @@ worker:
   lifecycleHooks: { }
   ## @param worker.extraVolumes Optionally specify extra list of additional volumes for the worker pod(s)
   ##
-  extraVolumes: [ ]
+  extraVolumes:
+    - name: hadoop-config
+      configMap:
+        name: '{{ include "common.names.fullname" . }}-hadoop-config'
   ## @param worker.extraVolumeMounts Optionally specify extra list of additional volumeMounts for the master container(s)
   ##
-  extraVolumeMounts: [ ]
+  extraVolumeMounts:
+    - name: hadoop-config
+      mountPath: /opt/bitnami/spark/conf/core-site.xml
+      subPath: core-site.xml
   ## @param worker.extraVolumeClaimTemplates Optionally specify extra list of volumesClaimTemplates for the worker statefulset
   ##
   extraVolumeClaimTemplates: [ ]

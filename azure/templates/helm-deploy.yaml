@@ -38,6 +38,8 @@ jobs:
                   --set image.registry="$(containerRegistryName).azurecr.io"
                   --set image.repository="giga-dagster-spark"
                   --set image.tag="$(Build.SourceVersion)"
+                  --set azure.storageAccountName="$(azureStorageAccountName)"
+                  --set azure.containerName="$(azureBlobContainerName)"
 
             - task: HelmDeploy@0
               displayName: Helm deploy Hive Metastore

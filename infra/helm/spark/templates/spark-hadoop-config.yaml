@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-hadoop-config
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: spark
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  core-site.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+      <!-- Azure ADLS Gen2 / ABFSS Configuration (DFS endpoint) -->
+      <property>
+        <name>fs.azure.account.auth.type.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
+        <value>SAS</value>
+      </property>
+      <property>
+        <name>fs.azure.sas.token.provider.type.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
+        <value>org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider</value>
+      </property>
+      <property>
+        <name>fs.azure.sas.fixed.token.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
+        <value>${env.AZURE_SAS_TOKEN}</value>
+      </property>
+      
+      <!-- Azure Blob Storage / WASBS Configuration (Blob endpoint for backward compatibility) -->
+      <property>
+        <name>fs.azure.sas.{{ .Values.azure.containerName }}.{{ .Values.azure.storageAccountName }}.blob.core.windows.net</name>
+        <value>${env.AZURE_SAS_TOKEN}</value>
+      </property>
+    </configuration>
