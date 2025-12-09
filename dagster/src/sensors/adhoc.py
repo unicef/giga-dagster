@@ -72,8 +72,8 @@ def school_master__gold_csv_to_deltatable_sensor(
 
         stem = path.stem
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
         master_metastore_schema = "school_master"
         reference_metastore_schema = "school_reference"
 
@@ -204,7 +204,7 @@ def school_master__gold_csv_to_deltatable_sensor(
             dq_target_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{master_metastore_schema}.db/{country_code}",
         )
 
-        last_modified = props.last_modified.strftime("%Y%m%d-%H%M%S")
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
 
         context.log.info(f"FILE: {path}")
         run_requests.append(
@@ -248,8 +248,8 @@ def health_master__gold_csv_to_deltatable_sensor(
         country_code = path.parent.name
         stem = path.stem
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
         metastore_schema = "health_master"
 
         ops_destination_mapping = {
@@ -282,7 +282,7 @@ def health_master__gold_csv_to_deltatable_sensor(
             country_code=country_code,
         )
 
-        last_modified = props.last_modified.strftime("%Y%m%d-%H%M%S")
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
         context.log.info(f"FILE: {path}")
         run_requests.append(
             RunRequest(
@@ -325,8 +325,8 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
         stem = path.stem
         country_code = path.parent.name
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
         metastore_schema = "qos_raw"
 
         ops_destination_mapping = {
@@ -503,8 +503,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
         stem = path.stem
         country_code = path.parent.name
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
         metastore_schema = "qos"
 
         ops_destination_mapping = {
@@ -640,8 +640,8 @@ def custom_dataset_sensor(
         path = Path(adls_filepath)
         stem = path.stem
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
 
         ops_destination_mapping = {
             "custom_dataset_raw": OpDestinationMapping(
@@ -667,7 +667,7 @@ def custom_dataset_sensor(
             country_code=stem,
         )
 
-        last_modified = props.last_modified.strftime("%Y%m%d-%H%M%S")
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
         context.log.info(f"FILE: {path}")
         yield RunRequest(
             run_key=f"{path}:{last_modified}",

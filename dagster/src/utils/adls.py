@@ -237,7 +237,7 @@ class ADLSFileClient(ConfigurableResource):
                 return data
         except Exception as e:
             logger.debug(
-                f"No metadata sidecar found at: {metadata_blob_path} ({e}), falling back to blob props"
+                f"No metadata sidecar found at: {metadata_blob_path} ({e}), falling back to blob properties"
             )
 
         # 2. Fallback to ADLS properties

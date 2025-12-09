@@ -34,8 +34,8 @@ def school_connectivity_update_schools_connectivity_sensor(
 
         country_code, *_ = path.stem.split("_")
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
 
         ops_destination_mapping = {
             "school_connectivity_realtime_silver": OpDestinationMapping(

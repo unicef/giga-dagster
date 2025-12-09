@@ -36,8 +36,8 @@ def qos_availability__raw_file_uploads_sensor(
         path = Path(adls_filepath)
         stem = path.stem
         metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-        props = adls_file_client.get_file_metadata(filepath=adls_filepath)
-        size = props.size
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
 
         ops_destination_mapping = {
             "qos_availability_raw": OpDestinationMapping(
