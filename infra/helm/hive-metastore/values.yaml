@@ -120,6 +120,7 @@ postgresql:
   global:
     imageRegistry: "public.ecr.aws"
   volumePermissions:
+    enabled: true
     image:
       tag: 11-debian-11-r96
   auth:
@@ -134,5 +135,3 @@ postgresql:
   primary:
     persistence:
       enabled: true
-  volumePermissions:
-    enabled: true
