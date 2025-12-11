@@ -7,9 +7,8 @@ from pyspark.sql.types import FloatType
 
 from dagster import OpExecutionContext
 from src.spark.user_defined_functions import (
+    find_similar_names_in_group_udf,
     h3_geo_to_h3_udf,
-    has_similar_name_check_udf,
-    point_110_udf,
 )
 from src.utils.logger import (
     ContextLoggerWithLoguruFallback,
@@ -26,8 +25,8 @@ def duplicate_name_level_110_check(
 
     df_columns = df.columns
 
-    df = df.withColumn("lat_110", point_110_udf(f.col("latitude")))
-    df = df.withColumn("long_110", point_110_udf(f.col("longitude")))
+    df = df.withColumn("lat_110", f.floor(f.col("latitude") * 1000) / 1000)
+    df = df.withColumn("long_110", f.floor(f.col("longitude") * 1000) / 1000)
     window_spec1 = Window.partitionBy(
         "school_name",
         "education_level",
@@ -68,8 +67,8 @@ def similar_name_level_within_110_check(
 
     # Generate Lat 110, Long 110
     column_actions = {
-        "lat_110": point_110_udf(f.col("latitude")),
-        "long_110": point_110_udf(f.col("longitude")),
+        "lat_110": f.floor(f.col("latitude") * 1000) / 1000,
+        "long_110": f.floor(f.col("longitude") * 1000) / 1000,
     }
     df = df.withColumns(column_actions)
 
@@ -83,34 +82,36 @@ def similar_name_level_within_110_check(
         ).otherwise(0),
     )
 
-    # Get list of names among duplicates from above
-    school_names_1 = df.select(
-        f.col("school_name"),
-        f.col("education_level"),
-        f.col("lat_110"),
-        f.col("long_110"),
-    ).filter(df["duplicate_level_within_110m_radius"] == 1)
+    # Group school names by location and education level for schools with duplicates
+    school_names_grouped = (
+        df.filter(df["duplicate_level_within_110m_radius"] == 1)
+        .groupBy("education_level", "lat_110", "long_110")
+        .agg(f.collect_list("school_name").alias("school_names"))
+    )
 
-    # Left join to self to compare similarity across duplicate groups
-    school_names_2 = school_names_1.withColumnRenamed("school_name", "school_name_join")
-    df_l = school_names_1.join(
-        school_names_2,
-        on=["education_level", "lat_110", "long_110"],
+    # Find similar names within each group using vectorized comparison
+    school_names_grouped = school_names_grouped.withColumn(
+        "similar_names_list", find_similar_names_in_group_udf(f.col("school_names"))
+    )
+
+    # Explode the list of similar names to get individual rows
+    df_similar = school_names_grouped.select(
+        "education_level",
+        "lat_110",
+        "long_110",
+        f.explode("similar_names_list").alias("school_name_similar"),
+    )
+
+    # Join to original dataset and tag entries with similar names
+    df = df.join(
+        df_similar,
+        (df["school_name"] == df_similar["school_name_similar"])
+        & (df["education_level"] == df_similar["education_level"])
+        & (df["lat_110"] == df_similar["lat_110"])
+        & (df["long_110"] == df_similar["long_110"]),
         how="left",
     )
 
-    df_l = df_l.withColumn(
-        "dq_has_similar_name",
-        has_similar_name_check_udf(f.col("school_name"), f.col("school_name_join")),
-    )
-
-    # Filter to entries with similar names
-    df_l = df_l.filter(df_l["dq_has_similar_name"] == 1)
-    df_l = df_l.select(f.col("school_name")).distinct()
-    df_l = df_l.withColumnRenamed("school_name", "school_name_similar")
-
-    # Join to original dataset and tag entries with similar names and duplicate education level, latitude, longitude
-    df = df.join(df_l, df["school_name"] == df_l["school_name_similar"], how="left")
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(f.col("school_name_similar").isNull(), 0).otherwise(1),

@@ -1,5 +1,4 @@
 from dagster import ScheduleDefinition
-
 from src.jobs.qos_availability import generate_uptime
 
 superset_schedule = ScheduleDefinition(
