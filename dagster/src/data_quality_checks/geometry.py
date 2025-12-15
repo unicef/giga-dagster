@@ -103,14 +103,21 @@ def similar_name_level_within_110_check(
     )
 
     # Join to original dataset and tag entries with similar names
-    df = df.join(
-        df_similar,
-        (df["school_name"] == df_similar["school_name_similar"])
-        & (df["education_level"] == df_similar["education_level"])
-        & (df["lat_110"] == df_similar["lat_110"])
-        & (df["long_110"] == df_similar["long_110"]),
+    # Use aliases to avoid duplicate column names from the join
+    df = df.alias("left_df").join(
+        df_similar.alias("right_df"),
+        (f.col("left_df.school_name") == f.col("right_df.school_name_similar"))
+        & (f.col("left_df.education_level") == f.col("right_df.education_level"))
+        & (f.col("left_df.lat_110") == f.col("right_df.lat_110"))
+        & (f.col("left_df.long_110") == f.col("right_df.long_110")),
         how="left",
     )
+
+    # Select only the left side columns plus school_name_similar from right side
+    # This avoids duplicate column names that would cause ambiguous references later
+    columns_to_select = [f.col(f"left_df.{col}") for col in df_columns]
+    columns_to_select.append(f.col("right_df.school_name_similar"))
+    df = df.select(*columns_to_select)
 
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
