@@ -63,7 +63,6 @@ def backfill_school_geolocation_metadata(
             file_size_bytes = properties.size
 
         context.log.info("Get upload details")
-        file_path = str(path)
         country_code = country_code
         schema_name = METASTORE_SCHEMA
         file_name = path.name
@@ -77,7 +76,7 @@ def backfill_school_geolocation_metadata(
             "country_code": country_code,
             "giga_sync_uploaded_at": giga_sync_uploaded_at,
             "schema_name": schema_name,
-            "raw_file_path": file_path,
+            "raw_file_path": adls_filepath,
             "file_size_bytes": file_size_bytes,
         }
 
