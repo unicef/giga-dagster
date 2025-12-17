@@ -3,6 +3,7 @@ from src import jobs, schedule, sensors
 from src.assets import (
     adhoc,
     admin,
+    backfill,
     common,
     datahub_assets,
     debug,
@@ -41,6 +42,9 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=school_connectivity,
             group_name=school_connectivity.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=backfill, group_name=backfill.GROUP_NAME
         ),
         *load_assets_from_package_module(
             package_module=common, group_name=common.GROUP_NAME
