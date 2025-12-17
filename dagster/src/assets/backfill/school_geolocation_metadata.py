@@ -63,10 +63,10 @@ def backfill_school_geolocation_metadata(
             file_size_bytes = properties.size
 
         context.log.info("Get upload details")
-        file_path = path
+        file_path = str(path)
         country_code = country_code
         schema_name = METASTORE_SCHEMA
-        file_name = Path(file_path).name
+        file_name = path.name
         giga_sync_id = file_name.split("_")[0]
         giga_sync_uploaded_at = datetime.strptime(
             file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S"
