@@ -4,10 +4,12 @@ from pathlib import Path
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
+from models.file_upload import FileUpload
 from pyspark.sql import (
     SparkSession,
 )
 from pyspark.sql.types import StructType
+from sqlalchemy import select
 from src.constants import constants
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -15,6 +17,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.db.primary import get_db_context
 from src.utils.filename import deconstruct_school_master_filename_components
 from src.utils.schema import (
     construct_full_table_name,
@@ -71,6 +74,16 @@ def backfill_school_geolocation_metadata(
             file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S"
         )
 
+        with get_db_context() as db:
+            file_upload = db.scalar(
+                select(FileUpload).where(FileUpload.id == giga_sync_id),
+            )
+            if file_upload is None:
+                context.log.error(
+                    f"Database entry for FileUpload with id {giga_sync_id} and country {country_code} was not found"
+                )
+                continue
+
         upload_details = {
             "giga_sync_id": giga_sync_id,
             "country_code": country_code,
@@ -79,6 +92,12 @@ def backfill_school_geolocation_metadata(
             "raw_file_path": adls_filepath,
             "file_size_bytes": file_size_bytes,
         }
+
+        context.log.info(f"Creating metadata for {country_code}")
+
+        context.log.info(
+            f"The type of the raw_file is: {type(upload_details['raw_file_path'])}"
+        )
 
         context.log.info("Create upload details dataframe")
         df = pd.DataFrame([upload_details])
