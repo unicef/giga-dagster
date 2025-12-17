@@ -8,8 +8,6 @@ from pyspark.sql import (
     SparkSession,
 )
 from pyspark.sql.types import StructType
-
-from dagster import OpExecutionContext, asset
 from src.constants import constants
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -22,6 +20,8 @@ from src.utils.schema import (
     construct_full_table_name,
     get_schema_columns,
 )
+
+from dagster import OpExecutionContext, asset
 
 DATASET_TYPE = "geolocation"
 DOMAIN = "school"
