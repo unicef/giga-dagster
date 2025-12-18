@@ -9,19 +9,18 @@ logger = logging.getLogger(__name__)
 
 
 @asset(
-    group_name="adhoc",
     description="One-time migration: Update Hive Metastore table locations from WASBS to ABFSS",
     compute_kind="spark",
 )
 def migrate_wasbs_to_abfss_tables(
-    context: OpExecutionContext, pyspark: PySparkResource
+    context: OpExecutionContext, spark: PySparkResource
 ) -> Output[dict]:
     """
     Migrates all Hive Metastore table locations from WASBS to ABFSS protocol.
 
     This is a one-time migration asset that should be run once per environment.
     """
-    spark: SparkSession = pyspark.spark_session
+    spark_session: SparkSession = spark.spark_session
 
     # Import migration functions (assuming they're in a utils module)
     from scripts.migrate_wasbs_to_abfss import (
@@ -32,7 +31,7 @@ def migrate_wasbs_to_abfss_tables(
     context.log.info("Starting WASBS to ABFSS migration")
 
     # Get all tables with WASBS
-    wasbs_tables = get_all_tables_with_wasbs(spark)
+    wasbs_tables = get_all_tables_with_wasbs(spark_session)
     context.log.info(f"Found {len(wasbs_tables)} tables with WASBS locations")
 
     # Migrate each table
@@ -40,7 +39,7 @@ def migrate_wasbs_to_abfss_tables(
     failure_count = 0
 
     for table_info in wasbs_tables:
-        if migrate_table_location(spark, table_info, dry_run=False):
+        if migrate_table_location(spark_session, table_info, dry_run=False):
             success_count += 1
         else:
             failure_count += 1

@@ -26,8 +26,23 @@
     <name>javax.jdo.option.ConnectionPassword</name>
     <value>{ENV:HMS_POSTGRESQL_PASSWORD}</value>
   </property>
+  <!-- WASBS authentication (Blob endpoint - for backward compatibility with existing tables) -->
   <property>
     <name>fs.azure.sas.{ENV:STORAGE_CONTAINER_NAME}.{ENV:STORAGE_ACCOUNT_NAME}.blob.core.windows.net</name>
+    <value>{ENV:AZURE_SAS_TOKEN}</value>
+  </property>
+  
+  <!-- ABFSS authentication (DFS endpoint - for new operations and migrated tables) -->
+  <property>
+    <name>fs.azure.account.auth.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>SAS</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.token.provider.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.fixed.token.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
     <value>{ENV:AZURE_SAS_TOKEN}</value>
   </property>
 </configuration>
