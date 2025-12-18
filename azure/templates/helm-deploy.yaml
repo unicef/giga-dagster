@@ -72,6 +72,50 @@ jobs:
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
 
+            - task: Kubernetes@1
+              displayName: Get Pods Status
+              condition: always()
+              inputs:
+                connectionType: Kubernetes Service Connection
+                command: get
+                arguments: pods -n $(kubernetesNamespace) -o wide
+
+            - task: Kubernetes@1
+              displayName: Get Dagster PostgreSQL Pod Status
+              condition: always()
+              continueOnError: true
+              inputs:
+                connectionType: Kubernetes Service Connection
+                command: get
+                arguments: pods -n $(kubernetesNamespace) -l app=postgresql,release=dagster -o wide
+
+            - task: Kubernetes@1
+              displayName: Describe Dagster PostgreSQL Pods
+              condition: always()
+              continueOnError: true
+              inputs:
+                connectionType: Kubernetes Service Connection
+                command: describe
+                arguments: pods -n $(kubernetesNamespace) -l app=postgresql,release=dagster
+
+            - task: Kubernetes@1
+              displayName: Get Dagster PostgreSQL Current Logs
+              condition: always()
+              continueOnError: true
+              inputs:
+                connectionType: Kubernetes Service Connection
+                command: logs
+                arguments: -n $(kubernetesNamespace) -l app=postgresql,release=dagster --tail=100
+
+            - task: Kubernetes@1
+              displayName: Get Dagster PostgreSQL Previous Logs (Crash Logs)
+              condition: always()
+              continueOnError: true
+              inputs:
+                connectionType: Kubernetes Service Connection
+                command: logs
+                arguments: -n $(kubernetesNamespace) -l app=postgresql,release=dagster --tail=100 --previous
+
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
               condition: or(eq(variables.environment, 'dev'), eq(variables.environment, 'stg'))
