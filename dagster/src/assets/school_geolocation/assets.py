@@ -1,4 +1,5 @@
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -35,6 +36,9 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.data_quality_descriptions import (
+    convert_dq_checks_to_human_readeable_descriptions_and_upload,
+)
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -42,6 +46,7 @@ from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
@@ -253,8 +258,14 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
+    # OPTIMIZATION: Cache the DataFrame before multiple actions
+    # This prevents re-computation for count() and limit().toPandas()
+    df.cache()
     row_count = df.count()
     preview_df = df.limit(10).toPandas()
+
+    # The cached DataFrame will be used by the IO manager for the write
+    # It will be unpersisted after the write completes
 
     return Output(
         df,

@@ -98,6 +98,9 @@ def build_deduped_merge_query(
     IMPORTANT: Because of this, it is crucial that you do not pass in partial datasets for the
     `updates` DataFrame without explicitly setting the `is_partial_dataset` flag. Otherwise,
     you may end up deleting more rows than you intended.
+
+    OPTIMIZATION: Uses a single join with full outer join to detect all change types
+    in one pass instead of 3 separate joins + counts.
     """
     incoming = updates.alias("incoming")
 
@@ -130,29 +133,59 @@ def build_deduped_merge_query(
             f"incoming.{primary_key}"
         )
 
+    # OPTIMIZATION: Use a single full outer join to detect all change types at once
+    # This replaces 3 separate joins (inner, left_anti, left_anti) + 3 counts
     master_ids = master_df.select(
-        primary_key, f.col("signature").alias("master_signature")
+        f.col(primary_key).alias("master_pk"),
+        f.col("signature").alias("master_signature"),
     )
     incoming_ids = incoming.select(
-        primary_key, f.col("signature").alias("incoming_signature")
+        f.col(primary_key).alias("incoming_pk"),
+        f.col("signature").alias("incoming_signature"),
     )
 
-    updates_df = incoming_ids.join(master_ids, primary_key, "inner")
-    inserts_df = incoming_ids.join(master_ids, primary_key, "left_anti")
-    deletes_df = master_df.select(primary_key).join(
-        incoming_ids, primary_key, "left_anti"
+    # Cache incoming_ids since it's used multiple times
+    incoming_ids.cache()
+
+    # Single full outer join to classify all rows
+    joined = incoming_ids.join(
+        master_ids,
+        f.col("incoming_pk") == f.col("master_pk"),
+        "full_outer",
+    ).select(
+        f.coalesce(f.col("incoming_pk"), f.col("master_pk")).alias("pk"),
+        f.col("master_pk"),
+        f.col("incoming_pk"),
+        f.col("master_signature"),
+        f.col("incoming_signature"),
     )
 
-    has_updates = (
-        updates_df.filter(f.col("master_signature") != f.col("incoming_signature"))
-        .limit(1)
-        .count()
-    ) > 0
-    inserts_count = inserts_df.count()
-    deletes_count = deletes_df.count()
+    # Classify each row as insert, update, delete, or unchanged in a single pass
+    classified = joined.withColumn(
+        "change_type",
+        f.when(f.col("master_pk").isNull(), "insert")
+        .when(f.col("incoming_pk").isNull(), "delete")
+        .when(f.col("master_signature") != f.col("incoming_signature"), "update")
+        .otherwise("unchanged"),
+    )
 
+    # Single aggregation to get all counts at once
+    change_counts = (
+        classified.groupBy("change_type").agg(f.count("*").alias("cnt")).collect()
+    )
+
+    # Parse results
+    counts_dict = {row["change_type"]: row["cnt"] for row in change_counts}
+    inserts_count = counts_dict.get("insert", 0)
+    deletes_count = counts_dict.get("delete", 0)
+    updates_count = counts_dict.get("update", 0)
+
+    has_updates = updates_count > 0
     has_insertions = inserts_count > 0
     has_deletions = deletes_count > 0
+
+    # Unpersist the cached DataFrame
+    incoming_ids.unpersist()
 
     if not any(
         [has_updates, has_insertions, (has_deletions and not is_partial_dataset)]
@@ -161,7 +194,9 @@ def build_deduped_merge_query(
 
     if context is not None:
         context.log.info(f"{is_qos=}, {is_partial_dataset=}")
-        context.log.info(f"{inserts_count=}, {deletes_count=}, {has_updates=}")
+        context.log.info(
+            f"{inserts_count=}, {deletes_count=}, {updates_count=}, {has_updates=}"
+        )
 
     query = master.alias("master").merge(incoming.alias("incoming"), merge_condition)
 

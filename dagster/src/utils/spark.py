@@ -136,11 +136,6 @@ def spark_loader(
     """
     ext = Path(filepath).suffix.lower()
 
-    # Calculate optimal partition count for parallelization
-    # Use 4x the number of available cores for better load balancing
-    # Minimum of 24 partitions to ensure good distribution across workers
-    num_partitions = max(spark.sparkContext.defaultParallelism * 4, 24)
-
     # Excel files: Use pandas fallback approach (memory-intensive but necessary)
     if ext in [".xlsx", ".xls"]:
         if raw_bytes is None:
@@ -156,26 +151,52 @@ def spark_loader(
             pdf = pandas_loader(buffer, filepath)
             df = spark.createDataFrame(pdf)
 
-            # Repartition to enable parallel processing across all workers
-            # Without this, pandas conversion creates single partition
-            return df.repartition(num_partitions)
+            # For small datasets from pandas, use minimal partitions
+            # This avoids overhead of managing many small partitions
+            return _optimize_partitions(spark, df)
 
     # All other formats: Use native Spark readers
     adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
 
     if ext == ".csv":
         df = spark.read.csv(adls_path, header=True, escape='"', multiLine=True)
-        # Repartition CSV data to ensure parallel processing
-        return df.repartition(num_partitions)
+        return _optimize_partitions(spark, df)
     elif ext == ".json":
         df = spark.read.json(adls_path, multiLine=True)
-        # Repartition JSON data to ensure parallel processing
-        return df.repartition(num_partitions)
+        return _optimize_partitions(spark, df)
     elif ext == ".parquet":
         # Parquet files typically have good partitioning already
         return spark.read.parquet(adls_path)
     else:
         raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
+
+
+def _optimize_partitions(spark: SparkSession, df: SparkDataFrame) -> SparkDataFrame:
+    """
+    Optimize DataFrame partitions based on data size.
+
+    For small datasets (<50k rows), fewer partitions reduce write overhead.
+    For larger datasets, more partitions enable parallel processing.
+
+    Uses partition count as a proxy for size to avoid expensive count() operations.
+    """
+    current_partitions = df.rdd.getNumPartitions()
+    default_parallelism = spark.sparkContext.defaultParallelism
+
+    # If data comes from a single partition (e.g., pandas conversion, small file),
+    # it's likely small - use minimal partitions to reduce write overhead
+    if current_partitions <= 1:
+        # Small dataset: use 2-4 partitions max for parallelism without overhead
+        return df.repartition(min(4, default_parallelism))
+    elif current_partitions <= default_parallelism:
+        # Medium dataset: already reasonably partitioned, leave as-is
+        return df
+    else:
+        # Large dataset: cap at 2x parallelism to avoid excessive file fragmentation
+        optimal = default_parallelism * 2
+        if current_partitions > optimal:
+            return df.coalesce(optimal)
+        return df
 
 
 def count_nulls_for_column(df: sql.DataFrame, column_name: str) -> sql.DataFrame:
@@ -394,5 +415,7 @@ def compute_row_hash(
         columns.remove("signature")
 
     out = df.withColumn("signature", sha2(concat_ws("|", *sorted(columns)), 256))
-    logger.info(f"Calculated SHA256 signature for {out.count()} rows")
+    # Note: Removed count() call here as it triggers an expensive action
+    # Row count is typically logged elsewhere in the pipeline
+    logger.info("Calculated SHA256 signature for DataFrame rows")
     return out

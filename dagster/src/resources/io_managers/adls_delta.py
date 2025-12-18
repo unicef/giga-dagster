@@ -218,6 +218,20 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                     .saveAsTable(full_table_name)
                 )
 
+        # OPTIMIZATION: Coalesce small datasets to reduce partition overhead
+        # For merge operations, fewer partitions = fewer file writes
+        current_partitions = data.rdd.getNumPartitions()
+        default_parallelism = spark.sparkContext.defaultParallelism
+
+        # For small/medium datasets, coalesce to reduce write overhead
+        # This is safe because merge is the expensive operation, not the read
+        if current_partitions > default_parallelism:
+            optimal_partitions = max(default_parallelism, 4)
+            data = data.coalesce(optimal_partitions)
+            context.log.info(
+                f"Coalesced from {current_partitions} to {optimal_partitions} partitions for merge"
+            )
+
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
         query = build_deduped_merge_query(
