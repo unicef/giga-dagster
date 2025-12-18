@@ -13,7 +13,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
-from src.constants import DataTier
+from src.constants import DataTier, UploadMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -102,6 +102,7 @@ def geolocation_metadata(
     upload_details = {
         "giga_sync_id": giga_sync_id,
         "country_code": country_code,
+        "country": country_code,  # Alias for country_code to satisfy NOT NULL constraint
         "giga_sync_uploaded_at": giga_sync_uploaded_at,
         "schema_name": schema_name,
         "raw_file_path": file_path,
@@ -171,7 +172,7 @@ def geolocation_bronze(
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
-    mode = config.metadata["mode"]
+    mode = config.metadata.get("mode", UploadMode.UPDATE.value)
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -320,7 +321,7 @@ def geolocation_data_quality_results(
         silver=casted_silver,
         dataset_type=dataset_type,
         _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
+        mode=config.metadata.get("mode", UploadMode.UPDATE.value),
         context=context,
     )
 
@@ -375,7 +376,7 @@ async def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    mode = config.metadata["mode"]
+    mode = config.metadata.get("mode", UploadMode.UPDATE.value)
 
     context.log.info("Create a new dataframe with only the relevant columns")
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
@@ -478,7 +479,7 @@ async def geolocation_data_quality_results_summary(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
-    mode = config.metadata["mode"]
+    mode = config.metadata.get("mode", UploadMode.UPDATE.value)
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
