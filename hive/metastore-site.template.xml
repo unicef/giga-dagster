@@ -33,16 +33,9 @@
   </property>
   
   <!-- ABFSS authentication (DFS endpoint - for new operations and migrated tables) -->
+  <!-- Container-specific SAS token for ABFSS (compatible with older hadoop-azure versions) -->
   <property>
-    <name>fs.azure.account.auth.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
-    <value>SAS</value>
-  </property>
-  <property>
-    <name>fs.azure.sas.token.provider.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
-    <value>org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider</value>
-  </property>
-  <property>
-    <name>fs.azure.sas.fixed.token.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <name>fs.azure.sas.{ENV:STORAGE_CONTAINER_NAME}.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
     <value>{ENV:AZURE_SAS_TOKEN}</value>
   </property>
 </configuration>

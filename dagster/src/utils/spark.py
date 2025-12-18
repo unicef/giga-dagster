@@ -78,12 +78,8 @@ spark_common_config = {
     # Enable verbose logging for Delta operations
     "spark.databricks.delta.logLevel": "INFO",
     # ABFSS authentication configuration (DFS endpoint for new operations)
-    # Must explicitly set auth type to SAS - ABFSS doesn't auto-detect like WASBS
-    f"spark.hadoop.fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
-    # Token provider type for ABFSS (recommended approach)
-    f"spark.hadoop.fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
-    # Fixed SAS token for ABFSS
-    f"spark.hadoop.fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN,
+    # Container-specific SAS token for ABFSS (compatible with older hadoop-azure versions)
+    f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN,
     # WASBS authentication configuration (Blob endpoint for backward compatibility)
     # Needed to access existing Delta tables that were created with WASBS protocol
     f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": settings.AZURE_SAS_TOKEN,

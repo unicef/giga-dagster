@@ -14,16 +14,9 @@ data:
     <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
     <configuration>
       <!-- Azure ADLS Gen2 / ABFSS Configuration (DFS endpoint) -->
+      <!-- Container-specific SAS token for ABFSS (compatible with older hadoop-azure versions) -->
       <property>
-        <name>fs.azure.account.auth.type.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
-        <value>SAS</value>
-      </property>
-      <property>
-        <name>fs.azure.sas.token.provider.type.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
-        <value>org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider</value>
-      </property>
-      <property>
-        <name>fs.azure.sas.fixed.token.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
+        <name>fs.azure.sas.{{ .Values.azure.containerName }}.{{ .Values.azure.storageAccountName }}.dfs.core.windows.net</name>
         <value>${env.AZURE_SAS_TOKEN}</value>
       </property>
       
