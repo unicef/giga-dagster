@@ -218,15 +218,19 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                     .saveAsTable(full_table_name)
                 )
 
-        # OPTIMIZATION: Coalesce small datasets to reduce partition overhead
+        # WASBS Optimization: Coalesce aggressively to minimize REST API calls
         # For merge operations, fewer partitions = fewer file writes
         current_partitions = data.rdd.getNumPartitions()
-        default_parallelism = spark.sparkContext.defaultParallelism
 
-        # For small/medium datasets, coalesce to reduce write overhead
-        # This is safe because merge is the expensive operation, not the read
-        if current_partitions > default_parallelism:
-            optimal_partitions = max(default_parallelism, 4)
+        # Use same aggressive strategy as overwrite: 1-4 files max
+        if current_partitions <= 4:
+            optimal_partitions = 1  # Single file for small data
+        elif current_partitions <= 16:
+            optimal_partitions = 2  # 2 files for medium data
+        else:
+            optimal_partitions = 4  # Cap at 4 files for large data
+
+        if current_partitions > optimal_partitions:
             data = data.coalesce(optimal_partitions)
             context.log.info(
                 f"Coalesced from {current_partitions} to {optimal_partitions} partitions for merge"
@@ -262,74 +266,60 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         column_names = [col.name for col in columns]
         context.log.info(f"columns: {column_names}")
 
-        # Adaptive repartitioning based on current partition count (avoids expensive count())
-        # For small datasets, fewer partitions = faster writes to ADLS
-        # For large datasets, more partitions = better parallelism
+        # =======================================================================
+        # WASBS Optimization: Minimize partitions to reduce REST API calls
+        # Each partition = 1 file = multiple PUT operations to Azure Blob
+        # For small datasets, coalesce aggressively to 1-2 files
+        # =======================================================================
         current_partitions = data.rdd.getNumPartitions()
-        default_parallelism = data.sparkSession.sparkContext.defaultParallelism
 
-        # Use current partition count as a proxy for data size
-        # If data already has few partitions, it's likely small
-        if current_partitions <= default_parallelism:
-            # Small dataset: use moderate partitioning
-            num_partitions = min(current_partitions * 2, default_parallelism * 2)
+        # For small datasets (< 100K rows), write to 1 file
+        # For medium datasets, write to 2-4 files
+        # Only use more partitions for genuinely large datasets
+        #
+        # Using partition count as proxy for size:
+        # - 1-2 partitions typically = small data (< 100K rows)
+        # - 3-8 partitions typically = medium data (100K-1M rows)
+        # - 8+ partitions typically = large data (> 1M rows)
+        if current_partitions <= 4:
+            # Small dataset: coalesce to single file to minimize API calls
+            num_partitions = 1
             context.log.info(
-                f"Small dataset ({current_partitions} current partitions): "
-                f"using {num_partitions} partitions for write"
+                f"Small dataset ({current_partitions} partitions): "
+                f"coalescing to 1 file to minimize WASBS API calls"
+            )
+        elif current_partitions <= 16:
+            # Medium dataset: use 2 files for some parallelism
+            num_partitions = 2
+            context.log.info(
+                f"Medium dataset ({current_partitions} partitions): "
+                f"coalescing to 2 files for balanced write performance"
             )
         else:
-            # Large dataset: keep existing partitions (already well-distributed)
-            optimal_partitions = default_parallelism * 3
-            if current_partitions < optimal_partitions:
-                num_partitions = optimal_partitions
-                context.log.info(
-                    f"Large dataset ({current_partitions} current partitions): "
-                    f"increasing to {num_partitions} for better parallelism"
-                )
-            else:
-                # Already well-partitioned, keep as-is to avoid shuffle
-                num_partitions = current_partitions
-                context.log.info(
-                    f"Large dataset ({current_partitions} current partitions): "
-                    f"keeping existing partitions (already well-distributed)"
-                )
-
-        # Only repartition if it would actually change the partition count
-        if num_partitions != current_partitions:
-            data = data.repartition(num_partitions)
+            # Large dataset: cap at 4 files to limit API overhead
+            num_partitions = 4
             context.log.info(
-                f"Repartitioned from {current_partitions} to {num_partitions} partitions"
+                f"Large dataset ({current_partitions} partitions): "
+                f"coalescing to 4 files to limit WASBS overhead"
             )
-        else:
+
+        # Use coalesce (not repartition) to avoid full shuffle
+        if num_partitions < current_partitions:
+            data = data.coalesce(num_partitions)
             context.log.info(
-                f"Keeping existing {current_partitions} partitions (already optimal)"
+                f"Coalesced from {current_partitions} to {num_partitions} partitions"
             )
 
         # overwrite the table with the new data
         context.log.info(f"the table {full_table_name} overwriting with new data")
 
-        # Adaptive maxRecordsPerFile: only limit for large datasets
+        # Write options optimized for minimal WASBS API calls
+        # - optimizeWrite: bin-packs small files into larger ones
+        # - No maxRecordsPerFile: let Spark write large files to minimize PUT calls
         write_options = {
             "overwriteSchema": "true",
             "optimizeWrite": "true",
-            "autoOptimize.optimizeWrite": "true",
         }
-
-        estimated_rows = num_partitions * 5000
-
-        if estimated_rows > 100000:
-            # Large dataset: limit records per file to prevent huge files
-            write_options["maxRecordsPerFile"] = "100000"
-            context.log.info(
-                f"Large dataset (~{estimated_rows} rows): "
-                f"limiting to 100K records per file"
-            )
-        else:
-            # Small dataset: let Spark decide file sizes naturally
-            context.log.info(
-                f"Small dataset (~{estimated_rows} rows): "
-                f"no maxRecordsPerFile limit"
-            )
 
         (
             data.write.format("delta")

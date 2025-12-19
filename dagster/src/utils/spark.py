@@ -72,10 +72,37 @@ spark_common_config = {
     "spark.sql.adaptive.localShuffleReader.enabled": "true",
     "spark.sql.shuffle.partitions": "48",
     "spark.sql.autoBroadcastJoinThreshold": "10485760",
-    # Reduce file write overhead for ADLS
-    "spark.sql.files.maxRecordsPerFile": "50000",
+    # ==========================================================================
+    # WASBS I/O Optimizations - Minimize REST API calls
+    # ==========================================================================
+    # Increase block size from default 4MB to 64MB - fewer PUT operations per file
+    "spark.hadoop.fs.azure.block.size": "67108864",  # 64MB
+    # Increase write buffer to reduce number of flush operations
+    "spark.hadoop.fs.azure.write.request.size": "8388608",  # 8MB
+    # Use DirectFileOutputCommitter (v2) for fewer rename operations
     "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version": "2",
-    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
+    # Skip writing _SUCCESS marker files (1 fewer API call per write)
+    "spark.hadoop.mapreduce.fileoutputcommitter.marksuccessfuljobs": "false",
+    # Reduce concurrent operations to avoid Azure throttling
+    "spark.hadoop.fs.azure.io.retry.max.retries": "5",
+    "spark.hadoop.fs.azure.io.retry.backoff.interval": "3000",
+    # ==========================================================================
+    # Delta Lake Write Optimizations - Minimize files written
+    # ==========================================================================
+    # Write larger files (fewer total files = fewer API calls)
+    "spark.sql.files.maxRecordsPerFile": "500000",  # 500K rows per file instead of 50K
+    # Checkpoint less frequently to reduce _delta_log writes
+    "spark.databricks.delta.checkpointInterval": "50",  # Every 50 commits instead of default 10
+    # Enable bin-packing to write fewer, larger files
+    "spark.databricks.delta.optimize.minFileSize": "134217728",  # 128MB target file size
+    # Reduce small file overhead during writes
+    "spark.sql.adaptive.advisoryPartitionSizeInBytes": "134217728",  # 128MB partitions
+    # For small tables, coalesce to single partition to minimize files
+    "spark.sql.adaptive.coalescePartitions.minPartitionSize": "67108864",  # 64MB min
+    # ==========================================================================
+    # WASBS Authentication
+    # ==========================================================================
+    f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
 }
@@ -173,30 +200,27 @@ def spark_loader(
 
 def _optimize_partitions(spark: SparkSession, df: SparkDataFrame) -> SparkDataFrame:
     """
-    Optimize DataFrame partitions based on data size.
+    Optimize DataFrame partitions for WASBS write performance.
 
-    For small datasets (<50k rows), fewer partitions reduce write overhead.
-    For larger datasets, more partitions enable parallel processing.
+    WASBS uses REST API for each file write, so minimizing partitions = fewer API calls.
+    We keep partitions minimal at load time since the IO manager will handle
+    final coalescing before writes anyway.
 
     Uses partition count as a proxy for size to avoid expensive count() operations.
     """
     current_partitions = df.rdd.getNumPartitions()
-    default_parallelism = spark.sparkContext.defaultParallelism
 
-    # If data comes from a single partition (e.g., pandas conversion, small file),
-    # it's likely small - use minimal partitions to reduce write overhead
-    if current_partitions <= 1:
-        # Small dataset: use 2-4 partitions max for parallelism without overhead
-        return df.repartition(min(4, default_parallelism))
-    elif current_partitions <= default_parallelism:
-        # Medium dataset: already reasonably partitioned, leave as-is
+    # Keep partitions minimal - the IO manager will coalesce further before writing
+    # This avoids expensive repartitioning at load time
+    if current_partitions <= 4:
+        # Small dataset: already optimal, don't touch
         return df
+    elif current_partitions <= 16:
+        # Medium dataset: coalesce to 4 partitions for processing
+        return df.coalesce(4)
     else:
-        # Large dataset: cap at 2x parallelism to avoid excessive file fragmentation
-        optimal = default_parallelism * 2
-        if current_partitions > optimal:
-            return df.coalesce(optimal)
-        return df
+        # Large dataset: coalesce to 8 partitions max
+        return df.coalesce(8)
 
 
 def count_nulls_for_column(df: sql.DataFrame, column_name: str) -> sql.DataFrame:
