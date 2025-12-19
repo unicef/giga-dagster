@@ -782,9 +782,19 @@ postgresql:
 
   # Used by init container to check that db is running. (Even if enabled:false)
   image:
-    repository: "library/postgres"
-    tag: "14.6"
+    registry: "public.ecr.aws"
+    repository: "bitnami/postgresql"
+    tag: "14.6.0-debian-11-r33"
     pullPolicy: IfNotPresent
+
+  # Init container for volume permissions
+  volumePermissions:
+    enabled: true
+    image:
+      registry: "public.ecr.aws"
+      repository: "bitnami/minideb"
+      tag: "stretch"
+      pullPolicy: IfNotPresent
 
   # set this PostgreSQL hostname when using an external PostgreSQL database
   postgresqlHost: ""
