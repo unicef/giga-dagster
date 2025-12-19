@@ -52,6 +52,10 @@ jobs:
                   --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-hive-metastore"
                   --set image.tag="$(Build.SourceVersion)"
 
+            - script: |
+                chmod +x $(Build.SourcesDirectory)/infra/helm/dagster/kustomize/kustomize-post-renderer.sh
+              displayName: Make post-renderer executable
+
             - task: HelmDeploy@0
               displayName: Helm deploy Dagster
               inputs:
@@ -64,6 +68,7 @@ jobs:
                 namespace: $(kubernetesNamespace)
                 arguments: >
                   --timeout 6m
+                  --post-renderer $(Build.SourcesDirectory)/infra/helm/dagster/kustomize/kustomize-post-renderer.sh
                   --values $(Build.SourcesDirectory)/infra/helm/dagster/values.yaml
                   --set dagster-user-deployments.deployments[0].image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
@@ -71,6 +76,7 @@ jobs:
                   --set pipelineRun.image.tag=$(Build.SourceVersion)
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
+                  --skip-schema-validation
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy
