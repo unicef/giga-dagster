@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster-daemon
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: check-db-ready
+          image: public.ecr.aws/bitnami/postgresql:14.6.0-debian-11-r33
