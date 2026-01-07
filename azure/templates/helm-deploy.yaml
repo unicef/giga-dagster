@@ -76,6 +76,7 @@ jobs:
                   --set pipelineRun.image.tag=$(Build.SourceVersion)
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
+                  --skip-schema-validation
 
             - task: HelmDeploy@0
               displayName: Helm deploy auth proxy

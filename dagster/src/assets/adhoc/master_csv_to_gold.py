@@ -776,7 +776,7 @@ async def adhoc__reset_geolocation_staging_table(
 
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    # State check: Verify enabled=False and is_merge_processing=False before reset
+    # State check: verify merge is not processing before reset
     formatted_dataset = f"School {dataset_type.capitalize()}"
     with get_db_context() as db:
         current_request = db.scalar(
@@ -790,12 +790,6 @@ async def adhoc__reset_geolocation_staging_table(
             context.log.warning(
                 f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
             )
-        elif current_request.enabled:
-            context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
-                f"Expected enabled=False before reset."
-            )
-            return
         elif current_request.is_merge_processing:
             context.log.warning(
                 f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
@@ -851,6 +845,10 @@ async def adhoc__reset_geolocation_staging_table(
                 f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
             raise
+
+    context.log.info(
+        f"Staging reset completed for {country_code} - {formatted_dataset}; previously staged changes were wiped."
+    )
 
 
 @asset(deps=["adhoc__publish_silver_coverage"])
@@ -891,7 +889,7 @@ async def adhoc__reset_coverage_staging_table(
 
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    # State check: Verify enabled=False and is_merge_processing=False before reset
+    # State check: verify merge is not processing before reset
     formatted_dataset = f"School {dataset_type.capitalize()}"
     with get_db_context() as db:
         current_request = db.scalar(
@@ -905,12 +903,6 @@ async def adhoc__reset_coverage_staging_table(
             context.log.warning(
                 f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
             )
-        elif current_request.enabled:
-            context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
-                f"Expected enabled=False before reset."
-            )
-            return
         elif current_request.is_merge_processing:
             context.log.warning(
                 f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
@@ -966,6 +958,10 @@ async def adhoc__reset_coverage_staging_table(
                 f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
             raise
+
+    context.log.info(
+        f"Staging reset completed for {country_code} - {formatted_dataset}; previously staged changes were wiped."
+    )
 
 
 @asset
