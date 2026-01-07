@@ -288,7 +288,7 @@ class StagingStep:
                 result = trino_db.execute(
                     text(
                         f"SELECT COUNT(*) as count FROM {self.staging_table_name} "  # nosec B608
-                        f"FOR SYSTEM_VERSION AS OF (SELECT MAX(version) FROM "
+                        f"FOR VERSION AS OF (SELECT MAX(version) FROM "
                         f'{self.staging_table_name}."$history") '
                         f"WHERE _change_type = 'delete'"
                     )
