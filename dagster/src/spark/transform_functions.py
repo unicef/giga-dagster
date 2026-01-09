@@ -328,6 +328,14 @@ def column_mapping_rename(
     df: sql.DataFrame,
     column_mapping: dict[str, str],
 ) -> tuple[sql.DataFrame, dict[str, str]]:
+    df_columns_list = df.columns
+
+    # if an unused column exists in the upload dataset that has a name that matches our schema for example school_id_govt,
+    # if we try to map another column to school_id_govt, it will fail so we need to check for this and update it prior
+    for column, mapped_column in column_mapping.items():
+        if mapped_column in df_columns_list and column != mapped_column:
+            df = df.withColumnRenamed(mapped_column, f"{mapped_column} (Not mapped)")
+
     column_mapping_filtered = {
         k.strip(): v
         for k, v in column_mapping.items()
