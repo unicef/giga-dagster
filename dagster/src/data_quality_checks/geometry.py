@@ -83,8 +83,18 @@ def similar_name_level_within_110_check(
     )
 
     # Group school names by location and education level for schools with duplicates
+    # IMPORTANT: Filter out invalid coordinates (NULL, NaN, or 0,0) BEFORE grouping
+    # to prevent O(N²) explosion when many schools have missing coordinates
+    valid_coords_filter = (
+        f.col("latitude").isNotNull()
+        & f.col("longitude").isNotNull()
+        & ~f.isnan(f.col("latitude"))
+        & ~f.isnan(f.col("longitude"))
+        & ~((f.col("latitude") == 0) & (f.col("longitude") == 0))
+    )
+
     school_names_grouped = (
-        df.filter(df["duplicate_level_within_110m_radius"] == 1)
+        df.filter((df["duplicate_level_within_110m_radius"] == 1) & valid_coords_filter)
         .groupBy("education_level", "lat_110", "long_110")
         .agg(f.collect_list("school_name").alias("school_names"))
     )
