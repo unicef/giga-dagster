@@ -42,7 +42,12 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext | None, data: bytes, filepath: str, metadata: dict | None = None) -> None:
+    def upload_raw(
+        context: OutputContext | None,
+        data: bytes,
+        filepath: str,
+        metadata: dict | None = None,
+    ) -> None:
         file_client = _adls.get_file_client(filepath)
 
         if not metadata and context:
