@@ -10,6 +10,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
 
 
+@asset
 def mng_school_geolocation_api_raw(
     context: OpExecutionContext, adls_file_client: ADLSFileClient
 ):
