@@ -11,6 +11,7 @@ from src.assets import (
     school_connectivity,
     school_coverage,
     school_geolocation,
+    school_geolocation_api,
     school_list,
     unstructured,
 )
@@ -29,6 +30,10 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=school_geolocation,
             group_name=school_geolocation.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=school_geolocation_api,
+            group_name=school_geolocation_api.GROUP_NAME,
         ),
         *load_assets_from_package_module(
             package_module=school_coverage,
