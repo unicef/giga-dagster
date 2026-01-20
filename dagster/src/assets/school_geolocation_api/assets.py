@@ -9,7 +9,8 @@ from models.file_upload import FileUpload
 from src.constants import DataTier, constants
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
-from dagster.src.settings import settings
+from src.settings import settings
+
 from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
