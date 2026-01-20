@@ -1,22 +1,18 @@
+import pandas as pd
+from models.file_upload import FileUpload
 from requests import get
 from requests.auth import HTTPBasicAuth
-
-import pandas as pd
-from dagster_pyspark import PySparkResource
-from delta import DeltaTable
-from models.file_upload import FileUpload
-
-from src.constants import DataTier, constants
+from src.constants import constants
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
-from src.settings import settings
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output
+from dagster.src.settings import settings
 
 
-def mng_school_geolocation_api_raw(context: OpExecutionContext,
-    adls_file_client: ADLSFileClient):
-
+def mng_school_geolocation_api_raw(
+    context: OpExecutionContext, adls_file_client: ADLSFileClient
+):
     auth = HTTPBasicAuth(settings.MONGOLIA_API_USER, settings.MONGOLIA_API_PASSWORD)
 
     def pull_data_from_api(last_update_date="2019-10-26T00:00:00Z"):
@@ -25,7 +21,9 @@ def mng_school_geolocation_api_raw(context: OpExecutionContext,
         page = 1
 
         if last_update_date:
-            base_url = f"{settings.MONGOLIA_API_URL}?size=100&UPDATED_AFTER={last_update_date}"
+            base_url = (
+                f"{settings.MONGOLIA_API_URL}?size=100&UPDATED_AFTER={last_update_date}"
+            )
         else:
             base_url = f"{settings.MONGOLIA_API_URL}?size=100"
 
@@ -34,7 +32,7 @@ def mng_school_geolocation_api_raw(context: OpExecutionContext,
 
             url = base_url + f"&page={page}"
             response = get(url, auth=auth)
-            result_schools = response.json()['RESULT']
+            result_schools = response.json()["RESULT"]
 
             if result_schools:
                 full_schools_list.extend(result_schools)
@@ -69,23 +67,29 @@ def mng_school_geolocation_api_raw(context: OpExecutionContext,
 
     # upload to ADLS
     context.log.info("Uploading API data to ADLS")
-    adls_folder_path= f"{constants.UPLOAD_PATH_PREFIX}/school-geolocation/MNG/{file_upload.upload_path}"
-    metadata = {'country': 'Mongolia',
-                'data_owner': 'Mongolia government',
-                'data_quality_issues': 'None',
-                'description': 'mongolia_api',
-                'emis_system': 'None',
-                'focal_point_contact': '',
-                'focal_point_name': 'Mongolia government',
-                'frequency_of_school_data_collection': '',
-                'modality_of_data_collection': '',
-                'mode': 'Create',
-                'next_school_data_collection': '',
-                'school_contacts': '',
-                'school_ids_type': '',
-                'uploader_email': 'apiautomation@gigasync.org',
-                'year_of_data_collection': ''
-                }
-    adls_file_client.upload_raw(context, data=schools_df.to_csv(index=False).encode(), filepath=adls_folder_path, metadata=metadata)
+    adls_folder_path = f"{constants.UPLOAD_PATH_PREFIX}/school-geolocation/MNG/{file_upload.upload_path}"
+    metadata = {
+        "country": "Mongolia",
+        "data_owner": "Mongolia government",
+        "data_quality_issues": "None",
+        "description": "mongolia_api",
+        "emis_system": "None",
+        "focal_point_contact": "",
+        "focal_point_name": "Mongolia government",
+        "frequency_of_school_data_collection": "",
+        "modality_of_data_collection": "",
+        "mode": "Create",
+        "next_school_data_collection": "",
+        "school_contacts": "",
+        "school_ids_type": "",
+        "uploader_email": "apiautomation@gigasync.org",
+        "year_of_data_collection": "",
+    }
+    adls_file_client.upload_raw(
+        context,
+        data=schools_df.to_csv(index=False).encode(),
+        filepath=adls_folder_path,
+        metadata=metadata,
+    )
 
     return Output(None)
