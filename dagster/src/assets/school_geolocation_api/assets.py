@@ -1,13 +1,13 @@
-import pandas as pd
-from models.file_upload import FileUpload
+from dagster import OpExecutionContext, Output
 from requests import get
 from requests.auth import HTTPBasicAuth
+import pandas as pd
+
+from models.file_upload import FileUpload
 from src.constants import constants
+from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
-
-from dagster import OpExecutionContext, Output
-from dagster.src.settings import settings
 
 
 def mng_school_geolocation_api_raw(
