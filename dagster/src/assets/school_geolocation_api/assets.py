@@ -4,6 +4,7 @@ from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from models.file_upload import FileUpload
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType
 from requests import get
 from requests.auth import HTTPBasicAuth
 from src.internal.school_geolocation_api_queries import get_mng_api_last_update_date
@@ -11,7 +12,7 @@ from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
-from src.utils.schema import construct_full_table_name
+from src.utils.schema import construct_full_table_name, get_schema_columns
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -72,33 +73,39 @@ def mng_school_geolocation_api_raw(
     schools_pdf = pd.DataFrame(full_schools_list)
     context.log.info(f"Number of schools pulled from API: {schools_pdf.shape[0]}")
 
-    schools_pdf["update_id"] = schools_pdf["school_id"].astype(str) + schools_pdf[
+    schools_pdf["ingestion_id"] = schools_pdf["school_id"].astype(str) + schools_pdf[
         "updated_at"
     ].str.replace("-", "")
     schools_pdf["operation"] = np.where(
         schools_pdf["created_at"] > last_update_date, "Create", "Update"
     )
+    schools_pdf["ingestion_timestamp"] = pd.Timestamp.now()
 
-    schools_sdf = s.createDataFrame(schools_pdf)
-    # create the schema and table if the table does not exist
+    table_schema_columns = get_schema_columns(s, "mongolia_emis_api")
+
+    schools_pdf = schools_pdf[schools_pdf[[col.name for col in table_schema_columns]]]
+
+    schools_sdf = s.createDataFrame(
+        schools_pdf, schema=StructType(table_schema_columns)
+    )
+
+    # create the schema and delta table if the table does not exist
     if not table_exists:
         context.log.info(
             f"Creating the {table_schema_name}.{table_name} table to store the raw data"
         )
-        table_columns = schools_sdf.schema.fields
-        for col in table_columns:
-            col.nullable = True
 
         create_schema(s, table_schema_name)
         create_delta_table(
             s,
             table_schema_name,
             table_name,
-            table_columns,
+            table_schema_columns,
             context,
             if_not_exists=True,
         )
 
+    # add the data pulled to the delta table
     context.log.info("Upsert the latest mongolia api school data updates")
     s.catalog.refreshTable(construct_full_table_name(table_schema_name, table_name))
     current_table = DeltaTable.forName(
