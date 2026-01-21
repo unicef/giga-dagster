@@ -116,7 +116,7 @@ def mng_school_geolocation_api_raw(
         current_table.alias("current")
         .merge(
             schools_sdf.alias("updates"),
-            "current.update_id = updates.update_id",
+            "current.ingestion_id = updates.ingestion_id",
         )
         .whenMatchedUpdateAll()
         .whenNotMatchedInsertAll()
