@@ -52,7 +52,7 @@ def mng_school_geolocation_api_raw(
     context.log.info("Creating DB entry for API data upload")
     column_mapping = {"school_id": "school_id_govt"}
     file_upload = FileUpload(
-        uploader_id="mng_api_user",
+        uploader_id="automated",
         uploader_email="apiautomated@gigasync.org",
         country="MNG",
         dataset="geolocation",
@@ -68,7 +68,8 @@ def mng_school_geolocation_api_raw(
 
     # upload to ADLS
     context.log.info("Uploading API data to ADLS")
-    adls_folder_path = f"{constants.UPLOAD_PATH_PREFIX}/school-geolocation/MNG/{file_upload.upload_path}"
+    adls_file_path = file_upload.upload_path
+    context.log.info(f"Uploading to: {adls_file_path}")
     metadata = {
         "country": "Mongolia",
         "data_owner": "Mongolia government",
@@ -83,13 +84,13 @@ def mng_school_geolocation_api_raw(
         "next_school_data_collection": "",
         "school_contacts": "",
         "school_ids_type": "",
-        "uploader_email": "apiautomation@gigasync.org",
+        "uploader_email": "apiautomated@gigasync.org",
         "year_of_data_collection": "",
     }
     adls_file_client.upload_raw(
         context,
         data=schools_df.to_csv(index=False).encode(),
-        filepath=adls_folder_path,
+        filepath=adls_file_path,
         metadata=metadata,
     )
 
