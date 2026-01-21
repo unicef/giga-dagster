@@ -83,7 +83,7 @@ def mng_school_geolocation_api_raw(
 
     table_schema_columns = get_schema_columns(s, "mongolia_emis_api")
 
-    schools_pdf = schools_pdf[schools_pdf[[col.name for col in table_schema_columns]]]
+    schools_pdf = schools_pdf[[col.name for col in table_schema_columns]]
 
     schools_sdf = s.createDataFrame(
         schools_pdf, schema=StructType(table_schema_columns)
