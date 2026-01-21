@@ -1,4 +1,4 @@
-from dagster import OpExecutionContext, Output
+from dagster import OpExecutionContext, Output, asset
 from requests import get
 from requests.auth import HTTPBasicAuth
 import pandas as pd
