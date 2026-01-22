@@ -73,6 +73,12 @@ def mng_school_geolocation_api_raw(
     schools_pdf = pd.DataFrame(full_schools_list)
     context.log.info(f"Number of schools pulled from API: {schools_pdf.shape[0]}")
 
+    schools_pdf["education_level_govt"] = schools_pdf["education_level_govt"].fillna(
+        "Unknown"
+    )
+    schools_pdf["latitude"] = schools_pdf["latitude"].replace("None", np.nan)
+    schools_pdf["longitude"] = schools_pdf["longitude"].replace("None", np.nan)
+
     schools_pdf["ingestion_id"] = schools_pdf["school_id"].astype(str) + schools_pdf[
         "updated_at"
     ].str.replace("-", "")
