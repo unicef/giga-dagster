@@ -161,7 +161,42 @@ def mng_school_geolocation_api_raw(
     return Output(None)
 
 
-def upload_data_and_create_db_entry(data, mode, adls_file_client, context):
+def upload_data_and_create_db_entry(
+    data: pd.DataFrame,
+    mode: str,
+    adls_file_client: ADLSFileClient,
+    context: OpExecutionContext,
+):
+    """
+    Uploads data to Azure Data Lake Storage (ADLS) and creates an entry in the database
+    for tracking the file upload process.
+
+    This function facilitates the uploading of a dataset to ADLS and simultaneously logs
+    details about the upload into the database. The upload process is designed to handle
+    specific metadata and create a structured entry in the file_uploads table. Logging
+    is used throughout the function to track progress and key actions.
+
+    Parameters:
+        data (pandas.DataFrame): The dataset to upload, provided as a Pandas DataFrame.
+        mode (str): The mode of operation for the upload, describing its purpose or type.
+        adls_file_client (ADLSFileClient): An instance of ADLSFileClient used to interact
+            with Azure Data Lake Storage for uploading files and metadata.
+        context (Dagster context): Context object providing logging functionality and
+            access to runtime-specific configurations or resources.
+
+    Raises:
+        Any exceptions raised during either the database entry creation or the ADLS upload
+        process will propagate to the caller.
+
+    Returns:
+        None
+    """
+    if data.empty:
+        context.log.info(f"There are no schools to {mode.lower()}")
+        return
+    else:
+        context.log.info(f"Uploading {data.shape[0]} schools to be {mode.lower()}d")
+
     # create db entry in the file_uploads table
     context.log.info("Creating DB entry for API data upload")
     column_mapping = {"school_id": "school_id_govt"}
@@ -170,7 +205,7 @@ def upload_data_and_create_db_entry(data, mode, adls_file_client, context):
         uploader_email="apiautomated@gigasync.org",
         country="MNG",
         dataset="geolocation",
-        source="",
+        source=None,
         original_filename="mongolia_api_upload.csv",
         column_to_schema_mapping=column_mapping,
         column_license={},
@@ -188,7 +223,7 @@ def upload_data_and_create_db_entry(data, mode, adls_file_client, context):
         "country": "Mongolia",
         "data_owner": "Mongolia government",
         "data_quality_issues": "None",
-        "description": "mongolia_api",
+        "description": "api",
         "emis_system": "None",
         "focal_point_contact": "",
         "focal_point_name": "Mongolia government",
