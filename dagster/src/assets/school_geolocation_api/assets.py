@@ -78,6 +78,9 @@ def mng_school_geolocation_api_raw(
     )
     schools_pdf["latitude"] = schools_pdf["latitude"].replace("None", np.nan)
     schools_pdf["longitude"] = schools_pdf["longitude"].replace("None", np.nan)
+    schools_pdf.rename(
+        columns={"latitude": "longitude", "longitude": "latitude"}, inplace=True
+    )
 
     schools_pdf["ingestion_id"] = schools_pdf["school_id"].astype(str) + schools_pdf[
         "updated_at"
