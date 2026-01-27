@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -180,14 +182,9 @@ def upload_data_and_create_db_entry(
     Uploads data to Azure Data Lake Storage (ADLS) and creates an entry in the database
     for tracking the file upload process.
 
-    This function facilitates the uploading of a dataset to ADLS and simultaneously logs
-    details about the upload into the database. The upload process is designed to handle
-    specific metadata and create a structured entry in the file_uploads table. Logging
-    is used throughout the function to track progress and key actions.
-
     Parameters:
         data (pandas.DataFrame): The dataset to upload, provided as a Pandas DataFrame.
-        mode (str): The mode of operation for the upload, describing its purpose or type.
+        mode (str): The mode of operation for the upload, Create or Update
         adls_file_client (ADLSFileClient): An instance of ADLSFileClient used to interact
             with Azure Data Lake Storage for uploading files and metadata.
         context (Dagster context): Context object providing logging functionality and
@@ -210,12 +207,12 @@ def upload_data_and_create_db_entry(
     context.log.info("Creating DB entry for API data upload")
     column_mapping = {"school_id": "school_id_govt"}
     file_upload = FileUpload(
-        uploader_id="automated",
+        uploader_id="305f7203-c97e-46bb-b2da-352379fa1c4e",
         uploader_email="apiautomated@gigasync.org",
         country="MNG",
         dataset="geolocation",
-        source=None,
-        original_filename="mongolia_api_upload.csv",
+        source="api",
+        original_filename=f"MNG_school_data_{mode.lower()}_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv",
         column_to_schema_mapping=column_mapping,
         column_license={},
     )
