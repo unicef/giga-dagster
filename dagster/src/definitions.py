@@ -13,6 +13,7 @@ from src.assets import (
     school_geolocation,
     school_list,
     unstructured,
+    upload_processing,
 )
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
@@ -72,6 +73,10 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=qos,
             group_name=qos.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=upload_processing,
+            group_name=upload_processing.GROUP_NAME,
         ),
     ],
     resources=RESOURCE_DEFINITIONS,
