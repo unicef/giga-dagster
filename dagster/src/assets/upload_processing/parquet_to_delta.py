@@ -4,8 +4,8 @@ from typing import Optional
 from dagster_pyspark import PySparkResource
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import DataFrame, Row, SparkSession
-from pyspark.sql.functions import col, concat_ws, sha2
-from pyspark.sql.types import DataType, DoubleType, StringType
+from pyspark.sql.functions import col, lit
+from pyspark.sql.types import DataType, DoubleType, StringType, TimestampType
 
 from dagster import Config, OpExecutionContext, asset
 from src.constants.constants_class import constants
@@ -20,19 +20,25 @@ INGESTION CONTRACT
 
 - All parquet files are appended into ONE Delta table.
 - Ingestion is append-only.
-- Idempotency is enforced via (file_path, checksum).
-- Same file + same checksum → skipped.
-- Same file + different checksum → appended again.
-- Manifest is the source of truth.
+- Idempotency is enforced via (file_path, storage_checksum).
+- storage_checksum = ADLS ETag.
+- Same file + same ETag → skipped.
+- Same file + different ETag → appended again.
+- Manifest is file-level and is the source of truth.
 """
 
 # -------------------------------------------------------------------
 # Config
 # -------------------------------------------------------------------
 
-BRONZE_COLUMN_CASTS: dict[str, DataType] = {
+COLUMN_CASTS: dict[str, DataType] = {
     "error_message": StringType(),
     "latency": DoubleType(),
+}
+
+FILE_METADATA_COLUMNS: dict[str, DataType] = {
+    "_source_file": StringType(),
+    "_ingested_at": TimestampType(),
 }
 
 
@@ -51,7 +57,7 @@ def _normalize_schema_for_delta(df: DataFrame) -> DataFrame:
     """
     Enforces a stable Bronze Delta schema across all parquet files.
     """
-    for column_name, target_type in BRONZE_COLUMN_CASTS.items():
+    for column_name, target_type in COLUMN_CASTS.items():
         if column_name in df.columns:
             df = df.withColumn(
                 column_name,
@@ -61,29 +67,17 @@ def _normalize_schema_for_delta(df: DataFrame) -> DataFrame:
     return df
 
 
-# -------------------------------------------------------------------
-# Checksum
-# -------------------------------------------------------------------
-
-
-def _compute_checksum(
-    spark: SparkSession,
-    parquet_path: str,
-) -> str:
-    df = spark.read.parquet(parquet_path)
-
-    return (
-        df.select(
-            sha2(
-                concat_ws(
-                    "||",
-                    *[col(column).cast("string") for column in df.columns],
-                ),
-                256,
-            ).alias("checksum")
-        )
-        .limit(1)
-        .collect()[0]["checksum"]
+def _add_file_metadata_columns(
+    df: DataFrame,
+    *,
+    source_file: str,
+    ingested_at: datetime,
+) -> DataFrame:
+    """
+    Adds file-level lineage metadata to the DataFrame.
+    """
+    return df.withColumn("_source_file", lit(source_file)).withColumn(
+        "_ingested_at", lit(ingested_at)
     )
 
 
@@ -132,6 +126,9 @@ def _is_new_or_modified(
     file_path: str,
     checksum: str,
 ) -> bool:
+    """
+    Returns True if (file_path, checksum) is not present in the manifest.
+    """
     return (
         manifest_df.filter(
             (manifest_df.file_path == file_path) & (manifest_df.checksum == checksum)
@@ -203,7 +200,8 @@ def _write_to_target_table(
 @asset(
     description=(
         "Reads parquet files from ADLS and appends them into a single "
-        "Bronze Delta table using a manifest-based ingestion strategy."
+        "Bronze Delta table using a file-level manifest and ADLS ETag–"
+        "based idempotency with full lineage metadata."
     ),
 )
 def convert_parquets_to_delta(
@@ -235,9 +233,14 @@ def convert_parquets_to_delta(
             continue
 
         full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{path_obj.name}"
-        checksum = _compute_checksum(spark_session, full_path)
+        checksum = path_obj.etag
+        ingestion_time = datetime.utcnow()
 
-        if not _is_new_or_modified(manifest_df, full_path, checksum):
+        if not _is_new_or_modified(
+            manifest_df,
+            full_path,
+            checksum,
+        ):
             skipped_files.append(path_obj.name)
             continue
 
@@ -248,6 +251,11 @@ def convert_parquets_to_delta(
 
         df = spark_session.read.parquet(full_path)
         df = _normalize_schema_for_delta(df)
+        df = _add_file_metadata_columns(
+            df,
+            source_file=path_obj.name,
+            ingested_at=ingestion_time,
+        )
 
         _write_to_target_table(
             df,
