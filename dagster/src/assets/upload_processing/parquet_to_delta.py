@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 from typing import Optional
 
@@ -15,41 +14,33 @@ from src.utils.delta import create_schema
 
 MANIFEST_TABLE_NAME = "_ingestion_manifest"
 
+
 """
-INGESTION CONTRACT – READ THIS BEFORE CHANGING ANYTHING
+INGESTION CONTRACT
 
-This asset implements BRONZE ingestion with the following guarantees:
-
-1. One Parquet file maps to exactly one Delta table.
-   - Table name is derived from the Parquet filename (without extension).
-
-2. Ingestion is APPEND-ONLY by design.
-   - Existing Delta tables are never overwritten.
-   - Reprocessing appends data if (and only if) file content changes.
-
-3. Idempotency is enforced via a Delta manifest table:
-   - bronze._ingestion_manifest
-   - A file is considered ingested if (file_path, checksum) exists.
-
-4. A Parquet file is reprocessed ONLY if its checksum changes.
-   - Filename reuse without content change is ignored.
-   - Filename reuse with content change is ingested again.
-
-5. Failure semantics:
-   - If Delta write succeeds but manifest write fails,
-     manual reconciliation is required.
-   - The manifest is the source of truth for ingestion state.
-
-DO NOT:
-- Change write mode to overwrite without redesigning manifest logic.
-- Ingest multiple files into the same table without redesigning state tracking.
-- Enable schema auto-merge without understanding downstream impact.
+- All parquet files are appended into ONE Delta table.
+- Ingestion is append-only.
+- Idempotency is enforced via (file_path, checksum).
+- Same file + same checksum → skipped.
+- Same file + different checksum → appended again.
+- Manifest is the source of truth.
 """
+
+
+# -------------------------------------------------------------------
+# Config
+# -------------------------------------------------------------------
 
 
 class ParquetToDeltaConfig(Config):
     upload_path: Optional[str] = constants.PING_PARQUET_PATH
-    target_schema: str = "bronze"
+    target_schema: str = "giga_meter"
+    target_table: str = "connectivity_ping_checks"
+
+
+# -------------------------------------------------------------------
+# Checksum
+# -------------------------------------------------------------------
 
 
 def _compute_checksum(
@@ -63,7 +54,7 @@ def _compute_checksum(
             sha2(
                 concat_ws(
                     "||",
-                    *[col(c).cast("string") for c in df.columns],
+                    *[col(column).cast("string") for column in df.columns],
                 ),
                 256,
             ).alias("checksum")
@@ -71,6 +62,11 @@ def _compute_checksum(
         .limit(1)
         .collect()[0]["checksum"]
     )
+
+
+# -------------------------------------------------------------------
+# Manifest helpers
+# -------------------------------------------------------------------
 
 
 def _read_manifest(
@@ -104,9 +100,6 @@ def _read_manifest(
         return _get_manifest()
     except AnalysisException as exc:
         if "DELTA_TABLE_NOT_FOUND" in str(exc):
-            # This handles the case where the Metastore has a stale entry
-            # but the actual Delta files are missing.
-            print(f"Dropping stale table {full_table_name} and retrying...")
             spark.sql(f"DROP TABLE IF EXISTS {full_table_name}")
             return _get_manifest()
         raise
@@ -155,10 +148,35 @@ def _record_manifest_entry(
     )
 
 
+def _write_to_target_table(
+    df: DataFrame,
+    *,
+    spark: SparkSession,
+    schema_name: str,
+    table_name: str,
+) -> None:
+    try:
+        (
+            df.write.format("delta")
+            .mode("append")
+            .saveAsTable(f"{schema_name}.`{table_name}`")
+        )
+    except AnalysisException as exc:
+        if "DELTA_TABLE_NOT_FOUND" in str(exc):
+            spark.sql(f"DROP TABLE IF EXISTS {schema_name}.{table_name}")
+            (
+                df.write.format("delta")
+                .mode("append")
+                .saveAsTable(f"{schema_name}.`{table_name}`")
+            )
+        else:
+            raise
+
+
 @asset(
     description=(
-        "Reads parquet files from ADLS upload folder and converts them "
-        "to Bronze Delta tables using a manifest-based ingestion strategy."
+        "Reads parquet files from ADLS and appends them into a single "
+        "Bronze Delta table using a manifest-based ingestion strategy."
     ),
 )
 def convert_parquets_to_delta(
@@ -168,103 +186,69 @@ def convert_parquets_to_delta(
     adls_file_client: ADLSFileClient,
 ) -> None:
     spark_session: SparkSession = spark.spark_session
-    upload_path = config.upload_path
-    schema_name = config.target_schema
 
-    # Ensure schema exists BEFORE touching manifest
-    create_schema(spark_session, schema_name)
+    create_schema(spark_session, config.target_schema)
 
     manifest_df = _read_manifest(
         spark_session,
-        schema_name,
+        config.target_schema,
         MANIFEST_TABLE_NAME,
     )
 
-    processed_tables: list[str] = []
-    skipped_tables: list[str] = []
+    processed_files: list[str] = []
+    skipped_files: list[str] = []
 
-    paths = adls_file_client.list_paths(upload_path, recursive=True)
+    paths = adls_file_client.list_paths(config.upload_path, recursive=True)
 
     for path_obj in paths:
-        path_name = path_obj.name
-
-        if not path_name.endswith(".parquet"):
+        if not path_obj.name.endswith(".parquet"):
             continue
 
-        full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{path_name}"
-
-        file_size = path_obj.content_length
-        last_modified = path_obj.last_modified
-
-        table_name = os.path.splitext(os.path.basename(path_name))[0].replace("-", "_")
-
+        full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{path_obj.name}"
         checksum = _compute_checksum(spark_session, full_path)
 
-        if not _is_new_or_modified(
-            manifest_df,
-            full_path,
-            checksum,
-        ):
-            skipped_tables.append(table_name)
+        if not _is_new_or_modified(manifest_df, full_path, checksum):
+            skipped_files.append(path_obj.name)
             continue
 
-        context.log.info(f"Processing {path_name} -> {schema_name}.{table_name}")
+        context.log.info(
+            f"Appending {path_obj.name} → "
+            f"{config.target_schema}.{config.target_table}"
+        )
 
-        try:
-            df = spark_session.read.parquet(full_path)
+        df = spark_session.read.parquet(full_path)
 
-            try:
-                (
-                    df.write.format("delta")
-                    .mode("append")
-                    .saveAsTable(f"{schema_name}.`{table_name}`")
-                )
-            except AnalysisException as exc:
-                if "DELTA_TABLE_NOT_FOUND" in str(exc):
-                    context.log.warning(
-                        f"Table {schema_name}.{table_name} not found in storage "
-                        "but exists in metastore. Dropping and retrying."
-                    )
-                    spark_session.sql(
-                        f"DROP TABLE IF EXISTS {schema_name}.{table_name}"
-                    )
-                    (
-                        df.write.format("delta")
-                        .mode("append")
-                        .saveAsTable(f"{schema_name}.`{table_name}`")
-                    )
-                else:
-                    raise
+        _write_to_target_table(
+            df,
+            spark=spark_session,
+            schema_name=config.target_schema,
+            table_name=config.target_table,
+        )
 
-            _record_manifest_entry(
-                spark_session,
-                schema_name,
-                MANIFEST_TABLE_NAME,
-                file_path=full_path,
-                file_size=file_size,
-                last_modified=last_modified,
-                checksum=checksum,
-                table_name=table_name,
-            )
+        _record_manifest_entry(
+            spark_session,
+            config.target_schema,
+            MANIFEST_TABLE_NAME,
+            file_path=full_path,
+            file_size=path_obj.content_length,
+            last_modified=path_obj.last_modified,
+            checksum=checksum,
+            table_name=config.target_table,
+        )
 
-            # Refresh manifest to avoid stale reads in the same run
-            manifest_df = _read_manifest(
-                spark_session,
-                schema_name,
-                MANIFEST_TABLE_NAME,
-            )
+        manifest_df = _read_manifest(
+            spark_session,
+            config.target_schema,
+            MANIFEST_TABLE_NAME,
+        )
 
-            processed_tables.append(table_name)
-
-        except Exception:
-            context.log.exception(f"Failed processing parquet file: {path_name}")
-            continue
+        processed_files.append(path_obj.name)
 
     context.add_output_metadata(
         {
-            "processed_tables": processed_tables,
-            "skipped_tables": skipped_tables,
-            "processed_count": len(processed_tables),
-            "skipped_count": len(skipped_tables),
+            "processed_files": processed_files,
+            "skipped_files": skipped_files,
+            "processed_count": len(processed_files),
+            "skipped_count": len(skipped_files),
         }
     )
