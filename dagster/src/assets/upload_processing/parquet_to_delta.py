@@ -5,6 +5,7 @@ from dagster_pyspark import PySparkResource
 from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import col, concat_ws, sha2
+from pyspark.sql.types import DataType, DoubleType, StringType
 
 from dagster import Config, OpExecutionContext, asset
 from src.constants.constants_class import constants
@@ -13,7 +14,6 @@ from src.utils.adls import ADLSFileClient
 from src.utils.delta import create_schema
 
 MANIFEST_TABLE_NAME = "_ingestion_manifest"
-
 
 """
 INGESTION CONTRACT
@@ -26,16 +26,39 @@ INGESTION CONTRACT
 - Manifest is the source of truth.
 """
 
-
 # -------------------------------------------------------------------
 # Config
 # -------------------------------------------------------------------
+
+BRONZE_COLUMN_CASTS: dict[str, DataType] = {
+    "error_message": StringType(),
+    "latency": DoubleType(),
+}
 
 
 class ParquetToDeltaConfig(Config):
     upload_path: Optional[str] = constants.PING_PARQUET_PATH
     target_schema: str = "giga_meter"
     target_table: str = "connectivity_ping_checks"
+
+
+# -------------------------------------------------------------------
+# Schema normalization
+# -------------------------------------------------------------------
+
+
+def _normalize_schema_for_delta(df: DataFrame) -> DataFrame:
+    """
+    Enforces a stable Bronze Delta schema across all parquet files.
+    """
+    for column_name, target_type in BRONZE_COLUMN_CASTS.items():
+        if column_name in df.columns:
+            df = df.withColumn(
+                column_name,
+                col(column_name).cast(target_type),
+            )
+
+    return df
 
 
 # -------------------------------------------------------------------
@@ -76,8 +99,7 @@ def _read_manifest(
 ) -> DataFrame:
     full_table_name = f"{schema_name}.{table_name}"
 
-    def _get_manifest():
-        # MUST exist before creating tables
+    def _get_manifest() -> DataFrame:
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {schema_name}")
 
         spark.sql(
@@ -173,6 +195,11 @@ def _write_to_target_table(
             raise
 
 
+# -------------------------------------------------------------------
+# Asset
+# -------------------------------------------------------------------
+
+
 @asset(
     description=(
         "Reads parquet files from ADLS and appends them into a single "
@@ -198,7 +225,10 @@ def convert_parquets_to_delta(
     processed_files: list[str] = []
     skipped_files: list[str] = []
 
-    paths = adls_file_client.list_paths(config.upload_path, recursive=True)
+    paths = adls_file_client.list_paths(
+        config.upload_path,
+        recursive=True,
+    )
 
     for path_obj in paths:
         if not path_obj.name.endswith(".parquet"):
@@ -217,6 +247,7 @@ def convert_parquets_to_delta(
         )
 
         df = spark_session.read.parquet(full_path)
+        df = _normalize_schema_for_delta(df)
 
         _write_to_target_table(
             df,
