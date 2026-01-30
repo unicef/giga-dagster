@@ -518,7 +518,7 @@ def add_admin_columns(  # noqa: C901
     broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
 
     def get_admin_en(latitude, longitude) -> str | None:
-        point = get_point(longitude=longitude, latitude=latitude)
+        point = get_point(longitude=float(longitude), latitude=latitude)
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
                 return row.get("name_en")

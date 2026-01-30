@@ -103,6 +103,9 @@ class ADLSFileClient(ConfigurableResource):
             if ext in [".xls", ".xlsx"]:
                 return pd.read_excel(buffer)
 
+            if ext == ".parquet":
+                return pd.read_parquet(buffer)
+
         raise ValueError(f"Unsupported format for file: {filepath}")
 
     def download_csv_as_spark_dataframe(

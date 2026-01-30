@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType, StructType
+from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -30,7 +30,6 @@ from src.settings import DeploymentEnvironment, settings
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
-    column_mapping_rename,
     create_bronze_layer_columns,
     get_country_rt_schools,
     merge_connectivity_to_master as merge_connectivity_to_df,
@@ -189,22 +188,50 @@ def geolocation_bronze(
         for column_name, schema_name in column_to_schema_mapping.items()
         if schema_name == "school_id_govt"
     ][0]
+    latitude_name = [
+        column_name
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name == "latitude"
+    ][0]
+    longitude_name = [
+        column_name
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name == "longitude"
+    ][0]
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
             buffer,
             config.filepath,
-            dtype_mapping={school_id_govt_name: str},
+            dtype_mapping={
+                school_id_govt_name: str,
+                latitude_name: str,
+                longitude_name: str,
+            },
             context=context,
         ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
-    df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
-    context.log.info("COLUMN MAPPING")
-    context.log.info(column_mapping)
-    context.log.info("COLUMN MAPPING DATAFRAME")
+
+    # keep just the columns that are required
+    pdf = pdf[column_to_schema_mapping.keys()]
+    pdf.rename(columns=column_to_schema_mapping, inplace=True)
+
+    cols_schema = StructType(
+        [
+            StructField("school_name", StringType(), True),
+            StructField("school_id_govt", StringType(), True),
+            StructField("latitude", StringType(), True),
+            StructField("longitude", StringType(), True),
+            StructField("education_level_govt", StringType(), True),
+        ]
+    )
+    df = s.createDataFrame(pdf, schema=cols_schema)
+    # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
+    # context.log.info("COLUMN MAPPING")
+    # context.log.info(column_mapping)
+    # context.log.info("COLUMN MAPPING DATAFRAME")
     context.log.info(df)
     uploaded_columns = df.columns
 
@@ -237,7 +264,7 @@ def geolocation_bronze(
     context.log.info("DF from create_bronze_layer_columns")
     context.log.info(df)
 
-    config.metadata.update({"column_mapping": column_mapping})
+    config.metadata.update({"column_mapping": column_to_schema_mapping})
     context.log.info("After config metadata update")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
@@ -270,7 +297,7 @@ def geolocation_bronze(
         metadata={
             **get_output_metadata(config),
             "row_count": len(df_pandas),
-            "column_mapping": column_mapping,
+            "column_mapping": column_to_schema_mapping,
             "preview": get_table_preview(df_pandas),
         },
     )
