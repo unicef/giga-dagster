@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType, StructField, StructType
+from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -199,6 +199,9 @@ def geolocation_bronze(
         if schema_name == "longitude"
     ][0]
 
+    # string_col_mapping = {column_name: str for column_name, schema_name in column_to_schema_mapping.items()
+    #                       if schema_name in ("school_id_govt", "latitude", "longitude")}
+
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
@@ -222,16 +225,16 @@ def geolocation_bronze(
     context.log.info("After renaming columns")
     context.log.info(pdf.head())
 
-    cols_schema = StructType(
-        [
-            StructField("school_name", StringType(), True),
-            StructField("school_id_govt", StringType(), True),
-            StructField("latitude", StringType(), True),
-            StructField("longitude", StringType(), True),
-            StructField("education_level_govt", StringType(), True),
-        ]
-    )
-    df = s.createDataFrame(pdf, schema=cols_schema)
+    # cols_schema = StructType(
+    #     [
+    #         StructField("school_name", StringType(), True),
+    #         StructField("school_id_govt", StringType(), True),
+    #         StructField("latitude", StringType(), True),
+    #         StructField("longitude", StringType(), True),
+    #         StructField("education_level_govt", StringType(), True),
+    #     ]
+    # )
+    df = s.createDataFrame(pdf)
     # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
     # context.log.info("COLUMN MAPPING")
     # context.log.info(column_mapping)
