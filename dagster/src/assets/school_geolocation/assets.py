@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType, StructField, StructType
+from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
