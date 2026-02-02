@@ -267,7 +267,10 @@ def geolocation_bronze(
     config.metadata.update({"column_mapping": column_to_schema_mapping})
     context.log.info("After config metadata update")
 
-    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+    if settings.DEPLOY_ENV not in (
+        DeploymentEnvironment.LOCAL,
+        DeploymentEnvironment.DEVELOPMENT,
+    ):
         # RT Columns
         connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
