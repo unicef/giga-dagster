@@ -135,6 +135,12 @@ class ADLSFileClient(ConfigurableResource):
 
         return spark.read.csv(**reader_params, schema=schema)
 
+    def download_parquet_as_spark_dataframe(
+        self, filepath: str, spark: SparkSession
+    ) -> sql.DataFrame:
+        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+        return spark.read.parquet(adls_path)
+
     def upload_pandas_dataframe_as_file(
         self,
         context: OutputContext | OpExecutionContext,
