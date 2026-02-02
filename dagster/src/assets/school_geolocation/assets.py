@@ -212,11 +212,15 @@ def geolocation_bronze(
             context=context,
         ).map(str)
 
+    context.log.info("After loading pandas dataframe")
+    context.log.info(pdf.head())
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
 
     # keep just the columns that are required
     pdf = pdf[column_to_schema_mapping.keys()]
     pdf.rename(columns=column_to_schema_mapping, inplace=True)
+    context.log.info("After renaming columns")
+    context.log.info(pdf.head())
 
     cols_schema = StructType(
         [
@@ -232,7 +236,8 @@ def geolocation_bronze(
     # context.log.info("COLUMN MAPPING")
     # context.log.info(column_mapping)
     # context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info(df)
+    context.log.info("After creating pandas dataframe")
+    context.log.info(df.show())
     uploaded_columns = df.columns
 
     columns = get_schema_columns(s, schema_name)
@@ -262,7 +267,7 @@ def geolocation_bronze(
         casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
     )
     context.log.info("DF from create_bronze_layer_columns")
-    context.log.info(df)
+    context.log.info(df.show())
 
     config.metadata.update({"column_mapping": column_to_schema_mapping})
     context.log.info("After config metadata update")
@@ -291,6 +296,7 @@ def geolocation_bronze(
 
     ## at this point it's already gone
     context.log.info("BEFORE DF TO PANDAS")
+    context.log.info(df.show())
     df_pandas = df.toPandas()
     context.log.info("AFTER DF TO PANDAS")
     context.log.info(df_pandas)

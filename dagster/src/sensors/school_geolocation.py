@@ -72,7 +72,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_data_quality_results": OpDestinationMapping(
                     source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquer",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
