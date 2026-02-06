@@ -51,7 +51,7 @@ class Constants(BaseSettings):
     # can't set infinite, just set to a value most likely beyond the extinction of the human race
     school_master_retention_period = "interval 1000000 weeks"
     qos_retention_period = "interval 90 days"
-    PING_PARQUET_PATH = f"{settings.LAKEHOUSE_PATH}/giga_meter/ping_checks"
+    PING_PARQUET_PATH = "giga_meter/ping_checks"
 
     TYPE_MAPPINGS: TypeMappings = TypeMappings(
         string=TypeMapping(
