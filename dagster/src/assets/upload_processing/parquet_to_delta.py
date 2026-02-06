@@ -130,7 +130,6 @@ def _write_to_target_table(
         )
     except AnalysisException as exc:
         if "DELTA_TABLE_NOT_FOUND" in str(exc):
-            spark.sql(f"DROP TABLE IF EXISTS {schema_name}.{table_name}")
             (
                 df.write.format("delta")
                 .mode("append")
