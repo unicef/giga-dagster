@@ -149,9 +149,24 @@ def generate_run_ops(
     dq_target_filepath: str = None,
     database_data: str = None,
 ) -> dict[str, FileConfig]:
+    from src.utils.adls import ADLSFileClient
+
     run_ops = {}
+    adls = ADLSFileClient()
 
     for asset_key, op_mapping in ops_destination_mapping.items():
+        resolved_metadata = metadata
+
+        if "metadata_json" in metadata:
+            metadata_path = str(
+                Path(op_mapping.source_filepath).parent / metadata["metadata_json"]
+            )
+            if adls.exists(metadata_path):
+                resolved_metadata = adls.download_json(metadata_path)
+            else:
+                print(
+                    f"No metadata sidecar found at: {metadata_path}, falling back to pointer metadata"
+                )
         file_config = FileConfig(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
@@ -159,7 +174,7 @@ def generate_run_ops(
             tier=op_mapping.tier,
             table_name=op_mapping.table_name,
             dataset_type=dataset_type,
-            metadata=metadata,
+            metadata=resolved_metadata,
             file_size_bytes=file_size_bytes,
             dq_target_filepath=dq_target_filepath,
             domain=domain,
