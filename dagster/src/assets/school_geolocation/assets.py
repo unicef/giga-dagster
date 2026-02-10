@@ -183,35 +183,19 @@ def geolocation_bronze(
         file_upload = FileUploadConfig.from_orm(file_upload)
 
     column_to_schema_mapping = file_upload.column_to_schema_mapping
-    school_id_govt_name = [
-        column_name
-        for column_name, schema_name in column_to_schema_mapping.items()
-        if schema_name == "school_id_govt"
-    ][0]
-    latitude_name = [
-        column_name
-        for column_name, schema_name in column_to_schema_mapping.items()
-        if schema_name == "latitude"
-    ][0]
-    longitude_name = [
-        column_name
-        for column_name, schema_name in column_to_schema_mapping.items()
-        if schema_name == "longitude"
-    ][0]
 
-    # string_col_mapping = {column_name: str for column_name, schema_name in column_to_schema_mapping.items()
-    #                       if schema_name in ("school_id_govt", "latitude", "longitude")}
+    string_col_mapping = {
+        column_name: str
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name in ("school_id_govt", "latitude", "longitude")
+    }
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
             buffer,
             config.filepath,
-            dtype_mapping={
-                school_id_govt_name: str,
-                latitude_name: str,
-                longitude_name: str,
-            },
+            dtype_mapping=string_col_mapping,
             context=context,
         ).map(str)
 
@@ -225,15 +209,6 @@ def geolocation_bronze(
     context.log.info("After renaming columns")
     context.log.info(pdf[["school_id_govt", "latitude", "longitude"]].head())
 
-    # cols_schema = StructType(
-    #     [
-    #         StructField("school_name", StringType(), True),
-    #         StructField("school_id_govt", StringType(), True),
-    #         StructField("latitude", StringType(), True),
-    #         StructField("longitude", StringType(), True),
-    #         StructField("education_level_govt", StringType(), True),
-    #     ]
-    # )
     df = s.createDataFrame(pdf)
     # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
     # context.log.info("COLUMN MAPPING")
@@ -275,10 +250,7 @@ def geolocation_bronze(
     config.metadata.update({"column_mapping": column_to_schema_mapping})
     context.log.info("After config metadata update")
 
-    if settings.DEPLOY_ENV not in (
-        DeploymentEnvironment.LOCAL,
-        DeploymentEnvironment.DEVELOPMENT,
-    ):
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         # RT Columns
         connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
