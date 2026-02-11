@@ -274,7 +274,7 @@ def geolocation_bronze(
 
     ## at this point it's already gone
     context.log.info("BEFORE DF TO PANDAS")
-    context.log.info(df.select("school_id_govt", "latitude", "longitude"))
+    context.log.info(df.select("school_id_govt", "latitude", "longitude").toPandas())
     df_pandas = df.toPandas()
     context.log.info("AFTER DF TO PANDAS")
     context.log.info(df_pandas[["school_id_govt", "latitude", "longitude"]])
@@ -303,6 +303,11 @@ def geolocation_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     dataset_type = "geolocation"
+
+    context.log.info("At the start before any processing")
+    context.log.info(
+        geolocation_bronze.select("school_id_govt", "latitude", "longitude").toPandas()
+    )
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
@@ -339,6 +344,11 @@ def geolocation_data_quality_results(
         context=context,
     )
 
+    context.log.info("After row level checks")
+    context.log.info(
+        dq_results.select("school_id_govt", "latitude", "longitude").toPandas()
+    )
+
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
     dq_results_schema_name = f"{schema_name}_dq_results"
@@ -365,6 +375,8 @@ def geolocation_data_quality_results(
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     dq_pandas = dq_results.toPandas()
+    context.log.info("After dq_results to pandas")
+    context.log.info(dq_pandas[["school_id_govt", "latitude", "longitude"]])
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
