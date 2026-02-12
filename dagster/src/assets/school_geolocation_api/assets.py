@@ -177,6 +177,7 @@ def mng_school_geolocation_api_raw(
             data=schools_to_delete,
             country_code="MNG",
             adls_file_client=adls_file_client,
+            context=context,
         )
 
     return Output(None)
