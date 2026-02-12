@@ -96,7 +96,7 @@ def mng_school_geolocation_api_raw(
         schools_pdf["created_at"] > last_update_date, "Create", "Update"
     )
     schools_pdf["operation"] = np.where(
-        schools_pdf["deleted_at"].notna(), schools_pdf["operation"]
+        schools_pdf["deleted_at"].notna(), "Delete", schools_pdf["operation"]
     )
 
     schools_pdf["ingestion_timestamp"] = pd.Timestamp.now()
