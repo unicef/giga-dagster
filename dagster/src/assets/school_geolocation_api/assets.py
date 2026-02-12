@@ -11,7 +11,10 @@ from pyspark.sql.types import StructType
 from requests import get
 from requests.auth import HTTPBasicAuth
 from src.constants import constants
-from src.internal.school_geolocation_api_queries import get_mng_api_last_update_date
+from src.internal.school_geolocation_api_queries import (
+    get_mng_api_last_update_date,
+    get_schools_by_govt_id,
+)
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
@@ -173,8 +176,9 @@ def mng_school_geolocation_api_raw(
 
         # schools to delete
         schools_to_delete = schools_pdf[schools_pdf["deleted_at"].notna()]
+        ids_to_delete = schools_to_delete["school_id"].astype(str).tolist()
         delete_schools_from_master(
-            data=schools_to_delete,
+            ids_to_delete=ids_to_delete,
             country_code="MNG",
             adls_file_client=adls_file_client,
             context=context,
@@ -260,7 +264,7 @@ def upload_data_and_create_db_entry(
 
 
 def delete_schools_from_master(
-    data: list[str],
+    ids_to_delete: list[str],
     country_code: str,
     adls_file_client: ADLSFileClient,
     context: OpExecutionContext,
@@ -278,13 +282,19 @@ def delete_schools_from_master(
     Returns:
     None
     """
-    if data.empty:
+    if not ids_to_delete:
         context.log.info(f"There are no schools to delete for {country_code}")
         return
     else:
-        ids_to_delete = data["school_id_giga"].tolist()
+        deletion_schools_master = get_schools_by_govt_id(
+            country_code.lower(), ids_to_delete
+        )
+        giga_ids_to_delete = deletion_schools_master["school_id_giga"].tolist()
+        if not giga_ids_to_delete:
+            context.log.info(f"There are no schools to delete for {country_code}")
+            return
         context.log.info(
-            f"{data.shape[0]} schools will be deleted from school master for {country_code}"
+            f"{len(giga_ids_to_delete)} schools will be deleted from school master for {country_code}"
         )
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
