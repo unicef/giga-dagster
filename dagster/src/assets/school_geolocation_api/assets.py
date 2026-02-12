@@ -105,13 +105,6 @@ def mng_school_geolocation_api_raw(
 
     schools_pdf = schools_pdf[[col.name for col in table_schema_columns]]
 
-    # For testing remove after testing
-    if not table_exists:
-        schools_pdf = schools_pdf[
-            (schools_pdf["updated_at"] < "2025-08-28")
-            & (schools_pdf["deleted_at"] < "2025-08-28")
-        ]
-
     schools_sdf = s.createDataFrame(
         schools_pdf, schema=StructType(table_schema_columns)
     )
