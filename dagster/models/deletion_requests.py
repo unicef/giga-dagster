@@ -4,7 +4,7 @@ from pydantic import UUID4
 from sqlalchemy import VARCHAR, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import BaseModel
+from .base_database import BaseModel
 
 
 class DeletionRequest(BaseModel):
