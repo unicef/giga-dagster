@@ -71,8 +71,8 @@ def school_master__gold_csv_to_deltatable_sensor(
         reference_stem = reference_path.stem
 
         stem = path.stem
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
         size = properties.size
         master_metastore_schema = "school_master"
         reference_metastore_schema = "school_reference"
@@ -247,8 +247,8 @@ def health_master__gold_csv_to_deltatable_sensor(
 
         country_code = path.parent.name
         stem = path.stem
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
         size = properties.size
         metastore_schema = "health_master"
 
@@ -324,8 +324,8 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
 
         stem = path.stem
         country_code = path.parent.name
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
         size = properties.size
         metastore_schema = "qos_raw"
 
@@ -502,8 +502,8 @@ def school_qos__gold_csv_to_deltatable_sensor(
         # process new file
         stem = path.stem
         country_code = path.parent.name
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
         size = properties.size
         metastore_schema = "qos"
 
@@ -639,8 +639,8 @@ def custom_dataset_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        metadata = properties.metadata
         size = properties.size
 
         ops_destination_mapping = {

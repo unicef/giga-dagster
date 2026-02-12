@@ -74,13 +74,11 @@ for file_data in bronze_coverage_list:
     else:
         continue
 
-    metadata = adls.fetch_metadata_for_blob(filepath)
-
+    properties = adls.get_file_metadata(filepath=filepath)
+    metadata = properties["metadata"]
     if "Date_Modified" in metadata:
         last_modified = metadata["Date_Modified"]
     else:
-        # We call get_file_metadata ONLY for the timestamp if not found in metadata
-        properties = adls.get_file_metadata(filepath=filepath)
         last_modified = properties["last_modified"].strftime("%Y%m%d-%H%M%S")
 
     new_filename = (
