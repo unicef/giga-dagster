@@ -75,6 +75,8 @@ def mng_school_geolocation_api_raw(
 
     full_schools_list = pull_data_from_api(last_update_date=last_update_date)
     schools_pdf = pd.DataFrame(full_schools_list)
+    # For testing remove after
+    schools_pdf = schools_pdf.sort_values(by=["updated_at"]).head(100)
     context.log.info(f"Number of schools pulled from API: {schools_pdf.shape[0]}")
 
     schools_pdf["education_level_govt"] = schools_pdf["education_level_govt"].fillna(
