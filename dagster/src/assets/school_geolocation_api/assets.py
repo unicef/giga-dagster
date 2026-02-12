@@ -227,7 +227,7 @@ def upload_data_and_create_db_entry(
         country="MNG",
         dataset="geolocation",
         source="api",
-        original_filename=f"MNG_school_data_{mode.lower()}_{datetime.now().strftime("%Y%m%d%H%M%S")}.csv",
+        original_filename=f"MNG_school_data_{mode.lower()}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
         column_to_schema_mapping=column_mapping,
         column_license={},
     )
