@@ -30,6 +30,7 @@ from src.settings import DeploymentEnvironment, settings
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
+    column_mapping_rename,
     create_bronze_layer_columns,
     get_country_rt_schools,
     merge_connectivity_to_master as merge_connectivity_to_df,
@@ -199,23 +200,13 @@ def geolocation_bronze(
             context=context,
         ).map(str)
 
-    context.log.info("After loading pandas dataframe")
-    context.log.info(pdf[["school_id_govt", "latitude", "longitude"]].head())
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
-
-    # keep just the columns that are required
-    pdf = pdf[column_to_schema_mapping.keys()]
-    pdf.rename(columns=column_to_schema_mapping, inplace=True)
-    context.log.info("After renaming columns")
-    context.log.info(pdf[["school_id_govt", "latitude", "longitude"]].head())
-
     df = s.createDataFrame(pdf)
-    # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
-    # context.log.info("COLUMN MAPPING")
-    # context.log.info(column_mapping)
-    # context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info("After creating pandas dataframe")
-    context.log.info(df.select("school_id_govt", "latitude", "longitude").show())
+    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
+    context.log.info("COLUMN MAPPING")
+    context.log.info(column_mapping)
+    context.log.info("COLUMN MAPPING DATAFRAME")
+    context.log.info(df)
     uploaded_columns = df.columns
 
     columns = get_schema_columns(s, schema_name)
@@ -245,9 +236,9 @@ def geolocation_bronze(
         casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
     )
     context.log.info("DF from create_bronze_layer_columns")
-    context.log.info(df.select("school_id_govt", "latitude", "longitude"))
+    context.log.info(df)
 
-    config.metadata.update({"column_mapping": column_to_schema_mapping})
+    config.metadata.update({"column_mapping": column_mapping})
     context.log.info("After config metadata update")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
@@ -271,17 +262,16 @@ def geolocation_bronze(
 
     ## at this point it's already gone
     context.log.info("BEFORE DF TO PANDAS")
-    context.log.info(df.select("school_id_govt", "latitude", "longitude").toPandas())
     df_pandas = df.toPandas()
     context.log.info("AFTER DF TO PANDAS")
-    context.log.info(df_pandas[["school_id_govt", "latitude", "longitude"]])
+    context.log.info(df_pandas)
 
     return Output(
         df_pandas,
         metadata={
             **get_output_metadata(config),
             "row_count": len(df_pandas),
-            "column_mapping": column_to_schema_mapping,
+            "column_mapping": column_mapping,
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -300,11 +290,6 @@ def geolocation_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     dataset_type = "geolocation"
-
-    context.log.info("At the start before any processing")
-    context.log.info(
-        geolocation_bronze.select("school_id_govt", "latitude", "longitude").toPandas()
-    )
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
@@ -341,11 +326,6 @@ def geolocation_data_quality_results(
         context=context,
     )
 
-    context.log.info("After row level checks")
-    context.log.info(
-        dq_results.select("school_id_govt", "latitude", "longitude").toPandas()
-    )
-
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
     dq_results_schema_name = f"{schema_name}_dq_results"
@@ -372,8 +352,6 @@ def geolocation_data_quality_results(
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     dq_pandas = dq_results.toPandas()
-    context.log.info("After dq_results to pandas")
-    context.log.info(dq_pandas[["school_id_govt", "latitude", "longitude"]])
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
