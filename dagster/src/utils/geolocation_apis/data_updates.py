@@ -115,10 +115,10 @@ def delete_schools_from_master(
         deletion_schools_master = get_schools_by_govt_id(
             country_code.lower(), ids_to_delete
         )
-        giga_ids_to_delete = deletion_schools_master["school_id_giga"].tolist()
-        if not giga_ids_to_delete:
+        if deletion_schools_master.empty:
             context.log.info(f"There are no schools to delete for {country_code}")
             return
+        giga_ids_to_delete = deletion_schools_master["school_id_giga"].tolist()
         context.log.info(
             f"{len(giga_ids_to_delete)} schools will be deleted from school master for {country_code}"
         )
