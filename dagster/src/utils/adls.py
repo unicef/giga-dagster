@@ -77,10 +77,10 @@ class ADLSFileClient(ConfigurableResource):
                 logger.error(f"ResourceNotFoundError: {filepath}")
                 raise e
 
-        # 2. Create sidecar metadata path
+        # 2. Create metadata path
         metadata_blob_path = ADLSFileClient._get_metadata_path(filepath)
 
-        # 3. Upload metadata JSON sidecar
+        # 3. Upload metadata JSON
         if metadata_blob_path:
             json_bytes = json.dumps(metadata, indent=2).encode()
             file_client_sidecar = _adls.get_file_client(metadata_blob_path)
@@ -173,15 +173,13 @@ class ADLSFileClient(ConfigurableResource):
         # 2. create metadata sidecar file
         metadata_blob_path = self._get_metadata_path(filepath)
 
-        if metadata_blob_path:
-            metadata_client = _adls.get_file_client(metadata_blob_path)
-            json_bytes = json.dumps(metadata, indent=2).encode()
-            with BytesIO(json_bytes) as buffer:
-                buffer.seek(0)
-                metadata_client.upload_data(buffer.read(), overwrite=True)
+        metadata_client = _adls.get_file_client(metadata_blob_path)
+        json_bytes = json.dumps(metadata, indent=2).encode()
+        with BytesIO(json_bytes) as buffer:
+            buffer.seek(0)
+            metadata_client.upload_data(buffer.read(), overwrite=True)
 
-            logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
-        return None
+        logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
 
     def download_delta_table_as_spark_dataframe(
         self,
@@ -230,16 +228,16 @@ class ADLSFileClient(ConfigurableResource):
         """
         metadata_blob_path = self._get_metadata_path(filepath)
 
-        # 1. Try JSON sidecar first
+        # 1. Try JSON first
         try:
             if metadata_blob_path:
                 data = self.download_json(metadata_blob_path)
                 if data is not None:
-                    logger.debug(f"Found metadata sidecar at: {metadata_blob_path}")
+                    logger.debug(f"Found metadata at: {metadata_blob_path}")
                     return data
         except Exception as e:
             logger.debug(
-                f"No metadata sidecar found at: {metadata_blob_path} ({e}), falling back to blob properties"
+                f"No metadata found at: {metadata_blob_path} ({e}), falling back to blob properties"
             )
 
         # 2. Fallback to ADLS properties
