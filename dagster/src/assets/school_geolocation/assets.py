@@ -189,18 +189,19 @@ def geolocation_bronze(
         file_upload = FileUploadConfig.from_orm(file_upload)
 
     column_to_schema_mapping = file_upload.column_to_schema_mapping
-    school_id_govt_name = [
-        column_name
+
+    string_col_mapping = {
+        column_name: str
         for column_name, schema_name in column_to_schema_mapping.items()
-        if schema_name == "school_id_govt"
-    ][0]
+        if schema_name in ("school_id_govt", "latitude", "longitude")
+    }
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
             buffer,
             config.filepath,
-            dtype_mapping={school_id_govt_name: str},
+            dtype_mapping=string_col_mapping,
             context=context,
         ).map(str)
 
