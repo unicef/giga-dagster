@@ -161,15 +161,11 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
     logger = ContextLoggerWithLoguruFallback(context, __test_name__)
     logger.log.info(f"Running {__test_name__} checks...")
 
-    column_actions = {
-        "latitude": f.col("latitude").cast(FloatType()),
-        "longitude": f.col("longitude").cast(FloatType()),
-    }
-    df = df.withColumns(column_actions)
-
     df = df.withColumn(
         "hex8",
-        h3_geo_to_h3_udf(f.col("latitude"), f.col("longitude")),
+        h3_geo_to_h3_udf(
+            f.col("latitude").cast(FloatType()), f.col("longitude").cast(FloatType())
+        ),
     )
 
     df = df.withColumn(
