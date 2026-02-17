@@ -14,16 +14,19 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import (
+    BooleanType,
     FloatType,
     StringType,
     StructField,
     StructType,
     TimestampType,
 )
+from rapidfuzz import fuzz, process
 
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.internal.connectivity_queries import get_qos_tables
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
@@ -31,6 +34,7 @@ from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
     get_nocodb_table_id_from_name,
+    get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
 
@@ -38,6 +42,189 @@ ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
 azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 container_name = azure_blob_container_name
+
+
+# FUZZY MATCHING CONFIGURATION
+# Mapping of column name to NocoDB table name
+# Assuming table names follow a convention or are explicitly mapped here
+NOCODB_FUZZY_TABLES = {
+    "education_level": "FuzzyMatchEducationLevel",
+    "connectivity_type": "FuzzyMatchConnectivityType",
+    "school_area_type": "FuzzyMatchSchoolAreaType",
+    "electricity_type": "FuzzyMatchElectricityType",
+    "learning_platform_type": "FuzzyMatchLearningPlatformType",
+}
+
+
+def get_fuzzy_match_config_from_nocodb() -> dict[str, list[str]]:
+    """
+    Fetches valid values for fuzzy matching from NocoDB.
+    Returns a dictionary where keys are column names and values are lists of valid strings.
+    """
+    config = {}
+    try:
+        for col_name, table_name in NOCODB_FUZZY_TABLES.items():
+            try:
+                table_id = get_nocodb_table_id_from_name(table_name)
+                # Assuming the NocoDB table has a 'value' column or we take the first column
+                # Using get_nocodb_table_rows to be safe
+                rows = get_nocodb_table_rows(table_id, fields="value")
+                # If 'value' column doesn't exist, we might need fallback or check structure
+                # For now assuming 'value' column exists as standard
+                valid_values = [r.get("value") for r in rows if r.get("value")]
+                if valid_values:
+                    config[col_name] = valid_values
+                else:
+                    logger.warning(
+                        f"No valid values found in NocoDB table {table_name} for {col_name}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to fetch fuzzy match config for {col_name} from {table_name}: {e}"
+                )
+    except Exception as e:
+        logger.error(f"Error connecting to NocoDB for fuzzy match config: {e}")
+
+    # Fallback to hardcoded config if NocoDB fetch fails or returns empty for crucial cols
+    # This ensures pipeline stability
+    fallback_config = {
+        "education_level": [
+            "Pre-Primary (Includes Kindergarten, Pre school, Nursery etc)",
+            "Primary",
+            "Secondary",
+            "Post-Secondary",
+            "Pre-Primary and Primary",
+            "Primary and Secondary",
+            "Pre-Primary, Primary and Secondary",
+        ],
+        "connectivity_type": [
+            "fiber",
+            "copper",
+            "coaxial",
+            "wired_other",
+            "unknown_wired",
+            "cellular",
+            "p2p",
+            "satellite",
+            "haps",
+            "drones",
+            "unknown_wireless",
+            "other_wireless",
+            "unknown",
+        ],
+        "school_area_type": ["urban", "rural"],
+        "electricity_type": [
+            "electrical grid",
+            "diesel generator",
+            "solar power station",
+            "other",
+        ],
+        "learning_platform_type": [
+            "Adaptive Platforms",
+            "Comm and Productivity Platforms",
+            "Offline Platforms",
+            "Others",
+        ],
+    }
+
+    # Merge configs, NocoDB takes precedence if available
+    for col, values in fallback_config.items():
+        if col not in config:
+            config[col] = values
+
+    return config
+
+
+def fuzzy_match_wrapper(val, valid_values, score_cutoff):
+    if not val:
+        return val, val, 0.0, False
+
+    # extractOne returns (match, score, index)
+    result = process.extractOne(
+        str(val), valid_values, scorer=fuzz.WRatio, score_cutoff=score_cutoff
+    )
+
+    if result:
+        matched_val, score, _ = result
+        was_changed = matched_val != val
+        return matched_val, val, float(score), was_changed
+
+    return val, val, 0.0, False
+
+
+def apply_fuzzy_matching(
+    df: sql.DataFrame, uploaded_columns: list[str], file_upload_id: str = None
+) -> tuple[sql.DataFrame, list[dict]]:
+    logger.info("Starting fuzzy matching...")
+
+    fuzzy_config = get_fuzzy_match_config_from_nocodb()
+    mismatches = []
+
+    result_struct_schema = StructType(
+        [
+            StructField("suggested", StringType(), True),
+            StructField("original", StringType(), True),
+            StructField("score", FloatType(), True),
+            StructField("changed", BooleanType(), True),
+        ]
+    )
+    for col_name, valid_values in fuzzy_config.items():
+        target_col = None
+        if col_name in df.columns:
+            target_col = col_name
+        elif f"{col_name}_govt" in df.columns:
+            target_col = f"{col_name}_govt"
+
+        if target_col and (
+            target_col in uploaded_columns
+            or target_col.replace("_govt", "") in uploaded_columns
+        ):
+            logger.info(f"Applying fuzzy matching to column: {target_col}")
+
+            match_udf = f.udf(
+                lambda x, vv=valid_values: fuzzy_match_wrapper(x, vv, 85),
+                result_struct_schema,
+            )
+
+            temp_col_name = f"{target_col}_fuzzy_struct"
+            df = df.withColumn(temp_col_name, match_udf(f.col(target_col)))
+
+            if file_upload_id:
+                mismatch_rows = (
+                    df.filter(f.col(f"{temp_col_name}.changed"))
+                    .select(
+                        f.col("school_id_govt"),
+                        f.col(f"{temp_col_name}.original").alias("original_value"),
+                        f.col(f"{temp_col_name}.suggested").alias("suggested_value"),
+                        f.col(f"{temp_col_name}.score").alias("match_score"),
+                    )
+                    .collect()
+                )
+
+                from datetime import datetime
+
+                now = datetime.utcnow()
+
+                for row in mismatch_rows:
+                    mismatches.append(
+                        {
+                            "file_upload_id": file_upload_id,
+                            "row_index": None,
+                            "school_id_govt": row["school_id_govt"],
+                            "column_name": target_col,
+                            "original_value": row["original_value"],
+                            "suggested_value": row["suggested_value"],
+                            "match_score": row["match_score"],
+                            "is_accepted": None,
+                            "final_value": None,
+                            "created_at": now,
+                        }
+                    )
+
+            df = df.withColumn(target_col, f.col(f"{temp_col_name}.suggested"))
+            df = df.drop(temp_col_name)
+
+    return df, mismatches
 
 
 # STANDARDIZATION FUNCTIONS
@@ -1169,12 +1356,15 @@ if __name__ == "__main__":
     # df = create_checks(bronze=df, silver=silver)
     # df.show()
 
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type="geolocation",
+        country_code_iso3="BRA",
+    )
     df = row_level_checks(
         df=df,
+        dq_context=dq_context,
         silver=silver,
-        mode=UploadMode.UPDATE.value,
-        dataset_type="geolocation",
-        _country_code_iso3="BRA",
     )
     df.show()
 
