@@ -1,19 +1,20 @@
 from httpx import AsyncClient
-from src.settings import settings
-from src.utils.logger import get_context_with_fallback_logger
 
 from dagster import OpExecutionContext
+from src.settings import settings
+from src.utils.logger import get_context_with_fallback_logger
 
 
 async def send_slack_base(
     text: str,
     context: OpExecutionContext = None,
+    webhook_url: str = settings.SLACK_WEBHOOK,
 ):
     logger = get_context_with_fallback_logger(context)
 
     async with AsyncClient() as client:
         res = await client.post(
-            settings.SLACK_WEBHOOK,
+            webhook_url,
             json={"text": text},
         )
         if res.is_error:

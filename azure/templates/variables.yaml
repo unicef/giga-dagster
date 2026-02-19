@@ -18,6 +18,7 @@ variables:
   aadAzureTenantId: $(AAD_AZURE_TENANT_ID)
   aadAzureClientId: $(AAD_AZURE_CLIENT_ID)
   aadAzureClientSecret: $(AAD_AZURE_CLIENT_SECRET)
+  dagsterIngressHost: $(DAGSTER_INGRESS_HOST)
   emailRendererBearerToken: $(EMAIL_RENDERER_BEARER_TOKEN)
   emailRendererServiceUrl: $(EMAIL_RENDERER_SERVICE_URL)
   cookieSecret: $(AUTH_COOKIE_SECRET)
@@ -30,6 +31,8 @@ variables:
   datahubOidcClientSecret: $(DATAHUB_OIDC_CLIENT_SECRET)
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
   slackWebHook: $(SLACK_WEBHOOK)
+  slackErrorNotificationWebHook: $(SLACK_ERROR_NOTIFICATION_WEBHOOK)
+  slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   gigamapsDbConnectionString: $(GIGAMAPS_DB_CONNECTION_STRING)
   gigameterDbConnectionString: $(GIGAMETER_DB_CONNECTION_STRING)
@@ -48,5 +51,4 @@ variables:
   catalogToken: $(CATALOG_TOKEN)
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
-  slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
   system.debug: true

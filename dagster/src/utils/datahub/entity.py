@@ -1,14 +1,19 @@
 from loguru import logger
 
 from dagster import OpExecutionContext
-from src.utils.datahub.graphql import datahub_graph_client
+from src.utils.datahub.graphql import get_datahub_graph_client
 
 
 def delete_entity_with_references(
     context: OpExecutionContext, urn: str, hard_delete: bool = False
 ) -> int:
     """Delete an entity and its references, returning the number of references deleted."""
-    reference_count, _ = datahub_graph_client.delete_references_to_urn(
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping entity deletion.")
+        return 0
+
+    reference_count, _ = client.delete_references_to_urn(
         urn=urn,
         dry_run=False,
     )
@@ -17,9 +22,9 @@ def delete_entity_with_references(
         context.log.info(f"Deleted {reference_count} references to {urn}")
 
     if hard_delete:
-        datahub_graph_client.hard_delete_entity(urn=urn)
+        client.hard_delete_entity(urn=urn)
     else:
-        datahub_graph_client.soft_delete_entity(urn=urn)
+        client.soft_delete_entity(urn=urn)
 
     logger.info(f"{'Hard' if hard_delete else 'Soft'} deleted entity: {urn}")
 
@@ -37,17 +42,22 @@ def get_entity_count_safe(entity_type: str = "assertion", batch_size: int = 100)
     Returns:
         Total count of entities
     """
+    client = get_datahub_graph_client()
+    if client is None:
+        print("DataHub is not configured. Skipping entity count.")
+        return 0
+
     total_count = 0
     start = 0
 
-    print(f"🔍 Counting {entity_type} entities with batch size {batch_size}...")
+    print(f"Counting {entity_type} entities with batch size {batch_size}...")
 
     while True:
         try:
-            print(f"  📊 Fetching batch starting at {start}")
+            print(f"  Fetching batch starting at {start}")
 
             # Get entities for this batch with small count to avoid timeout
-            entities = datahub_graph_client.list_all_entity_urns(
+            entities = client.list_all_entity_urns(
                 entity_type=entity_type,
                 start=start,
                 count=batch_size,

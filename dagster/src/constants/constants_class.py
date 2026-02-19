@@ -18,35 +18,29 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from src.settings import settings
-
 
 class Constants(BaseSettings):
-    UPLOAD_PATH_PREFIX: str = f"{settings.LAKEHOUSE_PATH}/raw/uploads"
+    UPLOAD_PATH_PREFIX: str = "raw/uploads"
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
-    connectivity_updates_folder = f"{settings.LAKEHOUSE_PATH}/raw/connectivity_updates"
-    raw_folder = f"{settings.LAKEHOUSE_PATH}/raw"  # if settings.IN_PRODUCTION else "adls-testing-raw"
-    raw_schema_folder = f"{settings.LAKEHOUSE_PATH}/raw/schema"
+    connectivity_updates_folder = "raw/connectivity_updates"
+    raw_folder = "raw"  # if settings.IN_PRODUCTION else "adls-testing-raw"
+    raw_schema_folder = "raw/schema"
     raw_schema_folder_source = "raw/schema"
-    bronze_folder = f"{settings.LAKEHOUSE_PATH}/bronze"
-    silver_folder = f"{settings.LAKEHOUSE_PATH}/silver"
-    gold_folder = f"{settings.LAKEHOUSE_PATH}/gold"
-    dq_results_folder = f"{settings.LAKEHOUSE_PATH}/data-quality-results"
-    staging_folder = f"{settings.LAKEHOUSE_PATH}/staging"
+    bronze_folder = "bronze"
+    silver_folder = "silver"
+    gold_folder = "gold"
+    dq_results_folder = "data-quality-results"
+    staging_folder = "staging"
 
-    dq_passed_folder = f"{settings.LAKEHOUSE_PATH}/staging/pending-review"
-    staging_approved_folder = f"{settings.LAKEHOUSE_PATH}/staging/approved"
-    archive_manual_review_rejected_folder = (
-        f"{settings.LAKEHOUSE_PATH}/archive/manual-review-rejected"
-    )
-    gold_source_folder = f"{settings.LAKEHOUSE_PATH}/updated_master_schema"
-    adhoc_master_updates_source_folder = (
-        f"{settings.LAKEHOUSE_PATH}/updated_master_schema/master_updates"
-    )
-    qos_source_folder = f"{settings.LAKEHOUSE_PATH}/gold/qos"
-    qos_raw_source_folder = f"{settings.LAKEHOUSE_PATH}/gold/qos-raw"
-    error_folder = f"{settings.LAKEHOUSE_PATH}/error"
+    dq_passed_folder = "staging/pending-review"
+    staging_approved_folder = "staging/approved"
+    archive_manual_review_rejected_folder = "archive/manual-review-rejected"
+    gold_source_folder = "updated_master_schema"
+    adhoc_master_updates_source_folder = "updated_master_schema/master_updates"
+    qos_source_folder = "gold/qos"
+    qos_raw_source_folder = "gold/qos-raw"
+    error_folder = "error"
 
     # can't set infinite, just set to a value most likely beyond the extinction of the human race
     school_master_retention_period = "interval 1000000 weeks"

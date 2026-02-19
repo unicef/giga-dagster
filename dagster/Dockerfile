@@ -31,14 +31,14 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
     https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.0.0/delta-spark_2.12-3.0.0.jar \
     https://repo1.maven.org/maven2/io/delta/delta-storage/3.0.0/delta-storage-3.0.0.jar
 
-# Install poetry,
-# set to not create an additional virtualenv (we are already in a container),
-# enable parallel installs
-RUN pip install "poetry==$POETRY_VERSION" && \
+# Install poetry and setuptools (required for building some packages)
+# Set virtualenv to be in-project for easier volume mounting
+# Enable parallel installs for faster dependency installation
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install "poetry==$POETRY_VERSION" && \
     poetry config virtualenvs.create true && \
     poetry config virtualenvs.in-project true && \
-    poetry config installer.max-workers 4 && \
-    poetry config installer.no-binary shapely,fiona
+    poetry config installer.max-workers 4
 
 # Move to the directory where we mount the source code (see: docker-compose.yml)
 WORKDIR /app

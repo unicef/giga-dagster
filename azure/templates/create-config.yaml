@@ -52,6 +52,7 @@ jobs:
                     SUPERSET_USERNAME: "$(supersetUsername)"
                     SUPERSET_PASSWORD: "$(supersetPassword)"
                     SUPERSET_URL: "$(supersetUrl)"
+                    DAGSTER_INGRESS_HOST: "$(dagsterIngressHost)"
                     DATAHUB_OIDC_REDIRECT_URL: "$(datahubOidcRedirectUrl)"
                     DATAHUB_OIDC_CLIENT_ID: "$(datahubOidcClientId)"
                     DATAHUB_OIDC_CLIENT_SECRET: "$(datahubOidcClientSecret)"
@@ -60,6 +61,8 @@ jobs:
                     DATAHUB_KUBERNETES_NAMESPACE: "$(kubernetesNamespace)"
                     SPARK_RPC_AUTHENTICATION_SECRET: "$(sparkRpcAuthSecret)"
                     SLACK_WEBHOOK: "$(slackWebHook)"
+                    SLACK_ERROR_NOTIFICATION_WEBHOOK: "$(slackErrorNotificationWebHook)"
+                    SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
                     SENTRY_DSN: "$(sentryDsn)"
@@ -82,7 +85,6 @@ jobs:
                     CATALOG_TOKEN: "$(catalogToken)"
                     CATALOG_BASE: "$(catalogBase)"
                     DATABASE_ID: "$(databaseId)"
-                    SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

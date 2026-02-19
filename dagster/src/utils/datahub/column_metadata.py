@@ -4,8 +4,8 @@ from sqlalchemy import select
 from dagster import OpExecutionContext
 from src.schemas.file_upload import FileUploadConfig
 from src.utils.datahub.graphql import (
-    datahub_graph_client,
     execute_batch_mutation,
+    get_datahub_graph_client,
 )
 from src.utils.db.primary import get_db_context
 from src.utils.logger import get_context_with_fallback_logger
@@ -49,6 +49,42 @@ def column_description_query(dataset_urn: str, column: str, description: str) ->
         """
 
 
+def _build_license_queries(
+    datahub_column_names: list[str],
+    column_licenses: dict[str, str],
+    dataset_urn: str,
+) -> str:
+    queries = ""
+    for column in datahub_column_names:
+        if column in column_licenses:
+            license_tag = column_licenses[column]
+            base_query = column_tag_query(
+                tag_key=license_tag,
+                column=column,
+                dataset_urn=dataset_urn,
+            )
+            queries += f" update_{column}: {base_query}"
+    return queries
+
+
+def _build_description_queries(
+    datahub_column_names: list[str],
+    column_descriptions: dict[str, str],
+    dataset_urn: str,
+) -> str:
+    queries = ""
+    for column in datahub_column_names:
+        description = column_descriptions.get(column)
+        if description is not None:
+            base_query = column_description_query(
+                column=column,
+                dataset_urn=dataset_urn,
+                description=description,
+            )
+            queries += f" update_{column}: {base_query}"
+    return queries
+
+
 def add_column_metadata(
     dataset_urn: str,
     column_licenses: dict[str, str] = None,
@@ -56,67 +92,40 @@ def add_column_metadata(
     context: OpExecutionContext = None,
 ) -> None:
     logger = get_context_with_fallback_logger(context)
-    datahub_schema_fields = datahub_graph_client.get_schema_metadata(dataset_urn).fields
+    client = get_datahub_graph_client()
+    if client is None:
+        logger.warning("DataHub is not configured. Skipping column metadata.")
+        return
+
+    datahub_schema_fields = client.get_schema_metadata(dataset_urn).fields
     datahub_column_names = [field.fieldPath for field in datahub_schema_fields]
 
     # COLUMN LICENSES
     logger.info("DATAHUB: ADD COLUMN LICENSES...")
-    if column_licenses is not None:
-        queries = ""
-        for column in datahub_column_names:
-            if column in column_licenses.keys():
-                license = column_licenses[column]
-                base_query = column_tag_query(
-                    tag_key=license,
-                    column=column,
-                    dataset_urn=dataset_urn,
-                )
-                queries = queries + " " + f"update_{column}: {base_query}"
+    if column_licenses:
+        queries = _build_license_queries(
+            datahub_column_names, column_licenses, dataset_urn
+        )
         if queries:
             execute_batch_mutation(queries, context)
         else:
-            context.log.warning("No column licenses to emit.")
+            logger.warning("No column licenses to emit.")
     else:
-        context.log.warning("No column licenses to emit.")
+        logger.warning("No column licenses to emit.")
 
     # COLUMN DESCRIPTIONS
     logger.info("DATAHUB: ADD COLUMN DESCRIPTIONS...")
-    if column_descriptions is not None:
-        queries = ""
-        for column in datahub_column_names:
-            if column in column_descriptions.keys():
-                description = column_descriptions[column]
-                if description is not None:
-                    base_query = column_description_query(
-                        column=column,
-                        dataset_urn=dataset_urn,
-                        description=description,
-                    )
-                    queries = queries + " " + f"update_{column}: {base_query}"
+    if column_descriptions:
+        queries = _build_description_queries(
+            datahub_column_names, column_descriptions, dataset_urn
+        )
         if queries:
             execute_batch_mutation(queries, context)
         else:
-            context.log.warning("No column descriptions to emit.")
+            logger.warning("No column descriptions to emit.")
     else:
-        context.log.warning("No column descriptions to emit.")
+        logger.warning("No column descriptions to emit.")
 
 
 if __name__ == "__main__":
-    dataset_urn = "urn:li:dataset:(urn:li:dataPlatform:adlsGen2,bronze/school-geolocation/l2wkbpxgyts291f0au9pyh6p_BEN_geolocation_20240321-130111,DEV)"
-    # COLUMN LICENSES
-    column_license_dict = {
-        "education_level": "Giga Analysis",
-        "education_level_govt": "CC-BY-4.0",
-        "connectivity_govt": "CC-BY-4.0",
-    }
-    # COLUMN DESCRIPTIONS
-    column_desc_dict = {
-        "education_level": "Description: educ_level",
-        "education_level_govt": "Description: educ_level_govt",
-        "connectivity_govt": "Description: conn_govt",
-    }
-    add_column_metadata(
-        dataset_urn=dataset_urn,
-        column_licenses=column_license_dict,
-        column_descriptions=column_desc_dict,
-    )
+    pass

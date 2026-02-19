@@ -24,7 +24,6 @@ from src.constants import constants
 from src.settings import settings
 from src.utils.datahub.column_metadata import add_column_metadata, get_column_licenses
 from src.utils.datahub.emit_lineage import emit_lineage
-from src.utils.datahub.graphql import datahub_graph_client
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.datahub.update_policies import update_policy_for_group
 from src.utils.datahub.validator import should_emit_metadata
@@ -197,19 +196,34 @@ def add_tag_query(tag_key: str, dataset_urn: str) -> str:
     """
 
 
-datahub_emitter = DatahubRestEmitter(
-    gms_server=settings.DATAHUB_METADATA_SERVER_URL,
-    token=settings.DATAHUB_ACCESS_TOKEN,
-    retry_max_times=5,
-    retry_status_codes=[
-        403,
-        429,
-        500,
-        502,
-        503,
-        504,
-    ],
-)
+# Lazy initialization of DataHub emitter
+_datahub_emitter = None
+
+
+def get_datahub_emitter() -> DatahubRestEmitter | None:
+    """Get the DataHub REST emitter, initializing it lazily if configured."""
+    global _datahub_emitter
+
+    if _datahub_emitter is not None:
+        return _datahub_emitter
+
+    if not settings.DATAHUB_METADATA_SERVER_URL:
+        return None
+
+    _datahub_emitter = DatahubRestEmitter(
+        gms_server=settings.DATAHUB_METADATA_SERVER_URL,
+        token=settings.DATAHUB_ACCESS_TOKEN,
+        retry_max_times=5,
+        retry_status_codes=[
+            403,
+            429,
+            500,
+            502,
+            503,
+            504,
+        ],
+    )
+    return _datahub_emitter
 
 
 def emit_metadata_to_datahub(
@@ -219,6 +233,15 @@ def emit_metadata_to_datahub(
     schema_reference: None | sql.DataFrame | list[tuple] = None,
     df_failed: None | sql.DataFrame = None,
 ) -> None:
+    from src.utils.datahub.graphql import get_datahub_graph_client
+
+    datahub_emitter = get_datahub_emitter()
+    datahub_graph_client = get_datahub_graph_client()
+
+    if datahub_emitter is None or datahub_graph_client is None:
+        context.log.warning("DataHub is not configured. Skipping metadata emission.")
+        return
+
     dataset_properties = define_dataset_properties(context, country_code=country_code)
     dataset_metadata_event = MetadataChangeProposalWrapper(
         entityUrn=dataset_urn,

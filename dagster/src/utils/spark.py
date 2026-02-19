@@ -40,7 +40,10 @@ spark_common_config = {
     "spark.sql.execution.arrow.pyspark.enabled": "true",
     "spark.sql.warehouse.dir": settings.SPARK_WAREHOUSE_DIR,
     "spark.sql.catalogImplementation": "hive",
-    "hive.metastore.uris": settings.HIVE_METASTORE_URI,
+    "spark.hadoop.hive.metastore.uris": settings.HIVE_METASTORE_URI,
+    # Hive Metastore connection timeouts (increase for local dev stability)
+    "spark.hadoop.hive.metastore.client.socket.timeout": "300s",
+    "spark.hadoop.hive.metastore.client.connect.retry.delay": "5s",
     "spark.driver.cores": str(settings.SPARK_DRIVER_CORES),
     "spark.driver.memory": f"{settings.SPARK_DRIVER_MEMORY_MB}m",
     "spark.executor.cores": str(settings.SPARK_DRIVER_CORES),
@@ -54,10 +57,24 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
-    f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
-        settings.AZURE_SAS_TOKEN
-    ),
 }
+
+# Configure Azure Storage authentication
+# Use account key for Azurite (local dev), SAS token for production
+if settings.USE_AZURITE and settings.AZURE_STORAGE_ACCOUNT_KEY:
+    # Account key authentication for Azurite
+    spark_common_config[
+        f"spark.hadoop.fs.azure.account.key.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+    ] = settings.AZURE_STORAGE_ACCOUNT_KEY
+    # Tell Hadoop we're using the storage emulator
+    spark_common_config["spark.hadoop.fs.azure.storage.emulator.account.name"] = (
+        settings.AZURE_STORAGE_ACCOUNT_NAME
+    )
+else:
+    # SAS token authentication for Azure cloud
+    spark_common_config[
+        f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
+    ] = settings.AZURE_SAS_TOKEN
 
 if settings.IN_PRODUCTION:
     spark_common_config.update(

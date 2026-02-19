@@ -11,7 +11,7 @@ from src.utils.datahub.create_domains import create_domains
 from src.utils.datahub.create_tags import create_tags
 from src.utils.datahub.datahub_ingest_nb_metadata import NotebookIngestionAction
 from src.utils.datahub.entity import get_entity_count_safe
-from src.utils.datahub.graphql import datahub_graph_client
+from src.utils.datahub.graphql import get_datahub_graph_client
 from src.utils.datahub.ingest_azure_ad import (
     ingest_azure_ad_to_datahub_pipeline,
 )
@@ -145,13 +145,16 @@ def datahub__delete_references_to_qos_dry_run(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
 ) -> Output[None]:
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping dry run.")
+        return Output(None, metadata={"qos_datasets_count": 0})
+
     context.log.info("DRY RUN OF DELETING QOS DATASETS FROM DATAHUB...")
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        references_info = datahub_graph_client.delete_references_to_urn(
-            qos_dataset, dry_run=True
-        )
+        references_info = client.delete_references_to_urn(qos_dataset, dry_run=True)
         i += 1
         context.log.info(f"{i} of {count}: {qos_dataset}")
         context.log.info(f"Count of references: {references_info[0]}")
@@ -167,13 +170,16 @@ def datahub__delete_references_to_qos(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
 ) -> Output[None]:
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping delete references.")
+        return Output(None, metadata={"count": 0})
+
     context.log.warning("DELETING REFERENCES TO QOS DATASETS FROM DATAHUB...")
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        references_info = datahub_graph_client.delete_references_to_urn(
-            qos_dataset, dry_run=False
-        )
+        references_info = client.delete_references_to_urn(qos_dataset, dry_run=False)
         i += 1
         context.log.info(f"{i} of {count}: {qos_dataset}")
         context.log.info(f"Count of references: {references_info[0]}")
@@ -189,11 +195,16 @@ def datahub__soft_delete_qos_datasets(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
 ) -> Output[None]:
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping soft delete.")
+        return Output(None, metadata={"count": 0})
+
     context.log.warning("SOFT DELETING QOS DATASETS FROM DATAHUB...")
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        datahub_graph_client.soft_delete_entity(qos_dataset)
+        client.soft_delete_entity(qos_dataset)
         i += 1
         context.log.info(f"SOFT DELETED {i} of {count}: {qos_dataset}")
 
@@ -207,11 +218,16 @@ def datahub__hard_delete_qos_datasets(
     context: OpExecutionContext,
     datahub__list_qos_datasets_to_delete: list[str],
 ) -> Output[None]:
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping hard delete.")
+        return Output(None, metadata={"count": 0})
+
     context.log.warning("HARD DELETING QOS DATASETS FROM DATAHUB...")
     count = len(datahub__list_qos_datasets_to_delete)
     i = 0
     for qos_dataset in datahub__list_qos_datasets_to_delete:
-        datahub_graph_client.hard_delete_entity(qos_dataset)
+        client.hard_delete_entity(qos_dataset)
         i += 1
         context.log.info(f"HARD DELETED {i} of {count}: {qos_dataset}")
 
@@ -240,21 +256,28 @@ class ListAssertionsConfig(Config):
 def datahub__purge_assertions(
     context: OpExecutionContext, config: ListAssertionsConfig
 ) -> Output[list[str]]:
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping purge assertions.")
+        return Output(
+            [], metadata={"total_assertions_deleted": 0, "total_references_deleted": 0}
+        )
+
     total_deleted = 0
     total_references_deleted = 0
 
     for iteration in range(config.max_iterations):
         # Get all assertion URNs for this iteration
-        all_assertion_urns = datahub_graph_client.list_all_entity_urns(
+        all_assertion_urns = client.list_all_entity_urns(
             entity_type="assertion", start=0, count=config.batch_size
         )
 
         if all_assertion_urns:
             for urn in all_assertion_urns:
-                datahub_graph_client.delete_references_to_urn(urn=urn, dry_run=False)
+                client.delete_references_to_urn(urn=urn, dry_run=False)
                 total_references_deleted += 1
 
-                datahub_graph_client.hard_delete_entity(urn=urn)
+                client.hard_delete_entity(urn=urn)
                 total_deleted += 1
 
         context.log.info(
@@ -309,8 +332,13 @@ def datahub__list_entities_to_delete(
     if config.platform == "":
         raise ValueError("Platform must be specified in the configuration.")
 
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping list entities.")
+        return Output([], metadata={"count": 0, "preview": []})
+
     assertion_urns = list(
-        datahub_graph_client.get_urns_by_filter(
+        client.get_urns_by_filter(
             status=config.status,
             platform=config.platform,
         )
@@ -344,6 +372,11 @@ def datahub__delete_entities(
     config: DeleteAssertionsConfig,
     datahub__list_entities_to_delete: list[str],
 ):
+    client = get_datahub_graph_client()
+    if client is None:
+        context.log.warning("DataHub is not configured. Skipping delete entities.")
+        return Output(None, metadata={"count": 0, "preview": []})
+
     num_of_entities = len(datahub__list_entities_to_delete)
 
     for idx, entity in enumerate(datahub__list_entities_to_delete):
@@ -353,14 +386,14 @@ def datahub__delete_entities(
             logger.info(
                 f"Hard deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
-            datahub_graph_client.hard_delete_entity(urn=entity)
+            client.hard_delete_entity(urn=entity)
 
         else:
             logger.warning("Soft deleting entities...")
             logger.info(
                 f"Soft deleting entity #{idx + 1} out of {num_of_entities}: {entity}"
             )
-            datahub_graph_client.soft_delete_entity(urn=entity)
+            client.soft_delete_entity(urn=entity)
 
     return Output(
         None,

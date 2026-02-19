@@ -4,12 +4,15 @@
 # Prerequisites:
 #   1. Create the external network first:
 #      docker compose -f docker-compose-network.yaml up -d
-#   2. Copy .env.example files to .env and fill in values:
-#      cp dagster/.env.example dagster/.env
-#      cp hive/.env.example hive/.env
+#   2. Copy .env.local files to .env:
+#      cp .env.local .env
+#      cp dagster/.env.local dagster/.env
+#      cp hive/.env.local hive/.env
 #
 # Usage:
 #   docker compose -f docker-compose.local.yaml up -d
+#   OR with explicit env file:
+#   docker compose -f docker-compose.local.yaml --env-file .env.local up -d
 #
 # Services:
 #   - dagster-webserver:  http://localhost:3001
@@ -31,7 +34,7 @@ x-dagster-common-config: &dagster-common-config
   build:
     context: ./dagster
     dockerfile: Dockerfile
-  image: unicef/giga-dataops-platform/dagster
+  # Local build - no external registry needed
   environment:
     DAGSTER_HOME: /app
     COMMIT_SHA: ${COMMIT_SHA:-local}
@@ -43,10 +46,12 @@ x-dagster-common-config: &dagster-common-config
     HIVE_METASTORE_URI: thrift://hive-metastore:9083
     # Spark connection
     SPARK_MASTER_URL: spark://spark-master:7077
-    # Local Azure Storage (Azurite) - use well-known development credentials
+    # Local Azure Storage (Azurite) configuration
     AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
     AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-    AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+    AZURE_STORAGE_ACCOUNT_KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+    AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
+    USE_AZURITE: "true"
   volumes:
     - ./dagster:/app
     - ./dagster/.tmp/warehouse:/opt/spark/warehouse
@@ -60,7 +65,10 @@ x-dagster-common-config: &dagster-common-config
 x-spark-common-config: &spark-common-config
   <<: *common-config
   user: "1001:1001"
-  image: unicef/giga-dataops-platform/spark
+  # Custom Dockerfile based on bitnami/spark:3.5.0 with Azure/Delta dependencies
+  build:
+    context: .
+    dockerfile: spark/Dockerfile
   env_file: ./dagster/.env
   environment:
     SPARK_RPC_AUTHENTICATION_ENABLED: ${SPARK_RPC_AUTHENTICATION_ENABLED:-yes}
@@ -70,13 +78,12 @@ x-spark-common-config: &spark-common-config
     # Local Azure Storage (Azurite)
     AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
     AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-    AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+    AZURE_STORAGE_ACCOUNT_KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+    AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
+    USE_AZURITE: "true"
 
 x-spark-worker-common-config: &spark-worker-common-config
   <<: *spark-common-config
-  build:
-    context: .
-    dockerfile: spark/Dockerfile
   working_dir: /opt/bitnami/spark/app
   volumes:
     - ./dagster:/opt/bitnami/spark/app
@@ -111,19 +118,25 @@ services:
   azurite:
     <<: *common-config
     image: mcr.microsoft.com/azure-storage/azurite:3.29.0
-    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --loose"
+    hostname: devstoreaccount1.blob.core.windows.net
+    # Use port 80 for blob service so wasb:// (HTTP) protocol works with Hadoop
+    command: "azurite --blobHost 0.0.0.0 --blobPort 80 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --loose"
     volumes:
       - azurite-data:/data
     ports:
-      - "10000:10000"  # Blob service
+      - "10000:80"    # Blob service (internal 80 for wasb://, exposed as 10000)
       - "10001:10001"  # Queue service
       - "10002:10002"  # Table service
     healthcheck:
-      test: ["CMD", "nc", "-z", "127.0.0.1", "10000"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "80"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      default:
+        aliases:
+          - devstoreaccount1.blob.core.windows.net
 
   # Initialize Azurite container on startup
   azurite-init:
@@ -132,7 +145,7 @@ services:
       azurite:
         condition: service_healthy
     environment:
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -181,7 +194,7 @@ services:
 
   dagster-daemon:
     <<: *dagster-common-config
-    command: ["dagster-daemon", "run"]
+    command: ["bash", "-c", "poetry install --with dev,dagster,pipelines,spark && poetry run dagster-daemon run"]
     environment:
       DAGSTER_HOME: /app
       COMMIT_SHA: ${COMMIT_SHA:-local}
@@ -194,7 +207,7 @@ services:
       # Local Azure Storage (Azurite)
       AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
       AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
 
   # =============================================================================
   # SPARK SERVICES
@@ -202,9 +215,6 @@ services:
 
   spark-master:
     <<: *spark-common-config
-    build:
-      context: .
-      dockerfile: spark/Dockerfile
     environment:
       SPARK_MODE: master
       SPARK_MASTER_HOST: 0.0.0.0
@@ -218,7 +228,7 @@ services:
       # Local Azure Storage (Azurite)
       AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
       AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
     volumes:
       - spark-warehouse:/opt/spark/warehouse
     ports:
@@ -246,7 +256,7 @@ services:
       # Local Azure Storage (Azurite)
       AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
       AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
     ports:
       - "8071:8071"
 
@@ -261,7 +271,7 @@ services:
       # Local Azure Storage (Azurite)
       AZURE_STORAGE_ACCOUNT_NAME: devstoreaccount1
       AZURE_BLOB_CONTAINER_NAME: giga-dataops-dev
-      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:80/devstoreaccount1;"
     ports:
       - "8072:8072"
 
@@ -298,21 +308,27 @@ services:
 
   hive-metastore:
     <<: *common-config
-    build: ./hive
-    image: unicef/giga-dataops-platform/hive-metastore
+    build:
+      context: ./hive
+      dockerfile: Dockerfile
     env_file: ./hive/.env
     environment:
       DB_DRIVER: postgres
       SERVICE_NAME: metastore
       METASTORE_HOME: /opt/hive
       HMS_DATABASE_URL: jdbc:postgresql://hms-database:5432/${HMS_POSTGRESQL_DATABASE:-hive_metastore}
-      # Local Azure Storage (Azurite) for warehouse
+      HMS_POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME:-hive}
+      HMS_POSTGRESQL_PASSWORD: ${HMS_POSTGRESQL_PASSWORD:-hive}
+      # Local development - use local file path for warehouse (simpler than wasbs with Azurite)
       STORAGE_ACCOUNT_NAME: devstoreaccount1
       STORAGE_CONTAINER_NAME: giga-dataops-dev
-      METASTORE_WAREHOUSE_DIR: wasbs://giga-dataops-dev@devstoreaccount1.blob.core.windows.net/warehouse
+      AZURE_STORAGE_ACCOUNT_KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+      AZURE_SAS_TOKEN: "placeholder"
+      # Use wasb:// (HTTP) for warehouse - wasbs:// (HTTPS) times out with Azurite
+      METASTORE_WAREHOUSE_DIR: wasb://giga-dataops-dev@devstoreaccount1.blob.core.windows.net/warehouse-local
     volumes:
       - ./hive/hive-site.template.xml:/opt/hive/tpl/hive-site.template.xml
-      - ./hive/metastore-site.template.xml:/opt/hive/tpl/metastore-site.template.xml
+      - ./hive/metastore-site.local.template.xml:/opt/hive/tpl/metastore-site.template.xml
       - ./hive/hms-entrypoint.sh:/opt/hive/bin/hms-entrypoint.sh
       - spark-warehouse:/opt/spark/warehouse
     ports:
