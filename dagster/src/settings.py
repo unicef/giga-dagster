@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
     TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
+    MONGOLIA_API_USER: str = ""
+    MONGOLIA_API_PASSWORD: str = ""
+    MONGOLIA_API_URL: str = ""
 
     # Derived settings
     @property

@@ -130,8 +130,14 @@ class ADLSFileClient(ConfigurableResource):
                 return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext | None, data: bytes, filepath: str) -> None:
-        metadata = context.step_context.op_config["metadata"] if context else None
+    def upload_raw(
+        context: OutputContext | None,
+        data: bytes,
+        filepath: str,
+        metadata: dict | None = None,
+    ) -> None:
+        if not metadata and context:
+            metadata = context.step_context.op_config["metadata"]
 
         if settings.USE_AZURITE:
             blob_client = _get_container_client().get_blob_client(filepath)

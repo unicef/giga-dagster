@@ -53,7 +53,7 @@ class FileUpload(BaseModel):
         timestamp = self.created.strftime("%Y%m%d-%H%M%S")
         ext = Path(self.original_filename).suffix
         filename_elements = [self.id, self.country, self.dataset]
-        if self.source is not None:
+        if self.source is not None and self.dataset != "geolocation":
             filename_elements.append(self.source)
 
         filename_elements.append(timestamp)

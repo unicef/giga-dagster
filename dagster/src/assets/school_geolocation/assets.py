@@ -89,6 +89,11 @@ def geolocation_metadata(
     context.log.info("Get upload details")
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
+    data_source = metadata.get("data_source")
+    if data_source is not None or data_source != "giga_sync":
+        context.log.info("Data is not from Giga Sync, skipping metadata table update")
+        return Output(None)
+
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
