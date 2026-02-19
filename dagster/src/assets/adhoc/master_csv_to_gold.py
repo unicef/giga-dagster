@@ -116,7 +116,12 @@ def adhoc__master_data_transforms(
 
     with BytesIO(adhoc__load_master_csv) as buffer:
         buffer.seek(0)
-        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+        dtype_mapping = {"school_id_govt": str, "latitude": str, "longitude": str}
+        df = (
+            pd.read_csv(buffer, dtype=dtype_mapping)
+            .fillna(np.nan)
+            .replace([np.nan], [None])
+        )
 
     for col, dtype in df.dtypes.items():
         if dtype == "object":
