@@ -120,7 +120,7 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite:3.29.0
     hostname: devstoreaccount1.blob.core.windows.net
     # Use port 80 for blob service so wasb:// (HTTP) protocol works with Hadoop
-    command: "azurite --blobHost 0.0.0.0 --blobPort 80 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --loose"
+    command: "azurite --blobHost 0.0.0.0 --blobPort 80 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --loose --skipApiVersionCheck"
     volumes:
       - azurite-data:/data
     ports:
