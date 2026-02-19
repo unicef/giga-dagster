@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
-    SLACK_WEBHOOK: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
     HIVE_METASTORE_URI: str
     EMAIL_RENDERER_BEARER_TOKEN: str
@@ -41,6 +40,7 @@ class Settings(BaseSettings):
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
+    DAGSTER_INGRESS_HOST: str = ""
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     MONGOLIA_API_USER: str = ""
     MONGOLIA_API_PASSWORD: str = ""
     MONGOLIA_API_URL: str = ""
+    SLACK_WEBHOOK: str = ""
 
     # Derived settings
     @property
