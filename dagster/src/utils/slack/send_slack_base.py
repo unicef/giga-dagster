@@ -1,8 +1,8 @@
 from httpx import AsyncClient
-
-from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
+
+from dagster import OpExecutionContext
 
 
 async def send_slack_base(
