@@ -1,6 +1,7 @@
 import io
 import re
 import uuid
+from datetime import datetime
 from itertools import chain
 
 import country_converter as coco
@@ -16,12 +17,10 @@ from pyspark.sql import (
 from pyspark.sql.types import (
     BooleanType,
     FloatType,
-    StringType,
     StructField,
-    StructType,
     TimestampType,
 )
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz, process, utils
 
 from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
@@ -43,16 +42,12 @@ azure_sas_token = settings.AZURE_SAS_TOKEN
 azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 container_name = azure_blob_container_name
 
-
-# FUZZY MATCHING CONFIGURATION
-# Mapping of column name to NocoDB table name
-# Assuming table names follow a convention or are explicitly mapped here
 NOCODB_FUZZY_TABLES = {
-    "education_level": "FuzzyMatchEducationLevel",
-    "connectivity_type": "FuzzyMatchConnectivityType",
-    "school_area_type": "FuzzyMatchSchoolAreaType",
-    "electricity_type": "FuzzyMatchElectricityType",
-    "learning_platform_type": "FuzzyMatchLearningPlatformType",
+    "education_level": "EducationLevelMapping",
+    "connectivity_type": "ConnectivityTypeMapping",
+    "school_area_type": "SchoolAreaTypeMapping",
+    "electricity_type": "ElectricityTypeMapping",
+    "learning_platform_type": "LearningPlatformTypeMapping",
 }
 
 
@@ -66,12 +61,12 @@ def get_fuzzy_match_config_from_nocodb() -> dict[str, list[str]]:
         for col_name, table_name in NOCODB_FUZZY_TABLES.items():
             try:
                 table_id = get_nocodb_table_id_from_name(table_name)
-                # Assuming the NocoDB table has a 'value' column or we take the first column
-                # Using get_nocodb_table_rows to be safe
-                rows = get_nocodb_table_rows(table_id, fields="value")
-                # If 'value' column doesn't exist, we might need fallback or check structure
-                # For now assuming 'value' column exists as standard
-                valid_values = [r.get("value") for r in rows if r.get("value")]
+                target_column = "Giga"
+                rows = get_nocodb_table_rows(table_id, fields=target_column)
+                valid_values = [
+                    r.get(target_column) for r in rows if r.get(target_column)
+                ]
+                valid_values = list(set(valid_values))
                 if valid_values:
                     config[col_name] = valid_values
                 else:
@@ -85,53 +80,6 @@ def get_fuzzy_match_config_from_nocodb() -> dict[str, list[str]]:
     except Exception as e:
         logger.error(f"Error connecting to NocoDB for fuzzy match config: {e}")
 
-    # Fallback to hardcoded config if NocoDB fetch fails or returns empty for crucial cols
-    # This ensures pipeline stability
-    fallback_config = {
-        "education_level": [
-            "Pre-Primary (Includes Kindergarten, Pre school, Nursery etc)",
-            "Primary",
-            "Secondary",
-            "Post-Secondary",
-            "Pre-Primary and Primary",
-            "Primary and Secondary",
-            "Pre-Primary, Primary and Secondary",
-        ],
-        "connectivity_type": [
-            "fiber",
-            "copper",
-            "coaxial",
-            "wired_other",
-            "unknown_wired",
-            "cellular",
-            "p2p",
-            "satellite",
-            "haps",
-            "drones",
-            "unknown_wireless",
-            "other_wireless",
-            "unknown",
-        ],
-        "school_area_type": ["urban", "rural"],
-        "electricity_type": [
-            "electrical grid",
-            "diesel generator",
-            "solar power station",
-            "other",
-        ],
-        "learning_platform_type": [
-            "Adaptive Platforms",
-            "Comm and Productivity Platforms",
-            "Offline Platforms",
-            "Others",
-        ],
-    }
-
-    # Merge configs, NocoDB takes precedence if available
-    for col, values in fallback_config.items():
-        if col not in config:
-            config[col] = values
-
     return config
 
 
@@ -141,7 +89,11 @@ def fuzzy_match_wrapper(val, valid_values, score_cutoff):
 
     # extractOne returns (match, score, index)
     result = process.extractOne(
-        str(val), valid_values, scorer=fuzz.WRatio, score_cutoff=score_cutoff
+        str(val),
+        valid_values,
+        scorer=fuzz.WRatio,
+        score_cutoff=score_cutoff,
+        processor=utils.default_process,
     )
 
     if result:
@@ -200,8 +152,6 @@ def apply_fuzzy_matching(
                     )
                     .collect()
                 )
-
-                from datetime import datetime
 
                 now = datetime.utcnow()
 
