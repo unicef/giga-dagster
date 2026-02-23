@@ -10,7 +10,7 @@ env:
     sh: git rev-parse --short HEAD
 
 vars:
-  PROJECT_NAME: giga-dataops_dagster
+  PROJECT_NAME: giga-dagster
 
 tasks:
   default:
@@ -21,7 +21,7 @@ tasks:
     desc: Build and start Docker containers
     cmds:
       - docker compose --project-name giga-dataops-platform --file docker-compose-network.yaml up --build --detach --remove-orphans {{.CLI_ARGS}}
-      - docker compose --project-name {{.PROJECT_NAME}} up --build --detach --remove-orphans {{.CLI_ARGS}}
+      - docker compose --project-name {{.PROJECT_NAME}} --file docker-compose.local.yaml up --build --detach --remove-orphans {{.CLI_ARGS}}
 
   setup:
     desc: Run all first-time setup tasks
