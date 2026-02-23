@@ -256,7 +256,6 @@ def convert_dq_checks_to_human_readeable_descriptions_and_upload(
     adls_client.upload_pandas_dataframe_as_file(
         context=context, data=dq_with_renamed_headers_pandas, filepath=temp_filepath
     )
-    return None
 
 
 def handle_rename_dq_has_critical_error_column(

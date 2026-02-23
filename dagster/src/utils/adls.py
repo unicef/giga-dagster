@@ -61,34 +61,27 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext | None, data: bytes, filepath: str) -> None:
+    def upload_raw(
+        context: OutputContext | None,
+        data: bytes,
+        filepath: str,
+        metadata: dict | None = None,
+    ) -> None:
         file_client = _adls.get_file_client(filepath)
 
-        metadata = context.step_context.op_config["metadata"] if context else None
-
-        # 1. Upload the actual file WITHOUT metadata
+        if not metadata and context:
+            metadata = context.step_context.op_config["metadata"]
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
-                file_client.upload_data(buffer.read(), overwrite=True)
+                file_client.upload_data(
+                    buffer.read(), overwrite=True, metadata=metadata
+                )
             except azure.core.exceptions.ResourceModifiedError:
                 logger.warning("ResourceModifiedError: Skipping write")
             except azure.core.exceptions.ResourceNotFoundError as e:
                 logger.error(f"ResourceNotFoundError: {filepath}")
                 raise e
-
-        # 2. Create metadata path
-        metadata_blob_path = ADLSFileClient._get_metadata_path(filepath)
-
-        # 3. Upload metadata JSON
-        if metadata_blob_path:
-            json_bytes = json.dumps(metadata, indent=2).encode()
-            file_client_sidecar = _adls.get_file_client(metadata_blob_path)
-            with BytesIO(json_bytes) as buffer:
-                buffer.seek(0)
-                file_client_sidecar.upload_data(buffer.read(), overwrite=True)
-
-            logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
 
     def download_csv_as_pandas_dataframe(self, filepath: str) -> pd.DataFrame:
         file_client = _adls.get_file_client(filepath)
@@ -138,14 +131,11 @@ class ADLSFileClient(ConfigurableResource):
         data: pd.DataFrame,
         filepath: str,
     ) -> None:
-        bytes_data, config = None, None
         ext = Path(filepath).suffix
         if not ext:
             raise RuntimeError(f"Cannot infer format of file {filepath}")
 
         file_client = _adls.get_file_client(filepath)
-
-        # convert DF to bytes
         match ext:
             case ".csv" | ".xls" | ".xlsx":
                 bytes_data = data.to_csv(index=False).encode("utf-8-sig")
@@ -156,30 +146,18 @@ class ADLSFileClient(ConfigurableResource):
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
-        # extract metadata object from op_config
         if isinstance(context, OpExecutionContext):
             config = FileConfig(**context._step_execution_context.op_config)
+
         if isinstance(context, OutputContext):
             config = FileConfig(**context.step_context.op_config)
 
         metadata = config.metadata
         metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
 
-        # 1. upload file without metadata
         with BytesIO(bytes_data) as buffer:
             buffer.seek(0)
-            file_client.upload_data(buffer.read(), overwrite=True)
-
-        # 2. create metadata sidecar file
-        metadata_blob_path = self._get_metadata_path(filepath)
-
-        metadata_client = _adls.get_file_client(metadata_blob_path)
-        json_bytes = json.dumps(metadata, indent=2).encode()
-        with BytesIO(json_bytes) as buffer:
-            buffer.seek(0)
-            metadata_client.upload_data(buffer.read(), overwrite=True)
-
-        logger.info(f"Successfully uploaded metadata file to {metadata_blob_path}")
+            file_client.upload_data(buffer.read(), overwrite=True, metadata=metadata)
 
     def download_delta_table_as_spark_dataframe(
         self,
