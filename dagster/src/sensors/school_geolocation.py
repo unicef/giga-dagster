@@ -47,7 +47,10 @@ def school_master_geolocation__raw_file_uploads_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+            raw_metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.ensure_metadata_exists(
+                raw_metadata, adls_filepath
+            )
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size
 

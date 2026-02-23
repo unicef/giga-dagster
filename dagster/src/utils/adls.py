@@ -1,8 +1,8 @@
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -285,3 +285,12 @@ class ADLSFileClient(ConfigurableResource):
     def delete(filepath: str, *, is_directory=False):
         file_client = _adls.get_file_client(file_path=filepath)
         file_client.delete_file(recursive=is_directory)
+
+    @staticmethod
+    def ensure_metadata_exists(
+        metadata: Mapping[str, Any] | None,
+        blob_path: str,
+    ) -> Mapping[str, Any]:
+        if not metadata:
+            raise ValueError(f"Metadata missing for blob: {blob_path}")
+        return metadata

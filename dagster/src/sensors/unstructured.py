@@ -45,7 +45,10 @@ def unstructured__emit_metadata_to_datahub_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+            raw_metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.ensure_metadata_exists(
+                raw_metadata, adls_filepath
+            )
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size
 
@@ -99,7 +102,8 @@ def generalized_unstructured__emit_metadata_to_datahub_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
 
-        metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
+        raw_metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+        metadata = adls_file_client.ensure_metadata_exists(raw_metadata, adls_filepath)
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         size = properties.size
         last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
