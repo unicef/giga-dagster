@@ -248,13 +248,6 @@ class ADLSFileClient(ConfigurableResource):
         except azure.core.exceptions.ResourceNotFoundError:
             return False
 
-    def exists(self, filepath: str) -> bool:
-        try:
-            client = _adls.get_file_client(filepath).exists()
-            return client.exists()
-        except Exception:
-            return False
-
     def copy_folder(self, source_folder: str, target_folder: str) -> None:
         # We use BlobServiceClient to copy folders because DataLakeServiceClient does not support folder copy.
         blob_service_client = BlobServiceClient.from_connection_string(
