@@ -47,9 +47,8 @@ def school_master_coverage__raw_file_uploads_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            raw_metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
-            metadata = adls_file_client.ensure_metadata_exists(
-                raw_metadata, adls_filepath
+            metadata = adls_file_client.fetch_metadata_for_blob(
+                adls_filepath, ensure_exists=True
             )
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size

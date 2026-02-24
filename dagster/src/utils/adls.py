@@ -1,8 +1,8 @@
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -197,15 +197,13 @@ class ADLSFileClient(ConfigurableResource):
         file_client = _adls.get_file_client(filepath)
         return file_client.get_file_properties()
 
-    def fetch_metadata_for_blob(self, filepath: str):
+    def fetch_metadata_for_blob(self, filepath: str, ensure_exists: bool = False):
         """
         Prefer <file>.metadata.json stored next to the file.
         Fallback to ADLS blob properties (legacy).
         Returns a dict or None.
         """
         metadata_blob_path = self._get_metadata_path(filepath)
-
-        # 1. Try JSON first
         try:
             if metadata_blob_path:
                 data = self.download_json(metadata_blob_path)
@@ -217,14 +215,17 @@ class ADLSFileClient(ConfigurableResource):
                 f"No metadata found at: {metadata_blob_path} ({e}), falling back to blob properties"
             )
 
-        # 2. Fallback to ADLS properties
+            # 2. Fallback to ADLS properties
         try:
             properties = self.get_file_metadata(filepath)
-            # properties.metadata is dict-like
             if getattr(properties, "metadata", None):
                 return dict(properties.metadata)
         except Exception as exc:
             logger.debug(f"Failed to fetch blob metadata for {filepath}: {exc}")
+
+            # 3. Both sources exhausted
+        if ensure_exists:
+            raise ValueError(f"Metadata missing for blob: {filepath}")
 
         return None
 
@@ -285,12 +286,3 @@ class ADLSFileClient(ConfigurableResource):
     def delete(filepath: str, *, is_directory=False):
         file_client = _adls.get_file_client(file_path=filepath)
         file_client.delete_file(recursive=is_directory)
-
-    @staticmethod
-    def ensure_metadata_exists(
-        metadata: Mapping[str, Any] | None,
-        blob_path: str,
-    ) -> Mapping[str, Any]:
-        if not metadata:
-            raise ValueError(f"Metadata missing for blob: {blob_path}")
-        return metadata
