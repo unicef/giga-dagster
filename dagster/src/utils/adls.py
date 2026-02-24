@@ -68,8 +68,9 @@ class ADLSFileClient(ConfigurableResource):
         metadata: dict | None = None,
     ) -> None:
         file_client = _adls.get_file_client(filepath)
-        metadata = context.step_context.op_config["metadata"] if context else None
 
+        if not metadata and context:
+            metadata = context.step_context.op_config["metadata"]
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
