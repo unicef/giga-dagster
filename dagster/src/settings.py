@@ -127,6 +127,9 @@ class Settings(BaseSettings):
 
     @property
     def AZURE_BLOB_CONNECTION_URI(self) -> str:
+        if self.USE_AZURITE:
+            # Use wasb:// (HTTP) with Azurite - wasbs:// (HTTPS) doesn't work
+            return f"wasb://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
         return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
     @property

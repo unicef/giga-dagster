@@ -9,7 +9,6 @@ from pyspark.sql import (
     window as w,
 )
 
-from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.data_quality_checks.column_relation import column_relation_checks
@@ -37,6 +36,7 @@ from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.settings import settings
 from src.spark.config_expectations import config
+from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
@@ -463,11 +463,8 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
 
 
 def get_report_template() -> str:
-    account_url = f"https://{settings.AZURE_DFS_SAS_HOST}"
-    azure_sas_token = settings.AZURE_SAS_TOKEN
     container_name = settings.AZURE_BLOB_CONTAINER_NAME
-
-    service = BlobServiceClient(account_url=account_url, credential=azure_sas_token)
+    service = get_blob_service_client()
     filename = "templates/data_quality/data_quality_report_template.txt"
     blob_client = service.get_blob_client(container=container_name, blob=filename)
     data = blob_client.download_blob(encoding="UTF-8").readall()

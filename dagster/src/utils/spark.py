@@ -48,7 +48,6 @@ spark_common_config = {
     "spark.driver.memory": f"{settings.SPARK_DRIVER_MEMORY_MB}m",
     "spark.executor.cores": str(settings.SPARK_DRIVER_CORES),
     "spark.executor.memory": f"{settings.SPARK_DRIVER_MEMORY_MB}m",
-    "spark.cores.max": str(settings.SPARK_DRIVER_CORES),
     "spark.scheduler.mode": "FAIR",
     "spark.authenticate": "true",
     "spark.authenticate.secret": settings.SPARK_RPC_AUTHENTICATION_SECRET,

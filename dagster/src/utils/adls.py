@@ -57,6 +57,16 @@ def _create_blob_client_for_azurite() -> BlobServiceClient:
     return BlobServiceClient.from_connection_string(connection_string)
 
 
+def get_blob_service_client() -> BlobServiceClient:
+    """Get the correct BlobServiceClient for the current environment."""
+    if settings.USE_AZURITE:
+        return _create_blob_client_for_azurite()
+    return BlobServiceClient(
+        account_url=f"https://{settings.AZURE_BLOB_SAS_HOST}",
+        credential=settings.AZURE_SAS_TOKEN,
+    )
+
+
 # Lazy initialization of clients
 _client: DataLakeServiceClient | None = None
 _adls: FileSystemClient | None = None
@@ -364,12 +374,7 @@ class ADLSFileClient(ConfigurableResource):
 
     def copy_folder(self, source_folder: str, target_folder: str) -> None:
         # We use BlobServiceClient to copy folders because DataLakeServiceClient does not support folder copy.
-        if settings.USE_AZURITE:
-            blob_service_client = _get_blob_client()
-        else:
-            blob_service_client = BlobServiceClient.from_connection_string(
-                settings.AZURE_STORAGE_CONNECTION_STRING
-            )
+        blob_service_client = get_blob_service_client()
 
         source_container_client = blob_service_client.get_container_client(
             settings.AZURE_BLOB_CONTAINER_NAME

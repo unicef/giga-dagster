@@ -21,12 +21,12 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.internal.connectivity_queries import get_qos_tables
 from src.settings import settings
 from src.spark.udf_dependencies import get_point
+from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
@@ -483,7 +483,7 @@ def get_admin_boundaries(
     admin_level: str,
 ) -> pd.DataFrame | gpd.GeoDataFrame | None:  # admin level = ["admin1", "admin2"]
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = f"{country_code_iso3}_{admin_level}.geojson"
         file = f"admin_data/{admin_level}/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
@@ -569,7 +569,7 @@ def add_admin_columns(  # noqa: C901
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = "disputed_areas_admin0.geojson"
         file = f"admin_data/admin0/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
