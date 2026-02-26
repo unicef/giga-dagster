@@ -21,6 +21,7 @@ from pyspark.sql.types import (
 
 class Constants(BaseSettings):
     UPLOAD_PATH_PREFIX: str = "raw/uploads"
+    UPLOAD_METADATA_PATH_PREFIX: str = "raw/upload_metadata"
     datetime_partition_key_format = "%Y-%m-%d-%H:%M"
 
     connectivity_updates_folder = "raw/connectivity_updates"
