@@ -2,6 +2,7 @@ import json
 from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -22,6 +23,7 @@ from azure.storage.filedatalake import (
     PathProperties,
 )
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
+from src.constants.constants_class import constants
 from src.settings import settings
 from src.utils.op_config import FileConfig
 
@@ -33,6 +35,23 @@ _adls = _client.get_file_system_client(file_system=settings.AZURE_BLOB_CONTAINER
 
 
 class ADLSFileClient(ConfigurableResource):
+    @staticmethod
+    def _get_metadata_path(filepath: str) -> Optional[str]:
+        # Normalize paths by stripping leading slashes for comparison
+        normalized_filepath = filepath.lstrip("/")
+        normalized_prefix = constants.UPLOAD_PATH_PREFIX.lstrip("/")
+        normalized_metadata_prefix = constants.UPLOAD_METADATA_PATH_PREFIX.lstrip("/")
+
+        if normalized_filepath.startswith(normalized_prefix):
+            return (
+                normalized_filepath.replace(
+                    normalized_prefix, normalized_metadata_prefix, 1
+                )
+                + ".metadata.json"
+            )
+
+        return None
+
     @staticmethod
     def download_raw(filepath: str) -> bytes:
         file_client = _adls.get_file_client(filepath)
@@ -187,6 +206,38 @@ class ADLSFileClient(ConfigurableResource):
     def get_file_metadata(self, filepath: str) -> FileProperties:
         file_client = _adls.get_file_client(filepath)
         return file_client.get_file_properties()
+
+    def fetch_metadata_for_blob(self, filepath: str, ensure_exists: bool = False):
+        """
+        Prefer <file>.metadata.json stored next to the file.
+        Fallback to ADLS blob properties (legacy).
+        Returns a dict or None.
+        """
+        metadata_blob_path = self._get_metadata_path(filepath)
+        try:
+            if metadata_blob_path:
+                data = self.download_json(metadata_blob_path)
+                if data is not None:
+                    logger.debug(f"Found metadata at: {metadata_blob_path}")
+                    return data
+        except Exception as e:
+            logger.debug(
+                f"No metadata found at: {metadata_blob_path} ({e}), falling back to blob properties"
+            )
+
+            # 2. Fallback to ADLS properties
+        try:
+            properties = self.get_file_metadata(filepath)
+            if getattr(properties, "metadata", None):
+                return dict(properties.metadata)
+        except Exception as exc:
+            logger.debug(f"Failed to fetch blob metadata for {filepath}: {exc}")
+
+            # 3. Both sources exhausted
+        if ensure_exists:
+            raise ValueError(f"Metadata missing for blob: {filepath}")
+
+        return None
 
     def rename_file(self, old_filepath: str, new_filepath: str) -> DataLakeFileClient:
         file_client = _adls.get_file_client(file_path=old_filepath)
