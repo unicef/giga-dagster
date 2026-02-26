@@ -258,7 +258,7 @@ def transform_types(
         {
             column.name: col(column.name).cast(column.dataType)
             for column in columns
-            if column.name not in ("signature", "latitude", "longitude")
+            if column.name not in ("signature")
         },
     )
     context.log.info(

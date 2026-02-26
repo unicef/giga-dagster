@@ -245,6 +245,10 @@ def geolocation_bronze(
         # RT Columns
         connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
+    else:
+        # On local, we can't retrieve the connectivity data
+        df = df.withColumn("connectivity", f.lit("Unknown"))
+        df = df.withColumn("connectivity_RT", f.lit("Unknown"))
 
     # standardize the connectivity type
     df = standardize_connectivity_type(df, mode, uploaded_columns)
