@@ -42,9 +42,16 @@ class ADLSFileClient(ConfigurableResource):
             return buffer.read()
 
     @staticmethod
-    def upload_raw(context: OutputContext | None, data: bytes, filepath: str) -> None:
+    def upload_raw(
+        context: OutputContext | None,
+        data: bytes,
+        filepath: str,
+        metadata: dict | None = None,
+    ) -> None:
         file_client = _adls.get_file_client(filepath)
-        metadata = context.step_context.op_config["metadata"] if context else None
+
+        if not metadata and context:
+            metadata = context.step_context.op_config["metadata"]
         with BytesIO(data) as buffer:
             buffer.seek(0)
             try:
@@ -69,6 +76,9 @@ class ADLSFileClient(ConfigurableResource):
 
             if ext in [".xls", ".xlsx"]:
                 return pd.read_excel(buffer)
+
+            if ext == ".parquet":
+                return pd.read_parquet(buffer)
 
         raise ValueError(f"Unsupported format for file: {filepath}")
 
@@ -98,6 +108,12 @@ class ADLSFileClient(ConfigurableResource):
                 return spark.read.csv(**reader_params)
 
         return spark.read.csv(**reader_params, schema=schema)
+
+    def download_parquet_as_spark_dataframe(
+        self, filepath: str, spark: SparkSession
+    ) -> sql.DataFrame:
+        adls_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{filepath}"
+        return spark.read.parquet(adls_path)
 
     def upload_pandas_dataframe_as_file(
         self,

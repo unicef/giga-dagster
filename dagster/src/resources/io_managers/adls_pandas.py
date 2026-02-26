@@ -35,7 +35,10 @@ class ADLSPandasIOManager(BaseConfigurableIOManager):
         path = self._get_filepath(context)
 
         try:
-            data = adls_client.download_csv_as_spark_dataframe(str(path), spark)
+            if path.suffix == ".parquet":
+                data = adls_client.download_parquet_as_spark_dataframe(str(path), spark)
+            else:
+                data = adls_client.download_csv_as_spark_dataframe(str(path), spark)
         except ResourceNotFoundError as e:
             if "_reference_" in context.asset_key.to_user_string():
                 # Required so that the asset does not skip materialization
