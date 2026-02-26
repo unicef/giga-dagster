@@ -1,5 +1,5 @@
 from io import BytesIO
-
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -23,6 +23,7 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.sentry import capture_op_exceptions
+from src.constants import constants
 
 from dagster import (
     OpExecutionContext,
@@ -47,6 +48,7 @@ def adhoc__health_master_data_transforms(
     context: OpExecutionContext,
     adhoc__load_health_master_csv: bytes,
     spark: PySparkResource,
+    adls_file_client: ADLSFileClient,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
@@ -84,6 +86,16 @@ def adhoc__health_master_data_transforms(
 
     df = sdf.toPandas()
     df = df.drop_duplicates("health_id_giga")
+
+    path = Path(config.filepath)
+    stem = path.stem
+    df_failed = df[df["health_id_giga"].isna()]
+    output_filepath = f"{constants.gold_folder}/dq-results/health-master/failed/{stem}.csv"
+    adls_file_client.upload_pandas_dataframe_as_file(
+        context=context,
+        data=df_failed,
+        filepath=str(output_filepath),
+    )
 
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
