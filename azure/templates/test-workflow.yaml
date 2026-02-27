@@ -19,3 +19,33 @@ stages:
 
           - script: pre-commit run --all-files
             displayName: Run pre-commit
+
+      - job: Pytest
+        displayName: Run pytest
+        strategy:
+          matrix:
+            Python311:
+              python.version: '3.11'
+        steps:
+          - task: UsePythonVersion@0
+            displayName: 'Use Python $(python.version)'
+            inputs:
+              versionSpec: '$(python.version)'
+
+          - script: python -m pip install --upgrade pip poetry
+            displayName: Install Poetry
+
+          - script: poetry install --with dev,pipelines --no-root
+            displayName: Install dependencies
+            workingDirectory: $(Build.SourcesDirectory)/dagster
+
+          - script: poetry run pytest --junitxml=junit/test-results.xml
+            displayName: Run tests
+            workingDirectory: $(Build.SourcesDirectory)/dagster
+
+          - task: PublishTestResults@2
+            displayName: Publish test results
+            condition: succeededOrFailed()
+            inputs:
+              testResultsFiles: '**/test-results.xml'
+              testRunTitle: 'Pytest $(python.version)'
