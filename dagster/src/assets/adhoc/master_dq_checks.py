@@ -5,6 +5,9 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
+
+from dagster import OpExecutionContext, Output, asset
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     row_level_checks,
 )
@@ -19,8 +22,6 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import OpExecutionContext, Output, asset
-
 
 @asset
 @capture_op_exceptions
@@ -33,12 +34,15 @@ def adhoc__standalone_master_data_quality_checks(
     s: SparkSession = spark.spark_session
     dt = DeltaTable.forName(s, f"school_master.{config.country_code}")
     master = dt.toDF()
-
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type=config.dataset_type,
+        country_code_iso3=config.country_code,
+    )
     dq_checked = logger.passthrough(
         row_level_checks(
             df=master,
-            dataset_type=config.dataset_type,
-            _country_code_iso3=config.country_code,
+            dq_context=dq_context,
             context=context,
         ),
         "Row level checks completed",

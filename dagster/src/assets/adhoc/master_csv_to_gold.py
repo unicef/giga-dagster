@@ -14,7 +14,11 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType, StructType
 from sqlalchemy import select, update
+
+from azure.core.exceptions import ResourceNotFoundError
+from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 from src.constants import DataTier
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -55,9 +59,6 @@ from src.utils.schema import (
 )
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
-
-from azure.core.exceptions import ResourceNotFoundError
-from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -207,9 +208,17 @@ def adhoc__master_data_quality_checks(
 
     df_deduplicated = adhoc__master_data_transforms.where(f.col("row_num") == 1)
     df_deduplicated = df_deduplicated.drop("row_num")
-
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type="master",
+        country_code_iso3=country_iso3,
+    )
     dq_checked = logger.passthrough(
-        row_level_checks(df_deduplicated, "master", country_iso3, context),
+        row_level_checks(
+            df=df_deduplicated,
+            dq_context=dq_context,
+            context=context,
+        ),
         "Row level checks completed",
     )
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
@@ -272,8 +281,16 @@ def adhoc__reference_data_quality_checks(
     sdf = sdf.withColumns(column_actions)
     sdf = sdf.select([col.name for col in columns])
     context.log.info(f"Renamed {len(columns_to_add)} columns")
-
-    dq_checked = row_level_checks(sdf, "reference", country_iso3, context)
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type="reference",
+        country_code_iso3=country_iso3,
+    )
+    dq_checked = row_level_checks(
+        df=sdf,
+        dq_context=dq_context,
+        context=context,
+    )
     dq_checked = transform_types(dq_checked, config.metastore_schema, context)
     datahub_emit_metadata_with_exception_catcher(
         context=context,

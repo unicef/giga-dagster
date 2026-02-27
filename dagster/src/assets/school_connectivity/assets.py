@@ -16,7 +16,10 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+
+from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier, constants
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -52,8 +55,6 @@ from src.utils.schema import (
 )
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
-
-from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -252,10 +253,15 @@ def qos_school_connectivity_data_quality_results(
     qos_school_connectivity_bronze: sql.DataFrame,
 ) -> Output[pd.DataFrame]:
     country_code = config.country_code
+
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type="qos",
+        country_code_iso3=country_code,
+    )
     dq_results = row_level_checks(
-        qos_school_connectivity_bronze,
-        "qos",
-        country_code,
+        df=qos_school_connectivity_bronze,
+        dq_context=dq_context,
         context=context,
     )
 
