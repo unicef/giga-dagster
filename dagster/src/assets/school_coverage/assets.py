@@ -9,6 +9,9 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
+
+from dagster import MetadataValue, OpExecutionContext, Output, asset
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -48,8 +51,6 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
-
-from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -109,10 +110,16 @@ def coverage_data_quality_results(
     )
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
+
+    dq_context = DQContext(
+        dq_mode=DQMode.MASTER,
+        dataset_type=dataset_type,
+        country_code_iso3=country_code,
+        upload_id=config.upload_id,
+    )
     dq_results = row_level_checks(
         df=df,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
+        dq_context=dq_context,
         context=context,
     )
 
