@@ -57,6 +57,7 @@ spark_common_config = {
     f"fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": (
         settings.AZURE_SAS_TOKEN
     ),
+    "spark.sql.legacy.parquet.nanosAsLong": "true",
 }
 
 if settings.IN_PRODUCTION:
