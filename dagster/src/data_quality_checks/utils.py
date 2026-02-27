@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
 
 import pandas as pd
+from delta import DeltaTable
 from jinja2 import BaseLoader, Environment
 from pyspark import sql
 from pyspark.sql import (
+    DataFrame,
     SparkSession,
     functions as f,
     window as w,
@@ -42,7 +44,10 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
     get_nocodb_table_id_from_name,
 )
-from src.utils.schema import get_schema_columns
+from src.utils.schema import (
+    construct_full_table_name,
+    get_schema_columns,
+)
 
 
 def aggregate_report_spark_df(
@@ -494,6 +499,63 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     df = df.filter(df.dq_has_critical_error == 1)
     return df
+
+
+def write_agg_failed_rows(
+    df: DataFrame,
+    dataset_type: str,
+    country_code: str,
+    file_id: str,
+    file_name: str,
+    context: OpExecutionContext,
+) -> None:
+    if df.rdd.isEmpty():
+        context.log.info("No failed rows to write to aggregated error table.")
+        return
+
+    schema_name = "school_master"
+    table_name = "upload_errors"
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    spark = df.sparkSession
+    context.log.info(f"Preparing to write failed rows to {full_table_name}")
+
+    dq_cols = [c for c in df.columns if c.startswith("dq_") or c == "failure_reason"]
+    source_cols = [c for c in df.columns if c not in dq_cols]
+
+    df_prepared = df.select(
+        f.lit(file_id).alias("giga_sync_file_id"),
+        f.lit(file_name).alias("giga_sync_file_name"),
+        f.lit(dataset_type).alias("dataset_type"),
+        f.lit(country_code).alias("country_code"),
+        f.to_json(f.struct(*[f.col(c) for c in source_cols])).alias("row_data"),
+        f.to_json(f.struct(*[f.col(c) for c in dq_cols])).alias("error_details"),
+        f.current_timestamp().alias("created_at"),
+    )
+
+    try:
+        if spark.catalog.tableExists(full_table_name):
+            context.log.info(f"Deleting existing errors for file_id: {file_id}")
+
+            delta_table = DeltaTable.forName(spark, full_table_name)
+            delta_table.delete(f.col("giga_sync_file_id") == f.lit(file_id))
+
+        else:
+            context.log.info(
+                f"Table {full_table_name} does not exist. It will be created on write."
+            )
+
+    except Exception as exc:
+        context.log.warning(f"Failed to delete existing rows: {exc}")
+
+    context.log.info("Appending failed rows to aggregated error table")
+
+    (
+        df_prepared.write.format("delta")
+        .mode("append")
+        .option("mergeSchema", "false")
+        .saveAsTable(full_table_name)
+    )
 
 
 def dq_geolocation_extract_relevant_columns(
