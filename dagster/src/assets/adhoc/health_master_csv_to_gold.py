@@ -82,14 +82,33 @@ def adhoc__health_master_data_transforms(
         country_code_iso3=config.country_code,
         admin_level="admin2",
     )
-    sdf = sdf.withColumn("signature", sha2(concat_ws("|", *sorted(sdf.columns)), 256))
+    columns_for_signature = sorted([c for c in sdf.columns if c != "signature"])
+    sdf = sdf.withColumn("signature", sha2(concat_ws("|", *columns_for_signature), 256))
 
     df = sdf.toPandas()
     df = df.drop_duplicates("health_id_giga")
 
     path = Path(config.filepath)
     stem = path.stem
-    df_failed = df[df["health_id_giga"].isna()]
+    mandatory_columns = [
+        column.name
+        for column in schema_columns
+        if not column.nullable
+    ]
+
+    if mandatory_columns:
+        for col in mandatory_columns:
+            if col not in df:
+                df[col] = None
+            df[col] = df[col].apply(
+            lambda x: None if x is None or str(x).strip() == "" else x
+        )
+
+        df_failed = df[df[mandatory_columns].isnull().any(axis=1)]
+        df = df[~df[mandatory_columns].isnull().any(axis=1)]
+    else:
+        df_failed = pd.DataFrame(columns=df.columns)
+
     output_filepath = f"{constants.gold_folder}/dq-results/health-master/failed/{stem}.csv"
     adls_file_client.upload_pandas_dataframe_as_file(
         context=context,
