@@ -31,6 +31,7 @@ class FileUpload(BaseModel):
     dq_status: Mapped[DQStatusEnum] = mapped_column(
         nullable=False, default=DQStatusEnum.IN_PROGRESS
     )
+    metadata_json_path: Mapped[str] = mapped_column(nullable=True)
     bronze_path: Mapped[str] = mapped_column(nullable=True, default=None)
     is_processed_in_staging: Mapped[bool] = mapped_column(nullable=False, default=False)
     country: Mapped[str] = mapped_column(VARCHAR(3), nullable=False)
@@ -53,7 +54,7 @@ class FileUpload(BaseModel):
         timestamp = self.created.strftime("%Y%m%d-%H%M%S")
         ext = Path(self.original_filename).suffix
         filename_elements = [self.id, self.country, self.dataset]
-        if self.source is not None:
+        if self.source is not None and self.dataset != "geolocation":
             filename_elements.append(self.source)
 
         filename_elements.append(timestamp)

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     AZURE_SAS_TOKEN: str
     AZURE_BLOB_CONTAINER_NAME: str
     AZURE_STORAGE_ACCOUNT_NAME: str
+    SLACK_WEBHOOK: str
     SPARK_RPC_AUTHENTICATION_SECRET: str
     HIVE_METASTORE_URI: str
     EMAIL_RENDERER_BEARER_TOKEN: str
@@ -70,6 +71,9 @@ class Settings(BaseSettings):
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
     TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
+    MONGOLIA_API_USER: str = ""
+    MONGOLIA_API_PASSWORD: str = ""
+    MONGOLIA_API_URL: str = ""
 
     # Derived settings
     @property
