@@ -345,7 +345,7 @@ class ADLSFileClient(ConfigurableResource):
                     content_length=blob.size,
                 )
         else:
-            return _get_adls_filesystem().get_paths(path=path, recursive=recursive)
+            yield from _get_adls_filesystem().get_paths(path=path, recursive=recursive)
 
     def get_file_metadata(self, filepath: str) -> FileProperties:
         if settings.USE_AZURITE:
