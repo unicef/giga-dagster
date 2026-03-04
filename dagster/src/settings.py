@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # Settings with a default are not required to be in .env
     PYTHON_ENV: Environment = Environment.PRODUCTION
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
+    DAGSTER_INGRESS_HOST: str = ""
+
+    # Azurite (local Azure Storage emulator) settings
+    USE_AZURITE: bool = False
+    AZURE_STORAGE_ACCOUNT_KEY: str = ""
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
     SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
@@ -65,6 +70,7 @@ class Settings(BaseSettings):
     NOCODB_TOKEN: str = ""
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
     TRINO_CONNECTION_STRING: str = ""
+    SLACK_WEBHOOK: str = ""
     MONGOLIA_API_USER: str = ""
     MONGOLIA_API_PASSWORD: str = ""
     MONGOLIA_API_URL: str = ""
@@ -125,6 +131,9 @@ class Settings(BaseSettings):
 
     @property
     def AZURE_BLOB_CONNECTION_URI(self) -> str:
+        if self.USE_AZURITE:
+            # Use wasb:// (HTTP) with Azurite - wasbs:// (HTTPS) doesn't work
+            return f"wasb://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
         return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
 
     @property
@@ -149,14 +158,13 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_DIR(self) -> str:
+        if self.USE_AZURITE:
+            # Use wasb:// (HTTP) with Azurite - wasbs:// (HTTPS) doesn't work
+            return f"wasb://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net/{self.SPARK_WAREHOUSE_PATH}"
         return f"{self.AZURE_BLOB_CONNECTION_URI}/{self.SPARK_WAREHOUSE_PATH}"
 
     @property
     def LAKEHOUSE_PATH(self) -> str:
-        if self.PYTHON_ENV == Environment.LOCAL:
-            if self.LAKEHOUSE_USERNAME:
-                return f"lakehouse-local-{self.LAKEHOUSE_USERNAME}"
-            return "lakehouse-local"
         return ""
 
     @property

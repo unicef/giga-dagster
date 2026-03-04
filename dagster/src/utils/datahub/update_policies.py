@@ -6,7 +6,7 @@ import sentry_sdk
 
 from dagster import OpExecutionContext
 from src.utils.datahub.builders import build_group_urn
-from src.utils.datahub.graphql import datahub_graph_client, execute_batch_mutation
+from src.utils.datahub.graphql import execute_batch_mutation, get_datahub_graph_client
 from src.utils.datahub.identify_country_name import identify_country_name
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
@@ -85,8 +85,12 @@ def create_policy_query(group_urn: str) -> str:
 
 
 def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
+    client = get_datahub_graph_client()
+    if client is None:
+        return json.dumps([])
+
     query = f"tag:{tag}"
-    dataset_urns_iterator = datahub_graph_client.get_urns_by_filter(
+    dataset_urns_iterator = client.get_urns_by_filter(
         entity_types=["dataset"],
         query=query,
         extraFilters=[
@@ -100,7 +104,10 @@ def list_datasets_by_filter(tag: str, dataset_type: str) -> str:
 
 
 def group_urns_iterator():
-    return datahub_graph_client.get_urns_by_filter(entity_types=["corpGroup"])
+    client = get_datahub_graph_client()
+    if client is None:
+        return iter([])
+    return client.get_urns_by_filter(entity_types=["corpGroup"])
 
 
 def is_valid_country_name(country_name: str) -> bool:
@@ -156,6 +163,12 @@ def update_policy_base(
     context: OpExecutionContext = None,
 ) -> None:
     logger = get_context_with_fallback_logger(context)
+
+    client = get_datahub_graph_client()
+    if client is None:
+        logger.warning("DataHub is not configured. Skipping policy update.")
+        return
+
     country_name = parse.unquote(group_urn.split("urn:li:corpGroup:")[1]).rsplit(
         "-", 1
     )[0]
@@ -164,7 +177,7 @@ def update_policy_base(
             query = policy_mutation_query(group_urn=group_urn)
             logger.info(f"UPDATING DATAHUB POLICY: {group_urn}...")
             logger.info(query)
-            datahub_graph_client.execute_graphql(query=query)
+            client.execute_graphql(query=query)
             logger.info("DATAHUB POLICY UPDATED SUCCESSFULLY.")
         except Exception as error:
             logger.error(error)
