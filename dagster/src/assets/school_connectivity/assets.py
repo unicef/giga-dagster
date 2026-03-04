@@ -491,11 +491,120 @@ def school_connectivity_realtime_schools(
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
+def school_connectivity_realtime_silver(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+):
+    s: SparkSession = spark.spark_session
+    schema_name = config.metastore_schema
+    file_path = config.filepath
+    country_code = config.country_code
+    schema_columns = get_schema_columns(s, schema_name)
+    column_names = [c.name for c in schema_columns]
+    primary_key = get_primary_key(s, schema_name)
+
+    context.log.info(f"Updating data for country {country_code} from {file_path}")
+    updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
+        file_path
+    )
+    context.log.info(
+        f"{updated_connectivity_schs_df.shape[0]} schools will have RT updated"
+    )
+
+    updated_connectivity_schs = s.createDataFrame(updated_connectivity_schs_df)
+    updated_connectivity_schs = updated_connectivity_schs.withColumn(
+        "connectivity", f.lit("Yes")
+    )
+
+    updated_connectivity_schs = updated_connectivity_schs.withColumnsRenamed(
+        {col: f"{col}_updated" for col in updated_connectivity_schs.columns}
+    )
+
+    silver_tier_schema_name = construct_schema_name_for_tier(
+        schema_name, DataTier.SILVER
+    )
+    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
+
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        context.log.info(
+            f"The silver table for {country_code} exists and will be updated"
+        )
+        s.catalog.refreshTable(silver_table_name)
+        current_silver = DeltaTable.forName(s, silver_table_name).toDF()
+        current_silver = add_missing_columns(current_silver, schema_columns)
+        current_silver = transform_types(current_silver, schema_name, context)
+
+        updated_silver = current_silver.join(
+            updated_connectivity_schs,
+            on=[
+                current_silver.school_id_giga
+                == updated_connectivity_schs.school_id_giga_updated
+            ],
+            how="left",
+        )
+        updated_silver = updated_silver.withColumn(
+            "connectivity",
+            f.coalesce(f.col("connectivity_updated"), f.col("connectivity")),
+        )
+        updated_silver = updated_silver.withColumn(
+            "connectivity_RT",
+            f.coalesce(f.col("connectivity_RT_updated"), f.col("connectivity_RT")),
+        )
+        updated_silver = updated_silver.withColumn(
+            "connectivity_RT_datasource",
+            f.coalesce(
+                f.col("connectivity_RT_datasource_updated"),
+                f.col("connectivity_RT_datasource"),
+            ),
+        )
+        updated_silver = updated_silver.withColumn(
+            "connectivity_RT_ingestion_timestamp",
+            f.coalesce(
+                f.col("connectivity_RT_ingestion_timestamp"),
+                f.col("connectivity_RT_ingestion_timestamp_updated"),
+            ),
+        )
+
+        updated_silver = updated_silver.drop(*updated_connectivity_schs.columns)
+
+        new_silver = full_in_cluster_merge(
+            current_silver, updated_silver, primary_key, column_names
+        )
+    else:
+        raise ValueError(f"The silver table for country {country_code} does not exist")
+
+    context.log.info("Merge the updated RT data into the silver table")
+
+    new_silver = compute_row_hash(new_silver)
+
+    schema_reference = get_schema_columns_datahub(s, schema_name)
+    datahub_emit_metadata_with_exception_catcher(
+        context=context,
+        config=config,
+        spark=spark,
+        schema_reference=schema_reference,
+    )
+
+    return Output(
+        new_silver,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": new_silver.count(),
+            "preview": get_table_preview(new_silver),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def school_connectivity_realtime_master(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
+    school_connectivity_realtime_silver: sql.DataFrame,
 ):
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema

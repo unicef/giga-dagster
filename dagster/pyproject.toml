@@ -58,6 +58,7 @@ zipp = ">=3.19.1"
 urllib3 = ">=2.2.2"
 tornado = ">=6.4.1"
 xlrd = "^2.0.1"
+chardet = "^5.2.0"
 
 [tool.poetry.group.spark.dependencies]
 pyspark = "3.5.0"

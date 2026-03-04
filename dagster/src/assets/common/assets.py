@@ -17,7 +17,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from sqlalchemy import update
+from sqlalchemy import select, update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
@@ -218,6 +218,12 @@ def silver(
 
     df_passed = manual_review_dedupe_strat(df_passed)
 
+    # Extract delete IDs before merge for post-merge verification
+    deletes_df = df_passed.filter(f.col("_change_type") == "delete")
+    delete_ids = [row[primary_key] for row in deletes_df.select(primary_key).collect()]
+    has_deletes = len(delete_ids) > 0
+    context.log.info(f"Approved deletes count: {len(delete_ids)}")
+
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
         s.catalog.refreshTable(silver_table_name)
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
@@ -225,6 +231,30 @@ def silver(
         new_silver = partial_cdf_in_cluster_merge(
             current_silver, df_passed, column_names, primary_key, context
         )
+
+        # Post-merge verification: Verify approved deletes were actually removed
+        if has_deletes:
+            remaining_deletes = new_silver.filter(
+                new_silver[primary_key].isin(delete_ids)
+            )
+            remaining_count = remaining_deletes.count()
+
+            if remaining_count > 0:
+                context.log.error(
+                    f"Delete verification failed: {remaining_count} out of {len(delete_ids)} "
+                    f"approved delete rows still exist in silver table. "
+                    f"Sample IDs: {[row[primary_key] for row in remaining_deletes.limit(5).collect()]}"
+                )
+                from dagster import DagsterExecutionInterruptError
+
+                raise DagsterExecutionInterruptError(
+                    f"Deletes not applied: {remaining_count} rows still in silver table"
+                )
+            else:
+                context.log.info(
+                    f"Delete verification passed: All {len(delete_ids)} approved deletes "
+                    f"successfully removed from silver table."
+                )
     else:
         new_silver = df_passed
 
@@ -274,6 +304,33 @@ def reset_staging_table(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
+    # State check: Verify enabled=False and is_merge_processing=False before reset
+    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    with get_db_context() as db:
+        current_request = db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+        if current_request is None:
+            context.log.warning(
+                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
+            )
+        elif current_request.enabled:
+            context.log.warning(
+                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
+                f"Expected enabled=False before reset."
+            )
+            return
+        elif current_request.is_merge_processing:
+            context.log.warning(
+                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
+                f"Expected is_merge_processing=False before reset."
+            )
+            return
+
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
 
     try:
@@ -297,20 +354,31 @@ def reset_staging_table(
 
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
     with get_db_context() as db:
-        with db.begin():
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
+        try:
+            with db.begin():
+                # Ensure enabled=False and is_merge_processing=False after reset
+                result = db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.is_merge_processing: False,
+                            ApprovalRequest.enabled: False,
+                        }
+                    )
                 )
-                .values(
-                    {
-                        ApprovalRequest.is_merge_processing: False,
-                        ApprovalRequest.enabled: False,
-                    }
-                )
+                if result.rowcount == 0:
+                    context.log.warning(
+                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
+                    )
+        except Exception as e:
+            context.log.error(
+                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
             )
+            raise
 
 
 def _handle_null_columns(schema_columns, primary_key, silver_columns):

@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import LongType, StringType, StructType
+from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -89,6 +89,11 @@ def geolocation_metadata(
     context.log.info("Get upload details")
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
+    data_source = metadata.get("data_source")
+    if data_source is not None or data_source != "giga_sync":
+        context.log.info("Data is not from Giga Sync, skipping metadata table update")
+        return Output(None)
+
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -183,13 +188,26 @@ def geolocation_bronze(
 
         file_upload = FileUploadConfig.from_orm(file_upload)
 
+    column_to_schema_mapping = file_upload.column_to_schema_mapping
+
+    string_col_mapping = {
+        column_name: str
+        for column_name, schema_name in column_to_schema_mapping.items()
+        if schema_name in ("school_id_govt", "latitude", "longitude")
+    }
+
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        pdf = pandas_loader(buffer, config.filepath).map(str)
+        pdf = pandas_loader(
+            buffer,
+            config.filepath,
+            dtype_mapping=string_col_mapping,
+            context=context,
+        ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, file_upload.column_to_schema_mapping)
+    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
     context.log.info("COLUMN MAPPING")
     context.log.info(column_mapping)
     context.log.info("COLUMN MAPPING DATAFRAME")
@@ -206,23 +224,16 @@ def geolocation_bronze(
     geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_geolocation_base = geolocation_base.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     context.log.info("Casted Geolocation")
     context.log.info(casted_geolocation_base)
 
     casted_bronze = df.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
+
     context.log.info("Casted Bronze")
     context.log.info(casted_bronze)
 
@@ -303,18 +314,10 @@ def geolocation_data_quality_results(
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
     casted_silver = silver.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
     casted_bronze = geolocation_bronze.withColumn(
-        "school_id_govt",
-        f.when(
-            f.col("school_id_govt").cast(LongType()).isNotNull(),
-            f.col("school_id_govt").cast(LongType()).cast(StringType()),
-        ).otherwise(f.col("school_id_govt").cast(StringType())),
+        "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
@@ -547,7 +550,7 @@ def geolocation_data_quality_report(
 
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
-        original_df = pandas_loader(buffer, config.filepath).map(str)
+        original_df = pandas_loader(buffer, config.filepath, context=context).map(str)
 
     original_df_columns = original_df.columns
     uploaded_columns = file_upload.column_to_schema_mapping.values()

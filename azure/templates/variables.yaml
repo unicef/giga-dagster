@@ -39,6 +39,9 @@ variables:
   nocoDBToken: $(NOCODB_TOKEN)
   nocoDBNameMappingsTableId: $(NOCODB_NAME_MAPPINGS_TABLE_ID)
   trinoConnectionString: $(TRINO_CONNECTION_STRING)
+  mongoliaAPIUser: $(MONGOLIA_API_USER)
+  mongoliaAPIPassword: $(MONGOLIA_API_PASSWORD)
+  mongoliaAPIUrl: $(MONGOLIA_API_URL)
   deployEnv: $(DEPLOY_ENV)
   sentryDsn: $(SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
@@ -48,4 +51,5 @@ variables:
   catalogToken: $(CATALOG_TOKEN)
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
+  slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
   system.debug: true

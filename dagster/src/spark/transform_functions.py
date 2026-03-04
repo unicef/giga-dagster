@@ -276,6 +276,7 @@ def get_connectivity_type_root(value):
             "unknown_wireless",
             "other_wireless",
         ],
+        "other": ["other"],
         "unknown_connectivity_type": ["unknown"],
     }
     for key in connectivity_root_mappings:

@@ -6,7 +6,7 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
@@ -15,6 +15,7 @@ from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
+from src.utils.db.trino import get_db_context as get_trino_context
 from src.utils.delta import (
     build_deduped_delete_query,
     build_deduped_merge_query,
@@ -91,58 +92,244 @@ class StagingStep:
         )
 
     def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
+        staging = self._process_staging_changes(upstream_df)
+        if staging is None:
+            return None
+
+        self._update_approval_request_status(staging)
+        self._emit_lineage()
+
+        return staging
+
+    def _process_staging_changes(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame | None:
+        """Process staging changes based on silver table existence."""
         if self.silver_table_exists:
-            if not self.staging_table_exists:
-                # If silver table exists and no staging table exists, clone it to staging
-                self.create_staging_table_from_silver()
-
-            self.sync_schema_staging()
-
-            # If silver table exists and staging table exists, merge files for review to existing staging table
-            if self.change_type != StagingChangeTypeEnum.DELETE:
-                staging = self.standard_transforms(upstream_df)
-                staging = self.upsert_rows(staging)
-            else:
-                staging = self.delete_rows(upstream_df)
-
+            return self._process_with_silver_table(upstream_df)
         else:
-            # If silver table does not exist, merge files for review into one spark dataframe
-            if self.change_type == StagingChangeTypeEnum.UPDATE:
-                staging = self.standard_transforms(upstream_df)
+            return self._process_without_silver_table(upstream_df)
 
-                if self.staging_table_exists:
-                    self.sync_schema_staging()
-                    staging = self.upsert_rows(staging)
-                else:
-                    self.create_empty_staging_table()
-                    (
-                        staging.write.option("mergeSchema", "true")
-                        .format("delta")
-                        .mode("append")
-                        .saveAsTable(self.staging_table_name)
-                    )
+    def _process_with_silver_table(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame:
+        """Process staging changes when silver table exists.
 
-                self.context.log.info(f"Full {staging.count()=}")
-            else:
-                return None  # Cannot delete rows when silver and staging tables do not exist
+        The staging table contains a working copy of the entire silver table plus
+        any pending changes (upserts/deletes) that are awaiting approval. This allows
+        reviewers to see the complete dataset with pending changes applied, not just
+        the diff of pending changes.
 
-        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
-        with get_db_context() as db:
-            db.execute(
-                update(ApprovalRequest)
-                .where(
-                    (ApprovalRequest.country == self.country_code)
-                    & (ApprovalRequest.dataset == formatted_dataset)
-                )
-                .values(
-                    {
-                        ApprovalRequest.enabled: True,
-                        ApprovalRequest.is_merge_processing: False,
-                    }
-                ),
+        When changes are approved, the staging table is merged back to silver.
+        """
+        if not self.staging_table_exists:
+            # Clone entire silver table to staging to create a working copy
+            self.create_staging_table_from_silver()
+
+        self.sync_schema_staging()
+
+        # If silver table exists and staging table exists, merge files for review to existing staging table
+        if self.change_type != StagingChangeTypeEnum.DELETE:
+            staging = self.standard_transforms(upstream_df)
+            staging = self.upsert_rows(staging)
+        else:
+            staging = self.delete_rows(upstream_df)
+
+        return staging
+
+    def _process_without_silver_table(
+        self, upstream_df: sql.DataFrame | list[str]
+    ) -> sql.DataFrame | None:
+        """Process staging changes when silver table does not exist."""
+        if self.change_type != StagingChangeTypeEnum.UPDATE:
+            return (
+                None  # Cannot delete rows when silver and staging tables do not exist
             )
-            db.commit()
 
+        staging = self.standard_transforms(upstream_df)
+
+        if self.staging_table_exists:
+            self.sync_schema_staging()
+            staging = self.upsert_rows(staging)
+        else:
+            self.create_empty_staging_table()
+            (
+                staging.write.option("mergeSchema", "true")
+                .format("delta")
+                .mode("append")
+                .saveAsTable(self.staging_table_name)
+            )
+
+        self.context.log.info(f"Full {staging.count()=}")
+        return staging
+
+    def _get_pre_update_row_count(self) -> int | None:
+        """Get row count from staging table before update."""
+        if not self.staging_table_exists:
+            return None
+
+        try:
+            with get_trino_context() as trino_db:
+                # Table name is constructed from trusted config sources, not user input
+                result = trino_db.execute(
+                    text(f"SELECT COUNT(*) as count FROM {self.staging_table_name}")  # nosec B608
+                )
+                row_count = result.scalar()
+                self.context.log.info(f"Pre-update staging row count: {row_count}")
+                return row_count
+        except Exception as e:
+            self.context.log.warning(
+                f"Failed to query staging row count: {e}. Proceeding with DB update."
+            )
+            return None
+
+    def _update_approval_request_status(self, staging: sql.DataFrame) -> None:
+        """Update ApprovalRequest status if conditions are met."""
+        pre_update_row_count = self._get_pre_update_row_count()
+        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        result = None
+
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    current_request = self._get_current_approval_request(
+                        db, formatted_dataset
+                    )
+                    if current_request is None:
+                        self.context.log.warning(
+                            f"No ApprovalRequest found for {self.country_code} - {formatted_dataset}"
+                        )
+                        return
+
+                    if not self._should_update_enabled(
+                        current_request, pre_update_row_count, formatted_dataset
+                    ):
+                        return
+
+                    result = db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == self.country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                            & (~ApprovalRequest.enabled)  # Only update if False
+                        )
+                        .values(
+                            {
+                                ApprovalRequest.enabled: True,
+                                ApprovalRequest.is_merge_processing: False,
+                            }
+                        ),
+                    )
+                    if result.rowcount > 0:
+                        self.context.log.info(
+                            f"Successfully set enabled=True for {self.country_code} - {formatted_dataset}"
+                        )
+                    else:
+                        self.context.log.info(
+                            "No rows updated (already enabled or state changed). Skipping commit."
+                        )
+
+                # Post-delete validation: Verify delete CDF entries were created
+                if (
+                    result is not None
+                    and self.change_type == StagingChangeTypeEnum.DELETE
+                    and result.rowcount > 0
+                ):
+                    self._validate_delete_cdf()
+
+            except Exception as e:
+                self.context.log.error(
+                    f"Failed to update ApprovalRequest for {self.country_code} - {formatted_dataset}: {e}"
+                )
+
+    def _get_current_approval_request(self, db, formatted_dataset: str):
+        """Get current ApprovalRequest from database."""
+        return db.scalar(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.country == self.country_code)
+                & (ApprovalRequest.dataset == formatted_dataset)
+            )
+        )
+
+    def _should_update_enabled(
+        self, current_request, pre_update_row_count: int | None, formatted_dataset: str
+    ) -> bool:
+        """Check if enabled flag should be updated."""
+        if current_request.enabled:
+            self.context.log.info(
+                f"ApprovalRequest already enabled for {self.country_code} - {formatted_dataset}. Skipping update."
+            )
+            return False
+
+        if (
+            pre_update_row_count is not None
+            and pre_update_row_count == 0
+            and self.change_type
+            in [StagingChangeTypeEnum.UPDATE, StagingChangeTypeEnum.DELETE]
+        ):
+            change_type_label = (
+                "changes"
+                if self.change_type == StagingChangeTypeEnum.UPDATE
+                else "rows to delete"
+            )
+            self.context.log.info(
+                f"No {change_type_label} detected (row count: {pre_update_row_count}). Skipping enabled=True update."
+            )
+            return False
+
+        return True
+
+    def _validate_delete_cdf(self) -> None:
+        """Validate that delete CDF entries were created after delete operation."""
+        try:
+            with get_trino_context() as trino_db:
+                # Query CDF for delete entries
+                # Table name is constructed from trusted config sources, not user input
+                result = trino_db.execute(
+                    text(
+                        f"SELECT COUNT(*) as count FROM {self.staging_table_name} "  # nosec B608
+                        f"FOR VERSION AS OF (SELECT MAX(version) FROM "
+                        f'{self.staging_table_name}."$history") '
+                        f"WHERE _change_type = 'delete'"
+                    )
+                )
+                delete_count = result.scalar()
+
+                if delete_count == 0:
+                    self.context.log.error(
+                        f"Delete CDF validation failed: No delete entries found in CDF "
+                        f"for {self.country_code}. This indicates the delete operation "
+                        f"may not have been successful despite enabled=True being set."
+                    )
+                    # Rollback enabled flag
+                    formatted_dataset = (
+                        f"School {self.config.dataset_type.capitalize()}"
+                    )
+                    with get_db_context() as db:
+                        with db.begin():
+                            db.execute(
+                                update(ApprovalRequest)
+                                .where(
+                                    (ApprovalRequest.country == self.country_code)
+                                    & (ApprovalRequest.dataset == formatted_dataset)
+                                )
+                                .values({ApprovalRequest.enabled: False})
+                            )
+                    raise RuntimeError("Delete CDF empty after delete operation")
+                else:
+                    self.context.log.info(
+                        f"Delete CDF validation passed: Found {delete_count} delete entries."
+                    )
+        except Exception as e:
+            self.context.log.error(
+                f"Failed to validate delete CDF: {e}. Manual verification recommended."
+            )
+            raise
+
+    def _emit_lineage(self) -> None:
+        """Emit lineage information."""
+        # Get files for review in a separate DB context
+        with get_db_context() as db:
             files_for_review = db.scalars(
                 select(FileUpload).where(
                     (FileUpload.country == self.country_code)
@@ -156,8 +343,6 @@ class StagingStep:
             dataset_urn=self.config.datahub_destination_dataset_urn,
             context=self.context,
         )
-
-        return staging
 
     @property
     def silver_table_exists(self) -> bool:
@@ -174,6 +359,12 @@ class StagingStep:
         )
 
     def create_staging_table_from_silver(self):
+        """Create staging table as a complete clone of the silver table.
+
+        This creates a working copy containing all rows from silver. Subsequent changes
+        will be applied to this staging table via upserts/deletes. The staging table
+        represents what the silver table will look like after approval.
+        """
         self.context.log.info("Creating staging from silver if not exists...")
         silver = (
             DeltaTable.forName(self.spark, self.silver_table_name)
@@ -290,6 +481,22 @@ class StagingStep:
     def delete_rows(self, df: list[str]):
         self.context.log.info("Performing delete...")
         staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
+
+        # Pre-delete validation: Check if target rows exist in staging table
+        staging_df = staging_dt.toDF()
+        existing_rows = staging_df.filter(staging_df[self.primary_key].isin(df))
+        existing_count = existing_rows.count()
+
+        if existing_count == 0:
+            self.context.log.warning(
+                f"No target rows found in staging table for deletion. "
+                f"Skipping delete operation for {len(df)} row IDs."
+            )
+            return staging_dt.toDF()
+
+        self.context.log.info(
+            f"Found {existing_count} out of {len(df)} row IDs in staging table for deletion."
+        )
 
         query = build_deduped_delete_query(staging_dt, df, self.primary_key)
 

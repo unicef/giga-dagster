@@ -9,9 +9,9 @@ from shapely.geometry import Point
 from shapely.ops import nearest_points
 
 
-def get_point(longitude: float, latitude: float) -> None | Point:
+def get_point(longitude: float | str, latitude: float | str) -> None | Point:
     try:
-        return Point(longitude, latitude)
+        return Point(float(longitude), float(latitude))
     except Exception as exc:
         logger.error(exc)
     return Point(181, 91)  # non existent coordinates, default value for nulls
