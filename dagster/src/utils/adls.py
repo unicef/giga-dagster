@@ -2,8 +2,7 @@ import json
 from collections.abc import Iterator
 from io import BytesIO
 from pathlib import Path
-from typing import NamedTuple
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import pandas as pd
 from delta.tables import DeltaTable
@@ -155,7 +154,6 @@ class ADLSFileClient(ConfigurableResource):
         filepath: str,
         metadata: dict | None = None,
     ) -> None:
-
         if not metadata and context:
             metadata = context.step_context.op_config["metadata"]
 
