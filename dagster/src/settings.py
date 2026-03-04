@@ -165,9 +165,7 @@ class Settings(BaseSettings):
 
     @property
     def LAKEHOUSE_PATH(self) -> str:
-        if self.PYTHON_ENV == Environment.LOCAL:
-            return ""
-        return "/"
+        return ""
 
     @property
     def INGESTION_DB_HOST(self) -> str:
