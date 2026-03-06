@@ -69,9 +69,7 @@ async def send_email_dq_report(
     logger.info(f"Recipients: {recipients}")
 
     # Renderer email/dq-report expects same shape as main (no "country"); keep it for PDF only
-    props_for_email_renderer = {
-        k: v for k, v in metadata.items() if k != "country"
-    }
+    props_for_email_renderer = {k: v for k, v in metadata.items() if k != "country"}
 
     # Generate PDF attachment if country is provided
     attachments = None
