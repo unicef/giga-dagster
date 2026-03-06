@@ -90,7 +90,7 @@ def geolocation_metadata(
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
     data_source = metadata.get("data_source")
-    if data_source is not None or data_source != "giga_sync":
+    if not (data_source is None or data_source == "giga_sync"):
         context.log.info("Data is not from Giga Sync, skipping metadata table update")
         return Output(None)
 
