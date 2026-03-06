@@ -56,7 +56,7 @@ async def send_email_dq_report(
         "dataQualityCheck": dq_results_formatted,
     }
 
-    # Add country if provided (required for PDF generation)
+    # Add country if provided (required for PDF generation only)
     if country_code:
         metadata["country"] = country_code
 
@@ -67,6 +67,11 @@ async def send_email_dq_report(
     logger.info("SENDING DQ REPORT VIA EMAIL WITH PDF ATTACHMENT...")
     logger.info(metadata)
     logger.info(f"Recipients: {recipients}")
+
+    # Renderer email/dq-report expects same shape as main (no "country"); keep it for PDF only
+    props_for_email_renderer = {
+        k: v for k, v in metadata.items() if k != "country"
+    }
 
     # Generate PDF attachment if country is provided
     attachments = None
@@ -111,7 +116,7 @@ async def send_email_dq_report(
     # Send email with PDF attachment (send_email_base will handle HTML/text rendering)
     await send_email_base(
         endpoint="email/dq-report",
-        props=metadata,
+        props=props_for_email_renderer,
         subject="Giga Data Quality Report",
         recipients=recipients,
         context=context,
