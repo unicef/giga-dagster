@@ -16,11 +16,10 @@ from shapely.ops import nearest_points
 # Name Similarity
 from thefuzz import fuzz
 
-from azure.storage.blob import BlobServiceClient
-
 # Auth
 from src.settings import Settings  # AZURE_SAS_TOKEN, AZURE_BLOB_CONTAINER_NAME
 from src.spark.config_expectations import config
+from src.utils.adls import get_blob_service_client
 
 settings_instance = Settings()
 azure_sas_token = settings_instance.AZURE_SAS_TOKEN
@@ -39,7 +38,7 @@ container_name = azure_blob_container_name
 # For getting the country GADM geometry
 def get_country_geometry(country_code_iso3):
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = f"{country_code_iso3}.gpkg"
         file = f"{DIRECTORY_LOCATION}{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)

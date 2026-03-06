@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -10,6 +11,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.functions import concat_ws, sha2
 from pyspark.sql.types import NullType
+from src.constants import constants
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
     add_admin_columns,
@@ -23,7 +25,6 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.sentry import capture_op_exceptions
-from src.constants import constants
 
 from dagster import (
     OpExecutionContext,
@@ -90,7 +91,9 @@ def adhoc__health_master_data_transforms(
     path = Path(config.filepath)
     stem = path.stem
     df_failed = df[df["health_id_giga"].isna()]
-    output_filepath = f"{constants.gold_folder}/dq-results/health-master/failed/{stem}.csv"
+    output_filepath = (
+        f"{constants.gold_folder}/dq-results/health-master/failed/{stem}.csv"
+    )
     adls_file_client.upload_pandas_dataframe_as_file(
         context=context,
         data=df_failed,

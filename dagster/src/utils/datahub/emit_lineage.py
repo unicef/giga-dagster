@@ -4,7 +4,7 @@ import sentry_sdk
 
 from dagster import OpExecutionContext
 from src.utils.datahub.builders import build_dataset_urn
-from src.utils.datahub.graphql import datahub_graph_client
+from src.utils.datahub.graphql import get_datahub_graph_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
@@ -14,6 +14,11 @@ def emit_lineage_query(
     upstream_urn: str, downstream_urn: str, context: OpExecutionContext = None
 ) -> None:
     logger = get_context_with_fallback_logger(context)
+
+    client = get_datahub_graph_client()
+    if client is None:
+        logger.warning("DataHub is not configured. Skipping lineage emit.")
+        return
 
     query = f"""
         mutation {{
@@ -27,7 +32,7 @@ def emit_lineage_query(
         }}"""
     logger.info(query)
     try:
-        datahub_graph_client.execute_graphql(query=query)
+        client.execute_graphql(query=query)
         logger.info("LINEAGE EMITTED.")
     except Exception as error:
         logger.error(f"LINEAGE EMIT ERROR: {error}")
