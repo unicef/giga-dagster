@@ -6,13 +6,13 @@ import geopandas as gpd
 from pyspark import sql
 from pyspark.sql import functions as f
 
-from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
-from src.settings import settings
+from src.settings import DeploymentEnvironment, settings
 from src.spark.user_defined_functions import (
     is_not_within_country_boundaries_udf_factory,
     is_not_within_country_check_udf_factory,
 )
+from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -20,7 +20,7 @@ azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 
 DUPLICATE_SCHOOL_DISTANCE_KM = 0.1
 
-ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
+ACCOUNT_URL = f"https://{settings.AZURE_BLOB_SAS_HOST}/"
 DIRECTORY_LOCATION_GADM = "raw/geospatial-data/gadm_files/version4.1/"
 DIRECTORY_LOCATION_MAPBOX = "admin_data/admin0/"
 container_name = azure_blob_container_name
@@ -28,7 +28,7 @@ container_name = azure_blob_container_name
 
 def get_country_geometry(country_code_iso3: str):
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = f"{country_code_iso3.upper()}_admin0.geojson"
         file = f"{DIRECTORY_LOCATION_MAPBOX}{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
@@ -60,33 +60,38 @@ def is_not_within_country(
     logger = get_context_with_fallback_logger(context)
     logger.info("Checking if not within country...")
 
-    # boundary constants
-    geometry = get_country_geometry(country_code_iso3)
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        # boundary constants
+        geometry = get_country_geometry(country_code_iso3)
 
-    # geopy constants
-    country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
+        # geopy constants
+        country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
-    is_not_within_country_boundaries = is_not_within_country_boundaries_udf_factory(
-        country_code_iso3,
-        geometry,
-    )
+        is_not_within_country_boundaries = is_not_within_country_boundaries_udf_factory(
+            country_code_iso3,
+            geometry,
+        )
 
-    is_not_within_country_check = is_not_within_country_check_udf_factory(
-        country_code_iso2,
-        geometry,
-    )
+        is_not_within_country_check = is_not_within_country_check_udf_factory(
+            country_code_iso2,
+            geometry,
+        )
 
-    df = df.withColumn(
-        "dq_is_not_within_country",
-        is_not_within_country_boundaries(f.col("latitude"), f.col("longitude")),
-    )
+        df = df.withColumn(
+            "dq_is_not_within_country",
+            is_not_within_country_boundaries(f.col("latitude"), f.col("longitude")),
+        )
 
-    df = df.withColumn(
-        "dq_is_not_within_country",
-        is_not_within_country_check(
-            f.col("latitude"), f.col("longitude"), f.col("dq_is_not_within_country")
-        ),
-    )
+        df = df.withColumn(
+            "dq_is_not_within_country",
+            is_not_within_country_check(
+                f.col("latitude"), f.col("longitude"), f.col("dq_is_not_within_country")
+            ),
+        )
+
+    else:
+        # on local development we do not run the in country check
+        df = df.withColumn("dq_is_not_within_country", f.lit(None).cast("int"))
 
     df = df.withColumn(
         "dq_is_not_within_country",

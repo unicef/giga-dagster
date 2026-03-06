@@ -1,0 +1,60 @@
+<configuration>
+  <property>
+    <name>metastore.thrift.uris</name>
+    <value>thrift://0.0.0.0:9083</value>
+    <description>
+      Thrift URI for the remote metastore. Used by metastore client to connect to remote metastore.
+    </description>
+  </property>
+  <property>
+    <name>metastore.warehouse.dir</name>
+    <value>{ENV:METASTORE_WAREHOUSE_DIR}</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionDriverName</name>
+    <value>org.postgresql.Driver</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionURL</name>
+    <value>{ENV:HMS_DATABASE_URL}</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionUserName</name>
+    <value>{ENV:HMS_POSTGRESQL_USERNAME}</value>
+  </property>
+  <property>
+    <name>javax.jdo.option.ConnectionPassword</name>
+    <value>{ENV:HMS_POSTGRESQL_PASSWORD}</value>
+  </property>
+
+  <!-- Azure Storage Configuration for Azurite (local development) -->
+  <!-- Use account key authentication -->
+  <property>
+    <name>fs.azure.account.key.{ENV:STORAGE_ACCOUNT_NAME}.blob.core.windows.net</name>
+    <value>{ENV:AZURE_STORAGE_ACCOUNT_KEY}</value>
+  </property>
+
+  <!-- Enable storage emulator mode for Azurite -->
+  <property>
+    <name>fs.azure.storage.emulator.account.name</name>
+    <value>{ENV:STORAGE_ACCOUNT_NAME}</value>
+  </property>
+
+  <!-- Use HTTP instead of HTTPS for Azurite -->
+  <property>
+    <name>fs.azure.secure.mode</name>
+    <value>false</value>
+  </property>
+
+  <!-- Skip SSL verification for local development -->
+  <property>
+    <name>fs.azure.skip.metrics</name>
+    <value>true</value>
+  </property>
+
+  <!-- Disable block blob with compaction (not supported by Azurite) -->
+  <property>
+    <name>fs.azure.block.blob.with.compaction.dir</name>
+    <value></value>
+  </property>
+</configuration>
