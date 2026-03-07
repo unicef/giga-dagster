@@ -548,7 +548,8 @@ def dq_geolocation_extract_relevant_columns(
     ].tolist()
     dq_columns_list = ["dq_has_critical_error", "failure_reason", *dq_columns_list]
     admin_columns = ["admin1", "admin2", "admin3", "admin4"]
-    columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
+    columns_not_mapped = [column for column in df.columns if column.endswith(" (Not mapped)")]
+    columns_to_keep = [*uploaded_columns, *columns_not_mapped, *admin_columns, *dq_columns_list]
     columns_to_keep = [col for col in columns_to_keep if col in df.columns]
     df = df.select(*columns_to_keep)
 
