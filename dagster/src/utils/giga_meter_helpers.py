@@ -135,24 +135,24 @@ def _is_file_already_processed(
     schema_name: str,
     manifest_table: str,
     file_path: str,
-    etag: str,
+    etag: str | None = None,
 ) -> bool:
     """
-    Checks the manifest table to determine whether a given file with the
-    specified ETag has already been successfully ingested into the target table.
-    Ensures idempotency constraint.
+    Checks the manifest table to determine whether a given file
+    has already been successfully ingested into the target table.
+    When etag is provided, checks both file_path and etag.
+    Otherwise checks file_path only.
     """
     try:
         manifest_df = spark.table(f"{schema_name}.{manifest_table}")
     except AnalysisException:
         return False
 
-    return (
-        manifest_df.filter((col("file_path") == file_path) & (col("etag") == etag))
-        .limit(1)
-        .count()
-        > 0
-    )
+    condition = col("file_path") == file_path
+    if etag is not None:
+        condition = condition & (col("etag") == etag)
+
+    return manifest_df.filter(condition).limit(1).count() > 0
 
 
 def _append_manifest_record(

@@ -8,11 +8,11 @@ from dagster import Config, OpExecutionContext, Output, asset
 from src.constants.constants_class import constants
 from src.resources import ResourceKey
 from src.settings import settings
+from src.utils.adls import ADLSFileClient
 from src.utils.delta import create_schema
 from src.utils.giga_meter_helpers import (
     _add_file_metadata_columns,
     _align_to_target_schema,
-    _append_manifest_record,
     _is_file_already_processed,
     _normalize_schema_for_delta,
     _read_parquet_best_effort,
@@ -24,17 +24,14 @@ INGESTION CONTRACT
 
 - All parquet files are appended into ONE Delta table.
 - Ingestion is append-only.
-- Idempotency is enforced via (file_path, storage_checksum).
-- storage_checksum = ADLS ETag.
-- Same file + same ETag → skipped.
-- Same file + different ETag → appended again.
-- Manifest is file-level and is the source of truth.
+- Failed reads are skipped; successful files are written to Delta.
+- Manifest records are written AFTER successful Delta write (in IO Manager).
+- On re-run, manifest check skips already-processed files.
 """
 
 
 class ParquetToDeltaConfig(Config):
     upload_path: Optional[str] = constants.PING_PARQUET_PATH
-    etag: Optional[str] = None
     files: Optional[list[str]] = None
     target_schema: str = "giga_meter"
     target_table: str = "connectivity_ping_checks"
@@ -47,8 +44,8 @@ class ParquetToDeltaConfig(Config):
 
 @asset(
     description=(
-        "Reads parquet files from ADLS and appends them into a single "
-        "Bronze Delta table. Idempotency enforced via manifest table."
+        "Reads parquet files from ADLS, skips unreadable files, "
+        "and appends successful reads into a Bronze Delta table."
     ),
     io_manager_key=ResourceKey.GIGA_METER_DELTA_IO_MANAGER.value,
 )
@@ -56,6 +53,7 @@ def connectivity_ping_checks(
     context: OpExecutionContext,
     config: ParquetToDeltaConfig,
     spark: PySparkResource,
+    adls_file_client: ADLSFileClient,
 ) -> Output:
     spark_session: SparkSession = spark.spark_session
 
@@ -63,10 +61,9 @@ def connectivity_ping_checks(
 
     base_path = config.upload_path
     if not base_path:
-        context.log.warning("No upload path provided, skipping.")
-        return Output(None)
+        raise ValueError("No upload_path provided in config.")
 
-    # Build list of individual file paths to process
+    # Build file list
     if config.files:
         file_paths = [
             f"{base_path}/{f}" if not f.startswith(base_path) else f
@@ -78,30 +75,33 @@ def connectivity_ping_checks(
     ingestion_time = datetime.utcnow()
     accumulated_df: DataFrame | None = None
     processed_files: list[str] = []
+    skipped_files: list[str] = []
+    failed_files: list[str] = []
 
     for file_path in file_paths:
         full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{file_path}"
 
-        # Idempotency Check
-        if config.etag and _is_file_already_processed(
+        # Manifest check — skip already-processed files
+        if _is_file_already_processed(
             spark_session,
             schema_name=config.target_schema,
             manifest_table=config.manifest_table,
             file_path=full_path,
-            etag=config.etag,
         ):
-            context.log.info(f"Skipping already processed file: {full_path}")
+            context.log.info(f"Skipping already processed: {full_path}")
+            skipped_files.append(file_path)
             continue
 
-        # Read File
-        context.log.info(f"Processing file: {full_path}")
+        # Read — skip on failure
+        context.log.info(f"Reading: {full_path}")
         df = _read_parquet_best_effort(spark_session, full_path)
 
         if df is None:
-            context.log.error(f"Unreadable parquet file: {full_path}")
+            context.log.warning(f"Failed to read: {full_path}")
+            failed_files.append(file_path)
             continue
 
-        # Transform — casts normalize types per file
+        # Transform
         df = _sanitize_schema_by_category(df)
         df = _normalize_schema_for_delta(df)
 
@@ -109,7 +109,6 @@ def connectivity_ping_checks(
             "_source_file": file_path,
             "_ingested_at": ingestion_time,
             "_ingestion_run_id": context.run_id,
-            "_storage_etag": config.etag,
         }
         df = _add_file_metadata_columns(df, metadata=metadata_values)
 
@@ -126,30 +125,35 @@ def connectivity_ping_checks(
         else:
             accumulated_df = accumulated_df.unionByName(df, allowMissingColumns=True)
 
-        processed_files.append(full_path)
+        processed_files.append(file_path)
 
-        # Manifest
-        if config.etag:
-            _append_manifest_record(
-                spark_session,
-                schema_name=config.target_schema,
-                manifest_table=config.manifest_table,
-                file_path=full_path,
-                etag=config.etag,
-                ingested_at=ingestion_time,
-            )
+    # Summary
+    context.log.info(
+        f"Batch complete: {len(processed_files)} processed, "
+        f"{len(skipped_files)} skipped, {len(failed_files)} failed."
+    )
+
+    # Write retry file for failed files (sensor reads this on next tick)
+    if failed_files:
+        context.log.warning(f"Failed files (will retry next run): {failed_files}")
+        adls_file_client.upload_json(failed_files, constants.PING_RETRY_FILE_PATH)
+    else:
+        # Clear retry file when no failures
+        try:
+            adls_file_client.upload_json([], constants.PING_RETRY_FILE_PATH)
+        except Exception:
+            pass  # retry file may not exist yet
 
     if accumulated_df is None:
-        context.log.info("No new files to process.")
+        context.log.info("No new data to write.")
         return Output(None)
-
-    context.log.info(f"Processed {len(processed_files)} file(s).")
 
     return Output(
         accumulated_df,
         metadata={
-            "processed_files": str(processed_files),
-            "file_count": len(processed_files),
-            "status": "success",
+            "processed_count": len(processed_files),
+            "skipped_count": len(skipped_files),
+            "failed_count": len(failed_files),
+            "failed_files": str(failed_files) if failed_files else "none",
         },
     )
