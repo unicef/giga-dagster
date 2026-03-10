@@ -89,6 +89,11 @@ def geolocation_metadata(
     context.log.info("Get upload details")
     file_size_bytes = config.file_size_bytes
     metadata = config.metadata
+    data_source = metadata.get("data_source")
+    if not (data_source is None or data_source == "giga_sync"):
+        context.log.info("Data is not from Giga Sync, skipping metadata table update")
+        return Output(None)
+
     file_path = config.filepath
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -245,6 +250,10 @@ def geolocation_bronze(
         # RT Columns
         connectivity = get_country_rt_schools(s, country_code)
         df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
+    else:
+        # On local, we can't retrieve the connectivity data
+        df = df.withColumn("connectivity", f.lit("Unknown"))
+        df = df.withColumn("connectivity_RT", f.lit("Unknown"))
 
     # standardize the connectivity type
     df = standardize_connectivity_type(df, mode, uploaded_columns)

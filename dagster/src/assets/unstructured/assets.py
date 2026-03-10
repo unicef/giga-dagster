@@ -1,8 +1,8 @@
 import sentry_sdk
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from src.utils.datahub.emit_dataset_metadata import (
-    datahub_emitter,
     define_dataset_properties,
+    get_datahub_emitter,
 )
 from src.utils.metadata import get_output_metadata
 from src.utils.op_config import FileConfig
@@ -14,6 +14,11 @@ from dagster import OpExecutionContext, Output, asset
 @asset
 def unstructured_raw(context: OpExecutionContext, config: FileConfig):
     country_code = None if config.country_code == "N/A" else config.country_code
+
+    datahub_emitter = get_datahub_emitter()
+    if datahub_emitter is None:
+        context.log.warning("DataHub is not configured. Skipping metadata emission.")
+        return Output(None, metadata={**get_output_metadata(config)})
 
     try:
         dataset_properties = define_dataset_properties(
@@ -41,6 +46,11 @@ def unstructured_raw(context: OpExecutionContext, config: FileConfig):
 
 @asset
 def generalized_unstructured_raw(context: OpExecutionContext, config: FileConfig):
+    datahub_emitter = get_datahub_emitter()
+    if datahub_emitter is None:
+        context.log.warning("DataHub is not configured. Skipping metadata emission.")
+        return Output(None, metadata={**get_output_metadata(config)})
+
     try:
         dataset_properties = define_dataset_properties(
             context, country_code=config.country_code
