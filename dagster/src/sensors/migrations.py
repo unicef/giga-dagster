@@ -17,8 +17,8 @@ def migrations__schema_sensor():
         if path.is_directory:
             continue
 
-        filepath = path["name"]
+        filepath = path.name
         properties = adls.get_file_metadata(filepath=filepath)
-        last_modified = properties["last_modified"].strftime("%Y%m%d-%H%M%S")
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
 
         yield RunRequest(run_key=f"{filepath}:{last_modified}")

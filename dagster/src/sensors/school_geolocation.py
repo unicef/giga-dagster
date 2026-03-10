@@ -47,8 +47,10 @@ def school_master_geolocation__raw_file_uploads_sensor(
             continue
         else:
             country_code = filename_components.country_code
+            metadata = adls_file_client.fetch_metadata_for_blob(
+                adls_filepath, ensure_exists=True
+            )
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
             size = properties.size
 
             ops_destination_mapping = {
@@ -66,30 +68,30 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_bronze": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.BRONZE,
                 ),
                 "geolocation_data_quality_results": OpDestinationMapping(
-                    source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_data_quality_results_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_schools_passed_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_schools_failed_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
@@ -178,8 +180,7 @@ def school_master_geolocation__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -275,8 +276,7 @@ def school_master_geolocation__admin_delete_rows_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            metadata = properties.metadata
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
 
             ops_destination_mapping = {
                 "geolocation_delete_staging": OpDestinationMapping(

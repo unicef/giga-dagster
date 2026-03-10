@@ -2,7 +2,7 @@ from country_converter import CountryConverter
 
 from dagster import OpExecutionContext
 from src.settings import settings
-from src.utils.datahub.graphql import datahub_graph_client
+from src.utils.datahub.graphql import get_datahub_graph_client
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -44,13 +44,20 @@ def tag_mutation_with_exception(
     description: str = "",
     context: OpExecutionContext = None,
 ) -> None:
+    client = get_datahub_graph_client()
+    if client is None:
+        get_context_with_fallback_logger(context).warning(
+            "DataHub is not configured. Skipping tag mutation."
+        )
+        return
+
     try:
         query = update_tag_query(
             tag_key=tag_key,
             new_display_name=display_name,
             new_description=description,
         )
-        datahub_graph_client.execute_graphql(query=query)
+        client.execute_graphql(query=query)
     except Exception as error:
         get_context_with_fallback_logger(context).error(error)
         try:
@@ -59,7 +66,7 @@ def tag_mutation_with_exception(
                 display_name=display_name,
                 description=description,
             )
-            datahub_graph_client.execute_graphql(query=query)
+            client.execute_graphql(query=query)
         except Exception as error:
             get_context_with_fallback_logger(context).error(error)
 
