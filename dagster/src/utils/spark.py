@@ -242,23 +242,22 @@ def transform_types(
     context.log.info(f"Schema name: {schema_name}")
     context.log.info(f"Schema columns: {columns}")
 
-    master_columns = get_schema_columns(df.sparkSession, "school_master")
-    reference_columns = get_schema_columns(df.sparkSession, "school_reference")
-
-    context.log.info(f"Master columns: {master_columns}")
-    context.log.info(f"Reference columns columns: {reference_columns}")
-
     if schema_name in ["qos", "qos_raw", "qos_availability"]:
         columns = [c for c in columns if c.name in df.columns]
 
     context.log.info(
         f"transform types schema columns before {df.schema.simpleString()}"
     )
+
+    columns_not_to_update = {"signature"}
+    if settings.IN_PRODUCTION:
+        columns_not_to_update.update({"latitude", "longitude"})
+
     df = df.withColumns(
         {
             column.name: col(column.name).cast(column.dataType)
             for column in columns
-            if column.name not in ("signature")
+            if column.name not in columns_not_to_update
         },
     )
     context.log.info(
