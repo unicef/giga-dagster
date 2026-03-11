@@ -45,8 +45,6 @@ class GigaMeterDeltaIOManager(ConfigurableIOManager):
 
         create_schema(spark, schema_name)
 
-        table_exists = spark.catalog.tableExists(schema_name, table_name)
-
         # Disable vectorized parquet reader for the entire write operation.
         # This prevents INT64 vs IntegerType conversion failures when Spark
         # lazily reads the source parquet during saveAsTable.
@@ -56,23 +54,15 @@ class GigaMeterDeltaIOManager(ConfigurableIOManager):
         spark.conf.set("spark.sql.parquet.enableVectorizedReader", "false")
 
         try:
-            if not table_exists:
-                context.log.info(
-                    f"Table {table_full_name} does not exist, creating via overwrite."
-                )
-                (
-                    output.write.format("delta")
-                    .mode("overwrite")
-                    .saveAsTable(table_full_name)
-                )
-            else:
-                context.log.info(f"Appending to existing table {table_full_name}.")
-                (
-                    output.write.format("delta")
-                    .mode("append")
-                    .option("mergeSchema", "true")
-                    .saveAsTable(table_full_name)
-                )
+            context.log.info(
+                f"Appending to table {table_full_name} (creates if not exists)."
+            )
+            (
+                output.write.format("delta")
+                .mode("append")
+                .option("mergeSchema", "true")
+                .saveAsTable(table_full_name)
+            )
         finally:
             spark.conf.set(
                 "spark.sql.parquet.enableVectorizedReader", original_vectorized
