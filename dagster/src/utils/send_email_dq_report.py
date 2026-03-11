@@ -1,4 +1,5 @@
 import datetime
+from base64 import b64decode
 from typing import Any
 
 import requests
@@ -8,6 +9,7 @@ from requests import JSONDecodeError
 from sqlalchemy import select
 
 from dagster import OpExecutionContext
+from src.constants.constants_class import constants
 from src.internal.groups import GroupsApi
 from src.schemas.file_upload import FileUploadConfig
 from src.settings import settings
@@ -17,6 +19,79 @@ from src.utils.email.send_email_base import send_email_base
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
+
+
+def _generate_pdf_attachment_and_store_in_adls(
+    metadata: dict[str, Any],
+    dataset_type: str,
+    upload_id: str,
+    country_code: str | None,
+    logger,
+) -> list[dict] | None:
+    """Call renderer for PDF, store it in ADLS under dq-report, and build Mailjet attachment."""
+    if not country_code:
+        return None
+
+    try:
+        pdf_res = requests.post(
+            f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
+            headers={
+                "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json=metadata,
+            timeout=int(datetime.timedelta(minutes=2).total_seconds()),
+        )
+    except Exception as pdf_error:
+        logger.error(f"Error calling email renderer for PDF: {pdf_error}")
+        return None
+
+    if not pdf_res.ok:
+        logger.warning(f"Failed to generate PDF: {pdf_res.status_code}")
+        try:
+            logger.warning(f"PDF error response: {pdf_res.json()}")
+        except JSONDecodeError:
+            logger.warning(f"PDF error response: {pdf_res.text}")
+        return None
+
+    pdf_data = pdf_res.json()
+    pdf_base64 = pdf_data.get("pdf")
+    pdf_filename = pdf_data.get(
+        "filename", f"data-quality-report-{country_code}-{upload_id}.pdf"
+    )
+
+    # Store PDF in ADLS alongside DQ summary (dq-report path)
+    try:
+        dataset_slug = dataset_type.lower().replace(" ", "-")
+        pdf_path = (
+            f"{constants.dq_results_folder}/"
+            f"{dataset_slug}/dq-report/{country_code}/{upload_id}.pdf"
+        )
+        pdf_bytes = b64decode(pdf_base64) if pdf_base64 else b""
+        if pdf_bytes:
+            ADLSFileClient.upload_raw(
+                context=None,
+                data=pdf_bytes,
+                filepath=pdf_path,
+                metadata=None,
+            )
+            logger.info(f"Stored DQ report PDF in ADLS at {pdf_path}")
+        else:
+            logger.warning("PDF base64 content was empty; skipping ADLS write")
+    except Exception as adls_error:
+        logger.error(f"Failed to store DQ report PDF in ADLS: {adls_error}")
+
+    if not pdf_base64:
+        return None
+
+    logger.info(f"PDF generated successfully: {pdf_filename}")
+    return [
+        {
+            "Content-type": "application/pdf",
+            "Filename": pdf_filename,
+            "content": pdf_base64,
+        }
+    ]
 
 
 async def send_email_dq_report(
@@ -56,7 +131,7 @@ async def send_email_dq_report(
         "dataQualityCheck": dq_results_formatted,
     }
 
-    # Add country if provided (required for PDF generation only)
+    # Add country if provided (required for PDF generation)
     if country_code:
         metadata["country"] = country_code
 
@@ -68,53 +143,19 @@ async def send_email_dq_report(
     logger.info(metadata)
     logger.info(f"Recipients: {recipients}")
 
-    # Renderer email/dq-report expects same shape as main (no "country"); keep it for PDF only
-    props_for_email_renderer = {k: v for k, v in metadata.items() if k != "country"}
-
     # Generate PDF attachment if country is provided
-    attachments = None
-    if country_code:
-        try:
-            pdf_res = requests.post(
-                f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
-                headers={
-                    "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
-                    "Content-Type": "application/json",
-                },
-                json=metadata,
-                timeout=int(datetime.timedelta(minutes=2).total_seconds()),
-            )
-
-            if pdf_res.ok:
-                pdf_data = pdf_res.json()
-                pdf_base64 = pdf_data.get("pdf")
-                pdf_filename = pdf_data.get(
-                    "filename", f"data-quality-report-{country_code}-{upload_id}.pdf"
-                )
-
-                # Create attachment dict with base64-encoded content
-                attachments = [
-                    {
-                        "Content-type": "application/pdf",
-                        "Filename": pdf_filename,
-                        "content": pdf_base64,  # Already base64-encoded from email service
-                    }
-                ]
-                logger.info(f"PDF generated successfully: {pdf_filename}")
-            else:
-                logger.warning(f"Failed to generate PDF: {pdf_res.status_code}")
-                try:
-                    logger.warning(f"PDF error response: {pdf_res.json()}")
-                except JSONDecodeError:
-                    logger.warning(f"PDF error response: {pdf_res.text}")
-        except Exception as pdf_error:
-            logger.error(f"Error generating PDF attachment: {pdf_error}")
-            # Continue without PDF attachment if generation fails
+    attachments = _generate_pdf_attachment_and_store_in_adls(
+        metadata=metadata,
+        dataset_type=dataset_type,
+        upload_id=upload_id,
+        country_code=country_code,
+        logger=logger,
+    )
 
     # Send email with PDF attachment (send_email_base will handle HTML/text rendering)
     await send_email_base(
         endpoint="email/dq-report",
-        props=props_for_email_renderer,
+        props=metadata,
         subject="Giga Data Quality Report",
         recipients=recipients,
         context=context,

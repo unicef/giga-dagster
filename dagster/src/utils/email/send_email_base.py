@@ -20,9 +20,11 @@ async def send_email_base(
     attachments: list[dict] | None = None,
 ):
     logger = get_context_with_fallback_logger(context)
+    renderer_base = str(settings.EMAIL_RENDERER_SERVICE_URL).rstrip("/")
+    renderer_url = f"{renderer_base}/{endpoint}"
 
     res = requests.post(
-        f"{settings.EMAIL_RENDERER_SERVICE_URL}/{endpoint}",
+        renderer_url,
         headers={
             "Content-Type": "application/json",
             "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
@@ -31,18 +33,27 @@ async def send_email_base(
         timeout=int(timedelta(minutes=2).total_seconds()),
     )
     if not res.ok:
+        logger.error(
+            "Email renderer failed: status=%s body=%s",
+            res.status_code,
+            res.text[:500] if res.text else "",
+        )
         try:
             raise HTTPError(res.json())
         except JSONDecodeError:
             raise HTTPError(res.text) from None
 
     data = res.json()
-    logger.info(f"Email renderer response: {res.status_code}")
+    logger.info("Email renderer response: %s", res.status_code)
 
     html = data.get("html")
     text = data.get("text")
+    if not html and not text:
+        logger.warning("Email renderer returned no html or text; email may not be sent")
 
-    async with AsyncClient(base_url=settings.GIGASYNC_API_URL) as client:
+    api_base = settings.GIGASYNC_API_URL
+    logger.info("Calling Giga Sync API send-email at %s/api/email/send-email", api_base)
+    async with AsyncClient(base_url=api_base) as client:
         res = await client.post(
             "/api/email/send-email",
             headers={"Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}"},
@@ -55,7 +66,15 @@ async def send_email_base(
             ).dict(),
         )
         if res.is_error:
-            logger.error(res.json())
+            logger.error(
+                "Giga Sync API send-email failed: status=%s body=%s",
+                res.status_code,
+                res.text[:500] if res.text else "",
+            )
+            try:
+                logger.error("API error body: %s", res.json())
+            except Exception:
+                pass
             res.raise_for_status()
         else:
-            logger.info(f"Send email response: {res.status_code} {res.text}")
+            logger.info("Send email response: %s %s", res.status_code, res.text)
