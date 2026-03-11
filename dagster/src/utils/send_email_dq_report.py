@@ -1,5 +1,5 @@
 import datetime
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from typing import Any
 
 import requests
@@ -23,7 +23,7 @@ from src.utils.sentry import log_op_context
 
 def _generate_pdf_attachment_and_store_in_adls(
     metadata: dict[str, Any],
-    dataset_type: str,
+    dataset: str,
     upload_id: str,
     country_code: str | None,
     logger,
@@ -32,6 +32,32 @@ def _generate_pdf_attachment_and_store_in_adls(
     if not country_code:
         return None
 
+    pdf_path = (
+        f"{constants.dq_results_folder}/"
+        f"{dataset}/dq-report/{country_code}/{upload_id}.pdf"
+    )
+    adls = ADLSFileClient()
+
+    # Safety: try using an existing PDF from ADLS first
+    try:
+        adls.get_file_metadata(pdf_path)
+        pdf_bytes_existing = ADLSFileClient.download_raw(pdf_path)
+        pdf_base64_existing = b64encode(pdf_bytes_existing).decode("ascii")
+        logger.info(f"Using existing DQ report PDF from ADLS at {pdf_path}")
+        return [
+            {
+                "Content-type": "application/pdf",
+                "Filename": f"data-quality-report-{country_code}-{upload_id}.pdf",
+                "content": pdf_base64_existing,
+            }
+        ]
+    except Exception:
+        # If file doesn't exist or can't be read, fall back to renderer
+        logger.info(
+            "No existing DQ report PDF found at %s; falling back to renderer", pdf_path
+        )
+
+    # Call renderer to generate a fresh PDF
     try:
         pdf_res = requests.post(
             f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
@@ -62,14 +88,9 @@ def _generate_pdf_attachment_and_store_in_adls(
 
     # Store PDF in ADLS alongside DQ summary (dq-report path)
     try:
-        dataset_slug = dataset_type.lower().replace(" ", "-")
-        pdf_path = (
-            f"{constants.dq_results_folder}/"
-            f"{dataset_slug}/dq-report/{country_code}/{upload_id}.pdf"
-        )
         pdf_bytes = b64decode(pdf_base64) if pdf_base64 else b""
         if pdf_bytes:
-            ADLSFileClient.upload_raw(
+            adls.upload_raw(
                 context=None,
                 data=pdf_bytes,
                 filepath=pdf_path,
@@ -96,6 +117,7 @@ def _generate_pdf_attachment_and_store_in_adls(
 
 async def send_email_dq_report(
     dq_results: dict[str, Any],
+    dataset: str,
     dataset_type: str,
     upload_date: str | datetime.datetime,
     upload_id: str,
@@ -146,7 +168,7 @@ async def send_email_dq_report(
     # Generate PDF attachment if country is provided
     attachments = _generate_pdf_attachment_and_store_in_adls(
         metadata=metadata,
-        dataset_type=dataset_type,
+        dataset=dataset,
         upload_id=upload_id,
         country_code=country_code,
         logger=logger,
@@ -183,9 +205,9 @@ async def send_email_dq_report_with_config(
             file_upload = FileUploadConfig.from_orm(file_upload)
 
         domain = config.domain
-        type = file_upload.dataset
+        dataset_raw = file_upload.dataset
 
-        dataset_type = f"{domain} {type}".title()
+        dataset_type = f"{domain} {dataset_raw}".title()
         upload_date = file_upload.created
         upload_id = file_upload.id
         uploader_email = file_upload.uploader_email
@@ -197,6 +219,7 @@ async def send_email_dq_report_with_config(
 
         await send_email_dq_report(
             dq_results=dq_results,
+            dataset=f"{domain}-{dataset_raw}",
             dataset_type=dataset_type,
             upload_date=upload_date,
             upload_id=upload_id,
@@ -226,8 +249,9 @@ if __name__ == "__main__":
     asyncio.run(
         send_email_dq_report(
             dq_results=dq_results,
+            dataset="school-coverage",
             dataset_type=dataset_type,
-            upload_date=str(upload_date),
+            upload_date=upload_date,
             upload_id=upload_id,
             uploader_email=uploader_email,
         )
