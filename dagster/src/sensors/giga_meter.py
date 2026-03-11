@@ -66,7 +66,7 @@ def _read_retry_files(adls_file_client: ADLSFileClient) -> list[str]:
 
 @sensor(
     job=giga_meter_connectivity_ping_checks,
-    minimum_interval_seconds=3600,
+    minimum_interval_seconds=120,
 )
 def giga_meter_parquet_to_delta(
     context: SensorEvaluationContext,
