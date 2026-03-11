@@ -37,7 +37,7 @@ def duplicate_set_checks(
                 f.lit(None).cast("int"),
             )
             .when(
-                f.count("*").over(Window.partitionBy(column_set)) > 1,
+                f.count("*").over(Window.partitionBy(*column_set)) > 1,
                 1,
             )
             .otherwise(0)
@@ -58,7 +58,7 @@ def duplicate_all_except_checks(
     df = df.withColumn(
         "dq_duplicate_all_except_school_code",
         f.when(
-            f.count("*").over(Window.partitionBy(config_column_list)) > 1,
+            f.count("*").over(Window.partitionBy(*config_column_list)) > 1,
             1,
         ).otherwise(0),
     )
