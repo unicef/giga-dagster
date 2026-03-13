@@ -25,3 +25,4 @@ class GenericEmailRequest(BaseModel):
     subject: str
     html_part: str | None = Field(None)
     text_part: str | None = Field(None)
+    attachments: list[dict] | None = Field(None)

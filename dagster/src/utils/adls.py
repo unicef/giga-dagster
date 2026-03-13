@@ -120,10 +120,17 @@ def _get_container_client() -> ContainerClient:
 class ADLSFileClient(ConfigurableResource):
     @staticmethod
     def _get_metadata_path(filepath: str) -> Optional[str]:
-        # Normalize paths by stripping leading slashes for comparison
+        # Normalize paths by stripping leading slashes for comparison.
+        # Use same prefix as ingestion (LAKEHOUSE_PATH + UPLOAD_PATH_PREFIX) so we match blob paths from the upload sensor.
         normalized_filepath = filepath.lstrip("/")
-        normalized_prefix = constants.UPLOAD_PATH_PREFIX.lstrip("/")
-        normalized_metadata_prefix = constants.UPLOAD_METADATA_PATH_PREFIX.lstrip("/")
+        normalized_prefix = (
+            f"{settings.LAKEHOUSE_PATH}/{constants.UPLOAD_PATH_PREFIX}".lstrip("/")
+        )
+        normalized_metadata_prefix = (
+            f"{settings.LAKEHOUSE_PATH}/{constants.UPLOAD_METADATA_PATH_PREFIX}".lstrip(
+                "/"
+            )
+        )
 
         if normalized_filepath.startswith(normalized_prefix):
             return (
