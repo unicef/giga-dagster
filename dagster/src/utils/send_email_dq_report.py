@@ -1,4 +1,5 @@
 import datetime
+import math
 from base64 import b64decode, b64encode
 from typing import Any
 
@@ -19,6 +20,17 @@ from src.utils.email.send_email_base import send_email_base
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
+
+
+def _make_json_safe(obj: Any) -> Any:
+    """Replace float nan/inf with None so payload is JSON-serializable."""
+    if isinstance(obj, dict):
+        return {k: _make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_make_json_safe(v) for v in obj]
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
 
 
 def _generate_pdf_attachment_and_store_in_adls(
@@ -57,7 +69,7 @@ def _generate_pdf_attachment_and_store_in_adls(
             "No existing DQ report PDF found at %s; falling back to renderer", pdf_path
         )
 
-    # Call renderer to generate a fresh PDF
+    # Call renderer to generate a fresh PDF (sanitize nan/inf so JSON is valid)
     try:
         pdf_res = requests.post(
             f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
@@ -77,35 +89,44 @@ def _generate_pdf_attachment_and_store_in_adls(
         try:
             logger.warning(f"PDF error response: {pdf_res.json()}")
         except JSONDecodeError:
-            logger.warning(f"PDF error response: {pdf_res.text}")
+            logger.warning(f"PDF error response: {pdf_res.text[:500]}")
         return None
 
-    pdf_data = pdf_res.json()
-    pdf_base64 = pdf_data.get("pdf")
-    pdf_filename = pdf_data.get(
-        "filename", f"data-quality-report-{country_code}-{upload_id}.pdf"
+    # Renderer returns binary PDF (avoids huge JSON/base64 truncation)
+    pdf_bytes = pdf_res.content
+    content_type = (pdf_res.headers.get("Content-Type") or "").split(";")[0].strip()
+    if content_type != "application/pdf" or not pdf_bytes or len(pdf_bytes) < 1000:
+        logger.warning(
+            "Invalid PDF response: Content-Type=%s, len=%s",
+            content_type,
+            len(pdf_bytes) if pdf_bytes else 0,
+        )
+        return None
+
+    # Filename from Content-Disposition or default
+    disp = pdf_res.headers.get("Content-Disposition") or ""
+    pdf_filename = (
+        f"data-quality-report-{country_code}-{upload_id}.pdf"
     )
+    if "filename=" in disp:
+        part = disp.split("filename=", 1)[1].strip().strip('"')
+        if part:
+            pdf_filename = part
 
     # Store PDF in ADLS alongside DQ summary (dq-report path)
     try:
-        pdf_bytes = b64decode(pdf_base64) if pdf_base64 else b""
-        if pdf_bytes:
-            adls.upload_raw(
-                context=None,
-                data=pdf_bytes,
-                filepath=pdf_path,
-                metadata=None,
-            )
-            logger.info(f"Stored DQ report PDF in ADLS at {pdf_path}")
-        else:
-            logger.warning("PDF base64 content was empty; skipping ADLS write")
+        adls.upload_raw(
+            context=None,
+            data=pdf_bytes,
+            filepath=pdf_path,
+            metadata=None,
+        )
+        logger.info(f"Stored DQ report PDF in ADLS at {pdf_path}")
     except Exception as adls_error:
         logger.error(f"Failed to store DQ report PDF in ADLS: {adls_error}")
 
-    if not pdf_base64:
-        return None
-
     logger.info(f"PDF generated successfully: {pdf_filename}")
+    pdf_base64 = b64encode(pdf_bytes).decode("ascii")
     return [
         {
             "Content-type": "application/pdf",
@@ -156,6 +177,9 @@ async def send_email_dq_report(
     # Add country if provided (required for PDF generation)
     if country_code:
         metadata["country"] = country_code
+
+    # Ensure payload is JSON-serializable (replace float nan/inf with None)
+    metadata = _make_json_safe(metadata)
 
     admins = GroupsApi.list_role_members("Admin")
     recipients = list({uploader_email, *admins})
