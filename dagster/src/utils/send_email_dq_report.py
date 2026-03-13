@@ -1,6 +1,6 @@
 import datetime
 import math
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from typing import Any
 
 import requests
@@ -105,9 +105,7 @@ def _generate_pdf_attachment_and_store_in_adls(
 
     # Filename from Content-Disposition or default
     disp = pdf_res.headers.get("Content-Disposition") or ""
-    pdf_filename = (
-        f"data-quality-report-{country_code}-{upload_id}.pdf"
-    )
+    pdf_filename = f"data-quality-report-{country_code}-{upload_id}.pdf"
     if "filename=" in disp:
         part = disp.split("filename=", 1)[1].strip().strip('"')
         if part:
