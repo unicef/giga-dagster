@@ -21,16 +21,13 @@ from sqlalchemy import select, update
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
+    core_merge_logic,
     full_in_cluster_merge,
-    manual_review_dedupe_strat,
-    partial_cdf_in_cluster_merge,
+    partial_in_cluster_merge,
 )
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
     add_missing_columns,
-)
-from src.utils.adls import (
-    ADLSFileClient,
 )
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
@@ -50,8 +47,17 @@ from src.utils.schema import (
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
-from azure.core.exceptions import ResourceNotFoundError
 from dagster import OpExecutionContext, Output, asset
+
+# Pending-changes status constants (mirror staging.py)
+_STATUS_APPROVED = "APPROVED"
+_STATUS_REJECTED = "REJECTED"
+_STATUS_PROCESSED = "PROCESSED"
+
+# Pending-changes change_type constants (mirror staging.py)
+_CHANGE_INSERT = "INSERT"
+_CHANGE_UPDATE = "UPDATE"
+_CHANGE_DELETE = "DELETE"
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
@@ -79,18 +85,17 @@ def manual_review_passed_rows(
 @capture_op_exceptions
 def manual_review_failed_rows(
     context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
 
     schema_name = config.metastore_schema
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
+
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
@@ -104,44 +109,22 @@ def manual_review_failed_rows(
         rejected_tier_schema_name, country_code
     )
 
-    staging_cdf = (
-        s.read.format("delta")
-        .option("readChangeFeed", "true")
-        .option("startingVersion", 0)
-        .table(staging_table_name)
-    )
-    staging_cdf = staging_cdf.withColumn(
-        "change_id",
-        f.concat_ws(
-            "|",
-            f.col("school_id_giga"),
-            f.col("_change_type"),
-            f.col("_commit_version").cast(StringType()),
-        ),
+    # Read REJECTED rows from pending_changes (staging) Delta table
+    s.catalog.refreshTable(staging_table_name)
+    staging_df = DeltaTable.forName(s, staging_table_name).toDF()
+    rejected_rows = staging_df.filter(f.col("status") == _STATUS_REJECTED).select(
+        *column_names
     )
 
-    if len(passing_rows_change_ids) == 0:
-        df_failed = staging_cdf
-    elif len(passing_rows_change_ids) == 1 and passing_rows_change_ids[0] == "__all__":
-        df_failed = staging_cdf.limit(0)
-    else:
-        bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
-        df_failed = staging_cdf.filter(
-            ~f.col("change_id").isin(bc_passing_rows_change_ids.value)
-        )
-
-    # Check if a rejects table already exists
-    # If yes, do an in-cluster merge
-    # Else, the current df_failed is the initial rejects table
     if check_table_exists(s, schema_name, country_code, DataTier.MANUAL_REJECTED):
         s.catalog.refreshTable(rejected_table_name)
-        rejected = DeltaTable.forName(s, rejected_table_name).toDF()
-        rejected = add_missing_columns(rejected, schema_columns)
-        new_rejected = partial_cdf_in_cluster_merge(
-            rejected, df_failed, column_names, primary_key, context
+        current_rejected = DeltaTable.forName(s, rejected_table_name).toDF()
+        current_rejected = add_missing_columns(current_rejected, schema_columns)
+        new_rejected = partial_in_cluster_merge(
+            current_rejected, rejected_rows, primary_key, column_names
         )
     else:
-        new_rejected = df_failed.select(*column_names)
+        new_rejected = rejected_rows
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -165,19 +148,17 @@ def manual_review_failed_rows(
 @capture_op_exceptions
 def silver(
     context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
-    passing_rows_change_ids = adls_file_client.download_json(config.filepath)
-    context.log.info(f"{len(passing_rows_change_ids)=}")
 
     schema_name = config.metastore_schema
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
+
     staging_tier_schema_name = construct_schema_name_for_tier(
         schema_name, DataTier.STAGING
     )
@@ -189,80 +170,128 @@ def silver(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    staging_cdf = (
-        s.read.format("delta")
-        .option("readChangeFeed", "true")
-        .option("startingVersion", 0)
-        .table(staging_table_name)
-    )
-    staging_cdf = staging_cdf.withColumn(
-        "change_id",
-        f.concat_ws(
-            "|",
-            f.col("school_id_giga"),
-            f.col("_change_type"),
-            f.col("_commit_version").cast(StringType()),
-        ),
-    )
+    # Read APPROVED rows from the pending_changes (staging) Delta table
+    s.catalog.refreshTable(staging_table_name)
+    staging_df = DeltaTable.forName(s, staging_table_name).toDF()
+    approved = staging_df.filter(f.col("status") == _STATUS_APPROVED)
 
-    if len(passing_rows_change_ids) == 0:
-        df_passed = staging_cdf.limit(0)
-    elif len(passing_rows_change_ids) == 1 and passing_rows_change_ids[0] == "__all__":
-        df_passed = staging_cdf
-    else:
-        bc_passing_rows_change_ids = s.sparkContext.broadcast(passing_rows_change_ids)
-        df_passed = staging_cdf.filter(
-            f.col("change_id").isin(bc_passing_rows_change_ids.value)
+    if approved.isEmpty():
+        context.log.info(
+            "No APPROVED rows in staging table. Returning current silver unchanged."
         )
-    context.log.info(f"{df_passed.count()=}")
+        if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+            s.catalog.refreshTable(silver_table_name)
+            current_silver = DeltaTable.forName(s, silver_table_name).toDF()
+            return Output(
+                current_silver,
+                metadata={
+                    **get_output_metadata(config),
+                    "preview": get_table_preview(current_silver),
+                    "row_count": current_silver.count(),
+                },
+            )
+        empty = s.createDataFrame([], StructType(schema_columns))
+        return Output(
+            empty,
+            metadata={
+                **get_output_metadata(config),
+                "preview": get_table_preview(empty),
+                "row_count": 0,
+            },
+        )
 
-    df_passed = manual_review_dedupe_strat(df_passed)
+    inserts = approved.filter(f.col("change_type") == _CHANGE_INSERT).select(
+        *column_names
+    )
+    updates = approved.filter(f.col("change_type") == _CHANGE_UPDATE).select(
+        *column_names
+    )
+    deletes = approved.filter(f.col("change_type") == _CHANGE_DELETE).select(
+        *column_names
+    )
 
-    # Extract delete IDs before merge for post-merge verification
-    deletes_df = df_passed.filter(f.col("_change_type") == "delete")
-    delete_ids = [row[primary_key] for row in deletes_df.select(primary_key).collect()]
-    has_deletes = len(delete_ids) > 0
-    context.log.info(f"Approved deletes count: {len(delete_ids)}")
+    insert_count = inserts.count()
+    update_count = updates.count()
+    delete_count = deletes.count()
+    context.log.info(
+        f"Approved rows: {insert_count} inserts, {update_count} updates, "
+        f"{delete_count} deletes"
+    )
+
+    delete_ids = [row[primary_key] for row in deletes.select(primary_key).collect()]
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
         s.catalog.refreshTable(silver_table_name)
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
         current_silver = add_missing_columns(current_silver, schema_columns)
-        new_silver = partial_cdf_in_cluster_merge(
-            current_silver, df_passed, column_names, primary_key, context
+        new_silver = core_merge_logic(
+            current_silver,
+            inserts,
+            updates,
+            deletes,
+            primary_key,
+            column_names,
+            update_join_type="left",
         )
 
-        # Post-merge verification: Verify approved deletes were actually removed
-        if has_deletes:
-            remaining_deletes = new_silver.filter(
-                new_silver[primary_key].isin(delete_ids)
-            )
-            remaining_count = remaining_deletes.count()
-
+        # Verify deletes were applied
+        if delete_ids:
+            remaining = new_silver.filter(new_silver[primary_key].isin(delete_ids))
+            remaining_count = remaining.count()
             if remaining_count > 0:
                 context.log.error(
-                    f"Delete verification failed: {remaining_count} out of {len(delete_ids)} "
-                    f"approved delete rows still exist in silver table. "
-                    f"Sample IDs: {[row[primary_key] for row in remaining_deletes.limit(5).collect()]}"
+                    f"Delete verification failed: {remaining_count} of {len(delete_ids)} "
+                    f"approved deletes still in silver."
                 )
                 from dagster import DagsterExecutionInterruptError
 
                 raise DagsterExecutionInterruptError(
-                    f"Deletes not applied: {remaining_count} rows still in silver table"
+                    f"Deletes not applied: {remaining_count} rows still in silver"
                 )
-            else:
-                context.log.info(
-                    f"Delete verification passed: All {len(delete_ids)} approved deletes "
-                    f"successfully removed from silver table."
-                )
+            context.log.info(
+                f"Delete verification passed: all {len(delete_ids)} deletes removed."
+            )
     else:
-        new_silver = df_passed
+        new_silver = inserts
 
     if new_silver.isEmpty():
-        context.log.info(
-            "Silver table is empty after merge, returning empty DataFrame."
-        )
-        new_silver = s.createDataFrame([], schema=StructType(schema_columns))
+        context.log.info("Silver is empty after merge.")
+        new_silver = s.createDataFrame([], StructType(schema_columns))
+
+    new_silver = compute_row_hash(new_silver)
+
+    # Mark approved rows as PROCESSED in the staging table
+    DeltaTable.forName(s, staging_table_name).update(
+        condition=f.col("status") == _STATUS_APPROVED,
+        set={"status": f.lit(_STATUS_PROCESSED)},
+    )
+    context.log.info("Marked approved staging rows as PROCESSED.")
+
+    # Reset ApprovalRequest state now that merge is complete
+    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    with get_db_context() as db:
+        try:
+            with db.begin():
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(
+                        {
+                            ApprovalRequest.merge_requested: False,
+                            ApprovalRequest.merge_requested_at: None,
+                            ApprovalRequest.is_merge_processing: False,
+                            ApprovalRequest.enabled: False,
+                        }
+                    )
+                )
+        except Exception as e:
+            context.log.error(
+                f"Failed to reset ApprovalRequest for {country_code} - "
+                f"{formatted_dataset}: {e}"
+            )
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -278,6 +307,9 @@ def silver(
             **get_output_metadata(config),
             "preview": get_table_preview(new_silver),
             "row_count": new_silver.count(),
+            "insert_count": insert_count,
+            "update_count": update_count,
+            "delete_count": delete_count,
         },
     )
 
@@ -288,8 +320,23 @@ def reset_staging_table(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
-    adls_file_client: ADLSFileClient,
 ) -> None:
+    """
+    No-op for the geolocation pipeline: the pending_changes staging table is a
+    persistent history log and does not need to be reset between merge cycles.
+
+    For other pipelines (coverage) this asset still performs the silver-clone reset.
+    """
+    if config.dataset_type == "geolocation":
+        context.log.info(
+            "Geolocation uses the pending_changes staging design; skipping reset."
+        )
+        return
+
+    from azure.core.exceptions import ResourceNotFoundError
+
+    from src.utils.adls import ADLSFileClient
+
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     staging_tier_schema_name = construct_schema_name_for_tier(
@@ -304,7 +351,6 @@ def reset_staging_table(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    # State check: Verify enabled=False and is_merge_processing=False before reset
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
     with get_db_context() as db:
         current_request = db.scalar(
@@ -316,23 +362,25 @@ def reset_staging_table(
 
         if current_request is None:
             context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
+                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. "
+                "Proceeding with reset."
             )
         elif current_request.enabled:
             context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled (enabled=True) for {country_code} - {formatted_dataset}. "
-                f"Expected enabled=False before reset."
+                f"Reset blocked: ApprovalRequest is enabled for {country_code} - "
+                f"{formatted_dataset}."
             )
             return
         elif current_request.is_merge_processing:
             context.log.warning(
-                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
-                f"Expected is_merge_processing=False before reset."
+                f"Reset blocked: merge still processing for {country_code} - "
+                f"{formatted_dataset}."
             )
             return
 
+    # Lazily import ADLSFileClient to avoid initialising it for the geolocation no-op path
+    adls_file_client = ADLSFileClient()
     s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-
     try:
         adls_file_client.delete(staging_table_path, is_directory=True)
     except ResourceNotFoundError as e:
@@ -340,7 +388,7 @@ def reset_staging_table(
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
     s.catalog.refreshTable(silver_table_name)
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
+    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     create_schema(s, staging_tier_schema_name)
     create_delta_table(
         s,
@@ -350,13 +398,11 @@ def reset_staging_table(
         context,
         if_not_exists=True,
     )
-    silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
+    silver_df.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
-    formatted_dataset = f"School {config.dataset_type.capitalize()}"
     with get_db_context() as db:
         try:
             with db.begin():
-                # Ensure enabled=False and is_merge_processing=False after reset
                 result = db.execute(
                     update(ApprovalRequest)
                     .where(
@@ -372,11 +418,13 @@ def reset_staging_table(
                 )
                 if result.rowcount == 0:
                     context.log.warning(
-                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
+                        f"No ApprovalRequest found for {country_code} - "
+                        f"{formatted_dataset}."
                     )
         except Exception as e:
             context.log.error(
-                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
+                f"Failed to update ApprovalRequest for {country_code} - "
+                f"{formatted_dataset}: {e}"
             )
             raise
 

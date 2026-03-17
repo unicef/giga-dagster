@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from models.approval_requests import ApprovalRequest
+from sqlalchemy import select, update
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.school_master import (
@@ -9,6 +12,7 @@ from src.jobs.school_master import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.db.primary import get_db_context
 from src.utils.filename import deconstruct_school_master_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
@@ -154,74 +158,74 @@ def school_master_geolocation__raw_file_uploads_sensor(
     job=school_master_geolocation__post_manual_checks_job,
     minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
 )
-def school_master_geolocation__post_manual_checks_sensor(
+def school_master_geolocation__approval_sensor(
     context: SensorEvaluationContext,
-    adls_file_client: ADLSFileClient,
 ):
+    """
+    Polls the ApprovalRequest table for geolocation merge requests.
+    Triggers the post-manual-checks job when merge_requested=True and
+    is_merge_processing=False, then immediately marks is_merge_processing=True
+    to prevent double-triggering.
+    """
     count = 0
-    source_directory = (
-        f"{constants.staging_folder}/approved-row-ids/{DOMAIN_DATASET_TYPE}"
-    )
 
-    for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
-    ):
-        if file_data.is_directory:
-            continue
-
-        adls_filepath = file_data.name
-        path = Path(adls_filepath)
-        try:
-            filename_components = deconstruct_school_master_filename_components(
-                adls_filepath
+    with get_db_context() as db:
+        pending = db.scalars(
+            select(ApprovalRequest).where(
+                (ApprovalRequest.dataset == f"School {DATASET_TYPE.capitalize()}")
+                & ApprovalRequest.merge_requested
+                & ~ApprovalRequest.is_merge_processing
             )
-        except Exception as e:
-            context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
-            continue
-        else:
-            country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+        ).all()
+
+        for ar in pending:
+            country_code = ar.country
+            staging_path = f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}"
+            silver_path = f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}"
+            master_path = f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}"
+            reference_path = f"{settings.SPARK_WAREHOUSE_PATH}/school_reference.db/{country_code.upper()}"
+            rejected_path = f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_rejected.db/{country_code.lower()}"
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
-                    destination_filepath=str(path),
+                    source_filepath=staging_path,
+                    destination_filepath=silver_path,
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.RAW,
                 ),
                 "manual_review_failed_rows": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_rejected.db/{country_code.lower()}",
-                    metastore_schema="school_geolocation",
+                    source_filepath=staging_path,
+                    destination_filepath=rejected_path,
+                    metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.MANUAL_REJECTED,
                 ),
                 "silver": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                    source_filepath=staging_path,
+                    destination_filepath=silver_path,
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.SILVER,
                 ),
                 "reset_staging_table": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
-                    metastore_schema="school_geolocation",
+                    source_filepath=staging_path,
+                    destination_filepath=staging_path,
+                    metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.STAGING,
                 ),
                 "master": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                    source_filepath=silver_path,
+                    destination_filepath=master_path,
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
                 "reference": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_reference.db/{country_code.upper()}",
+                    source_filepath=silver_path,
+                    destination_filepath=reference_path,
                     metastore_schema="school_reference",
                     tier=DataTier.GOLD,
                 ),
                 "broadcast_master_release_notes": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
+                    source_filepath=master_path,
+                    destination_filepath=master_path,
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
@@ -230,22 +234,40 @@ def school_master_geolocation__post_manual_checks_sensor(
             run_ops = generate_run_ops(
                 ops_destination_mapping,
                 dataset_type=DATASET_TYPE,
-                metadata=metadata,
+                metadata={},
                 file_size_bytes=0,
                 domain=DOMAIN,
                 country_code=country_code,
             )
 
-            context.log.info(f"FILE: {path}")
+            # Unique run_key per merge request; merge_requested_at is set by the portal
+            merge_ts = (
+                ar.merge_requested_at.isoformat()
+                if ar.merge_requested_at
+                else str(ar.id)
+            )
+            run_key = f"{country_code}:{DATASET_TYPE}:merge:{merge_ts}"
+
+            # Mark as processing immediately to prevent re-triggering on the next tick
+            with db.begin():
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(ApprovalRequest.id == ar.id)
+                    .values({ApprovalRequest.is_merge_processing: True})
+                )
+
+            context.log.info(
+                f"Triggering merge for {country_code} (run_key={run_key})"
+            )
             yield RunRequest(
-                run_key=str(path),
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )
             count += 1
 
     if count == 0:
-        yield SkipReason(f"No files detected in {source_directory}")
+        yield SkipReason("No pending merge requests in ApprovalRequest table")
 
 
 @sensor(

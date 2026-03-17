@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import UUID4
 from sqlalchemy import VARCHAR, DateTime, ForeignKey, UniqueConstraint, func
@@ -17,6 +18,10 @@ class ApprovalRequest(BaseModel):
     dataset: Mapped[str] = mapped_column(nullable=False)
     enabled: Mapped[bool] = mapped_column(default=False)
     is_merge_processing: Mapped[bool] = mapped_column(default=False)
+    merge_requested: Mapped[bool] = mapped_column(default=False)
+    merge_requested_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     audit_logs: Mapped[list["ApprovalRequestAuditLog"]] = relationship(
         back_populates="approval_request"
     )
