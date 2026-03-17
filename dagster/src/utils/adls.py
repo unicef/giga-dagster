@@ -26,7 +26,6 @@ from azure.storage.filedatalake import (
 from dagster import ConfigurableResource, OpExecutionContext, OutputContext
 from src.constants.constants_class import constants
 from src.settings import settings
-from src.utils.op_config import FileConfig
 
 
 class AzuriteBlobPathProperties(NamedTuple):
@@ -161,9 +160,6 @@ class ADLSFileClient(ConfigurableResource):
         filepath: str,
         metadata: dict | None = None,
     ) -> None:
-        if not metadata and context:
-            metadata = context.step_context.op_config["metadata"]
-
         if settings.USE_AZURITE:
             blob_client = _get_container_client().get_blob_client(filepath)
             try:
@@ -249,6 +245,7 @@ class ADLSFileClient(ConfigurableResource):
         context: OutputContext | OpExecutionContext,
         data: pd.DataFrame,
         filepath: str,
+        metadata: dict | None = None,
     ) -> None:
         ext = Path(filepath).suffix
         if not ext:
@@ -263,15 +260,6 @@ class ADLSFileClient(ConfigurableResource):
                 bytes_data = data.to_parquet(index=False)
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
-
-        if isinstance(context, OpExecutionContext):
-            config = FileConfig(**context._step_execution_context.op_config)
-
-        if isinstance(context, OutputContext):
-            config = FileConfig(**context.step_context.op_config)
-
-        metadata = config.metadata
-        metadata = {k: v for k, v in metadata.items() if not isinstance(v, dict)}
 
         if settings.USE_AZURITE:
             blob_client = _get_container_client().get_blob_client(filepath)
