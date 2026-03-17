@@ -130,31 +130,40 @@ def format_validation_checks(df, context: OpExecutionContext = None):
     column_actions = {}
     for column, dtype in config.DATA_TYPES:
         if column in df.columns and dtype == "STRING":
-            column_actions[f"dq_is_not_alphanumeric-{column}"] = f.when(
-                f.regexp_extract(f.col(column), ".*[A-Za-z0-9].*", 0) != "",
-                0,
-            ).otherwise(1)
+            # Null values are already captured by completeness checks; skip them here
+            # to avoid double-flagging a column as both null and not-alphanumeric.
+            column_actions[f"dq_is_not_alphanumeric-{column}"] = (
+                f.when(f.col(column).isNull(), f.lit(0))
+                .when(f.regexp_extract(f.col(column), ".*[A-Za-z0-9].*", 0) != "", f.lit(0))
+                .otherwise(f.lit(1))
+            )
         if column in df.columns and dtype in [
             "INT",
             "DOUBLE",
             "LONG",
             "TIMESTAMP",
         ]:  # included timestamp based on luke's code
-            column_actions[f"dq_is_not_numeric-{column}"] = f.when(
-                f.regexp_extract(f.col(column), r"^-?\d+(\.\d+)?$", 0) != "",
-                0,
-            ).otherwise(1)
+            # Null values are already captured by completeness checks; skip them here.
+            column_actions[f"dq_is_not_numeric-{column}"] = (
+                f.when(f.col(column).isNull(), f.lit(0))
+                .when(f.regexp_extract(f.col(column), r"^-?\d+(\.\d+)?$", 0) != "", f.lit(0))
+                .otherwise(f.lit(1))
+            )
         # special format validation for school_id_giga
         if column in df.columns and column == "school_id_giga":
-            column_actions[f"dq_is_not_36_character_hash-{column}"] = f.when(
-                f.regexp_extract(
-                    f.col(column),
-                    r"\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b",
-                    0,
+            column_actions[f"dq_is_not_36_character_hash-{column}"] = (
+                f.when(f.col(column).isNull(), f.lit(0))
+                .when(
+                    f.regexp_extract(
+                        f.col(column),
+                        r"\b([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\b",
+                        0,
+                    )
+                    != "",
+                    f.lit(0),
                 )
-                != "",
-                0,
-            ).otherwise(1)
+                .otherwise(f.lit(1))
+            )
 
     return df.withColumns(column_actions)
 
@@ -166,9 +175,13 @@ def is_string_more_than_255_characters_check(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running character length checks...")
 
+    # Skip columns whose expected type is non-string — their string representation
+    # can never exceed 255 characters, so the check always returns 0 for them.
+    non_string_cols = {col for col, dtype in config.DATA_TYPES if dtype != "STRING"}
+
     column_actions = {}
     for column in df.columns:
-        if column != "school_name" and not column.startswith("dq"):
+        if column != "school_name" and not column.startswith("dq") and column not in non_string_cols:
             column_actions[f"dq_is_string_more_than_255_characters-{column}"] = f.when(
                 f.length(column) > 255,
                 1,

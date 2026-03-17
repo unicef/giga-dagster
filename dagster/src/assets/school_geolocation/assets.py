@@ -34,7 +34,7 @@ from src.spark.transform_functions import (
     create_bronze_layer_columns,
     get_country_rt_schools,
     merge_connectivity_to_master as merge_connectivity_to_df,
-    standardize_connectivity_type,
+    standardize_connectivity_type, create_bronze_layer_columns_updated,
 )
 from src.utils.adls import (
     ADLSFileClient,
@@ -206,57 +206,68 @@ def geolocation_bronze(
         ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
+    column_mapping_filtered = {
+        k.strip(): v
+        for k, v in column_to_schema_mapping.items()
+        if (k is not None) and (v is not None)
+    }
+    pdf = pdf[column_to_schema_mapping.keys()]
+    pdf.rename(column_mapping_filtered, axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
-    context.log.info("COLUMN MAPPING")
-    context.log.info(column_mapping)
-    context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info(df)
+    # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
+    # context.log.info("COLUMN MAPPING")
+    # context.log.info(column_mapping)
+    # context.log.info("COLUMN MAPPING DATAFRAME")
+    # context.log.info(df)
     uploaded_columns = df.columns
 
-    columns = get_schema_columns(s, schema_name)
-    context.log.info("schema columns")
-    context.log.info(columns)
+    # columns = get_schema_columns(s, schema_name)
+    # context.log.info("schema columns")
+    # context.log.info(columns)
 
-    schema = StructType(columns)
+    # schema = StructType(columns)
 
     # Create empty base schema DataFrame
-    geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
+    # geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
+    #
+    # casted_geolocation_base = geolocation_base.withColumn(
+    #     "school_id_govt", f.col("school_id_govt").cast(StringType())
+    # )
+    #
+    # context.log.info("Casted Geolocation")
+    # context.log.info(casted_geolocation_base)
+    #
+    # casted_bronze = df.withColumn(
+    #     "school_id_govt", f.col("school_id_govt").cast(StringType())
+    # )
+    #
+    # context.log.info("Casted Bronze")
+    # context.log.info(casted_bronze)
+    #
+    # df = create_bronze_layer_columns(
+    #     casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
+    # )
+    # context.log.info("DF from create_bronze_layer_columns")
+    # context.log.info(df)
 
-    casted_geolocation_base = geolocation_base.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
-    )
+    # config.metadata.update({"column_mapping": column_mapping})
+    # context.log.info("After config metadata update")
 
-    context.log.info("Casted Geolocation")
-    context.log.info(casted_geolocation_base)
-
-    casted_bronze = df.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
-    )
-
-    context.log.info("Casted Bronze")
-    context.log.info(casted_bronze)
-
-    df = create_bronze_layer_columns(
-        casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
-    )
-    context.log.info("DF from create_bronze_layer_columns")
-    context.log.info(df)
-
-    config.metadata.update({"column_mapping": column_mapping})
-    context.log.info("After config metadata update")
-
-    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # RT Columns
-        connectivity = get_country_rt_schools(s, country_code)
-        df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
-    else:
-        # On local, we can't retrieve the connectivity data
-        df = df.withColumn("connectivity", f.lit("Unknown"))
-        df = df.withColumn("connectivity_RT", f.lit("Unknown"))
+    # if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+    #     # RT Columns
+    #     connectivity = get_country_rt_schools(s, country_code)
+    #     df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
+    # else:
+    #     # On local, we can't retrieve the connectivity data
+    #     df = df.withColumn("connectivity", f.lit("Unknown"))
+    #     df = df.withColumn("connectivity_RT", f.lit("Unknown"))
 
     # standardize the connectivity type
-    df = standardize_connectivity_type(df, mode, uploaded_columns)
+    # df = standardize_connectivity_type(df, mode, uploaded_columns)
+
+    df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
+
+    df = create_bronze_layer_columns_updated(df, mode, uploaded_columns)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -280,7 +291,7 @@ def geolocation_bronze(
         metadata={
             **get_output_metadata(config),
             "row_count": len(df_pandas),
-            "column_mapping": column_mapping,
+            "column_mapping": column_mapping_filtered,
             "preview": get_table_preview(df_pandas),
         },
     )
@@ -336,6 +347,24 @@ def geolocation_data_quality_results(
     )
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
+
+    # Collapse all individual dq_ check columns into a single map<string, int> column.
+    # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
+    # dq_has_critical_error and failure_reason remain as top-level columns because
+    # they are used for row-level filtering throughout the pipeline.
+    # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
+    dq_flag_cols = [
+        c for c in dq_results.columns
+        if c.startswith("dq_") and c != "dq_has_critical_error"
+    ]
+    map_args = []
+    for col_name in dq_flag_cols:
+        map_args.extend([f.lit(col_name[len("dq_"):]), f.col(col_name).cast("int")])
+    dq_results = (
+        dq_results
+        .withColumn("dq_results", f.create_map(*map_args))
+        .drop(*dq_flag_cols)
+    )
 
     dq_results_schema_name = f"{schema_name}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
@@ -406,21 +435,18 @@ async def geolocation_data_quality_results_human_readable(
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns, mode
     )
-    # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
-    dq_column_names = [
-        col
-        for col in df.columns
-        if (col.startswith("dq_") and col != "dq_has_critical_error")
-    ]
-    for column in dq_column_names:
+    # human_readable_mappings keys are map keys (without "dq_" prefix).
+    # Expand each relevant map entry into its own column with Yes/No values,
+    # then drop the map so the output is flat like before.
+    for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
-            column,
-            f.when(f.col(column) == 1, "No").otherwise(
-                f.when(f.col(column) == 0, "Yes")
+            human_name,
+            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
+                f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
             ),
         )
+    df = df.drop("dq_results")
 
-    df = df.withColumnsRenamed(human_readable_mappings)
     context.log.info("Convert the dataframe to a pandas object to save it locally")
     df_pandas = df.toPandas()
 
@@ -688,15 +714,30 @@ def geolocation_staging(
         spark.spark_session,
         StagingChangeTypeEnum.UPDATE,
     )
-    staging = staging_step(geolocation_dq_passed_rows)
-    row_count = 0 if staging is None else staging.count()
+    pending = staging_step(geolocation_dq_passed_rows)
 
+    if pending is None:
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "insert_count": MetadataValue.int(0),
+                "update_count": MetadataValue.int(0),
+                "unchanged_count": MetadataValue.int(0),
+                "delete_count": MetadataValue.int(0),
+            },
+        )
+
+    counts = pending.groupBy("change_type").count().collect()
+    count_map = {row["change_type"]: row["count"] for row in counts}
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
-            "row_count": MetadataValue.int(row_count),
-            "preview": get_table_preview(staging),
+            "insert_count": MetadataValue.int(count_map.get("INSERT", 0)),
+            "update_count": MetadataValue.int(count_map.get("UPDATE", 0)),
+            "unchanged_count": MetadataValue.int(count_map.get("UNCHANGED", 0)),
+            "delete_count": MetadataValue.int(count_map.get("DELETE", 0)),
         },
     )
 

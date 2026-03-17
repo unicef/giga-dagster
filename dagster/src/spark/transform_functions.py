@@ -50,9 +50,9 @@ generate_uuid_udf = f.udf(generate_uuid)
 
 def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     # Create school_id_giga column if not exists, otherwise use provided values
-    df = df.withColumn(
-        "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
-    )
+    # df = df.withColumn(
+    #     "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
+    # )
 
     school_id_giga_prereqs = [
         "school_id_govt",
@@ -75,6 +75,11 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
             f.col("longitude").cast(StringType()),
         ),
     )
+
+    # If school_id_giga was not part of the upload, add it as null so the coalesce
+    # below can reference it safely regardless of whether the column already exists.
+    if "school_id_giga" not in df.columns:
+        df = df.withColumn("school_id_giga", f.lit(None).cast(StringType()))
 
     # Use existing school_id_giga if provided, otherwise use system-generated value
     df = df.withColumn(
@@ -474,6 +479,22 @@ def create_bronze_layer_columns(
                     missing_location_condition, f.lit(None).cast(StringType())
                 ).otherwise(f.col(column)),
             )
+
+    return df
+
+
+def create_bronze_layer_columns_updated(
+    df: sql.DataFrame,
+    mode: str,
+    uploaded_columns: list[str],
+):
+    # standardize education level
+    if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
+        df = create_education_level(df, mode, uploaded_columns)
+
+    # Generate school_id_giga for new schools using the dedicated function
+    if mode == UploadMode.CREATE.value:
+        df = create_school_id_giga(df)
 
     return df
 
