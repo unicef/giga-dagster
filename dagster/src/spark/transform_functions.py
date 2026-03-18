@@ -487,6 +487,7 @@ def create_bronze_layer_columns_updated(
     df: sql.DataFrame,
     mode: str,
     uploaded_columns: list[str],
+    country_code_iso3: str,
 ):
     # standardize education level
     if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
@@ -495,6 +496,39 @@ def create_bronze_layer_columns_updated(
     # Generate school_id_giga for new schools using the dedicated function
     if mode == UploadMode.CREATE.value:
         df = create_school_id_giga(df)
+
+    # Admin columns: re-compute whenever lat/lon are part of the upload
+    if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
+        for admin_level in ("admin1", "admin2", "admin3", "admin4"):
+            df = add_admin_columns(df, country_code_iso3, admin_level)
+        df = add_disputed_region_column(df)
+
+        missing_location_condition = (
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude"))
+        )
+        for column in ("admin1", "admin1_id_giga", "admin2", "admin2_id_giga"):
+            df = df.withColumn(
+                column,
+                f.when(
+                    missing_location_condition, f.lit(None).cast(StringType())
+                ).otherwise(f.col(column)),
+            )
+
+    # Connectivity type: re-compute whenever connectivity_type_govt is part of the upload
+    if mode == UploadMode.CREATE.value or "connectivity_type_govt" in uploaded_columns:
+        df = standardize_connectivity_type(df, mode, uploaded_columns)
+
+    # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded
+    if mode == UploadMode.CREATE.value or "connectivity_govt" in uploaded_columns:
+        df = df.withColumn(
+            "connectivity_govt_ingestion_timestamp",
+            f.when(
+                f.col("connectivity_govt").isNotNull(), f.current_timestamp()
+            ).otherwise(f.lit(None).cast(TimestampType())),
+        )
 
     return df
 
@@ -851,14 +885,6 @@ def merge_connectivity_to_master(
             .when(f.col("download_speed_govt") == 0, "No")
             .otherwise(f.lit(None).cast(StringType())),
         )
-
-    # add the time connectivity_govt was ingested
-    master = master.withColumn(
-        "connectivity_govt_ingestion_timestamp",
-        f.when(f.col("connectivity_govt").isNotNull(), f.current_timestamp()).otherwise(
-            f.lit(None).cast(TimestampType())
-        ),
-    )
 
     master_cols_to_drop = [
         col

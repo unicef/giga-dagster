@@ -26,8 +26,11 @@ from src.internal.merge import (
     partial_in_cluster_merge,
 )
 from src.resources import ResourceKey
+from src.settings import DeploymentEnvironment, settings
 from src.spark.transform_functions import (
     add_missing_columns,
+    get_country_rt_schools,
+    merge_connectivity_to_master,
 )
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
@@ -504,6 +507,25 @@ def master(
         )
     else:
         new_master = silver
+
+    # Merge RT connectivity data into master (geolocation pipeline only).
+    # RT data updates independently of geolocation uploads, so it belongs here
+    # rather than in geolocation_bronze.  Pass both govt columns as uploaded_columns
+    # to trigger the full connectivity derivation in merge_connectivity_to_master.
+    if config.dataset_type == "geolocation":
+        if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+            connectivity = get_country_rt_schools(s, country_code)
+            new_master = merge_connectivity_to_master(
+                new_master,
+                connectivity,
+                uploaded_columns=["connectivity_govt", "download_speed_govt"],
+                mode="update",
+            )
+        else:
+            context.log.info(
+                "Skipping RT connectivity merge on local — "
+                "pipeline_tables.school_connectivity_realtime_schools unavailable."
+            )
 
     column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_master = new_master.withColumns(column_actions)

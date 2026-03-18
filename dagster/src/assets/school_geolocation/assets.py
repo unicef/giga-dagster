@@ -267,7 +267,7 @@ def geolocation_bronze(
 
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
-    df = create_bronze_layer_columns_updated(df, mode, uploaded_columns)
+    df = create_bronze_layer_columns_updated(df, mode, uploaded_columns, country_code)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,

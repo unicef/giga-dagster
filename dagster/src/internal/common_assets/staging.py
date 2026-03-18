@@ -268,6 +268,7 @@ class StagingStep:
                     pending_schema,
                     self.context,
                     replace=True,
+                    partition_by=["upload_id"],
                 )
         elif not self.pending_changes_table_exists:
             create_delta_table(
@@ -277,6 +278,7 @@ class StagingStep:
                 pending_schema,
                 self.context,
                 if_not_exists=True,
+                partition_by=["upload_id"],
             )
 
         (
@@ -366,6 +368,12 @@ class StagingStep:
     def _get_uploaded_columns(self) -> list[str]:
         """Return the list of schema column names present in the upload file.
 
+        Expands the raw upload columns to include columns that are derived
+        from uploaded columns and computed in bronze (admin, connectivity_type,
+        connectivity_govt_ingestion_timestamp).  Without this expansion the
+        staging step would copy the old silver value for these derived columns
+        instead of using the freshly-computed bronze values.
+
         Falls back to all schema column names if no FileUpload record is found,
         which preserves backward-compatible behaviour for non-geolocation pipelines.
         """
@@ -381,7 +389,28 @@ class StagingStep:
                         f"FileUpload with id `{self.config.filename_components.id}` not found"
                     )
             file_upload = FileUploadConfig.from_orm(file_upload)
-            return list(file_upload.column_to_schema_mapping.values())
+            columns = set(file_upload.column_to_schema_mapping.values())
+
+            # Admin columns are derived from lat/lon in geolocation_bronze.
+            # Treat them as uploaded so staging uses the freshly-computed values.
+            if {"latitude", "longitude"}.issubset(columns):
+                columns.update({
+                    "admin1", "admin1_id_giga",
+                    "admin2", "admin2_id_giga",
+                    "admin3", "admin3_id_giga",
+                    "admin4", "admin4_id_giga",
+                    "disputed_region",
+                })
+
+            # connectivity_type/root are derived from connectivity_type_govt.
+            if "connectivity_type_govt" in columns:
+                columns.update({"connectivity_type", "connectivity_type_root"})
+
+            # connectivity_govt_ingestion_timestamp is derived from connectivity_govt.
+            if "connectivity_govt" in columns:
+                columns.add("connectivity_govt_ingestion_timestamp")
+
+            return list(columns)
         except Exception as e:
             self.context.log.warning(
                 f"Could not retrieve uploaded_columns from FileUpload: {e}. "
