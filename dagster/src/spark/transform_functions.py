@@ -172,7 +172,9 @@ def create_education_level(
             {
                 "education_level_govt": f.when(
                     f.col("education_level_govt").isNull()
-                    | (f.trim(f.col("education_level_govt")) == ""),
+                    | (f.trim(f.col("education_level_govt")) == "")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "nan")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "none"),
                     f.lit("Unknown"),
                 ).otherwise(f.col("education_level_govt")),
                 "education_level": f.coalesce(
