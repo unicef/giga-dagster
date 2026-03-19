@@ -10,8 +10,8 @@ from src.utils.datahub.emit_lineage import (
 
 @pytest.fixture
 def mock_graph_client():
-    with patch("src.utils.datahub.emit_lineage.datahub_graph_client") as mock:
-        yield mock
+    with patch("src.utils.datahub.emit_lineage.get_datahub_graph_client") as mock:
+        yield mock.return_value
 
 
 def test_emit_lineage_query(mock_context, mock_graph_client):

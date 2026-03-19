@@ -63,8 +63,8 @@ def test_define_dataset_properties(mock_identify_country, mock_context):
     assert props.customProperties["Data Format"] == "csv"
 
 
-@patch("src.utils.datahub.emit_dataset_metadata.datahub_emitter")
-@patch("src.utils.datahub.emit_dataset_metadata.datahub_graph_client")
+@patch("src.utils.datahub.emit_dataset_metadata.get_datahub_emitter")
+@patch("src.utils.datahub.graphql.get_datahub_graph_client")
 @patch("src.utils.datahub.emit_dataset_metadata.identify_country_name")
 def test_emit_metadata_to_datahub(
     mock_identify_country, mock_graph, mock_emitter, mock_context
@@ -81,13 +81,13 @@ def test_emit_metadata_to_datahub(
         schema_reference=schema_ref,
     )
 
-    assert mock_emitter.emit.call_count >= 2
-    assert mock_graph.execute_graphql.call_count >= 2
+    assert mock_emitter.return_value.emit.call_count >= 2
+    assert mock_graph.return_value.execute_graphql.call_count >= 2
 
 
 @patch("src.utils.datahub.emit_dataset_metadata.define_schema_properties")
-@patch("src.utils.datahub.emit_dataset_metadata.datahub_emitter")
-@patch("src.utils.datahub.emit_dataset_metadata.datahub_graph_client")
+@patch("src.utils.datahub.emit_dataset_metadata.get_datahub_emitter")
+@patch("src.utils.datahub.graphql.get_datahub_graph_client")
 @patch("src.utils.datahub.emit_dataset_metadata.identify_country_name")
 def test_emit_metadata_spark_schema(
     mock_identify, mock_graph, mock_emitter, _, mock_context
@@ -111,9 +111,9 @@ def test_emit_metadata_spark_schema(
         schema_reference=mock_df,
     )
 
-    assert mock_emitter.emit.call_count >= 2
+    assert mock_emitter.return_value.emit.call_count >= 2
 
-    assert mock_graph.execute_graphql.call_count >= 2
+    assert mock_graph.return_value.execute_graphql.call_count >= 2
 
 
 @patch("src.utils.datahub.emit_dataset_metadata.update_policy_for_group")

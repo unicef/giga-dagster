@@ -27,8 +27,8 @@ def test_duplicate_checks(spark_session):
 def test_completeness_checks(spark_session):
     df = spark_session.createDataFrame(
         [
-            {"mandatory": "ok", "optional": "ok", "lat": 10.0},
-            {"mandatory": None, "optional": None, "lat": float("nan")},
+            {"mandatory": "ok", "optional": "ok", "latitude": 10.0},
+            {"mandatory": None, "optional": None, "latitude": float("nan")},
         ]
     )
 
@@ -43,6 +43,11 @@ def test_completeness_checks(spark_session):
     assert "dq_is_null_optional-optional" in result.columns
     assert rows[0]["dq_is_null_optional-optional"] == 0
     assert rows[1]["dq_is_null_optional-optional"] == 1
+
+    # Test that latitude NaN is detected
+    assert "dq_is_null_optional-latitude" in result.columns
+    assert rows[0]["dq_is_null_optional-latitude"] == 0
+    assert rows[1]["dq_is_null_optional-latitude"] == 1
 
 
 def test_range_checks(spark_session):

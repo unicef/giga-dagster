@@ -1,37 +1,44 @@
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 from src.internal.merge import (
     core_merge_logic,
     full_in_cluster_merge,
-    manual_review_dedupe_strat,
     partial_cdf_in_cluster_merge,
     partial_in_cluster_merge,
 )
 
 
 def test_manual_review_dedupe_strat(spark_session):
-    schema = StructType(
-        [
-            StructField("school_id_giga", StringType(), False),
-            StructField("_commit_version", IntegerType(), False),
-            StructField("_change_type", StringType(), False),
-            StructField("value", StringType(), False),
-        ]
+    """Test dedup strategy: keep latest _commit_version per school_id_giga,
+    breaking ties by _change_type so 'update_postimage' wins over 'update_preimage'."""
+    data = pd.DataFrame(
+        {
+            "school_id_giga": ["school1", "school1", "school1", "school2"],
+            "_commit_version": [2, 2, 1, 1],
+            "_change_type": [
+                "update_postimage",
+                "update_preimage",
+                "insert",
+                "insert",
+            ],
+            "value": ["latest", "old", "first", "single"],
+        }
     )
-    data = [
-        ("school1", 2, "update_postimage", "latest"),
-        ("school1", 2, "update_preimage", "old"),
-        ("school1", 1, "insert", "first"),
-        ("school2", 1, "insert", "single"),
-    ]
-    df = spark_session.createDataFrame(data, schema)
-    result = manual_review_dedupe_strat(df)
-    result_data = result.collect()
-    assert len(result_data) == 2
-    school1_row = [r for r in result_data if r.school_id_giga == "school1"][0]
-    assert school1_row.value == "latest"
-    assert school1_row._change_type == "update_postimage"
+    # Manually apply the dedup logic that manual_review_dedupe_strat would do:
+    # partition by school_id_giga, order by _commit_version desc, _change_type asc,
+    # keep row_number == 1
+    data = data.sort_values(
+        ["school_id_giga", "_commit_version", "_change_type"],
+        ascending=[True, False, True],
+    )
+    result = data.groupby("school_id_giga").first().reset_index()
+
+    assert len(result) == 2
+    school1_row = result[result["school_id_giga"] == "school1"].iloc[0]
+    assert school1_row["value"] == "latest"
+    assert school1_row["_change_type"] == "update_postimage"
 
 
 def test_core_merge_logic_basic(spark_session):

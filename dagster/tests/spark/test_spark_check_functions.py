@@ -126,7 +126,8 @@ def test_is_same_name_level_within_radius():
     assert is_same_name_level_within_radius(row1, row2) is False
 
 
-def test_get_country_geometry():
+@patch("src.spark.check_functions.get_blob_service_client")
+def test_get_country_geometry(mock_get_blob_service_client):
     with patch("src.spark.check_functions.gpd.read_file") as mock_read_file:
         mock_gdf = MagicMock()
         mock_gdf.__getitem__.return_value.__getitem__.return_value.__getitem__.return_value = "GeometryObject"

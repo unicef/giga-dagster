@@ -95,7 +95,7 @@ async def test_qos_school_connectivity_bronze(
     mock_silver_df = spark_session.createDataFrame([("1",)], ["school_id_giga"])
     with (
         patch("src.assets.school_connectivity.assets.DeltaTable") as mock_dt_class,
-        patch("pyspark.sql.catalog.Catalog.tableExists", return_value=True),
+        patch.object(spark_session.catalog, "tableExists", return_value=True),
         patch(
             "src.assets.school_connectivity.assets.get_output_metadata", return_value={}
         ),

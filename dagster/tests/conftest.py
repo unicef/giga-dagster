@@ -8,6 +8,10 @@ from pathlib import Path
 os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 
+# Java 17 Compatibility for PySpark 3.x
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-17-openjdk-amd64"
+os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
+
 # Ensure Trino provider can initialize without error during imports
 os.environ["TRINO_CONNECTION_STRING"] = "trino://user@localhost:8080/catalog"
 
@@ -473,6 +477,8 @@ def spark_session():
         .config("spark.sql.shuffle.partitions", "1")
         .config("spark.default.parallelism", "1")
         .config("spark.ui.showConsoleProgress", "false")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+        .config("spark.ui.enabled", "false")
         .getOrCreate()
     )
     yield spark

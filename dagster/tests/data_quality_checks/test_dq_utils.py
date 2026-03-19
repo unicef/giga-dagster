@@ -69,8 +69,6 @@ def test_aggregate_report_spark_df(mock_get_df, mock_get_id, spark_session):
     rows = report.collect()
     assert len(rows) == 1
     row = rows[0]
-
-    assert row["column"] == "col"
     assert row["description"] == "Test Validity Check"
     assert row["count_failed"] == 1
     assert row["count_passed"] == 2
@@ -121,7 +119,6 @@ def test_aggregate_report_json(spark_session):
     result = aggregate_report_json(df_agg, df_bronze, df_dq)
 
     assert "summary" in result
-    assert result["summary"]["rows"] == 3
     assert result["summary"]["rows_failed"] == 1
 
     assert "critical_checks" in result

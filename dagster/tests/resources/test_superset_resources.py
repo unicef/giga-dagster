@@ -64,9 +64,10 @@ def test_fetch_saved_query(mock_noco_class):
     assert res == [{"col": "val"}]
 
 
+@patch("time.sleep", return_value=None)
 @patch("requests.post")
 @patch.dict(os.environ, {"SUPERSET_URL": "http://superset", "DATABASE_ID": "1"})
-def test_run_query(mock_post):
+def test_run_query(mock_post, mock_sleep):
     mock_post.return_value.status_code = 200
     mock_post.return_value.text = "OK"
 

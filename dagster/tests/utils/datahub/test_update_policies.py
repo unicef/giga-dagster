@@ -9,7 +9,7 @@ from src.utils.datahub.update_policies import (
 from src.utils.op_config import DataTier, FileConfig
 
 
-@patch("src.utils.datahub.update_policies.datahub_graph_client")
+@patch("src.utils.datahub.update_policies.get_datahub_graph_client")
 @patch("src.utils.datahub.update_policies.identify_country_name")
 @patch("src.utils.datahub.update_policies.build_group_urn")
 @patch("src.utils.datahub.update_policies.is_valid_country_name")
@@ -20,7 +20,7 @@ def test_update_policy_for_group(
     mock_build_urn.return_value = "urn:li:corpGroup:Brazil-Master%20Table"
     mock_is_valid.return_value = True
 
-    mock_graph.get_urns_by_filter.return_value = ["urn:li:dataset:1"]
+    mock_graph.return_value.get_urns_by_filter.return_value = ["urn:li:dataset:1"]
 
     config = FileConfig(
         filepath="/file.csv",
@@ -34,18 +34,20 @@ def test_update_policy_for_group(
 
     update_policy_for_group(config, mock_context)
 
-    mock_graph.execute_graphql.assert_called()
-    assert "updatePolicy" in mock_graph.execute_graphql.call_args[1]["query"]
+    mock_graph.return_value.execute_graphql.assert_called()
+    assert (
+        "updatePolicy" in mock_graph.return_value.execute_graphql.call_args[1]["query"]
+    )
 
 
-@patch("src.utils.datahub.update_policies.datahub_graph_client")
+@patch("src.utils.datahub.update_policies.get_datahub_graph_client")
 @patch("src.utils.datahub.update_policies.is_valid_country_name")
 def test_update_policy_base_invalid(mock_is_valid, mock_graph):
     mock_is_valid.return_value = False
 
     update_policy_base("urn:li:corpGroup:Invalid-master")
 
-    mock_graph.execute_graphql.assert_not_called()
+    mock_graph.return_value.execute_graphql.assert_not_called()
 
 
 @patch("src.utils.datahub.update_policies.group_urns_iterator")
@@ -67,9 +69,9 @@ def test_update_policies_batch(mock_is_valid, mock_batch, mock_iterator, mock_co
     mock_batch.assert_called()
 
 
-@patch("src.utils.datahub.update_policies.datahub_graph_client")
+@patch("src.utils.datahub.update_policies.get_datahub_graph_client")
 def test_list_datasets_by_filter(mock_graph):
-    mock_graph.get_urns_by_filter.return_value = ["urn1", "urn2"]
+    mock_graph.return_value.get_urns_by_filter.return_value = ["urn1", "urn2"]
 
     res = list_datasets_by_filter("Brazil", "master")
     assert '"urn1"' in res

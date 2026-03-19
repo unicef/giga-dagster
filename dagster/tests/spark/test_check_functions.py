@@ -30,10 +30,10 @@ def test_get_point():
     assert point.y == 20.0
 
 
-@patch("src.spark.check_functions.BlobServiceClient")
-def test_get_country_geometry(mock_blob_service, mock_settings, spark_session):
+@patch("src.spark.check_functions.get_blob_service_client")
+def test_get_country_geometry(mock_get_service, mock_settings, spark_session):
     mock_client = MagicMock()
-    mock_blob_service.return_value = mock_client
+    mock_get_service.return_value = mock_client
     mock_blob_client = MagicMock()
     mock_client.get_blob_client.return_value = mock_blob_client
     with patch("src.spark.check_functions.gpd.read_file") as mock_read_file:

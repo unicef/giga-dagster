@@ -27,6 +27,7 @@ def test_is_not_within_country(spark_session):
         patch(
             "src.data_quality_checks.geography.is_not_within_country_check_udf_factory"
         ) as mock_udf_factory_check,
+        patch("src.data_quality_checks.geography.settings.DEPLOY_ENV", "production"),
     ):
         mock_get_geom.return_value = "geometry_obj"
         mock_convert.return_value = "BR"

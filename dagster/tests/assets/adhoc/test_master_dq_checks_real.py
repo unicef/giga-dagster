@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from pyspark.sql import SparkSession
 from src.assets.adhoc.master_dq_checks import (
     adhoc__standalone_master_data_quality_checks,
 )
@@ -11,12 +10,9 @@ from dagster import Output
 
 @pytest.fixture(scope="module")
 def spark_session():
-    spark = (
-        SparkSession.builder.master("local[1]")
-        .appName("test_master_dq_real")
-        .getOrCreate()
-    )
-    yield spark
+    from tests.conftest import FakeADLSFileClient, FakeSpark
+
+    return FakeSpark(FakeADLSFileClient())
 
 
 @pytest.mark.asyncio

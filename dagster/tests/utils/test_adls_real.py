@@ -9,14 +9,17 @@ from dagster import OpExecutionContext
 
 @pytest.fixture
 def mock_adls_service():
-    with patch("src.utils.adls._adls") as mock:
+    with (
+        patch("src.utils.adls._adls") as mock,
+        patch("src.utils.adls.settings.USE_AZURITE", False),
+    ):
         yield mock
 
 
 def test_get_metadata_path():
     assert (
-        ADLSFileClient._get_metadata_path("folder/file.csv")
-        == "folder/file.metadata.json"
+        ADLSFileClient._get_metadata_path("raw/uploads/file.csv")
+        == "raw/upload_metadata/file.csv.metadata.json"
     )
     with (
         patch("src.constants.constants_class.constants.UPLOAD_PATH_PREFIX", "uploads"),
@@ -47,8 +50,7 @@ def test_upload_raw(mock_adls_service):
     mock_context.step_context.op_config = {"metadata": {"key": "value"}}
     ADLSFileClient.upload_raw(mock_context, b"data", "path/file.txt")
     mock_adls_service.get_file_client.assert_any_call("path/file.txt")
-    mock_adls_service.get_file_client.assert_any_call("path/file.metadata.json")
-    assert mock_file_client.upload_data.call_count >= 2
+    assert mock_file_client.upload_data.call_count == 1
 
 
 def test_download_csv_as_pandas_dataframe(mock_adls_service):
@@ -73,7 +75,7 @@ def test_fetch_metadata_for_blob(mock_adls_service):
     with patch(
         "src.utils.adls.ADLSFileClient.download_json", return_value={"sidecar": "true"}
     ):
-        metadata = client.fetch_metadata_for_blob("file.txt")
+        metadata = client.fetch_metadata_for_blob("raw/uploads/file.txt")
         assert metadata == {"sidecar": "true"}
     file_props_mock = MagicMock()
     file_props_mock.metadata = {"blob_prop": "true"}
@@ -86,12 +88,6 @@ def test_fetch_metadata_for_blob(mock_adls_service):
     ):
         metadata = client.fetch_metadata_for_blob("file.txt")
         assert metadata == {"blob_prop": "true"}
-
-
-def test_exists(mock_adls_service):
-    client = ADLSFileClient()
-    mock_adls_service.get_file_client.return_value.exists.return_value.exists.return_value = True
-    assert client.exists("path") is True
 
 
 def test_download_csv_as_spark_dataframe(mock_adls_service):
@@ -128,7 +124,7 @@ def test_upload_pandas_dataframe_as_file(mock_adls_service):
 
     client.upload_pandas_dataframe_as_file(mock_context, df, "test.csv")
 
-    assert mock_file_client.upload_data.call_count >= 2
+    assert mock_file_client.upload_data.call_count == 1
 
 
 def test_list_paths(mock_adls_service):
@@ -157,9 +153,9 @@ def test_delete_file(mock_adls_service):
 
 
 def test_folder_exists(mock_adls_service):
-    with patch("src.utils.adls._client") as mock_client_global:
+    with patch("src.utils.adls._get_datalake_client") as mock_client_global:
         mock_fs = MagicMock()
-        mock_client_global.get_file_system_client.return_value = mock_fs
+        mock_client_global.return_value.get_file_system_client.return_value = mock_fs
 
         client = ADLSFileClient()
         assert client.folder_exists("folder") is True

@@ -35,12 +35,14 @@ def test_add_column_metadata_licenses(mock_context):
     licenses = {"col1": "lic1"}
 
     with (
-        patch("src.utils.datahub.column_metadata.datahub_graph_client") as mock_client,
+        patch(
+            "src.utils.datahub.column_metadata.get_datahub_graph_client"
+        ) as mock_client,
         patch("src.utils.datahub.column_metadata.execute_batch_mutation") as mock_exec,
     ):
         mock_field = MagicMock()
         mock_field.fieldPath = "col1"
-        mock_client.get_schema_metadata.return_value.fields = [mock_field]
+        mock_client.return_value.get_schema_metadata.return_value.fields = [mock_field]
 
         add_column_metadata(dataset_urn, column_licenses=licenses, context=mock_context)
 
@@ -54,12 +56,14 @@ def test_add_column_metadata_descriptions(mock_context):
     descriptions = {"col1": "desc1"}
 
     with (
-        patch("src.utils.datahub.column_metadata.datahub_graph_client") as mock_client,
+        patch(
+            "src.utils.datahub.column_metadata.get_datahub_graph_client"
+        ) as mock_client,
         patch("src.utils.datahub.column_metadata.execute_batch_mutation") as mock_exec,
     ):
         mock_field = MagicMock()
         mock_field.fieldPath = "col1"
-        mock_client.get_schema_metadata.return_value.fields = [mock_field]
+        mock_client.return_value.get_schema_metadata.return_value.fields = [mock_field]
 
         add_column_metadata(
             dataset_urn, column_descriptions=descriptions, context=mock_context
