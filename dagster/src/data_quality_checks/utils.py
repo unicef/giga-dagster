@@ -517,18 +517,67 @@ def write_agg_failed_rows(
     spark = df.sparkSession
     context.log.info(f"Preparing to write failed rows to {full_table_name}")
 
-    dq_cols = [c for c in df.columns if c.startswith("dq_") or c == "failure_reason"]
-    source_cols = [c for c in df.columns if c not in dq_cols]
+    # Mandatory columns to keep as flat, queryable top-level fields.
+    # These are the union of key columns across all dataset types.
+    mandatory_columns = [
+        "school_id_govt",
+        "school_id_giga",
+        "school_name",
+        "latitude",
+        "longitude",
+        "education_level",
+    ]
 
-    df_prepared = df.select(
+    dq_cols = [c for c in df.columns if c.startswith("dq_")]
+    source_cols = [c for c in df.columns if c not in dq_cols and c != "failure_reason"]
+
+    # Split source columns into mandatory (flat) and non-mandatory (JSON)
+    additional_cols = [c for c in source_cols if c not in mandatory_columns]
+
+    # Build the select list
+    select_exprs = [
         f.lit(file_id).alias("giga_sync_file_id"),
         f.lit(file_name).alias("giga_sync_file_name"),
         f.lit(dataset_type).alias("dataset_type"),
         f.lit(country_code).alias("country_code"),
-        f.to_json(f.struct(*[f.col(c) for c in source_cols])).alias("row_data"),
-        f.to_json(f.struct(*[f.col(c) for c in dq_cols])).alias("error_details"),
-        f.current_timestamp().alias("created_at"),
-    )
+    ]
+
+    # Add mandatory columns as flat top-level fields
+    for col_name in mandatory_columns:
+        if col_name in df.columns:
+            select_exprs.append(f.col(col_name).cast("string").alias(col_name))
+        else:
+            select_exprs.append(f.lit(None).cast("string").alias(col_name))
+
+    # failure_reason as a top-level field
+    if "failure_reason" in df.columns:
+        select_exprs.append(
+            f.col("failure_reason").cast("string").alias("failure_reason")
+        )
+    else:
+        select_exprs.append(f.lit(None).cast("string").alias("failure_reason"))
+
+    # Non-mandatory source columns as JSON
+    if additional_cols:
+        select_exprs.append(
+            f.to_json(f.struct(*[f.col(c) for c in additional_cols])).alias(
+                "additional_data"
+            )
+        )
+    else:
+        select_exprs.append(f.lit(None).cast("string").alias("additional_data"))
+
+    # DQ check columns as JSON (for debugging / detailed analysis)
+    if dq_cols:
+        select_exprs.append(
+            f.to_json(f.struct(*[f.col(c) for c in dq_cols])).alias("error_details")
+        )
+    else:
+        select_exprs.append(f.lit(None).cast("string").alias("error_details"))
+
+    select_exprs.append(f.current_timestamp().alias("created_at"))
+
+    df_prepared = df.select(*select_exprs)
 
     try:
         if spark.catalog.tableExists(full_table_name):
@@ -550,7 +599,7 @@ def write_agg_failed_rows(
     (
         df_prepared.write.format("delta")
         .mode("append")
-        .option("mergeSchema", "false")
+        .option("mergeSchema", "true")
         .saveAsTable(full_table_name)
     )
 

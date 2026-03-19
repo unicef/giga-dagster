@@ -4,6 +4,8 @@ from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
+
+from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -11,6 +13,7 @@ from src.data_quality_checks.utils import (
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
+    write_agg_failed_rows,
 )
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
@@ -36,8 +39,6 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.sentry import capture_op_exceptions
-
-from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
@@ -221,12 +222,25 @@ def qos_school_list_dq_passed_rows(
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 @capture_op_exceptions
 def qos_school_list_dq_failed_rows(
+    context: OpExecutionContext,
     qos_school_list_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_list_data_quality_results,
         "geolocation",
+    )
+
+    database_data = config.row_data_dict
+    file_id = database_data.get("id", config.country_code)
+    file_name = f"{config.country_code}_school_list"
+    write_agg_failed_rows(
+        df_failed,
+        "school_list",
+        config.country_code,
+        file_id,
+        file_name,
+        context,
     )
 
     df_pandas = df_failed.toPandas()
