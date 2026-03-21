@@ -16,6 +16,8 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+
+from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier, constants
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -23,6 +25,7 @@ from src.data_quality_checks.utils import (
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
+    write_agg_failed_rows,
 )
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import full_in_cluster_merge
@@ -52,8 +55,6 @@ from src.utils.schema import (
 )
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
-
-from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key="adls_pandas_io_manager")
@@ -313,12 +314,25 @@ def qos_school_connectivity_dq_passed_rows(
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 @capture_op_exceptions
 def qos_school_connectivity_dq_failed_rows(
+    context: OpExecutionContext,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(
         qos_school_connectivity_data_quality_results,
         "qos",
+    )
+
+    database_data = config.row_data_dict
+    file_id = database_data.get("id", config.country_code)
+    file_name = f"{config.country_code}_school_connectivity"
+    write_agg_failed_rows(
+        df_failed,
+        "school_connectivity",
+        config.country_code,
+        file_id,
+        file_name,
+        context,
     )
 
     df_pandas = df_failed.toPandas()

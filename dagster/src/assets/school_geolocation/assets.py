@@ -13,6 +13,8 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
+
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -22,6 +24,7 @@ from src.data_quality_checks.utils import (
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
+    write_agg_failed_rows,
 )
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
@@ -56,8 +59,6 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
-
-from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -633,6 +634,17 @@ def geolocation_dq_failed_rows(
     df_failed = dq_split_failed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
+    )
+
+    file_id = config.filename_components.id
+    file_name = Path(config.filepath).name
+    write_agg_failed_rows(
+        df_failed,
+        config.dataset_type,
+        config.country_code,
+        file_id,
+        file_name,
+        context,
     )
 
     schema_reference = get_schema_columns_datahub(

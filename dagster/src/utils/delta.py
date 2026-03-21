@@ -233,7 +233,7 @@ def check_table_exists(
         f"{settings.SPARK_WAREHOUSE_DIR}/{tiered_schema_name}.db/{table_name.lower()}"
     )
 
-    return ic(spark.catalog.tableExists(table_name, tiered_schema_name)) and ic(
+    return ic(spark.catalog.tableExists(f"{tiered_schema_name}.{table_name}")) and ic(
         DeltaTable.isDeltaTable(spark, table_path)
     )
 
