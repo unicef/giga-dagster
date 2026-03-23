@@ -292,11 +292,7 @@ def build_nullability_queries(
 
 
 def _enable_column_mapping(spark: SparkSession, table_name: str) -> None:
-    """Enable column mapping mode on an existing Delta table if not already enabled.
-
-    This is a one-time, irreversible protocol upgrade (reader v2 / writer v5).
-    It must be executed before any ``RENAME COLUMN`` or ``DROP COLUMN`` operations.
-    """
+    """Enable column mapping mode on an existing Delta table if not already enabled."""
     spark.sql(
         f"ALTER TABLE {table_name} SET TBLPROPERTIES ("
         f"  'delta.columnMapping.mode' = 'name',"
