@@ -26,12 +26,10 @@ from src.internal.merge import (
     partial_in_cluster_merge,
 )
 from src.resources import ResourceKey
-from src.settings import DeploymentEnvironment, settings
 from src.spark.transform_functions import (
     add_missing_columns,
-    get_country_rt_schools,
-    merge_connectivity_to_master,
 )
+from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -53,6 +51,7 @@ from src.utils.spark import compute_row_hash, transform_types
 from dagster import OpExecutionContext, Output, asset
 
 # Pending-changes status constants (mirror staging.py)
+_STATUS_PENDING = "PENDING"
 _STATUS_APPROVED = "APPROVED"
 _STATUS_REJECTED = "REJECTED"
 _STATUS_PROCESSED = "PROCESSED"
@@ -61,6 +60,37 @@ _STATUS_PROCESSED = "PROCESSED"
 _CHANGE_INSERT = "INSERT"
 _CHANGE_UPDATE = "UPDATE"
 _CHANGE_DELETE = "DELETE"
+_CHANGE_UNCHANGED = "UNCHANGED"
+
+# Approval file shorthands
+_APPROVE_ALL = "__all__"
+
+
+def _parse_approval_file(approval_data: dict) -> tuple[str, list, list]:
+    return (
+        approval_data.get("upload_id", ""),
+        approval_data.get("approved_change_ids", []),
+        approval_data.get("rejected_change_ids", []),
+    )
+
+
+def _resolve_change_ids(
+    upload_rows: sql.DataFrame,
+    change_ids: list,
+    spark_context,
+) -> sql.DataFrame:
+    """Filter upload_rows by change_ids.
+
+    ["__all__"] → all rows
+    []          → no rows
+    [id, ...]   → filter to matching change_ids
+    """
+    if change_ids == [_APPROVE_ALL]:
+        return upload_rows
+    if not change_ids:
+        return upload_rows.limit(0)
+    bc = spark_context.broadcast(change_ids)
+    return upload_rows.filter(f.col("change_id").isin(bc.value))
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])
@@ -90,6 +120,7 @@ def manual_review_failed_rows(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
+    adls_file_client: ADLSFileClient,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
@@ -112,13 +143,49 @@ def manual_review_failed_rows(
         rejected_tier_schema_name, country_code
     )
 
-    # Read REJECTED rows from pending_changes (staging) Delta table
-    s.catalog.refreshTable(staging_table_name)
-    staging_df = DeltaTable.forName(s, staging_table_name).toDF()
-    rejected_rows = staging_df.filter(f.col("status") == _STATUS_REJECTED).select(
-        *column_names
+    # Download and parse the approval file written by the portal
+    approval_data = adls_file_client.download_json(config.filepath)
+    upload_id, _, rejected_change_ids = _parse_approval_file(approval_data)
+    context.log.info(
+        f"[manual_review_failed_rows] approval file: upload_id={upload_id!r}, "
+        f"rejected_change_ids={rejected_change_ids!r}"
     )
 
+    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    s.catalog.refreshTable(staging_table_name)
+    staging_df = DeltaTable.forName(s, staging_table_name).toDF()
+    upload_rows = staging_df.filter(
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != _CHANGE_UNCHANGED)
+        & (f.col("status") == _STATUS_PENDING)
+    )
+
+    rejected_rows = _resolve_change_ids(
+        upload_rows, rejected_change_ids, s.sparkContext
+    ).select(*column_names)
+
+    # Mark rejected rows as REJECTED in pending_changes
+    if rejected_change_ids == [_APPROVE_ALL]:
+        reject_condition = (
+            (f.col("upload_id") == upload_id)
+            & (f.col("change_type") != _CHANGE_UNCHANGED)
+            & (f.col("status") == _STATUS_PENDING)
+        )
+    elif not rejected_change_ids:
+        reject_condition = f.lit(False)
+    else:
+        reject_condition = (
+            (f.col("upload_id") == upload_id)
+            & f.col("change_id").isin(rejected_change_ids)
+            & (f.col("status") == _STATUS_PENDING)
+        )
+    DeltaTable.forName(s, staging_table_name).update(
+        condition=reject_condition,
+        set={"status": f.lit(_STATUS_REJECTED)},
+    )
+    context.log.info("Marked rejected staging rows as REJECTED.")
+
+    create_schema(s, rejected_tier_schema_name)
     if check_table_exists(s, schema_name, country_code, DataTier.MANUAL_REJECTED):
         s.catalog.refreshTable(rejected_table_name)
         current_rejected = DeltaTable.forName(s, rejected_table_name).toDF()
@@ -147,12 +214,70 @@ def manual_review_failed_rows(
     )
 
 
+def _log_staging_diagnostics(
+    context: OpExecutionContext,
+    staging_df: sql.DataFrame,
+    upload_id: str,
+) -> None:
+    total_staging = staging_df.count()
+    context.log.info(f"[silver] total rows in staging table: {total_staging}")
+
+    if total_staging > 0:
+        sample_upload_ids = [
+            r.upload_id
+            for r in staging_df.select("upload_id").distinct().limit(5).collect()
+        ]
+        sample_statuses = [
+            r.status for r in staging_df.select("status").distinct().limit(5).collect()
+        ]
+        sample_change_types = [
+            r.change_type
+            for r in staging_df.select("change_type").distinct().limit(5).collect()
+        ]
+        context.log.info(f"[silver] distinct upload_ids (up to 5): {sample_upload_ids}")
+        context.log.info(f"[silver] distinct statuses: {sample_statuses}")
+        context.log.info(f"[silver] distinct change_types: {sample_change_types}")
+
+    matched_upload = staging_df.filter(f.col("upload_id") == upload_id).count()
+    matched_non_unchanged = staging_df.filter(
+        (f.col("upload_id") == upload_id) & (f.col("change_type") != _CHANGE_UNCHANGED)
+    ).count()
+    matched_all = staging_df.filter(
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != _CHANGE_UNCHANGED)
+        & (f.col("status") == _STATUS_PENDING)
+    ).count()
+    context.log.info(
+        f"[silver] filter breakdown: "
+        f"upload_id match={matched_upload}, "
+        f"+non-unchanged={matched_non_unchanged}, "
+        f"+status=PENDING={matched_all}"
+    )
+
+
+def _build_processed_condition(approved_change_ids: list, upload_id: str):
+    if approved_change_ids == [_APPROVE_ALL]:
+        return (
+            (f.col("upload_id") == upload_id)
+            & (f.col("change_type") != _CHANGE_UNCHANGED)
+            & (f.col("status") == _STATUS_PENDING)
+        )
+    if not approved_change_ids:
+        return f.lit(False)
+    return (
+        (f.col("upload_id") == upload_id)
+        & f.col("change_id").isin(approved_change_ids)
+        & (f.col("status") == _STATUS_PENDING)
+    )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def silver(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
+    adls_file_client: ADLSFileClient,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
 
@@ -173,14 +298,39 @@ def silver(
     )
     silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
 
-    # Read APPROVED rows from the pending_changes (staging) Delta table
+    # Download and parse the approval file written by the portal
+    approval_data = adls_file_client.download_json(config.filepath)
+    upload_id, approved_change_ids, _ = _parse_approval_file(approval_data)
+    context.log.info(
+        f"[silver] approval file: upload_id={upload_id!r}, "
+        f"approved_change_ids={approved_change_ids!r}"
+    )
+
+    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
-    approved = staging_df.filter(f.col("status") == _STATUS_APPROVED)
+
+    _log_staging_diagnostics(context, staging_df, upload_id)
+
+    upload_rows = staging_df.filter(
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != _CHANGE_UNCHANGED)
+        & (f.col("status") == _STATUS_PENDING)
+    )
+
+    approved = _resolve_change_ids(upload_rows, approved_change_ids, s.sparkContext)
+
+    # Break the lazy lineage back to the staging Delta table immediately.
+    # Delta Lake invalidates Spark's DataFrame cache when the table is written to
+    # (e.g. our PENDING→PROCESSED update), so .cache() is insufficient.
+    # localCheckpoint() materialises the rows into executor memory and severs the
+    # dependency on staging, ensuring the IO manager's isEmpty() call cannot
+    # accidentally re-read the now-PROCESSED rows and find 0 results.
+    approved = approved.localCheckpoint()
 
     if approved.isEmpty():
         context.log.info(
-            "No APPROVED rows in staging table. Returning current silver unchanged."
+            "No approved rows for this upload. Returning current silver unchanged."
         )
         if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
             s.catalog.refreshTable(silver_table_name)
@@ -264,14 +414,31 @@ def silver(
     new_silver = compute_row_hash(new_silver)
 
     # Mark approved rows as PROCESSED in the staging table
+    processed_condition = _build_processed_condition(approved_change_ids, upload_id)
     DeltaTable.forName(s, staging_table_name).update(
-        condition=f.col("status") == _STATUS_APPROVED,
+        condition=processed_condition,
         set={"status": f.lit(_STATUS_PROCESSED)},
     )
     context.log.info("Marked approved staging rows as PROCESSED.")
 
-    # Reset ApprovalRequest state now that merge is complete
+    # Check if any PENDING non-UNCHANGED rows remain across all uploads
+    remaining_pending = (
+        DeltaTable.forName(s, staging_table_name)
+        .toDF()
+        .filter(
+            (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != _CHANGE_UNCHANGED)
+        )
+        .count()
+    )
+
+    # Reset ApprovalRequest: always clear is_merge_processing; disable only when
+    # no other upload is waiting for approval
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    update_values = {ApprovalRequest.is_merge_processing: False}
+    if remaining_pending == 0:
+        update_values[ApprovalRequest.enabled] = False
+
     with get_db_context() as db:
         try:
             with db.begin():
@@ -281,14 +448,7 @@ def silver(
                         (ApprovalRequest.country == country_code)
                         & (ApprovalRequest.dataset == formatted_dataset)
                     )
-                    .values(
-                        {
-                            ApprovalRequest.merge_requested: False,
-                            ApprovalRequest.merge_requested_at: None,
-                            ApprovalRequest.is_merge_processing: False,
-                            ApprovalRequest.enabled: False,
-                        }
-                    )
+                    .values(update_values)
                 )
         except Exception as e:
             context.log.error(
@@ -336,9 +496,9 @@ def reset_staging_table(
         )
         return
 
-    from azure.core.exceptions import ResourceNotFoundError
-
     from src.utils.adls import ADLSFileClient
+
+    from azure.core.exceptions import ResourceNotFoundError
 
     s: SparkSession = spark.spark_session
     country_code = config.country_code
@@ -507,25 +667,6 @@ def master(
         )
     else:
         new_master = silver
-
-    # Merge RT connectivity data into master (geolocation pipeline only).
-    # RT data updates independently of geolocation uploads, so it belongs here
-    # rather than in geolocation_bronze.  Pass both govt columns as uploaded_columns
-    # to trigger the full connectivity derivation in merge_connectivity_to_master.
-    if config.dataset_type == "geolocation":
-        if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-            connectivity = get_country_rt_schools(s, country_code)
-            new_master = merge_connectivity_to_master(
-                new_master,
-                connectivity,
-                uploaded_columns=["connectivity_govt", "download_speed_govt"],
-                mode="update",
-            )
-        else:
-            context.log.info(
-                "Skipping RT connectivity merge on local — "
-                "pipeline_tables.school_connectivity_realtime_schools unavailable."
-            )
 
     column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
     new_master = new_master.withColumns(column_actions)

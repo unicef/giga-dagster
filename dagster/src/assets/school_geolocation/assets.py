@@ -26,15 +26,10 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
-from src.settings import DeploymentEnvironment, settings
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
-    column_mapping_rename,
-    create_bronze_layer_columns,
-    get_country_rt_schools,
-    merge_connectivity_to_master as merge_connectivity_to_df,
-    standardize_connectivity_type, create_bronze_layer_columns_updated,
+    create_bronze_layer_columns_updated,
 )
 from src.utils.adls import (
     ADLSFileClient,
@@ -174,7 +169,6 @@ def geolocation_bronze(
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
-    schema_name = config.metastore_schema
     mode = config.metadata["mode"]
 
     with get_db_context() as db:
@@ -214,60 +208,13 @@ def geolocation_bronze(
     pdf = pdf[column_to_schema_mapping.keys()]
     pdf.rename(column_mapping_filtered, axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    # df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
-    # context.log.info("COLUMN MAPPING")
-    # context.log.info(column_mapping)
-    # context.log.info("COLUMN MAPPING DATAFRAME")
-    # context.log.info(df)
     uploaded_columns = df.columns
-
-    # columns = get_schema_columns(s, schema_name)
-    # context.log.info("schema columns")
-    # context.log.info(columns)
-
-    # schema = StructType(columns)
-
-    # Create empty base schema DataFrame
-    # geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
-    #
-    # casted_geolocation_base = geolocation_base.withColumn(
-    #     "school_id_govt", f.col("school_id_govt").cast(StringType())
-    # )
-    #
-    # context.log.info("Casted Geolocation")
-    # context.log.info(casted_geolocation_base)
-    #
-    # casted_bronze = df.withColumn(
-    #     "school_id_govt", f.col("school_id_govt").cast(StringType())
-    # )
-    #
-    # context.log.info("Casted Bronze")
-    # context.log.info(casted_bronze)
-    #
-    # df = create_bronze_layer_columns(
-    #     casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
-    # )
-    # context.log.info("DF from create_bronze_layer_columns")
-    # context.log.info(df)
-
-    # config.metadata.update({"column_mapping": column_mapping})
-    # context.log.info("After config metadata update")
-
-    # if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-    #     # RT Columns
-    #     connectivity = get_country_rt_schools(s, country_code)
-    #     df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
-    # else:
-    #     # On local, we can't retrieve the connectivity data
-    #     df = df.withColumn("connectivity", f.lit("Unknown"))
-    #     df = df.withColumn("connectivity_RT", f.lit("Unknown"))
-
-    # standardize the connectivity type
-    # df = standardize_connectivity_type(df, mode, uploaded_columns)
 
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
-    df = create_bronze_layer_columns_updated(df, mode, uploaded_columns, country_code)
+    df = create_bronze_layer_columns_updated(
+        df, mode, uploaded_columns, country_code, s
+    )
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -354,16 +301,15 @@ def geolocation_data_quality_results(
     # they are used for row-level filtering throughout the pipeline.
     # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
     dq_flag_cols = [
-        c for c in dq_results.columns
+        c
+        for c in dq_results.columns
         if c.startswith("dq_") and c != "dq_has_critical_error"
     ]
     map_args = []
     for col_name in dq_flag_cols:
-        map_args.extend([f.lit(col_name[len("dq_"):]), f.col(col_name).cast("int")])
-    dq_results = (
-        dq_results
-        .withColumn("dq_results", f.create_map(*map_args))
-        .drop(*dq_flag_cols)
+        map_args.extend([f.lit(col_name[len("dq_") :]), f.col(col_name).cast("int")])
+    dq_results = dq_results.withColumn("dq_results", f.create_map(*map_args)).drop(
+        *dq_flag_cols
     )
 
     dq_results_schema_name = f"{schema_name}_dq_results"

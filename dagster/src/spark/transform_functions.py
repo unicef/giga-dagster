@@ -24,7 +24,7 @@ from pyspark.sql.types import (
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.internal.connectivity_queries import get_qos_tables
-from src.settings import settings
+from src.settings import DeploymentEnvironment, settings
 from src.spark.udf_dependencies import get_point
 from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
@@ -488,6 +488,7 @@ def create_bronze_layer_columns_updated(
     mode: str,
     uploaded_columns: list[str],
     country_code_iso3: str,
+    spark: SparkSession = None,
 ):
     # standardize education level
     if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
@@ -521,14 +522,19 @@ def create_bronze_layer_columns_updated(
     if mode == UploadMode.CREATE.value or "connectivity_type_govt" in uploaded_columns:
         df = standardize_connectivity_type(df, mode, uploaded_columns)
 
-    # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded
-    if mode == UploadMode.CREATE.value or "connectivity_govt" in uploaded_columns:
+    # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded.
+    if "connectivity_govt" in df.columns:
         df = df.withColumn(
             "connectivity_govt_ingestion_timestamp",
             f.when(
                 f.col("connectivity_govt").isNotNull(), f.current_timestamp()
             ).otherwise(f.lit(None).cast(TimestampType())),
         )
+
+    # RT connectivity columns: merge from the realtime schools table
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        connectivity = get_country_rt_schools(spark, country_code_iso3)
+        df = merge_connectivity_to_master(df, connectivity, uploaded_columns, mode)
 
     return df
 

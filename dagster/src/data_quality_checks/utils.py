@@ -256,10 +256,7 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
 
     # Flatten only the needed map keys into individual columns for the stack/agg step
     df_report = df.select(
-        *[
-            _check(key).cast("int").alias(f"dq_{key}")
-            for key in static_check_keys
-        ],
+        *[_check(key).cast("int").alias(f"dq_{key}") for key in static_check_keys],
         f.col("dq_has_critical_error").cast("int"),
         f.col("dq_missing_location").cast("int"),
         f.col("dq_is_null_connectivity_type_when_connectivity_govt").cast("int"),
@@ -530,10 +527,13 @@ def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
     if "dq_results" not in df.columns:
         return df
     from pyspark.sql.types import StructType as _StructType
+
     if isinstance(df.schema["dq_results"].dataType, _StructType):
         df = df.withColumn(
             "dq_results",
-            f.from_json(f.to_json(f.col("dq_results")), MapType(StringType(), IntegerType())),
+            f.from_json(
+                f.to_json(f.col("dq_results")), MapType(StringType(), IntegerType())
+            ),
         )
     return df
 
@@ -596,7 +596,12 @@ def dq_geolocation_extract_relevant_columns(
 
     columns_to_keep = [
         col
-        for col in [*uploaded_columns, "dq_has_critical_error", "failure_reason", "dq_results"]
+        for col in [
+            *uploaded_columns,
+            "dq_has_critical_error",
+            "failure_reason",
+            "dq_results",
+        ]
         if col in df.columns
     ]
     df = df.select(*columns_to_keep)
@@ -607,13 +612,17 @@ def dq_geolocation_extract_relevant_columns(
         relevant_keys_set = set(relevant_map_keys)
         df = df.withColumn(
             "dq_results",
-            f.map_filter(f.col("dq_results"), lambda k, _v: k.isin(list(relevant_keys_set))),
+            f.map_filter(
+                f.col("dq_results"), lambda k, _v: k.isin(list(relevant_keys_set))
+            ),
         )
 
     # human_readable_mappings: map key (without "dq_" prefix) -> human-readable label
     human_readable_mappings = {
         col.replace("dq_", "", 1): name
-        for col, name in dq_table_all.set_index("DQ Table Column Name")["Human Readable Name"]
+        for col, name in dq_table_all.set_index("DQ Table Column Name")[
+            "Human Readable Name"
+        ]
         .to_dict()
         .items()
     }

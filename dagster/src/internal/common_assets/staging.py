@@ -4,8 +4,10 @@ from delta import DeltaTable
 from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as f
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from pyspark.sql.types import ArrayType, StringType, StructField
 from sqlalchemy import select, update
 
@@ -127,14 +129,22 @@ class StagingStep:
             df = compute_row_hash(df)
             df = self._select_schema_cols(df)
             df = (
-                df
-                .withColumn("change_type", f.lit(_CHANGE_INSERT))
+                df.withColumn("change_type", f.lit(_CHANGE_INSERT))
                 .withColumn("upload_id", f.lit(upload_id))
                 .withColumn(
                     "uploaded_columns",
                     f.array(*[f.lit(c) for c in uploaded_columns]),
                 )
                 .withColumn("status", f.lit(_STATUS_PENDING))
+                .withColumn(
+                    "change_id",
+                    f.concat_ws(
+                        "|",
+                        f.col(self.primary_key),
+                        f.lit(upload_id),
+                        f.col("change_type"),
+                    ),
+                )
             )
             self.context.log.info(f"No silver table; all {df.count()} rows are INSERT")
             return df
@@ -183,25 +193,33 @@ class StagingStep:
         joined = joined.withColumn(
             "change_type",
             f.when(f.col("_sig_pk").isNull(), f.lit(_CHANGE_INSERT))
-             .when(
-                 f.col("signature") == f.col("_silver_sig"),
-                 f.lit(_CHANGE_UNCHANGED),
-             )
-             .otherwise(f.lit(_CHANGE_UPDATE)),
+            .when(
+                f.col("signature") == f.col("_silver_sig"),
+                f.lit(_CHANGE_UNCHANGED),
+            )
+            .otherwise(f.lit(_CHANGE_UPDATE)),
         )
         joined = joined.drop("_sig_pk", "_silver_sig")
 
-        # Trim to schema columns only before persisting
-        joined = self._select_schema_cols(joined)
+        # Trim to schema columns + change_type before persisting.
+        # Inline the select instead of calling _select_schema_cols so that
+        # change_type (not a schema column) is preserved alongside them.
+        available = [c for c in schema_col_names if c in joined.columns]
+        joined = joined.select(*available, "change_type")
 
         joined = (
-            joined
-            .withColumn("upload_id", f.lit(upload_id))
+            joined.withColumn("upload_id", f.lit(upload_id))
             .withColumn(
                 "uploaded_columns",
                 f.array(*[f.lit(c) for c in uploaded_columns]),
             )
             .withColumn("status", f.lit(_STATUS_PENDING))
+            .withColumn(
+                "change_id",
+                f.concat_ws(
+                    "|", f.col(self.primary_key), f.lit(upload_id), f.col("change_type")
+                ),
+            )
         )
         return joined
 
@@ -224,11 +242,16 @@ class StagingStep:
 
         upload_id = self.config.filename_components.id
         rows = (
-            rows
-            .withColumn("change_type", f.lit(_CHANGE_DELETE))
+            rows.withColumn("change_type", f.lit(_CHANGE_DELETE))
             .withColumn("upload_id", f.lit(upload_id))
             .withColumn("uploaded_columns", f.array(f.lit(self.primary_key)))
             .withColumn("status", f.lit(_STATUS_PENDING))
+            .withColumn(
+                "change_id",
+                f.concat_ws(
+                    "|", f.col(self.primary_key), f.lit(upload_id), f.col("change_type")
+                ),
+            )
         )
         return rows
 
@@ -241,6 +264,7 @@ class StagingStep:
             StructField("change_type", StringType(), nullable=False),
             StructField("uploaded_columns", ArrayType(StringType()), nullable=False),
             StructField("status", StringType(), nullable=False),
+            StructField("change_id", StringType(), nullable=False),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
         expected_col_names = {f.name for f in pending_schema}
@@ -282,8 +306,7 @@ class StagingStep:
             )
 
         (
-            pending.write
-            .format("delta")
+            pending.write.format("delta")
             .mode("append")
             .option("mergeSchema", "true")
             .saveAsTable(self.staging_table_name)
@@ -394,13 +417,19 @@ class StagingStep:
             # Admin columns are derived from lat/lon in geolocation_bronze.
             # Treat them as uploaded so staging uses the freshly-computed values.
             if {"latitude", "longitude"}.issubset(columns):
-                columns.update({
-                    "admin1", "admin1_id_giga",
-                    "admin2", "admin2_id_giga",
-                    "admin3", "admin3_id_giga",
-                    "admin4", "admin4_id_giga",
-                    "disputed_region",
-                })
+                columns.update(
+                    {
+                        "admin1",
+                        "admin1_id_giga",
+                        "admin2",
+                        "admin2_id_giga",
+                        "admin3",
+                        "admin3_id_giga",
+                        "admin4",
+                        "admin4_id_giga",
+                        "disputed_region",
+                    }
+                )
 
             # connectivity_type/root are derived from connectivity_type_govt.
             if "connectivity_type_govt" in columns:

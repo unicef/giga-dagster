@@ -134,7 +134,10 @@ def format_validation_checks(df, context: OpExecutionContext = None):
             # to avoid double-flagging a column as both null and not-alphanumeric.
             column_actions[f"dq_is_not_alphanumeric-{column}"] = (
                 f.when(f.col(column).isNull(), f.lit(0))
-                .when(f.regexp_extract(f.col(column), ".*[A-Za-z0-9].*", 0) != "", f.lit(0))
+                .when(
+                    f.regexp_extract(f.col(column), ".*[A-Za-z0-9].*", 0) != "",
+                    f.lit(0),
+                )
                 .otherwise(f.lit(1))
             )
         if column in df.columns and dtype in [
@@ -146,7 +149,10 @@ def format_validation_checks(df, context: OpExecutionContext = None):
             # Null values are already captured by completeness checks; skip them here.
             column_actions[f"dq_is_not_numeric-{column}"] = (
                 f.when(f.col(column).isNull(), f.lit(0))
-                .when(f.regexp_extract(f.col(column), r"^-?\d+(\.\d+)?$", 0) != "", f.lit(0))
+                .when(
+                    f.regexp_extract(f.col(column), r"^-?\d+(\.\d+)?$", 0) != "",
+                    f.lit(0),
+                )
                 .otherwise(f.lit(1))
             )
         # special format validation for school_id_giga
@@ -181,7 +187,11 @@ def is_string_more_than_255_characters_check(
 
     column_actions = {}
     for column in df.columns:
-        if column != "school_name" and not column.startswith("dq") and column not in non_string_cols:
+        if (
+            column != "school_name"
+            and not column.startswith("dq")
+            and column not in non_string_cols
+        ):
             column_actions[f"dq_is_string_more_than_255_characters-{column}"] = f.when(
                 f.length(column) > 255,
                 1,
