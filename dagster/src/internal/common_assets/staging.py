@@ -267,7 +267,6 @@ class StagingStep:
             StructField("change_id", StringType(), nullable=False),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
-        expected_col_names = {f.name for f in pending_schema}
 
         if self.pending_changes_table_exists:
             # If the existing table has columns not in the new schema (i.e. it was
@@ -279,11 +278,11 @@ class StagingStep:
             existing_col_names = set(
                 DeltaTable.forName(self.spark, self.staging_table_name).toDF().columns
             )
-            stale_cols = existing_col_names - expected_col_names
-            if stale_cols:
+            pending_field_names = {field.name for field in pending_extra_fields}
+            if not pending_field_names.issubset(existing_col_names):
                 self.context.log.warning(
-                    f"Staging table {self.staging_table_name} has stale columns "
-                    f"{stale_cols} not in the current schema. Replacing table."
+                    f"Staging table {self.staging_table_name} is missing new columns "
+                    f"{pending_field_names} not in the current schema. Replacing table."
                 )
                 create_delta_table(
                     self.spark,
