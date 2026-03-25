@@ -25,7 +25,6 @@ from src.data_quality_checks.utils import (
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
-    write_agg_failed_rows,
 )
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import full_in_cluster_merge
@@ -321,18 +320,6 @@ def qos_school_connectivity_dq_failed_rows(
     df_failed = dq_split_failed_rows(
         qos_school_connectivity_data_quality_results,
         "qos",
-    )
-
-    database_data = config.row_data_dict
-    file_id = database_data.get("id", config.country_code)
-    file_name = f"{config.country_code}_school_connectivity"
-    write_agg_failed_rows(
-        df_failed,
-        "school_connectivity",
-        config.country_code,
-        file_id,
-        file_name,
-        context,
     )
 
     df_pandas = df_failed.toPandas()
