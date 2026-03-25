@@ -835,14 +835,16 @@ def merge_connectivity_to_master(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
 
-    # make sure connectivity_govt is standardized
-    if "connectivity_govt" in master.columns:
+    # standardize connectivity_govt only when it was uploaded; for CREATE mode ensure it exists
+    if "connectivity_govt" in uploaded_columns:
         master = master.withColumn(
             "connectivity_govt",
             f.when(
                 f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
             ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
         )
+    elif mode == UploadMode.CREATE.value and "connectivity_govt" not in master.columns:
+        master = master.withColumn("connectivity_govt", f.lit(None).cast(StringType()))
 
     # determine the value of connectivity
     if mode == UploadMode.CREATE.value or {
