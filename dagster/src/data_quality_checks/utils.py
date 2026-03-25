@@ -1,11 +1,9 @@
 from datetime import UTC, datetime
 
 import pandas as pd
-from delta import DeltaTable
 from jinja2 import BaseLoader, Environment
 from pyspark import sql
 from pyspark.sql import (
-    DataFrame,
     SparkSession,
     functions as f,
     window as w,
@@ -45,7 +43,6 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_id_from_name,
 )
 from src.utils.schema import (
-    construct_full_table_name,
     get_schema_columns,
 )
 
@@ -496,112 +493,6 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
 def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     df = df.filter(df.dq_has_critical_error == 1)
     return df
-
-
-def write_agg_failed_rows(
-    df: DataFrame,
-    dataset_type: str,
-    country_code: str,
-    file_id: str,
-    file_name: str,
-    context: OpExecutionContext,
-) -> None:
-    if df.rdd.isEmpty():
-        context.log.info("No failed rows to write to aggregated error table.")
-        return
-
-    schema_name = "school_master"
-    table_name = "upload_errors"
-    full_table_name = construct_full_table_name(schema_name, table_name)
-
-    spark = df.sparkSession
-    context.log.info(f"Preparing to write failed rows to {full_table_name}")
-
-    # Mandatory columns to keep as flat, queryable top-level fields.
-    # These are the union of key columns across all dataset types.
-    mandatory_columns = [
-        "school_id_govt",
-        "school_id_giga",
-        "school_name",
-        "latitude",
-        "longitude",
-        "education_level",
-    ]
-
-    dq_cols = [c for c in df.columns if c.startswith("dq_")]
-    source_cols = [c for c in df.columns if c not in dq_cols and c != "failure_reason"]
-
-    # Split source columns into mandatory (flat) and non-mandatory (JSON)
-    additional_cols = [c for c in source_cols if c not in mandatory_columns]
-
-    # Build the select list
-    select_exprs = [
-        f.lit(file_id).alias("giga_sync_file_id"),
-        f.lit(file_name).alias("giga_sync_file_name"),
-        f.lit(dataset_type).alias("dataset_type"),
-        f.lit(country_code).alias("country_code"),
-    ]
-
-    # Add mandatory columns as flat top-level fields
-    for col_name in mandatory_columns:
-        if col_name in df.columns:
-            select_exprs.append(f.col(col_name).cast("string").alias(col_name))
-        else:
-            select_exprs.append(f.lit(None).cast("string").alias(col_name))
-
-    # failure_reason as a top-level field
-    if "failure_reason" in df.columns:
-        select_exprs.append(
-            f.col("failure_reason").cast("string").alias("failure_reason")
-        )
-    else:
-        select_exprs.append(f.lit(None).cast("string").alias("failure_reason"))
-
-    # Non-mandatory source columns as JSON
-    if additional_cols:
-        select_exprs.append(
-            f.to_json(f.struct(*[f.col(c) for c in additional_cols])).alias(
-                "additional_data"
-            )
-        )
-    else:
-        select_exprs.append(f.lit(None).cast("string").alias("additional_data"))
-
-    # DQ check columns as JSON (for debugging / detailed analysis)
-    if dq_cols:
-        select_exprs.append(
-            f.to_json(f.struct(*[f.col(c) for c in dq_cols])).alias("error_details")
-        )
-    else:
-        select_exprs.append(f.lit(None).cast("string").alias("error_details"))
-
-    select_exprs.append(f.current_timestamp().alias("created_at"))
-
-    df_prepared = df.select(*select_exprs)
-
-    try:
-        if spark.catalog.tableExists(full_table_name):
-            context.log.info(f"Deleting existing errors for file_id: {file_id}")
-
-            delta_table = DeltaTable.forName(spark, full_table_name)
-            delta_table.delete(f.col("giga_sync_file_id") == f.lit(file_id))
-
-        else:
-            context.log.info(
-                f"Table {full_table_name} does not exist. It will be created on write."
-            )
-
-    except Exception as exc:
-        context.log.warning(f"Failed to delete existing rows: {exc}")
-
-    context.log.info("Appending failed rows to aggregated error table")
-
-    (
-        df_prepared.write.format("delta")
-        .mode("append")
-        .option("mergeSchema", "true")
-        .saveAsTable(full_table_name)
-    )
 
 
 def dq_geolocation_extract_relevant_columns(

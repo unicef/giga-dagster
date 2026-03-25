@@ -1,5 +1,5 @@
+from datetime import UTC, datetime
 from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
@@ -17,7 +17,6 @@ from src.data_quality_checks.utils import (
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
-    write_agg_failed_rows,
 )
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
@@ -40,10 +39,12 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
+    construct_full_table_name,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -95,8 +96,11 @@ def coverage_data_quality_results(
         pdf = pandas_loader(buffer, config.filepath, context=context)
 
     source = config.filename_components.source
+    schema_name = config.metastore_schema
+    id = config.filename_components.id
     country_code = config.country_code
     dataset_type = f"coverage_{source}"
+    current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
     df_raw = s.createDataFrame(pdf)
     df, column_mapping = column_mapping_rename(
@@ -113,6 +117,29 @@ def coverage_data_quality_results(
     )
 
     config.metadata.update({"column_mapping": column_mapping})
+
+    dq_results_schema_name = f"{schema_name}_{source}_dq_results"
+    table_name = f"{id}_{country_code}_{current_timestamp}"
+
+    schema_columns = dq_results.schema.fields
+    for col in schema_columns:
+        col.nullable = True
+
+    dq_results_table_name = construct_full_table_name(
+        dq_results_schema_name,
+        table_name,
+    )
+
+    create_schema(s, dq_results_schema_name)
+    create_delta_table(
+        s,
+        dq_results_schema_name,
+        table_name,
+        schema_columns,
+        context,
+        if_not_exists=True,
+    )
+    dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
     convert_dq_checks_to_human_readeable_descriptions_and_upload(
         dq_results=dq_results,
@@ -212,17 +239,6 @@ def coverage_dq_failed_rows(
     spark: PySparkResource,
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
-
-    file_id = config.filename_components.id
-    file_name = Path(config.filepath).name
-    write_agg_failed_rows(
-        df_failed,
-        config.dataset_type,
-        config.country_code,
-        file_id,
-        file_name,
-        context,
-    )
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,

@@ -313,7 +313,6 @@ def qos_school_connectivity_dq_passed_rows(
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
 @capture_op_exceptions
 def qos_school_connectivity_dq_failed_rows(
-    context: OpExecutionContext,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[pd.DataFrame]:
