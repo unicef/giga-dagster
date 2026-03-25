@@ -836,12 +836,13 @@ def merge_connectivity_to_master(
     )
 
     # make sure connectivity_govt is standardized
-    master = master.withColumn(
-        "connectivity_govt",
-        f.when(
-            f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
-        ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
-    )
+    if "connectivity_govt" in master.columns:
+        master = master.withColumn(
+            "connectivity_govt",
+            f.when(
+                f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
+            ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
+        )
 
     # determine the value of connectivity
     if mode == UploadMode.CREATE.value or {
@@ -893,6 +894,15 @@ def merge_connectivity_to_master(
             .when(f.col("download_speed_govt") > 0, "Yes")
             .when(f.col("download_speed_govt") == 0, "No")
             .otherwise(f.lit(None).cast(StringType())),
+        )
+
+    # add the time connectivity_govt was ingested
+    if "connectivity_govt" in master.columns:
+        master = master.withColumn(
+            "connectivity_govt_ingestion_timestamp",
+            f.when(
+                f.col("connectivity_govt").isNotNull(), f.current_timestamp()
+            ).otherwise(f.lit(None).cast(TimestampType())),
         )
 
     master_cols_to_drop = [
