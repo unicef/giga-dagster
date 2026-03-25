@@ -617,14 +617,17 @@ def add_admin_columns(  # noqa: C901
             ),
         }
     )
+    coalesce_args = [
+        f.col(f"{admin_level}_en"),
+        f.col(f"{admin_level}_native"),
+    ]
+    if admin_level in df.columns:
+        coalesce_args.append(f.col(admin_level))
+    coalesce_args.append(f.lit("Unknown"))
+
     return df.withColumn(
         admin_level,
-        f.coalesce(
-            f.col(f"{admin_level}_en"),
-            f.col(f"{admin_level}_native"),
-            f.col(admin_level),
-            f.lit("Unknown"),
-        ),
+        f.coalesce(*coalesce_args),
     ).drop(f"{admin_level}_en", f"{admin_level}_native")
 
 
