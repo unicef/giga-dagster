@@ -305,6 +305,16 @@ class StagingStep:
                 partition_by=["upload_id"],
             )
 
+        # Cast pending columns to the expected schema types before writing
+        schema_type_map = {field.name: field.dataType for field in pending_schema}
+        pending = pending.withColumns(
+            {
+                col: f.col(col).cast(dtype)
+                for col, dtype in schema_type_map.items()
+                if col in pending.columns
+            }
+        )
+
         (
             pending.write.format("delta")
             .mode("append")
