@@ -42,9 +42,7 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
     get_nocodb_table_id_from_name,
 )
-from src.utils.schema import (
-    get_schema_columns,
-)
+from src.utils.schema import get_schema_columns
 
 
 def aggregate_report_spark_df(

@@ -124,22 +124,28 @@ def find_similar_names_in_group_udf(names: pd.Series) -> pd.Series:
     """
     For each group's list of names, return list of similar names.
     Runs once per group instead of N² times using vectorized pandas operations.
-    Input names is a Series of Strings (from collected_list).
     """
 
-    def check_group(group_names):
-        if not group_names or len(group_names) < 2:
+    def check_group(name_list):
+        if name_list is None or len(name_list) == 0:
             return []
 
-        # group_names is a list of strings
-        # simple N^2 comparisons for the small group
-        n = len(group_names)
         similar = set()
-        for i in range(n):
-            for j in range(i + 1, n):
-                if has_similar_name_check_udf(group_names[i], group_names[j]):
-                    similar.add(group_names[i])
-                    similar.add(group_names[j])
+        # Compare each pair of names in the group
+        for i, name1 in enumerate(name_list):
+            if name1 is None:
+                continue
+            for name2 in name_list[i + 1 :]:
+                if name2 is None:
+                    continue
+                if (
+                    name1 != name2
+                    and SequenceMatcher(a=name1, b=name2).ratio()
+                    > config.SIMILARITY_RATIO_CUTOFF
+                ):
+                    similar.add(name1)
+                    similar.add(name2)
+
         return list(similar)
 
     return names.apply(check_group)
