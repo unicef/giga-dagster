@@ -6,6 +6,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from requests import get
 from requests.auth import HTTPBasicAuth
+
+from dagster import OpExecutionContext, Output, asset
 from src.internal.school_geolocation_api_queries import get_mng_api_last_update_date
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
@@ -15,8 +17,6 @@ from src.utils.geolocation_apis.data_updates import (
     upload_data_and_create_db_entry,
 )
 from src.utils.schema import construct_full_table_name, get_schema_columns
-
-from dagster import OpExecutionContext, Output, asset
 
 
 @asset

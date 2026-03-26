@@ -4,9 +4,9 @@ from delta import DeltaTable
 from models import VALID_PRIMITIVES, Schema
 from pyspark import sql
 from pyspark.sql.functions import col, when
-from src.utils.delta import execute_query_with_error_handler
 
 from dagster import OpExecutionContext
+from src.utils.delta import execute_query_with_error_handler
 
 
 def get_filepath(context: OpExecutionContext) -> str:

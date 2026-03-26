@@ -8,6 +8,12 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
+
+from dagster import (
+    OpExecutionContext,
+    Output,
+    asset,
+)
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_dataset_metadata import (
@@ -18,12 +24,6 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import get_schema_columns_datahub
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
-
-from dagster import (
-    OpExecutionContext,
-    Output,
-    asset,
-)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
