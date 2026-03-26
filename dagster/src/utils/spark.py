@@ -57,6 +57,9 @@ spark_common_config = {
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
     "spark.sql.legacy.parquet.nanosAsLong": "true",
+    "spark.databricks.delta.properties.defaults.columnMapping.mode": "name",
+    "spark.databricks.delta.properties.defaults.minReaderVersion": "2",
+    "spark.databricks.delta.properties.defaults.minWriterVersion": "5",
 }
 
 # Configure Azure Storage authentication

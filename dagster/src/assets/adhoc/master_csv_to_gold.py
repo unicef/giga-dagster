@@ -14,6 +14,9 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import NullType, StructType
 from sqlalchemy import select, update
+
+from azure.core.exceptions import ResourceNotFoundError
+from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -55,9 +58,6 @@ from src.utils.schema import (
 )
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
-
-from azure.core.exceptions import ResourceNotFoundError
-from dagster import OpExecutionContext, Output, PythonObjectDagsterType, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -638,6 +638,7 @@ def adhoc__publish_master_to_gold(
             updated_schema=updated_schema,
             spark=spark.spark_session,
             context=context,
+            schema_name=config.metastore_schema,
         )
 
     schema_reference = get_schema_columns_datahub(
@@ -720,6 +721,7 @@ def adhoc__publish_reference_to_gold(
             updated_schema=updated_schema,
             spark=spark.spark_session,
             context=context,
+            schema_name=config.metastore_schema,
         )
 
     schema_reference = get_schema_columns_datahub(

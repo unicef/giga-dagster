@@ -407,13 +407,29 @@ class StagingStep:
         )
 
     def sync_schema_staging(self):
-        """Update the schema of existing delta tables based on the reference schema delta tables."""
+        """Update the schema of existing delta tables based on the reference schema delta tables.
+
+        Supports adding, renaming, and deleting columns.  Renames and deletes
+        are detected by comparing stable column UUIDs stored in the table
+        properties against the latest reference schema CSV.
+        """
+        from src.utils.delta import apply_renames_and_deletes, persist_column_id_map
+
         self.context.log.info("Checking for schema update...")
         updated_schema = StructType(self.schema_columns)
         updated_columns = sorted(updated_schema.fieldNames())
 
         existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
         existing_columns = sorted(existing_df.schema.fieldNames())
+
+        any_renames_deletes = apply_renames_and_deletes(
+            self.spark, self.staging_table_name, self.schema_name, self.context
+        )
+
+        # Refresh schemas after rename/delete
+        if any_renames_deletes:
+            existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
+            existing_columns = sorted(existing_df.schema.fieldNames())
 
         # Sync changes in nullability flags
         alter_sql = f"ALTER TABLE {self.staging_table_name}"
@@ -449,8 +465,11 @@ class StagingStep:
             for stmnt in alter_sql:
                 self.spark.sql(stmnt).show()
 
-        if has_schema_changed or has_nullability_changed:
+        if has_schema_changed or has_nullability_changed or any_renames_deletes:
             self.reload_schema()
+
+        # Persist column-ID mapping
+        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
 
     def reload_schema(self):
         self.schema_columns = get_schema_columns(self.spark, self.schema_name)
