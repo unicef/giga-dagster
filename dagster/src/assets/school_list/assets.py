@@ -4,6 +4,8 @@ from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
+
+from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -36,8 +38,6 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.sentry import capture_op_exceptions
-
-from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)

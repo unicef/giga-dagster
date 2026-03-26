@@ -13,6 +13,8 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StringType, StructType
 from sqlalchemy import select
+
+from dagster import MetadataValue, OpExecutionContext, Output, asset
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -56,8 +58,6 @@ from src.utils.schema import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
-
-from dagster import MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -654,6 +654,69 @@ def geolocation_dq_failed_rows(
             **get_output_metadata(config),
             "row_count": len(df_pandas),
             "preview": get_table_preview(df_pandas),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
+def upload_errors(
+    context: OpExecutionContext,
+    geolocation_dq_failed_rows: pd.DataFrame,
+    config: FileConfig,
+    spark: PySparkResource,
+) -> Output[sql.DataFrame]:
+    s: SparkSession = spark.spark_session
+
+    if geolocation_dq_failed_rows.empty:
+        context.log.info("No failed rows to write to aggregated error table.")
+        # Return empty DataFrame with an empty schema
+        return Output(s.createDataFrame([], schema=StructType([])))
+
+    file_id = config.filename_components.id
+    file_name = Path(config.filepath).name
+    country_code = config.country_code
+    dataset_type = config.dataset_type
+
+    df = s.createDataFrame(geolocation_dq_failed_rows)
+
+    df = df.withColumn("giga_sync_file_id", f.lit(file_id))
+    df = df.withColumn("giga_sync_file_name", f.lit(file_name))
+    df = df.withColumn("dataset_type", f.lit(dataset_type))
+    df = df.withColumn("country_code", f.lit(country_code))
+    df = df.withColumn("created_at", f.current_timestamp())
+
+    schema_name = "school_master"
+    table_name = "upload_errors"
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    try:
+        if s.catalog.tableExists(full_table_name):
+            context.log.info(f"Deleting existing errors for file_id: {file_id}")
+            delta_table = DeltaTable.forName(s, full_table_name)
+            delta_table.delete(f.col("giga_sync_file_id") == f.lit(file_id))
+        else:
+            context.log.info(
+                f"Table {full_table_name} does not exist. It will be created on write."
+            )
+    except Exception as exc:
+        context.log.warning(f"Failed to delete existing rows: {exc}")
+
+    context.log.info("Appending flat failed rows to aggregated error table")
+
+    (
+        df.write.format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable(full_table_name)
+    )
+
+    return Output(
+        df,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": geolocation_dq_failed_rows.shape[0],
+            "preview": get_table_preview(df),
         },
     )
 
