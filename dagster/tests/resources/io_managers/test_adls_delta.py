@@ -70,10 +70,13 @@ def test_handle_output_upsert(
         patch(
             "src.resources.io_managers.adls_delta.build_deduped_merge_query"
         ) as mock_build_merge,
+        patch("src.utils.delta.apply_renames_and_deletes") as mock_apply_renames,
+        patch("src.utils.delta.persist_column_id_map"),
     ):
         mock_get_cols.return_value = []
         mock_get_parts.return_value = []
         mock_get_pk.return_value = "id"
+        mock_apply_renames.return_value = False
 
         mock_delta_table.forName.return_value.toDF.return_value.schema.fieldNames.return_value = [
             "col1"
