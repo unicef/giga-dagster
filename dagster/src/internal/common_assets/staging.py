@@ -268,39 +268,14 @@ class StagingStep:
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
 
-        if self.pending_changes_table_exists:
-            # If the existing table has columns not in the new schema (i.e. it was
-            # created with the old silver-clone approach or a stale schema CSV),
-            # use createOrReplace to fully overwrite the Delta table — including the
-            # transaction log that carries the old NOT NULL constraints.  A simple
-            # DROP TABLE leaves the Delta files intact, so createIfNotExists would
-            # re-register the same path and inherit the stale constraints.
-            existing_col_names = set(
-                DeltaTable.forName(self.spark, self.staging_table_name).toDF().columns
-            )
-            pending_field_names = {field.name for field in pending_extra_fields}
-            if not pending_field_names.issubset(existing_col_names):
-                self.context.log.warning(
-                    f"Staging table {self.staging_table_name} is missing new columns "
-                    f"{pending_field_names} not in the current schema. Replacing table."
-                )
-                create_delta_table(
-                    self.spark,
-                    self.staging_tier_schema_name,
-                    self.country_code,
-                    pending_schema,
-                    self.context,
-                    replace=True,
-                    partition_by=["upload_id"],
-                )
-        elif not self.pending_changes_table_exists:
+        if not self.spark.catalog.tableExists(self.staging_table_name):
             create_delta_table(
                 self.spark,
                 self.staging_tier_schema_name,
                 self.country_code,
                 pending_schema,
                 self.context,
-                if_not_exists=True,
+                replace=True,
                 partition_by=["upload_id"],
             )
 
