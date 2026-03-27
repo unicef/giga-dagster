@@ -8,7 +8,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, StringType, StructField
+from pyspark.sql.types import ArrayType, StringType, StructField, TimestampType
 from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
@@ -145,6 +145,8 @@ class StagingStep:
                         f.col("change_type"),
                     ),
                 )
+                .withColumn("created_at", f.current_timestamp())
+                .withColumn("processed_at", f.lit(None).cast(TimestampType()))
             )
             self.context.log.info(f"No silver table; all {df.count()} rows are INSERT")
             return df
@@ -220,6 +222,8 @@ class StagingStep:
                     "|", f.col(self.primary_key), f.lit(upload_id), f.col("change_type")
                 ),
             )
+            .withColumn("created_at", f.current_timestamp())
+            .withColumn("processed_at", f.lit(None).cast(TimestampType()))
         )
         return joined
 
@@ -252,6 +256,8 @@ class StagingStep:
                     "|", f.col(self.primary_key), f.lit(upload_id), f.col("change_type")
                 ),
             )
+            .withColumn("created_at", f.current_timestamp())
+            .withColumn("processed_at", f.lit(None).cast(TimestampType()))
         )
         return rows
 
@@ -265,6 +271,9 @@ class StagingStep:
             StructField("uploaded_columns", ArrayType(StringType()), nullable=False),
             StructField("status", StringType(), nullable=False),
             StructField("change_id", StringType(), nullable=False),
+            StructField("created_at", TimestampType(), nullable=True),
+            StructField("processed_at", TimestampType(), nullable=True),
+            StructField("approval_request_log_id", StringType(), nullable=True),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
 

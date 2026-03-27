@@ -66,11 +66,12 @@ _CHANGE_UNCHANGED = "UNCHANGED"
 _APPROVE_ALL = "__all__"
 
 
-def _parse_approval_file(approval_data: dict) -> tuple[str, list, list]:
+def _parse_approval_file(approval_data: dict) -> tuple[str, list, list, str | None]:
     return (
         approval_data.get("upload_id", ""),
         approval_data.get("approved_change_ids", []),
         approval_data.get("rejected_change_ids", []),
+        approval_data.get("approval_request_log_id"),
     )
 
 
@@ -145,7 +146,7 @@ def manual_review_failed_rows(
 
     # Download and parse the approval file written by the portal
     approval_data = adls_file_client.download_json(config.filepath)
-    upload_id, _, rejected_change_ids = _parse_approval_file(approval_data)
+    upload_id, _, rejected_change_ids, _ = _parse_approval_file(approval_data)
     context.log.info(
         f"[manual_review_failed_rows] approval file: upload_id={upload_id!r}, "
         f"rejected_change_ids={rejected_change_ids!r}"
@@ -300,10 +301,13 @@ def silver(
 
     # Download and parse the approval file written by the portal
     approval_data = adls_file_client.download_json(config.filepath)
-    upload_id, approved_change_ids, _ = _parse_approval_file(approval_data)
+    upload_id, approved_change_ids, _, approval_request_log_id = _parse_approval_file(
+        approval_data
+    )
     context.log.info(
         f"[silver] approval file: upload_id={upload_id!r}, "
-        f"approved_change_ids={approved_change_ids!r}"
+        f"approved_change_ids={approved_change_ids!r}, "
+        f"approval_request_log_id={approval_request_log_id!r}"
     )
 
     # Read PENDING non-UNCHANGED rows for this upload from pending_changes
@@ -417,7 +421,11 @@ def silver(
     processed_condition = _build_processed_condition(approved_change_ids, upload_id)
     DeltaTable.forName(s, staging_table_name).update(
         condition=processed_condition,
-        set={"status": f.lit(_STATUS_PROCESSED)},
+        set={
+            "status": f.lit(_STATUS_PROCESSED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
     )
     context.log.info("Marked approved staging rows as PROCESSED.")
 
@@ -592,14 +600,13 @@ def reset_staging_table(
             raise
 
 
-def _handle_null_columns(schema_columns, primary_key, silver_columns):
+def _handle_null_columns(schema_columns, primary_key):
     """Handle null columns by providing default values based on data type.
 
     If the column value is NULL, add a placeholder value if the following
     conditions are met:
     - The column is not nullable
     - The column is not the primary key
-    - The column is not in the silver table
 
     Default values by type:
     - String: "Unknown"
@@ -609,11 +616,7 @@ def _handle_null_columns(schema_columns, primary_key, silver_columns):
     """
     column_actions = {}
     for col in schema_columns:
-        if (
-            not col.nullable
-            and col.name != primary_key
-            and col.name not in [c.name for c in silver_columns]
-        ):
+        if not col.nullable and col.name != primary_key:
             if col.dataType == StringType():
                 column_actions[col.name] = f.coalesce(f.col(col.name), f.lit("Unknown"))
             elif isinstance(
@@ -646,8 +649,6 @@ def master(
 
     s.catalog.refreshTable(silver_table_name)
     silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    silver_columns = get_schema_columns(s, f"school_{config.dataset_type}")
-
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
@@ -668,7 +669,7 @@ def master(
     else:
         new_master = silver
 
-    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
+    column_actions = _handle_null_columns(schema_columns, primary_key)
     new_master = new_master.withColumns(column_actions)
     new_master = compute_row_hash(new_master)
 
@@ -710,7 +711,6 @@ def reference(
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
     primary_key = get_primary_key(s, schema_name)
-    silver_columns = silver.schema.fields
 
     silver = add_missing_columns(silver, schema_columns)
     silver = transform_types(silver, schema_name, context)
@@ -727,7 +727,7 @@ def reference(
     else:
         new_reference = silver
 
-    column_actions = _handle_null_columns(schema_columns, primary_key, silver_columns)
+    column_actions = _handle_null_columns(schema_columns, primary_key)
     new_reference = new_reference.withColumns(column_actions)
     new_reference = compute_row_hash(new_reference)
 
