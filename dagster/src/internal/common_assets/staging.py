@@ -5,6 +5,7 @@ from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType
 from sqlalchemy import select, text, update
 
@@ -70,6 +71,9 @@ class StagingStep:
         self.adls_file_client = adls_file_client
         self.spark = spark
         self.change_type = change_type
+
+        # Store upload_id from filename components for tracking which upload this data came from
+        self.upload_id = config.filename_components.id
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
@@ -371,6 +375,14 @@ class StagingStep:
             .alias("silver")
             .toDF()
         )
+
+        # Add upload_id column to cloned silver data (NULL for existing rows from silver)
+        # New upload data will have actual upload_id added in standard_transforms
+        from pyspark.sql.functions import lit
+
+        silver = silver.withColumn("upload_id", lit(None).cast("string"))
+        self.context.log.info("Added upload_id column (NULL) to cloned silver data")
+
         create_schema(self.spark, self.staging_tier_schema_name)
         create_delta_table(
             self.spark,
@@ -395,13 +407,29 @@ class StagingStep:
         )
 
     def sync_schema_staging(self):
-        """Update the schema of existing delta tables based on the reference schema delta tables."""
+        """Update the schema of existing delta tables based on the reference schema delta tables.
+
+        Supports adding, renaming, and deleting columns.  Renames and deletes
+        are detected by comparing stable column UUIDs stored in the table
+        properties against the latest reference schema CSV.
+        """
+        from src.utils.delta import apply_renames_and_deletes, persist_column_id_map
+
         self.context.log.info("Checking for schema update...")
         updated_schema = StructType(self.schema_columns)
         updated_columns = sorted(updated_schema.fieldNames())
 
         existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
         existing_columns = sorted(existing_df.schema.fieldNames())
+
+        any_renames_deletes = apply_renames_and_deletes(
+            self.spark, self.staging_table_name, self.schema_name, self.context
+        )
+
+        # Refresh schemas after rename/delete
+        if any_renames_deletes:
+            existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
+            existing_columns = sorted(existing_df.schema.fieldNames())
 
         # Sync changes in nullability flags
         alter_sql = f"ALTER TABLE {self.staging_table_name}"
@@ -437,8 +465,11 @@ class StagingStep:
             for stmnt in alter_sql:
                 self.spark.sql(stmnt).show()
 
-        if has_schema_changed or has_nullability_changed:
+        if has_schema_changed or has_nullability_changed or any_renames_deletes:
             self.reload_schema()
+
+        # Persist column-ID mapping
+        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
 
     def reload_schema(self):
         self.schema_columns = get_schema_columns(self.spark, self.schema_name)
@@ -447,7 +478,14 @@ class StagingStep:
         self.context.log.info("Performing standard transforms...")
         df = add_missing_columns(df, self.schema_columns)
         df = transform_types(df, self.schema_name, self.context)
-        return compute_row_hash(df)
+        df = compute_row_hash(df)
+
+        # Add upload_id column to track which upload this data came from
+        # This enables filtering approval requests by specific upload
+        df = df.withColumn("upload_id", lit(self.upload_id))
+        self.context.log.info(f"Added upload_id column: {self.upload_id}")
+
+        return df
 
     def upsert_rows(self, df: sql.DataFrame):
         self.context.log.info("Performing upsert...")
