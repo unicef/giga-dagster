@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Config(BaseSettings):
@@ -365,7 +365,7 @@ class Config(BaseSettings):
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
     }
 
-    VALUES_DOMAIN_COVERAGE_ITU: dict[str, list[str]] = {
+    VALUES_DOMAIN_COVERAGE_ITU: dict[str, list[int]] = {
         "2G": [1, 0],
         "3G": [1, 0],
         "4G": [1, 0],

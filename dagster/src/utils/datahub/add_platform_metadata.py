@@ -5,7 +5,6 @@ from datahub.metadata.com.linkedin.pegasus2avro.dataplatform import DataPlatform
 from datahub.metadata.schema_classes import (
     PlatformTypeClass,
 )
-from pydantic import AnyUrl
 
 from src.settings import settings
 
@@ -13,7 +12,7 @@ from src.settings import settings
 def add_platform_metadata(
     platform: str,
     display_name: str,
-    logo_url: AnyUrl | str = None,
+    logo_url: str | None = None,
     filepath_delimiter: str = "/",
 ) -> None:
     emitter = DatahubRestEmitter(

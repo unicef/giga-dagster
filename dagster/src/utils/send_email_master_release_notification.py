@@ -27,7 +27,7 @@ async def send_email_master_release_notification(
 
     await send_email_base(
         endpoint="email/master-data-release-notification",
-        props=props.dict(),
+        props=props.model_dump(),
         recipients=recipients,
         subject="Master Data Update Notification",
         context=context,

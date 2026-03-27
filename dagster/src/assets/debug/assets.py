@@ -226,10 +226,10 @@ async def debug__send_test_email(
         res = await client.post(
             "/api/email/send-email",
             headers={"Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}"},
-            json=config.dict(),
+            json=config.model_dump(),
         )
         if res.is_error:
             context.log.error(res.json())
             res.raise_for_status()
 
-    return Output(None, metadata=config.dict())
+    return Output(None, metadata=config.model_dump())

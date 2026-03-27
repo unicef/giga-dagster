@@ -250,7 +250,7 @@ class ADLSFileClient(ConfigurableResource):
             case ".json":
                 bytes_data = data.to_json(index=False, indent=2).encode()
             case ".parquet":
-                bytes_data = data.to_parquet(index=False)
+                bytes_data = data.to_parquet(index=False, coerce_timestamps="us")
             case _:
                 raise OSError(f"Unsupported format for file {filepath}")
 
