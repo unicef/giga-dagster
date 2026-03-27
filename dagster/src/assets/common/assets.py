@@ -18,9 +18,6 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from sqlalchemy import select, update
-
-from azure.core.exceptions import ResourceNotFoundError
-from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
@@ -52,6 +49,9 @@ from src.utils.schema import (
 )
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
+
+from azure.core.exceptions import ResourceNotFoundError
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value, deps=["silver"])

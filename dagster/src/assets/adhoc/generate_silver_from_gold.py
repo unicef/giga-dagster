@@ -5,8 +5,6 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StructType
-
-from dagster import OpExecutionContext, Output, asset
 from src.constants import DataTier, constants
 from src.spark.transform_functions import add_missing_columns
 from src.utils.delta import check_table_exists, execute_query_with_error_handler
@@ -15,6 +13,8 @@ from src.utils.op_config import DatasetConfig
 from src.utils.schema import get_schema_columns
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
+
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset

@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
+from src.spark import spark
 
 from dagster import asset
-from src.spark import spark
 
 
 @asset(

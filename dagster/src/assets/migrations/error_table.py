@@ -2,10 +2,10 @@ from dagster_pyspark import PySparkResource
 from delta.tables import DeltaTable
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StringType, StructField, TimestampType
-
-from dagster import AssetExecutionContext, asset
 from src.utils.delta import create_schema
 from src.utils.sentry import capture_op_exceptions
+
+from dagster import AssetExecutionContext, asset
 
 
 @asset

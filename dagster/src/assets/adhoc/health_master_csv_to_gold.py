@@ -11,12 +11,6 @@ from pyspark.sql import (
 )
 from pyspark.sql.functions import concat_ws, sha2
 from pyspark.sql.types import NullType
-
-from dagster import (
-    OpExecutionContext,
-    Output,
-    asset,
-)
 from src.constants import constants
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
@@ -31,6 +25,12 @@ from src.utils.schema import (
     get_schema_columns,
 )
 from src.utils.sentry import capture_op_exceptions
+
+from dagster import (
+    OpExecutionContext,
+    Output,
+    asset,
+)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)

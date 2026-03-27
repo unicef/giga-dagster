@@ -2,10 +2,10 @@ from dagster_pyspark import PySparkResource
 from httpx import AsyncClient
 from pydantic import Field
 from pyspark.sql import SparkSession
-
-from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 from src.settings import settings
 from src.utils.sentry import capture_op_exceptions
+
+from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
 
 class DropSchemaConfig(Config):
@@ -90,7 +90,6 @@ def debug__test_connectivity_merge(
     _: OpExecutionContext, config: ExternalDbQueryConfig
 ):
     import numpy as np
-
     from src.internal.connectivity_queries import (
         get_giga_meter_schools,
         get_mlab_schools,

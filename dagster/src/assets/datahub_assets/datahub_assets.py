@@ -4,8 +4,6 @@ from datahub.emitter.rest_emitter import DatahubRestEmitter
 from datahub.ingestion.graph.filters import RemovedStatusFilter
 from loguru import logger
 from pydantic import Field
-
-from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 from src.settings import settings
 from src.utils.datahub.add_glossary import add_business_glossary
 from src.utils.datahub.add_platform_metadata import add_platform_metadata
@@ -21,6 +19,8 @@ from src.utils.datahub.list_datasets import list_datasets_by_filter
 from src.utils.datahub.update_policies import update_policies
 from src.utils.github_api_calls import list_ipynb_from_github_repo
 from src.utils.sentry import capture_op_exceptions
+
+from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
 
 
 @asset

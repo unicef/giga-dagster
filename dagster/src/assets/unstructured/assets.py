@@ -1,7 +1,5 @@
 import sentry_sdk
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
-
-from dagster import OpExecutionContext, Output, asset
 from src.utils.datahub.emit_dataset_metadata import (
     define_dataset_properties,
     get_datahub_emitter,
@@ -9,6 +7,8 @@ from src.utils.datahub.emit_dataset_metadata import (
 from src.utils.metadata import get_output_metadata
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
+
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset

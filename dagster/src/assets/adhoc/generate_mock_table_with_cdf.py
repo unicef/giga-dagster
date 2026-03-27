@@ -1,11 +1,11 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark.sql import functions as f
-
-from dagster import OpExecutionContext, asset
 from src.utils.delta import execute_query_with_error_handler
 from src.utils.schema import get_schema_columns
 from src.utils.sentry import capture_op_exceptions
+
+from dagster import OpExecutionContext, asset
 
 SOURCE_TABLE_NAME = "school_master.ben"
 ZCDF_TABLE_NAME = "school_master.zcdf"
