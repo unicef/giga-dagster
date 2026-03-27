@@ -687,7 +687,7 @@ def upload_errors(
     df = df.withColumn("created_at", f.current_timestamp())
 
     schema_name = "school_master"
-    table_name = "upload_errors"
+    table_name = f"upload_errors_{country_code.lower()}"
     full_table_name = construct_full_table_name(schema_name, table_name)
 
     try:
@@ -702,7 +702,7 @@ def upload_errors(
     except Exception as exc:
         context.log.warning(f"Failed to delete existing rows: {exc}")
 
-    context.log.info("Appending flat failed rows to aggregated error table")
+    context.log.info(f"Appending natively failed rows to {full_table_name}")
 
     (
         df.write.format("delta")

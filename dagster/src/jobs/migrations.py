@@ -5,7 +5,6 @@ migrate__schema = define_asset_job(
     name="migrate__schema",
     selection=[
         "initialize_metaschema",
-        "initialize_upload_errors_table",
         "migrate_schema",
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
