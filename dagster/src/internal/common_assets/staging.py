@@ -174,6 +174,30 @@ class StagingStep:
                     f.when(row_in_silver, f.col(s_col)).otherwise(f.col(col_name)),
                 )
 
+        # Admin columns may be null per-row when lat/lon is absent for that row,
+        # even though lat/lon is present in the file (and admin columns therefore
+        # appear in uploaded_columns).  For existing rows, fall back to silver so
+        # we preserve a previously-computed admin value and avoid spurious UPDATEs.
+        _admin_cols = (
+            "admin1",
+            "admin2",
+            "admin3",
+            "admin4",
+            "admin1_id_giga",
+            "admin2_id_giga",
+            "admin3_id_giga",
+            "admin4_id_giga",
+        )
+        for col_name in _admin_cols:
+            s_col = f"_s_{col_name}"
+            if col_name in uploaded_columns and s_col in joined.columns:
+                joined = joined.withColumn(
+                    col_name,
+                    f.when(
+                        row_in_silver & f.col(col_name).isNull(), f.col(s_col)
+                    ).otherwise(f.col(col_name)),
+                )
+
         # Drop all silver-prefixed columns (including _s_signature)
         s_cols_to_drop = [c for c in joined.columns if c.startswith("_s_")]
         joined = joined.drop(*s_cols_to_drop)
