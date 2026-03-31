@@ -36,7 +36,7 @@ def get_decimal_places_updated(value) -> int | None:
         return None
     try:
         decimal_places = -Decimal(str(value)).as_tuple().exponent
-    except TypeError:
+    except (TypeError, InvalidOperation):
         return None
     return int(decimal_places < 5)
 

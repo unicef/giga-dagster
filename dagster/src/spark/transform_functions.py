@@ -175,9 +175,13 @@ def create_education_level(
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
             {
-                "education_level_govt": f.coalesce(
-                    f.col("education_level_govt"), f.lit("Unknown")
-                ),
+                "education_level_govt": f.when(
+                    f.col("education_level_govt").isNull()
+                    | (f.trim(f.col("education_level_govt")) == "")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "nan")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "none"),
+                    f.lit("Unknown"),
+                ).otherwise(f.col("education_level_govt")),
                 "education_level": f.coalesce(
                     f.col("education_level"), f.lit("Unknown")
                 ),
