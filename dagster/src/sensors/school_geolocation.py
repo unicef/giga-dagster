@@ -180,7 +180,7 @@ def school_master_geolocation__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -276,7 +276,7 @@ def school_master_geolocation__admin_delete_rows_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
             ops_destination_mapping = {
                 "geolocation_delete_staging": OpDestinationMapping(
