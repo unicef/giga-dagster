@@ -1,7 +1,5 @@
-from datetime import datetime
-
 from pyspark.errors.exceptions.captured import AnalysisException
-from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, lit
 from pyspark.sql.types import (
     DataType,
@@ -127,60 +125,3 @@ def _align_to_target_schema(
             )
 
     return df
-
-
-def _is_file_already_processed(
-    spark: SparkSession,
-    *,
-    schema_name: str,
-    manifest_table: str,
-    file_path: str,
-    etag: str | None = None,
-) -> bool:
-    """
-    Checks the manifest table to determine whether a given file
-    has already been successfully ingested into the target table.
-    When etag is provided, checks both file_path and etag.
-    Otherwise checks file_path only.
-    """
-    try:
-        manifest_df = spark.table(f"{schema_name}.{manifest_table}")
-    except AnalysisException:
-        return False
-
-    condition = col("file_path") == file_path
-    if etag is not None:
-        condition = condition & (col("etag") == etag)
-
-    return manifest_df.filter(condition).limit(1).count() > 0
-
-
-def _append_manifest_record(
-    spark: SparkSession,
-    *,
-    schema_name: str,
-    manifest_table: str,
-    file_path: str,
-    etag: str,
-    ingested_at: datetime,
-) -> None:
-    """
-    Records a successful file ingestion into the manifest Delta table.
-    Used for recording file provenance and future idempotency checks.
-    """
-    manifest_df = spark.createDataFrame(
-        [
-            Row(
-                file_path=file_path,
-                etag=etag,
-                ingested_at=ingested_at,
-            )
-        ]
-    )
-
-    (
-        manifest_df.write.format("delta")
-        .mode("append")
-        .option("mergeSchema", "true")
-        .saveAsTable(f"{schema_name}.{manifest_table}")
-    )
