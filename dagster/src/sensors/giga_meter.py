@@ -53,17 +53,6 @@ def _collect_parquet_files(
     ]
 
 
-def _read_retry_files(adls_file_client: ADLSFileClient) -> list[str]:
-    """Read failed file paths from the retry file on ADLS."""
-    try:
-        data = adls_file_client.download_json(constants.PING_RETRY_FILE_PATH)
-        if isinstance(data, list) and data:
-            return data
-    except Exception:
-        pass
-    return []
-
-
 @sensor(
     job=giga_meter_connectivity_ping_checks,
     minimum_interval_seconds=43200,  # 12 hours
@@ -84,45 +73,29 @@ def giga_meter_parquet_to_delta_sensor(
     # Deterministic ordering
     parquet_files.sort(key=_get_sort_key)
 
-    new_files: list[str] = []
-    new_cursor_timestamp = last_timestamp
-    new_cursor_filename = last_filename
-
+    new_files_found = False
     for path in parquet_files:
         file_timestamp, file_name = _get_sort_key(path)
 
         if (file_timestamp, file_name) <= (last_timestamp, last_filename):
             continue
 
-        new_files.append(file_name)
+        new_files_found = True
+        context.log.info(f"Yielding RunRequest for new file: {file_name}")
 
-        new_cursor_timestamp = file_timestamp
-        new_cursor_filename = file_name
+        yield RunRequest(
+            run_key=f"file:{file_name}:{file_timestamp}",
+            run_config=RunConfig(
+                ops={
+                    "connectivity_ping_checks": ParquetToDeltaConfig(
+                        upload_path=upload_path,
+                        files=[file_name],
+                    )
+                }
+            ),
+        )
+        # Update cursor to this file's position
+        context.update_cursor(_build_cursor(file_timestamp, file_name))
 
-    # Include files that failed in the previous batch
-    retry_files = _read_retry_files(adls_file_client)
-    if retry_files:
-        context.log.info(f"Including {len(retry_files)} retry files from previous run.")
-
-    # Merge: retry files + new files (deduplicate)
-    all_files = list(set(dict.fromkeys(retry_files + new_files)))
-
-    if not all_files:
-        yield SkipReason("No new or retry parquet files found.")
-        return
-
-    # Update cursor only after full evaluation
-    if new_cursor_timestamp > last_timestamp:
-        context.update_cursor(_build_cursor(new_cursor_timestamp, new_cursor_filename))
-
-    yield RunRequest(
-        run_key=f"batch:{new_cursor_timestamp}:{len(all_files)}",
-        run_config=RunConfig(
-            ops={
-                "connectivity_ping_checks": ParquetToDeltaConfig(
-                    upload_path=upload_path,
-                    files=all_files,
-                )
-            }
-        ),
-    )
+    if not new_files_found:
+        yield SkipReason("No new parquet files found.")
