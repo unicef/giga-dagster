@@ -3,8 +3,6 @@ from typing import Optional
 
 from dagster_pyspark import PySparkResource
 from pyspark.sql import DataFrame, SparkSession
-
-from dagster import Config, OpExecutionContext, Output, asset
 from src.constants.constants_class import constants
 from src.resources import ResourceKey
 from src.settings import settings
@@ -17,6 +15,8 @@ from src.utils.giga_meter_helpers import (
     _read_parquet_best_effort,
     _sanitize_schema_by_category,
 )
+
+from dagster import Config, OpExecutionContext, Output, asset
 
 """
 INGESTION CONTRACT
