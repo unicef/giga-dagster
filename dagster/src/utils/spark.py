@@ -70,10 +70,14 @@ if settings.USE_AZURITE and settings.AZURE_STORAGE_ACCOUNT_KEY:
         settings.AZURE_STORAGE_ACCOUNT_NAME
     )
 else:
-    # SAS token authentication for Azure cloud
-    spark_common_config[
-        f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
-    ] = settings.AZURE_SAS_TOKEN
+    # SAS token authentication for Azure cloud via ABFS driver (abfss://)
+    spark_common_config.update(
+        {
+            f"spark.hadoop.fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
+            f"spark.hadoop.fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
+            f"spark.hadoop.fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN,
+        }
+    )
 
 if settings.IN_PRODUCTION:
     spark_common_config.update(
