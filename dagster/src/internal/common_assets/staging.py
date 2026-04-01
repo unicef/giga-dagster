@@ -4,27 +4,34 @@ from delta import DeltaTable
 from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType
-from sqlalchemy import select, text, update
 from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, StringType, StructField, TimestampType
+from pyspark.sql.types import (
+    ArrayType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
+from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
+from src.internal.merge import partial_in_cluster_merge
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
 from src.utils.delta import (
+    build_deduped_delete_query,
+    build_deduped_merge_query,
     check_table_exists,
     create_delta_table,
     create_schema,
+    execute_query_with_error_handler,
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -493,9 +500,10 @@ class StagingStep:
         available = [c for c in schema_col_names if c in df.columns]
         return df.select(*available)
 
-    def standard_transforms(self, df: sql.DataFrame) -> sql.DataFrame:
-        """Backward-compatible wrapper used by other pipelines."""
-        df = self._prepare_df(df)
+    def standard_transforms(self, df: sql.DataFrame):
+        self.context.log.info("Performing standard transforms...")
+        df = add_missing_columns(df, self.schema_columns)
+        df = transform_types(df, self.schema_name, self.context)
         return compute_row_hash(df)
 
     def _emit_lineage(self) -> None:
@@ -542,9 +550,7 @@ class StagingStep:
 
         # Add upload_id column to cloned silver data (NULL for existing rows from silver)
         # New upload data will have actual upload_id added in standard_transforms
-        from pyspark.sql.functions import lit
 
-        silver = silver.withColumn("upload_id", lit(None).cast("string"))
         self.context.log.info("Added upload_id column (NULL) to cloned silver data")
 
         create_schema(self.spark, self.staging_tier_schema_name)
@@ -637,19 +643,6 @@ class StagingStep:
 
     def reload_schema(self):
         self.schema_columns = get_schema_columns(self.spark, self.schema_name)
-
-    def standard_transforms(self, df: sql.DataFrame):
-        self.context.log.info("Performing standard transforms...")
-        df = add_missing_columns(df, self.schema_columns)
-        df = transform_types(df, self.schema_name, self.context)
-        df = compute_row_hash(df)
-
-        # Add upload_id column to track which upload this data came from
-        # This enables filtering approval requests by specific upload
-        df = df.withColumn("upload_id", lit(self.upload_id))
-        self.context.log.info(f"Added upload_id column: {self.upload_id}")
-
-        return df
 
     def upsert_rows(self, df: sql.DataFrame):
         self.context.log.info("Performing upsert...")
