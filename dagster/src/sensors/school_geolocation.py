@@ -54,6 +54,22 @@ def school_master_geolocation__raw_file_uploads_sensor(
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size
 
+            run_key = str(path)
+            try:
+                metadata_path = (
+                    adls_filepath.replace(
+                        constants.UPLOAD_PATH_PREFIX,
+                        constants.UPLOAD_METADATA_PATH_PREFIX,
+                        1,
+                    )
+                    + ".metadata.json"
+                )
+                metadata_adls = adls_file_client.download_json(metadata_path)
+                if isinstance(metadata_adls, dict):
+                    metadata = {**(metadata or {}), **metadata_adls}
+            except Exception:
+                pass
+
             ops_destination_mapping = {
                 "geolocation_raw": OpDestinationMapping(
                     source_filepath=str(path),
@@ -141,7 +157,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
 
             context.log.info(f"FILE: {path}")
             yield RunRequest(
-                run_key=str(path),
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )
