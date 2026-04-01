@@ -21,12 +21,12 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
-from azure.storage.blob import BlobServiceClient
 from dagster import OpExecutionContext
 from src.constants import UploadMode
 from src.internal.connectivity_queries import get_qos_tables
-from src.settings import settings
+from src.settings import DeploymentEnvironment, settings
 from src.spark.udf_dependencies import get_point
+from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
@@ -50,9 +50,9 @@ generate_uuid_udf = f.udf(generate_uuid)
 
 def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     # Create school_id_giga column if not exists, otherwise use provided values
-    df = df.withColumn(
-        "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
-    )
+    # df = df.withColumn(
+    #     "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
+    # )
 
     school_id_giga_prereqs = [
         "school_id_govt",
@@ -75,6 +75,11 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
             f.col("longitude").cast(StringType()),
         ),
     )
+
+    # If school_id_giga was not part of the upload, add it as null so the coalesce
+    # below can reference it safely regardless of whether the column already exists.
+    if "school_id_giga" not in df.columns:
+        df = df.withColumn("school_id_giga", f.lit(None).cast(StringType()))
 
     # Use existing school_id_giga if provided, otherwise use system-generated value
     df = df.withColumn(
@@ -170,9 +175,13 @@ def create_education_level(
     if mode == UploadMode.CREATE.value:
         df = df.withColumns(
             {
-                "education_level_govt": f.coalesce(
-                    f.col("education_level_govt"), f.lit("Unknown")
-                ),
+                "education_level_govt": f.when(
+                    f.col("education_level_govt").isNull()
+                    | (f.trim(f.col("education_level_govt")) == "")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "nan")
+                    | (f.lower(f.trim(f.col("education_level_govt"))) == "none"),
+                    f.lit("Unknown"),
+                ).otherwise(f.col("education_level_govt")),
                 "education_level": f.coalesce(
                     f.col("education_level"), f.lit("Unknown")
                 ),
@@ -478,12 +487,68 @@ def create_bronze_layer_columns(
     return df
 
 
+def create_bronze_layer_columns_updated(
+    df: sql.DataFrame,
+    mode: str,
+    uploaded_columns: list[str],
+    country_code_iso3: str,
+    spark: SparkSession = None,
+):
+    # standardize education level
+    if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
+        df = create_education_level(df, mode, uploaded_columns)
+
+    # Generate school_id_giga for new schools using the dedicated function
+    if mode == UploadMode.CREATE.value:
+        df = create_school_id_giga(df)
+
+    # Admin columns: re-compute whenever lat/lon are part of the upload
+    if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
+        for admin_level in ("admin1", "admin2", "admin3", "admin4"):
+            df = add_admin_columns(df, country_code_iso3, admin_level)
+        df = add_disputed_region_column(df)
+
+        missing_location_condition = (
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude"))
+        )
+        for column in ("admin1", "admin1_id_giga", "admin2", "admin2_id_giga"):
+            df = df.withColumn(
+                column,
+                f.when(
+                    missing_location_condition, f.lit(None).cast(StringType())
+                ).otherwise(f.col(column)),
+            )
+
+    # Connectivity type: re-compute whenever connectivity_type_govt is part of the upload
+    if mode == UploadMode.CREATE.value or "connectivity_type_govt" in uploaded_columns:
+        df = standardize_connectivity_type(df, mode, uploaded_columns)
+
+    # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded.
+    if "connectivity_govt" in df.columns:
+        df = df.withColumn(
+            "connectivity_govt_ingestion_timestamp",
+            f.when(
+                f.col("connectivity_govt").isNotNull(), f.current_timestamp()
+            ).otherwise(f.lit(None).cast(TimestampType())),
+        )
+
+    # RT connectivity columns: merge from the realtime schools table
+    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        connectivity = get_country_rt_schools(spark, country_code_iso3)
+        df = merge_connectivity_to_master(df, connectivity, uploaded_columns, mode)
+
+    return df
+
+
 def get_admin_boundaries(
     country_code_iso3: str,
     admin_level: str,
 ) -> pd.DataFrame | gpd.GeoDataFrame | None:  # admin level = ["admin1", "admin2"]
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = f"{country_code_iso3}_{admin_level}.geojson"
         file = f"admin_data/{admin_level}/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
@@ -556,20 +621,23 @@ def add_admin_columns(  # noqa: C901
             ),
         }
     )
+    coalesce_args = [
+        f.col(f"{admin_level}_en"),
+        f.col(f"{admin_level}_native"),
+    ]
+    if admin_level in df.columns:
+        coalesce_args.append(f.col(admin_level))
+    coalesce_args.append(f.lit("Unknown"))
+
     return df.withColumn(
         admin_level,
-        f.coalesce(
-            f.col(f"{admin_level}_en"),
-            f.col(f"{admin_level}_native"),
-            f.col(admin_level),
-            f.lit("Unknown"),
-        ),
+        f.coalesce(*coalesce_args),
     ).drop(f"{admin_level}_en", f"{admin_level}_native")
 
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     try:
-        service = BlobServiceClient(account_url=ACCOUNT_URL, credential=azure_sas_token)
+        service = get_blob_service_client()
         filename = "disputed_areas_admin0.geojson"
         file = f"admin_data/admin0/{filename}"
         blob_client = service.get_blob_client(container=container_name, blob=file)
@@ -771,13 +839,16 @@ def merge_connectivity_to_master(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
 
-    # make sure connectivity_govt is standardized
-    master = master.withColumn(
-        "connectivity_govt",
-        f.when(
-            f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
-        ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
-    )
+    # standardize connectivity_govt only when it was uploaded; for CREATE mode ensure it exists
+    if "connectivity_govt" in uploaded_columns:
+        master = master.withColumn(
+            "connectivity_govt",
+            f.when(
+                f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
+            ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
+        )
+    elif mode == UploadMode.CREATE.value and "connectivity_govt" not in master.columns:
+        master = master.withColumn("connectivity_govt", f.lit(None).cast(StringType()))
 
     # determine the value of connectivity
     if mode == UploadMode.CREATE.value or {
@@ -791,20 +862,11 @@ def merge_connectivity_to_master(
             "connectivity",
             f.when(
                 (f.lower(f.col("connectivity_RT")) == "yes")
-                | (
-                    (f.lower(f.col("connectivity_govt")) == "yes")
-                    & (
-                        (f.col("download_speed_govt") != 0)
-                        | f.col("download_speed_govt").isNull()
-                        | f.isnan(f.col("download_speed_govt"))
-                    )
-                )
-                | (f.col("download_speed_govt") > 0),
+                | (f.lower(f.col("connectivity_govt")) == "yes"),
                 "Yes",
             )
             .when(
-                (f.lower("connectivity_govt") == "no")
-                | (f.col("download_speed_govt") == 0),
+                f.lower(f.col("connectivity_govt")) == "no",
                 "No",
             )
             .otherwise(
@@ -831,13 +893,14 @@ def merge_connectivity_to_master(
             .otherwise(f.lit(None).cast(StringType())),
         )
 
-    # add the time connectivity_govt was ingested
-    master = master.withColumn(
-        "connectivity_govt_ingestion_timestamp",
-        f.when(f.col("connectivity_govt").isNotNull(), f.current_timestamp()).otherwise(
-            f.lit(None).cast(TimestampType())
-        ),
-    )
+    # add the time connectivity_govt was ingested (only when it was part of the upload)
+    if "connectivity_govt" in uploaded_columns or mode == UploadMode.CREATE.value:
+        master = master.withColumn(
+            "connectivity_govt_ingestion_timestamp",
+            f.when(
+                f.col("connectivity_govt").isNotNull(), f.current_timestamp()
+            ).otherwise(f.lit(None).cast(TimestampType())),
+        )
 
     master_cols_to_drop = [
         col
