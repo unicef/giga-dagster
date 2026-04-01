@@ -5,6 +5,13 @@ from dagster import OpExecutionContext
 from src.utils.logger import get_context_with_fallback_logger
 
 
+def _col_if_exists(df: sql.DataFrame, col_name: str):
+    """Return f.col(col_name) if it exists in df, else f.lit(None)."""
+    if col_name in df.columns:
+        return f.col(col_name)
+    return f.lit(None)
+
+
 def column_relation_checks(
     df: sql.DataFrame,
     dataset_type: str,
@@ -127,8 +134,8 @@ def column_relation_checks(
         transforms[
             "dq_column_relation_checks-connectivity_govt_download_speed_contracted"
         ] = f.when(
-            (f.col("download_speed_contracted").isNotNull())
-            & (f.col("connectivity_govt").isNull()),
+            (_col_if_exists(df, "download_speed_contracted").isNotNull())
+            & (_col_if_exists(df, "connectivity_govt").isNull()),
             1,
         ).otherwise(0)
 
@@ -136,8 +143,8 @@ def column_relation_checks(
         transforms[
             "dq_column_relation_checks-electricity_availability_electricity_type"
         ] = f.when(
-            (f.lower(f.col("electricity_availability")) == "yes")
-            & (f.col("electricity_type").isNull()),
+            (f.lower(_col_if_exists(df, "electricity_availability")) == "yes")
+            & (_col_if_exists(df, "electricity_type").isNull()),
             1,
         ).otherwise(0)
 
