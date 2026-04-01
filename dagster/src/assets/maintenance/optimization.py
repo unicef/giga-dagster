@@ -1,8 +1,8 @@
 from pyspark.sql import SparkSession
-
-from dagster import asset
 from src.spark import spark
 from src.utils.schema import construct_full_table_name
+
+from dagster import asset
 
 
 @asset(
