@@ -2,31 +2,39 @@ from pyspark.sql import SparkSession
 
 from dagster import asset
 from src.spark import spark
+from src.utils.schema import construct_full_table_name
 
 
 @asset(
     group_name="maintenance",
-    description="Optimizes the school_master.upload_errors table using Z-Ordering on country_code and dataset_type.",
+    description="Optimizes all school_master.upload_errors_* tables using Z-Ordering on dataset_type.",
 )
 def optimize_upload_errors_table(context) -> None:
     """
-    Runs OPTIMIZE and ZORDER BY on the upload_errors table.
-    This improves query performance for the Admin Dashboard which filters by country and dataset.
+    Discovers all per-country upload_errors tables and runs OPTIMIZE + ZORDER BY
+    on each one to improve query performance for the Error Table UI.
     """
     s: SparkSession = spark.spark_session
-    full_table_name = "school_master.upload_errors"
+    schema_name = "school_master"
 
-    context.log.info(f"Starting optimization for {full_table_name}...")
+    context.log.info("Discovering upload_errors_* tables...")
 
-    # Check if table exists first to avoid error if run before migration
-    if s.catalog.tableExists(full_table_name):
-        # Optimize with Z-Ordering
-        # Note: Delta Lake on Spark OS supports OPTIMIZE.
-        query = f"OPTIMIZE {full_table_name} ZORDER BY (country_code, dataset_type)"
-        context.log.info(f"Executing: {query}")
-        s.sql(query).collect()  # Trigger execution
-        context.log.info("Optimization completed successfully.")
-    else:
-        context.log.warning(
-            f"Table {full_table_name} does not exist. Skipping optimization."
-        )
+    # Query the metastore for all upload_errors tables
+    tables_df = s.sql(f"SHOW TABLES IN {schema_name} LIKE 'upload_errors_*'")
+    table_names = [row.tableName for row in tables_df.collect()]
+
+    if not table_names:
+        context.log.warning("No upload_errors_* tables found. Skipping optimization.")
+        return
+
+    context.log.info(f"Found {len(table_names)} upload_errors tables to optimize.")
+
+    for table_name in table_names:
+        full_table_name = construct_full_table_name(schema_name, table_name)
+        try:
+            query = f"OPTIMIZE {full_table_name} ZORDER BY (dataset_type)"
+            context.log.info(f"Executing: {query}")
+            s.sql(query).collect()
+            context.log.info(f"Optimization completed for {full_table_name}.")
+        except Exception as exc:
+            context.log.warning(f"Failed to optimize {full_table_name}: {exc}")
