@@ -140,3 +140,28 @@ def get_nocodb_table_id_from_name(table_name):
         return nocodb_response[0]["table_id"]
     else:
         raise ValueError(f"Unable to retrieve the table_id for table {table_name}")
+
+
+def create_nocodb_table_record(table_id, data):
+    """
+    Create a new record in a NoCoDB table.
+
+    Args:
+        table_id (str): The ID of the NoCoDB table.
+        data (dict): Dictionary containing the record data to insert.
+
+    Returns:
+        dict: The created record response from NoCoDB.
+
+    Raises:
+        requests.HTTPError: If the API request fails.
+    """
+    table_url = f"{settings.NOCODB_BASE_URL}/api/v2/tables/{table_id}/records"
+    headers = {
+        "xc-token": settings.NOCODB_TOKEN,
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(table_url, json=data, headers=headers)
+    response.raise_for_status()
+    return response.json()
