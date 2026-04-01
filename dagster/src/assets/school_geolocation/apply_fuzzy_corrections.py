@@ -1,10 +1,10 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
-
-from dagster import Config, OpExecutionContext, asset
 from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.schema import construct_full_table_name
+
+from dagster import Config, OpExecutionContext, asset
 
 
 class FuzzyCorrectionsConfig(Config):
