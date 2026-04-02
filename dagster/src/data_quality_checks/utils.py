@@ -8,6 +8,7 @@ from pyspark.sql import (
     functions as f,
     window as w,
 )
+from pyspark.sql.types import IntegerType, MapType, StringType
 
 from dagster import OpExecutionContext
 from src.constants import UploadMode
@@ -49,21 +50,33 @@ def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
 ):  # input df == row level checks results
-    dq_columns = [col for col in df.columns if col.startswith("dq_")]
+    # Geolocation DQ results store individual checks in a single dq_results map column.
+    # Other pipelines (master, coverage, connectivity) still use flat dq_* columns.
+    # Detect which format is present and unify into (check_key, value) rows.
+    if "dq_results" in df.columns:
+        # Map path: explode map<string, int> + merge dq_has_critical_error
+        all_checks_map = f.map_concat(
+            f.col("dq_results"),
+            f.create_map(
+                f.lit("has_critical_error"),
+                f.col("dq_has_critical_error").cast("int"),
+            ),
+        )
+        unpivoted_df = df.select(f.explode(all_checks_map).alias("check_key", "value"))
+    else:
+        # Flat path: stack all dq_* columns into (check_key, value) rows
+        dq_columns = [col for col in df.columns if col.startswith("dq_")]
+        df_flat = df.select(*dq_columns)
+        for col_name in dq_columns:
+            df_flat = df_flat.withColumn(col_name, f.col(col_name).cast("int"))
+        stack_expr = ", ".join(
+            [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns]
+        )
+        unpivoted_df = df_flat.selectExpr(
+            f"stack({len(dq_columns)}, {stack_expr}) as (check_key, value)",
+        )
 
-    df = df.select(*dq_columns)
-
-    for column_name in df.columns:
-        df = df.withColumn(column_name, f.col(column_name).cast("int"))
-
-    # Unpivot Row Level Checks
-    stack_expr = ", ".join([f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns])
-    unpivoted_df = df.selectExpr(
-        f"stack({len(dq_columns)}, {stack_expr}) as (assertion, value)",
-    )
-    # unpivoted_df.show()
-
-    agg_df = unpivoted_df.groupBy("assertion").agg(
+    agg_df = unpivoted_df.groupBy("check_key").agg(
         f.expr("count(CASE WHEN value = 1 THEN value END) as count_failed"),
         f.expr("count(CASE WHEN value = 0 THEN value END) as count_passed"),
         f.expr("count(value) as count_overall"),
@@ -83,12 +96,9 @@ def aggregate_report_spark_df(
     )
 
     # Processing for Human Readable Report
-    agg_df = agg_df.withColumn("dq_column", f.col("assertion"))
-    agg_df = agg_df.withColumn("column", (f.split(f.col("assertion"), "-").getItem(1)))
-    agg_df = agg_df.withColumn(
-        "assertion",
-        (f.split(f.col("assertion"), "-").getItem(0)),
-    )
+    agg_df = agg_df.withColumn("dq_column", f.col("check_key"))
+    agg_df = agg_df.withColumn("column", f.split(f.col("check_key"), "-").getItem(1))
+    agg_df = agg_df.withColumn("assertion", f.split(f.col("check_key"), "-").getItem(0))
 
     # get data descriptions from nocodb
     dq_column_name_table_id = get_nocodb_table_id_from_name(
@@ -195,12 +205,18 @@ def aggregate_report_json(
 
 
 def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
-    # add necessary columns
+    df = _normalize_dq_results_map(df)
+
+    # dq_results is now a map<string, int>; access specific keys via element_at().
+    def _check(key):
+        return f.element_at(f.col("dq_results"), key)
+
+    # Computed composite columns derived from map values
     df = df.withColumn(
         "dq_missing_location",
         f.when(
-            (f.col("dq_is_null_optional-latitude") == 1)
-            | (f.col("dq_is_null_optional-latitude") == 1),
+            (_check("is_null_optional-latitude") == 1)
+            | (_check("is_null_optional-longitude") == 1),
             1,
         ).otherwise(0),
     )
@@ -208,42 +224,49 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
     df = df.withColumn(
         "dq_is_null_connectivity_type_when_connectivity_govt",
         f.when(
-            (f.col("dq_is_null_optional-connectivity_type_govt") == 1)
-            & (f.col("dq_is_null_optional-connectivity_govt") == 0),
+            (_check("is_null_optional-connectivity_type_govt") == 1)
+            & (_check("is_null_optional-connectivity_govt") == 0),
             1,
         ).otherwise(0),
     )
 
     count_schools_raw_file = df.count()
 
-    dq_report_columns = [
-        "dq_duplicate-school_id_govt",
-        "dq_duplicate_all_except_school_code",
-        "dq_duplicate_name_level_within_110m_radius",
-        "dq_duplicate_set-location_id",
-        "dq_duplicate_set-education_level_location_id",
-        "dq_duplicate_set-school_id_govt_school_name_education_level_location_id",
-        "dq_duplicate_set-school_name_education_level_location_id",
-        "dq_duplicate_similar_name_same_level_within_110m_radius",
-        "dq_has_critical_error",
-        "dq_is_not_within_country",
-        "dq_is_not_alphanumeric-school_name",
-        "dq_is_null_connectivity_type_when_connectivity_govt",
-        "dq_is_null_mandatory-school_id_govt",
-        "dq_is_null_optional-computer_availability",
-        "dq_is_null_optional-connectivity_govt",
-        "dq_is_null_optional-education_level_govt",
-        "dq_is_null_optional-school_name",
-        "dq_is_school_density_greater_than_5",
-        "dq_missing_location",
-        "dq_precision-latitude",
-        "dq_precision-longitude",
+    # Keys in the dq_results map needed for the statistics report
+    static_check_keys = [
+        "duplicate-school_id_govt",
+        "duplicate_all_except_school_code",
+        "duplicate_name_level_within_110m_radius",
+        "duplicate_set-location_id",
+        "duplicate_set-education_level_location_id",
+        "duplicate_set-school_id_govt_school_name_education_level_location_id",
+        "duplicate_set-school_name_education_level_location_id",
+        "duplicate_similar_name_same_level_within_110m_radius",
+        "is_not_within_country",
+        "is_not_alphanumeric-school_name",
+        "is_null_mandatory-school_id_govt",
+        "is_null_optional-computer_availability",
+        "is_null_optional-connectivity_govt",
+        "is_null_optional-education_level_govt",
+        "is_null_optional-school_name",
+        "is_school_density_greater_than_5",
+        "precision-latitude",
+        "precision-longitude",
     ]
 
-    df_report = df.select(*dq_report_columns)
+    # Flatten only the needed map keys into individual columns for the stack/agg step
+    df_report = df.select(
+        *[_check(key).cast("int").alias(f"dq_{key}") for key in static_check_keys],
+        f.col("dq_has_critical_error").cast("int"),
+        f.col("dq_missing_location").cast("int"),
+        f.col("dq_is_null_connectivity_type_when_connectivity_govt").cast("int"),
+    )
 
-    for column_name in df_report.columns:
-        df_report = df_report.withColumn(column_name, f.col(column_name).cast("int"))
+    dq_report_columns = [f"dq_{key}" for key in static_check_keys] + [
+        "dq_has_critical_error",
+        "dq_missing_location",
+        "dq_is_null_connectivity_type_when_connectivity_govt",
+    ]
 
     dq_duplicate_columns = [
         col for col in dq_report_columns if col.startswith("dq_duplicate")
@@ -493,9 +516,33 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     return df
 
 
+def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
+    """Ensure dq_results is MapType(string, int).
+
+    ADLSPandasIOManager round-trips through Pandas/PyArrow, which writes the map as a
+    Parquet STRUCT (fixed keys, more compact). Spark reads it back as StructType, which
+    breaks map_filter / element_at. Converting via to_json → from_json restores the
+    proper MapType regardless of the original column type.
+    """
+    if "dq_results" not in df.columns:
+        return df
+    from pyspark.sql.types import StructType as _StructType
+
+    if isinstance(df.schema["dq_results"].dataType, _StructType):
+        df = df.withColumn(
+            "dq_results",
+            f.from_json(
+                f.to_json(f.col("dq_results")), MapType(StringType(), IntegerType())
+            ),
+        )
+    return df
+
+
 def dq_geolocation_extract_relevant_columns(
     df: sql.DataFrame, uploaded_columns: list[str], mode: str
 ):
+    df = _normalize_dq_results_map(df)
+
     dq_column_name_table_id = get_nocodb_table_id_from_name(
         table_name="SchoolGeolocationMasterDQChecks"
     )
@@ -543,16 +590,42 @@ def dq_geolocation_extract_relevant_columns(
     dq_columns_list = dq_table_all.sort_values("Related Check ID")[
         "DQ Table Column Name"
     ].tolist()
-    dq_columns_list = ["dq_has_critical_error", "failure_reason", *dq_columns_list]
-    admin_columns = ["admin1", "admin2", "admin3", "admin4"]
-    columns_to_keep = [*uploaded_columns, *admin_columns, *dq_columns_list]
-    columns_to_keep = [col for col in columns_to_keep if col in df.columns]
+
+    # The dq_results map keys are the check names without the "dq_" prefix.
+    relevant_map_keys = [col.replace("dq_", "", 1) for col in dq_columns_list]
+
+    columns_to_keep = [
+        col
+        for col in [
+            *uploaded_columns,
+            "dq_has_critical_error",
+            "failure_reason",
+            "dq_results",
+        ]
+        if col in df.columns
+    ]
     df = df.select(*columns_to_keep)
 
-    # column name mappings
-    human_readable_mappings = dq_table_all.set_index("DQ Table Column Name")[
-        "Human Readable Name"
-    ].to_dict()
+    # Narrow the dq_results map to only checks that are relevant for the uploaded
+    # columns and mode. This avoids exposing checks that do not apply.
+    if relevant_map_keys:
+        relevant_keys_set = set(relevant_map_keys)
+        df = df.withColumn(
+            "dq_results",
+            f.map_filter(
+                f.col("dq_results"), lambda k, _v: k.isin(list(relevant_keys_set))
+            ),
+        )
+
+    # human_readable_mappings: map key (without "dq_" prefix) -> human-readable label
+    human_readable_mappings = {
+        col.replace("dq_", "", 1): name
+        for col, name in dq_table_all.set_index("DQ Table Column Name")[
+            "Human Readable Name"
+        ]
+        .to_dict()
+        .items()
+    }
 
     return df, human_readable_mappings
 

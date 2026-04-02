@@ -11,7 +11,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import StringType, StructType
+from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -26,15 +26,10 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
-from src.settings import DeploymentEnvironment, settings
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
-    column_mapping_rename,
-    create_bronze_layer_columns,
-    get_country_rt_schools,
-    merge_connectivity_to_master as merge_connectivity_to_df,
-    standardize_connectivity_type,
+    create_bronze_layer_columns_updated,
 )
 from src.utils.adls import (
     ADLSFileClient,
@@ -57,7 +52,14 @@ from src.utils.schema import (
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import (
+    AssetOut,
+    MetadataValue,
+    OpExecutionContext,
+    Output,
+    asset,
+    multi_asset,
+)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -164,17 +166,16 @@ def geolocation_metadata(
     return Output(None)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_bronze(
     context: OpExecutionContext,
     geolocation_raw: bytes,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
-    schema_name = config.metastore_schema
     mode = config.metadata["mode"]
 
     with get_db_context() as db:
@@ -206,57 +207,21 @@ def geolocation_bronze(
         ).map(str)
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
+    column_mapping_filtered = {
+        k.strip(): v
+        for k, v in column_to_schema_mapping.items()
+        if (k is not None) and (v is not None)
+    }
+    pdf = pdf[column_to_schema_mapping.keys()]
+    pdf.rename(column_mapping_filtered, axis="columns", inplace=True)
     df = s.createDataFrame(pdf)
-    df, column_mapping = column_mapping_rename(df, column_to_schema_mapping)
-    context.log.info("COLUMN MAPPING")
-    context.log.info(column_mapping)
-    context.log.info("COLUMN MAPPING DATAFRAME")
-    context.log.info(df)
     uploaded_columns = df.columns
 
-    columns = get_schema_columns(s, schema_name)
-    context.log.info("schema columns")
-    context.log.info(columns)
+    df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
-    schema = StructType(columns)
-
-    # Create empty base schema DataFrame
-    geolocation_base = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
-
-    casted_geolocation_base = geolocation_base.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
+    df = create_bronze_layer_columns_updated(
+        df, mode, uploaded_columns, country_code, s
     )
-
-    context.log.info("Casted Geolocation")
-    context.log.info(casted_geolocation_base)
-
-    casted_bronze = df.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
-    )
-
-    context.log.info("Casted Bronze")
-    context.log.info(casted_bronze)
-
-    df = create_bronze_layer_columns(
-        casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
-    )
-    context.log.info("DF from create_bronze_layer_columns")
-    context.log.info(df)
-
-    config.metadata.update({"column_mapping": column_mapping})
-    context.log.info("After config metadata update")
-
-    if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # RT Columns
-        connectivity = get_country_rt_schools(s, country_code)
-        df = merge_connectivity_to_df(df, connectivity, uploaded_columns, mode)
-    else:
-        # On local, we can't retrieve the connectivity data
-        df = df.withColumn("connectivity", f.lit("Unknown"))
-        df = df.withColumn("connectivity_RT", f.lit("Unknown"))
-
-    # standardize the connectivity type
-    df = standardize_connectivity_type(df, mode, uploaded_columns)
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -269,31 +234,28 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
-    ## at this point it's already gone
-    context.log.info("BEFORE DF TO PANDAS")
-    df_pandas = df.toPandas()
-    context.log.info("AFTER DF TO PANDAS")
-    context.log.info(df_pandas)
+    df.cache()
+    row_count = df.count()
 
     return Output(
-        df_pandas,
+        df,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "column_mapping": column_mapping,
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "column_mapping": column_mapping_filtered,
+            "preview": get_table_preview(df),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -337,12 +299,30 @@ def geolocation_data_quality_results(
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
+    # Collapse all individual dq_ check columns into a single map<string, int> column.
+    # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
+    # dq_has_critical_error and failure_reason remain as top-level columns because
+    # they are used for row-level filtering throughout the pipeline.
+    # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
+    dq_flag_cols = [
+        c
+        for c in dq_results.columns
+        if c.startswith("dq_") and c != "dq_has_critical_error"
+    ]
+    map_args = []
+    for col_name in dq_flag_cols:
+        map_args.extend([f.lit(col_name[len("dq_") :]), f.col(col_name).cast("int")])
+    dq_results = dq_results.withColumn("dq_results", f.create_map(*map_args)).drop(
+        *dq_flag_cols
+    )
+
     dq_results_schema_name = f"{schema_name}_dq_results"
     table_name = f"{id}_{country_code}_{current_timestamp}"
 
-    schema_columns = dq_results.schema.fields
-    for col in schema_columns:
-        col.nullable = True
+    schema_columns = [
+        StructField(field.name, field.dataType, nullable=True)
+        for field in dq_results.schema.fields
+    ]
 
     dq_results_table_name = construct_full_table_name(
         dq_results_schema_name,
@@ -358,9 +338,8 @@ def geolocation_data_quality_results(
         context,
         if_not_exists=True,
     )
+    dq_results.cache()
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
-
-    dq_pandas = dq_results.toPandas()
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -369,22 +348,31 @@ def geolocation_data_quality_results(
     )
 
     return Output(
-        dq_pandas,
+        dq_results.coalesce(1),
         metadata={
             **get_output_metadata(config),
-            "row_count": len(dq_pandas),
-            "preview": get_table_preview(dq_pandas),
+            "row_count": dq_results.count(),
+            "preview": get_table_preview(dq_results),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@multi_asset(
+    outs={
+        "geolocation_dq_schools_passed_human_readable": AssetOut(
+            io_manager_key=ResourceKey.ADLS_SPARK_SINGLE_FILE_IO_MANAGER.value,
+        ),
+        "geolocation_dq_schools_failed_human_readable": AssetOut(
+            io_manager_key=ResourceKey.ADLS_SPARK_SINGLE_FILE_IO_MANAGER.value,
+        ),
+    },
+)
 @capture_op_exceptions
-async def geolocation_data_quality_results_human_readable(
+def geolocation_data_quality_results_human_readable(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
-) -> Output[pd.DataFrame]:
+):
     context.log.info("Get the file upload object from the database")
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -406,79 +394,41 @@ async def geolocation_data_quality_results_human_readable(
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns, mode
     )
-    # replace the dq_column column binary values with Yes/No depending on if they passed or failed the check
-    dq_column_names = [
-        col
-        for col in df.columns
-        if (col.startswith("dq_") and col != "dq_has_critical_error")
-    ]
-    for column in dq_column_names:
+    for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
-            column,
-            f.when(f.col(column) == 1, "No").otherwise(
-                f.when(f.col(column) == 0, "Yes")
+            human_name,
+            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
+                f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
             ),
         )
+    df = df.drop("dq_results")
 
-    df = df.withColumnsRenamed(human_readable_mappings)
-    context.log.info("Convert the dataframe to a pandas object to save it locally")
-    df_pandas = df.toPandas()
+    # Cache once — both filters read from the same plan
+    df.cache()
 
-    return Output(
-        df_pandas,
+    df_passed = df.filter(df.dq_has_critical_error == 0).drop(
+        "dq_has_critical_error", "failure_reason"
+    )
+    df_failed = df.filter(df.dq_has_critical_error == 1).drop("dq_has_critical_error")
+
+    output_metadata = get_output_metadata(config)
+
+    yield Output(
+        df_passed,
+        output_name="geolocation_dq_schools_passed_human_readable",
         metadata={
-            **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            **output_metadata,
+            "row_count": df_passed.count(),
+            "preview": get_table_preview(df_passed),
         },
     )
-
-
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-@capture_op_exceptions
-async def geolocation_dq_schools_passed_human_readable(
-    context: OpExecutionContext,
-    geolocation_data_quality_results_human_readable: sql.DataFrame,
-    config: FileConfig,
-) -> Output[pd.DataFrame]:
-    context.log.info("Filter and keep schools that do not have a critical error")
-    df = geolocation_data_quality_results_human_readable.filter(
-        geolocation_data_quality_results_human_readable.dq_has_critical_error == 0
-    )
-    df = df.drop("dq_has_critical_error", "failure_reason")
-    df_pandas = df.toPandas()
-
-    return Output(
-        df_pandas,
+    yield Output(
+        df_failed,
+        output_name="geolocation_dq_schools_failed_human_readable",
         metadata={
-            **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
-        },
-    )
-
-
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
-@capture_op_exceptions
-async def geolocation_dq_schools_failed_human_readable(
-    context: OpExecutionContext,
-    geolocation_data_quality_results_human_readable: sql.DataFrame,
-    config: FileConfig,
-) -> Output[pd.DataFrame]:
-    context.log.info("Filter and keep schools that have a critical error")
-    df = geolocation_data_quality_results_human_readable.filter(
-        geolocation_data_quality_results_human_readable.dq_has_critical_error == 1
-    )
-
-    df = df.drop("dq_has_critical_error")
-    df_pandas = df.toPandas()
-
-    return Output(
-        df_pandas,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            **output_metadata,
+            "row_count": df_failed.count(),
+            "preview": get_table_preview(df_failed),
         },
     )
 
@@ -587,14 +537,14 @@ def geolocation_data_quality_report(
     return Output(dq_report)
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_passed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_passed = dq_split_passed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -611,25 +561,27 @@ def geolocation_dq_passed_rows(
         schema_reference=schema_reference,
     )
 
-    df_pandas = df_passed.toPandas()
+    df_passed.cache()
+    row_count = df_passed.count()
+
     return Output(
-        df_pandas,
+        df_passed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(df_passed),
         },
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_dq_failed_rows(
     context: OpExecutionContext,
     geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[pd.DataFrame]:
+) -> Output[sql.DataFrame]:
     df_failed = dq_split_failed_rows(
         geolocation_data_quality_results,
         config.dataset_type,
@@ -647,13 +599,15 @@ def geolocation_dq_failed_rows(
         df_failed=df_failed,
     )
 
-    df_pandas = df_failed.toPandas()
+    df_failed.cache()
+    row_count = df_failed.count()
+
     return Output(
-        df_pandas,
+        df_failed,
         metadata={
             **get_output_metadata(config),
-            "row_count": len(df_pandas),
-            "preview": get_table_preview(df_pandas),
+            "row_count": row_count,
+            "preview": get_table_preview(df_failed),
         },
     )
 
@@ -667,7 +621,7 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    if geolocation_dq_passed_rows.count() == 0:
+    if geolocation_dq_passed_rows.isEmpty():
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
 
@@ -688,15 +642,30 @@ def geolocation_staging(
         spark.spark_session,
         StagingChangeTypeEnum.UPDATE,
     )
-    staging = staging_step(geolocation_dq_passed_rows)
-    row_count = 0 if staging is None else staging.count()
+    pending = staging_step(geolocation_dq_passed_rows)
 
+    if pending is None:
+        return Output(
+            None,
+            metadata={
+                **get_output_metadata(config),
+                "insert_count": MetadataValue.int(0),
+                "update_count": MetadataValue.int(0),
+                "unchanged_count": MetadataValue.int(0),
+                "delete_count": MetadataValue.int(0),
+            },
+        )
+
+    counts = pending.groupBy("change_type").count().collect()
+    count_map = {row["change_type"]: row["count"] for row in counts}
     return Output(
         None,
         metadata={
             **get_output_metadata(config),
-            "row_count": MetadataValue.int(row_count),
-            "preview": get_table_preview(staging),
+            "insert_count": MetadataValue.int(count_map.get("INSERT", 0)),
+            "update_count": MetadataValue.int(count_map.get("UPDATE", 0)),
+            "unchanged_count": MetadataValue.int(count_map.get("UNCHANGED", 0)),
+            "delete_count": MetadataValue.int(count_map.get("DELETE", 0)),
         },
     )
 

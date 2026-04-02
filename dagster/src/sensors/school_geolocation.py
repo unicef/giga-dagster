@@ -80,19 +80,11 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 ),
                 "geolocation_data_quality_results_human_readable": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_dq_schools_passed_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_dq_schools_failed_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-human-readable/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
+                    destination_filepath="",
+                    output_filepaths={
+                        "geolocation_dq_schools_passed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                        "geolocation_dq_schools_failed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
+                    },
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
@@ -109,19 +101,19 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_passed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_dq_failed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_staging": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.STAGING,
@@ -180,7 +172,7 @@ def school_master_geolocation__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -276,7 +268,7 @@ def school_master_geolocation__admin_delete_rows_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
             ops_destination_mapping = {
                 "geolocation_delete_staging": OpDestinationMapping(
