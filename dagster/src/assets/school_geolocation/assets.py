@@ -14,6 +14,7 @@ from pyspark.sql import (
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -264,10 +265,16 @@ def geolocation_data_quality_results(
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
+    dq_mode_str = config.metadata.get("dq_mode", "master")
+    dq_mode = DQMode(dq_mode_str)
+    context.log.info(f"Running DQ checks in mode: {dq_mode.value}")
+
     columns = get_schema_columns(s, schema_name)
     schema = StructType(columns)
 
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+    if dq_mode == DQMode.MASTER and check_table_exists(
+        s, schema_name, country_code, DataTier.SILVER
+    ):
         silver_tier_schema_name = construct_schema_name_for_tier(
             "school_geolocation", DataTier.SILVER
         )
@@ -288,12 +295,17 @@ def geolocation_data_quality_results(
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
+    dq_context = DQContext(
+        dq_mode=dq_mode,
+        dataset_type=dataset_type,
+        country_code_iso3=country_code,
+        upload_mode=config.metadata["mode"],
+    )
+
     dq_results = row_level_checks(
         df=renamed_bronze,
+        dq_context=dq_context,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
         context=context,
     )
 
