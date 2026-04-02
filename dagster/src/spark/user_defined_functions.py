@@ -23,7 +23,7 @@ def get_decimal_places_udf_factory(precision: int) -> callable:
             return None
         try:
             decimal_places = -Decimal(str(value)).as_tuple().exponent
-        except TypeError:
+        except (TypeError, InvalidOperation):
             return None
         return int(decimal_places < precision)
 

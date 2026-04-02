@@ -51,6 +51,15 @@ class FileConfig(Config):
         For regular assets, simply pass in the destination path as a string.
         """,
     )
+    output_filepaths: dict[str, str] = Field(
+        default_factory=dict,
+        description="""
+        Per-output destination paths for multi-output assets (@multi_asset).
+        Keys are output names; values are ADLS-relative destination paths.
+        When non-empty, the IO manager uses the output name to select the path
+        instead of destination_filepath.
+        """,
+    )
     dq_target_filepath: str = Field(
         description="""
         The path of the file inside the ADLS container where we run data quality checks on.
@@ -137,6 +146,7 @@ class OpDestinationMapping(BaseModel):
     metastore_schema: str
     tier: DataTier
     table_name: Optional[str] = None
+    output_filepaths: dict[str, str] = Field(default_factory=dict)
 
 
 def generate_run_ops(
@@ -155,6 +165,7 @@ def generate_run_ops(
         file_config = FileConfig(
             filepath=op_mapping.source_filepath,
             destination_filepath=op_mapping.destination_filepath,
+            output_filepaths=op_mapping.output_filepaths,
             metastore_schema=op_mapping.metastore_schema,
             tier=op_mapping.tier,
             table_name=op_mapping.table_name,

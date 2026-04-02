@@ -51,6 +51,7 @@ def create_delta_table(
     *,
     if_not_exists: bool = False,
     replace: bool = False,
+    partition_by: list[str] | None = None,
 ) -> None:
     if if_not_exists and replace:
         raise MutexException(
@@ -71,6 +72,8 @@ def create_delta_table(
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
     )
+    if partition_by:
+        query = query.partitionedBy(*partition_by)
     execute_query_with_error_handler(spark, query, schema_name, table_name, context)
 
 
