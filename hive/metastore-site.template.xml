@@ -7,6 +7,18 @@
     </description>
   </property>
   <property>
+    <name>fs.azurebfs.impl</name>
+    <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+  </property>
+  <property>
+    <name>fs.AbstractFileSystem.abfss.impl</name>
+    <value>org.apache.hadoop.fs.azurebfs.Abfss</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.giga-dataops-staging.saunigiga.dfs.core.windows.net</name>
+    <value>{ENV:AZURE_SAS_TOKEN}</value>
+  </property>
+  <property>
     <name>metastore.warehouse.dir</name>
     <value>{ENV:METASTORE_WAREHOUSE_DIR}</value>
   </property>
