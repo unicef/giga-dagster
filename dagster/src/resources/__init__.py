@@ -8,7 +8,6 @@ from .io_managers.adls_generic_file import ADLSGenericFileIOManager
 from .io_managers.adls_json import ADLSJSONIOManager
 from .io_managers.adls_pandas import ADLSPandasIOManager
 from .io_managers.adls_passthrough import ADLSPassthroughIOManager
-from .io_managers.giga_meter_delta import GigaMeterDeltaIOManager
 from .io_managers.adls_spark import ADLSSparkIOManager
 from .io_managers.adls_spark_single_file import ADLSSparkSingleFileIOManager
 from .io_managers.giga_meter_delta import GigaMeterDeltaIOManager
