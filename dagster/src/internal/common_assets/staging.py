@@ -4,18 +4,27 @@ from delta import DeltaTable
 from models.approval_requests import ApprovalRequest
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import lit
-from pyspark.sql.types import StructType
-from sqlalchemy import select, text, update
 from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, StringType, StructField, TimestampType
+from pyspark.sql.functions import lit
+from pyspark.sql.types import (
+    ArrayType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
+from dagster.src.internal.merge import partial_in_cluster_merge
+from dagster.src.utils.delta import (
+    build_deduped_delete_query,
+    build_deduped_merge_query,
+    execute_query_with_error_handler,
+)
 from src.constants import DataTier
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
@@ -493,11 +502,6 @@ class StagingStep:
         schema_col_names = [c.name for c in self.schema_columns]
         available = [c for c in schema_col_names if c in df.columns]
         return df.select(*available)
-
-    def standard_transforms(self, df: sql.DataFrame) -> sql.DataFrame:
-        """Backward-compatible wrapper used by other pipelines."""
-        df = self._prepare_df(df)
-        return compute_row_hash(df)
 
     def _emit_lineage(self) -> None:
         with get_db_context() as db:
