@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pyspark.sql.types import StringType, StructField
 from src.assets.common.assets import (
     broadcast_master_release_notes,
     manual_review_failed_rows,
@@ -143,33 +144,43 @@ async def test_silver(mock_file_config, mock_adls_client, spark_session, op_cont
     mock_spark_resource = MagicMock()
     mock_spark_resource.spark_session = spark_session
     spark_session.catalog.refreshTable = MagicMock()
-    mock_adls_client.download_json.return_value = ["__all__"]
-    params = [(1, "A", "insert", 1)]
-    columns = ["school_id_giga", "name", "_change_type", "_commit_version"]
+    mock_adls_client.download_json.return_value = {
+        "upload_id": "test_upload",
+        "approved_change_ids": ["__all__"],
+        "rejected_change_ids": [],
+    }
+    params = [(1, "A", "INSERT", 1, "test_upload", "PENDING")]
+    columns = [
+        "school_id_giga",
+        "name",
+        "change_type",
+        "_commit_version",
+        "upload_id",
+        "status",
+    ]
     staging_df = spark_session.createDataFrame(params, columns)
     mock_session = MagicMock()
     mock_spark_resource.spark_session = mock_session
+    mock_session.createDataFrame = spark_session.createDataFrame
     mock_session.read.format.return_value.option.return_value.option.return_value.table.return_value = staging_df
     mock_session.sparkContext.broadcast.return_value.value = ["__all__"]
     mock_session.catalog.refreshTable = MagicMock()
     with (
-        patch("src.assets.common.assets.DeltaTable.forName") as _,
+        patch("src.assets.common.assets.DeltaTable.forName") as mock_dt,
         patch("src.assets.common.assets.check_table_exists", return_value=False),
         patch("src.assets.common.assets.get_schema_columns") as mock_get_schema,
         patch(
             "src.assets.common.assets.get_primary_key", return_value="school_id_giga"
         ),
-        patch(
-            "src.assets.common.assets.manual_review_dedupe_strat",
-            return_value=staging_df,
-        ),
         patch("src.assets.common.assets.get_schema_columns_datahub"),
         patch("src.assets.common.assets.datahub_emit_metadata_with_exception_catcher"),
         patch("src.assets.common.assets.get_output_metadata", return_value={}),
         patch("src.assets.common.assets.get_table_preview", return_value="preview"),
+        patch("src.assets.common.assets.compute_row_hash", side_effect=lambda df: df),
     ):
-        mock_col = MagicMock()
-        mock_col.name = "school_id_giga"
+        mock_dt.return_value.toDF.return_value = staging_df
+        mock_dt.return_value.alias.return_value.toDF.return_value = staging_df
+        mock_col = StructField("school_id_giga", StringType(), True)
         mock_get_schema.return_value = [mock_col]
         result = await silver(
             context=context,
@@ -189,15 +200,28 @@ async def test_manual_review_failed_rows(
     mock_spark_resource = MagicMock()
     mock_spark_resource.spark_session = spark_session
     spark_session.catalog.refreshTable = MagicMock()
-    mock_adls_client.download_json.return_value = ["__all__"]
-    params = [(1, "A", "insert", 1)]
-    columns = ["school_id_giga", "name", "_change_type", "_commit_version"]
+    mock_adls_client.download_json.return_value = {
+        "upload_id": "test_upload",
+        "approved_change_ids": [],
+        "rejected_change_ids": ["__all__"],
+    }
+    params = [(1, "A", "INSERT", 1, "test_upload", "PENDING")]
+    columns = [
+        "school_id_giga",
+        "name",
+        "change_type",
+        "_commit_version",
+        "upload_id",
+        "status",
+    ]
     staging_df = spark_session.createDataFrame(params, columns)
     mock_session = MagicMock()
     mock_spark_resource.spark_session = mock_session
+    mock_session.createDataFrame = spark_session.createDataFrame
     mock_session.read.format.return_value.option.return_value.option.return_value.table.return_value = staging_df
     mock_session.catalog.refreshTable = MagicMock()
     with (
+        patch("src.assets.common.assets.DeltaTable.forName") as mock_dt,
         patch("src.assets.common.assets.check_table_exists", return_value=False),
         patch("src.assets.common.assets.get_schema_columns") as mock_get_schema,
         patch(
@@ -208,8 +232,9 @@ async def test_manual_review_failed_rows(
         patch("src.assets.common.assets.get_output_metadata", return_value={}),
         patch("src.assets.common.assets.get_table_preview", return_value="preview"),
     ):
-        mock_col = MagicMock()
-        mock_col.name = "school_id_giga"
+        mock_dt.return_value.toDF.return_value = staging_df
+        mock_dt.return_value.alias.return_value.toDF.return_value = staging_df
+        mock_col = StructField("school_id_giga", StringType(), True)
         mock_get_schema.return_value = [mock_col]
         result = await manual_review_failed_rows(
             context=context,
@@ -218,13 +243,11 @@ async def test_manual_review_failed_rows(
             config=mock_file_config,
         )
         assert isinstance(result, Output)
-        assert result.value.count() == 0
+        assert result.value.count() == 1
 
 
 @pytest.mark.asyncio
-async def test_reset_staging_table(
-    mock_file_config, mock_adls_client, spark_session, op_context
-):
+async def test_reset_staging_table(mock_file_config, spark_session, op_context):
     context = op_context
     mock_spark_resource = MagicMock()
     mock_spark_resource.spark_session = spark_session
@@ -236,6 +259,7 @@ async def test_reset_staging_table(
         patch("src.assets.common.assets.create_schema") as _,
         patch("src.assets.common.assets.create_delta_table") as _,
         patch("src.assets.common.assets.get_schema_columns") as _,
+        patch("src.utils.adls.ADLSFileClient") as _,
     ):
         mock_db = MagicMock()
         mock_db_ctx.return_value.__enter__.return_value = mock_db
@@ -244,7 +268,6 @@ async def test_reset_staging_table(
             context=context,
             spark=mock_spark_resource,
             config=mock_file_config,
-            adls_file_client=mock_adls_client,
         )
         assert result is None
         spark_session.sql.assert_called()

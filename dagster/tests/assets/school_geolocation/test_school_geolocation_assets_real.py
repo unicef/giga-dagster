@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 mock_trino = MagicMock()
 sys.modules["src.utils.db.trino"] = mock_trino
 
-import pandas as pd
 import pytest
 from pyspark.sql import functions as f
 from pyspark.sql.types import (
@@ -123,71 +122,33 @@ async def test_geolocation_bronze(mock_file_config, spark_session, op_context):
         mock_upload.country = "BRA"
         mock_upload.metadata = {"mode": "append"}
 
-        with patch("src.assets.school_geolocation.assets.FileUploadConfig") as mock_fuc:
-            mock_fuc.from_orm.return_value = mock_upload
-
-            with patch(
-                "src.assets.school_geolocation.assets.get_schema_columns",
-                return_value=[],
-            ):
-                with patch(
-                    "src.assets.school_geolocation.assets.get_country_rt_schools",
-                    return_value=spark_session.createDataFrame([], StructType([])),
-                ):
-                    with patch(
-                        "src.assets.school_geolocation.assets.merge_connectivity_to_df",
-                        side_effect=lambda df, *args, **kwargs: df,
-                    ):
-                        with patch(
-                            "src.assets.school_geolocation.assets.standardize_connectivity_type",
-                            side_effect=lambda df, *args, **kwargs: df,
-                        ):
-                            # We want to let column_mapping_rename and create_bronze_layer_columns run for real
-                            pass
-            with patch(
+        with (
+            patch("src.assets.school_geolocation.assets.FileUploadConfig") as mock_fuc,
+            patch(
                 "src.assets.school_geolocation.assets.get_schema_columns",
                 return_value=mock_cols,
-            ):
-                with patch(
-                    "src.assets.school_geolocation.assets.get_country_rt_schools",
-                    return_value=spark_session.createDataFrame([], StructType([])),
-                ):
-                    with patch(
-                        "src.assets.school_geolocation.assets.merge_connectivity_to_df",
-                        side_effect=lambda df, *args, **kwargs: df,
-                    ):
-                        with patch(
-                            "src.assets.school_geolocation.assets.standardize_connectivity_type",
-                            side_effect=lambda df, *args, **kwargs: df,
-                        ):
-                            with patch(
-                                "src.spark.transform_functions.get_nocodb_table_id_from_name",
-                                return_value="123",
-                            ):
-                                with patch(
-                                    "src.spark.transform_functions.get_nocodb_table_as_key_value_mapping",
-                                    return_value={},
-                                ):
-                                    with patch(
-                                        "src.assets.school_geolocation.assets.create_bronze_layer_columns",
-                                        side_effect=lambda df, *args, **kwargs: df,
-                                    ):
-                                        with patch(
-                                            "src.assets.school_geolocation.assets.datahub_emit_metadata_with_exception_catcher"
-                                        ):
-                                            result = await geolocation_bronze(
-                                                context=op_context,
-                                                geolocation_raw=raw_csv,
-                                                config=mock_file_config,
-                                                spark=mock_spark,
-                                            )
+            ),
+            patch(
+                "src.assets.school_geolocation.assets.create_bronze_layer_columns_updated",
+                side_effect=lambda df, *args, **kwargs: df,
+            ),
+            patch(
+                "src.assets.school_geolocation.assets.datahub_emit_metadata_with_exception_catcher"
+            ),
+        ):
+            mock_fuc.from_orm.return_value = mock_upload
+            result = await geolocation_bronze(
+                context=op_context,
+                geolocation_raw=raw_csv,
+                config=mock_file_config,
+                spark=mock_spark,
+            )
 
-                            assert isinstance(result, Output)
-                            assert isinstance(result.value, pd.DataFrame)
-                            assert len(result.value) == 1
-                            assert "latitude" in result.value.columns
-                            assert "longitude" in result.value.columns
-                            assert "school_id_govt" in result.value.columns
+            assert isinstance(result, Output)
+            assert result.value.count() == 1
+            assert "latitude" in result.value.columns
+            assert "longitude" in result.value.columns
+            assert "school_id_govt" in result.value.columns
 
 
 @pytest.mark.asyncio
@@ -301,9 +262,8 @@ async def test_geolocation_data_quality_results(
 
     assert isinstance(result, Output)
     df = result.value
-    assert isinstance(df, pd.DataFrame)
     assert "dq_has_critical_error" in df.columns
-    assert len(df) > 0
+    assert df.count() > 0
 
 
 @pytest.mark.asyncio
@@ -327,10 +287,7 @@ async def test_geolocation_staging(mock_file_config, spark_session, op_context):
         patch("src.assets.school_geolocation.assets.get_table_preview") as mock_preview,
     ):
         mock_instance = MockStagingStep.return_value
-
-        mock_staging_result = MagicMock()
-        mock_staging_result.count.return_value = 1
-        mock_instance.return_value = mock_staging_result
+        mock_instance.return_value = None
 
         mock_get_schema.return_value = []
         mock_preview.return_value = "markdown_preview"
@@ -345,4 +302,4 @@ async def test_geolocation_staging(mock_file_config, spark_session, op_context):
 
         assert isinstance(result, Output)
         assert result.value is None
-        assert result.metadata["row_count"].value == 1
+        assert result.metadata["insert_count"].value == 0

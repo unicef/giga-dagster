@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pyspark.sql.types import StructType
 from src.internal.common_assets.staging import (
     StagingChangeTypeEnum,
     StagingStep,
@@ -19,6 +20,7 @@ def mock_config():
     config.filepath = "test_file.csv"
     config.filepath_object = MagicMock()
     config.filepath_object.parent = "parent_path"
+    config.filename_components.id = "123"
     return config
 
 
@@ -52,8 +54,10 @@ class TestStagingStep:
     @patch("src.internal.common_assets.staging.get_schema_columns")
     @patch("src.internal.common_assets.staging.get_primary_key")
     @patch("src.internal.common_assets.staging.check_table_exists")
-    def test_process_staging_changes_no_silver(
+    @patch("src.internal.common_assets.staging.compute_row_hash")
+    def test_build_upsert_records_no_silver(
         self,
+        mock_hash,
         mock_exists,
         mock_pk,
         mock_cols,
@@ -62,9 +66,15 @@ class TestStagingStep:
         mock_adls_client,
         spark_session,
     ):
-        mock_cols.return_value = []
+        from pyspark.sql.types import StringType, StructField
+
+        mock_cols.return_value = [
+            StructField("id", StringType()),
+            StructField("name", StringType()),
+        ]
         mock_pk.return_value = "id"
         mock_exists.return_value = False
+        mock_hash.side_effect = lambda df: df
 
         step = StagingStep(
             context=mock_context,
@@ -74,20 +84,17 @@ class TestStagingStep:
             change_type=StagingChangeTypeEnum.UPDATE,
         )
 
-        step.standard_transforms = MagicMock(side_effect=lambda x: x)
-        step.create_empty_staging_table = MagicMock()
-        step.sync_schema_staging = MagicMock()
-        step.upsert_rows = MagicMock(return_value=MagicMock())
+        step._get_uploaded_columns = MagicMock(return_value=["id", "name"])
+        # Mock _prepare_df to avoid complex transforms
+        step._prepare_df = MagicMock(side_effect=lambda df: df)
 
-        mock_df = MagicMock()
-        mock_df.write.option.return_value.format.return_value.mode.return_value.saveAsTable = MagicMock()
-        mock_df.count.return_value = 10
-        step.standard_transforms = MagicMock(return_value=mock_df)
+        mock_df = spark_session.createDataFrame([("1", "A")], ["id", "name"])
 
-        result = step._process_staging_changes(mock_df)
+        result = step._build_upsert_records(mock_df)
 
         assert result is not None
-        step.create_empty_staging_table.assert_called_once()
+        assert "change_type" in result.columns
+        assert result.filter(result.change_type == "INSERT").count() == 1
 
 
 def test_get_files_for_review(mock_adls_client, mock_config):
@@ -139,19 +146,15 @@ class TestStagingStepApproval:
     def test_update_approval_request_status_enabled(self, staging_step):
         with (
             patch("src.internal.common_assets.staging.get_db_context") as mock_db_ctx,
-            patch(
-                "src.internal.common_assets.staging.get_trino_context"
-            ) as mock_trino_ctx,
+            patch("src.internal.common_assets.staging.DeltaTable") as mock_dt,
         ):
+            # Mock DeltaTable to return actionable rows
+            mock_df = MagicMock()
+            mock_df.filter.return_value.count.return_value = 1
+            mock_dt.forName.return_value.toDF.return_value = mock_df
+
             mock_db = MagicMock()
             mock_db_ctx.return_value.__enter__.return_value = mock_db
-
-            mock_trino = MagicMock()
-            mock_trino_ctx.return_value.__enter__.return_value = mock_trino
-
-            mock_trino_exec = MagicMock()
-            mock_trino_exec.scalar.return_value = 100
-            mock_trino.execute.return_value = mock_trino_exec
 
             mock_req = MagicMock()
             mock_req.enabled = False
@@ -161,15 +164,20 @@ class TestStagingStepApproval:
             mock_update_res.rowcount = 1
             mock_db.execute.return_value = mock_update_res
 
-            staging_step._update_approval_request_status(MagicMock())
+            staging_step._update_approval_request_status()
 
             mock_db.execute.assert_called()
 
     def test_update_approval_request_already_enabled(self, staging_step):
         with (
             patch("src.internal.common_assets.staging.get_db_context") as mock_db_ctx,
-            patch.object(staging_step, "_get_pre_update_row_count", return_value=10),
+            patch("src.internal.common_assets.staging.DeltaTable") as mock_dt,
         ):
+            # Mock DeltaTable to return actionable rows
+            mock_df = MagicMock()
+            mock_df.filter.return_value.count.return_value = 1
+            mock_dt.forName.return_value.toDF.return_value = mock_df
+
             mock_db = MagicMock()
             mock_db_ctx.return_value.__enter__.return_value = mock_db
 
@@ -177,42 +185,35 @@ class TestStagingStepApproval:
             mock_req.enabled = True
             mock_db.scalar.return_value = mock_req
 
-            staging_step._update_approval_request_status(MagicMock())
+            staging_step._update_approval_request_status()
 
             mock_db.execute.assert_not_called()
 
-    def test_validate_delete_cdf_success(self, staging_step):
+    @patch("src.internal.common_assets.staging.DeltaTable")
+    def test_build_delete_records_success(self, mock_dt, staging_step):
         staging_step.change_type = StagingChangeTypeEnum.DELETE
 
-        with patch(
-            "src.internal.common_assets.staging.get_trino_context"
-        ) as mock_trino:
-            mock_conn = MagicMock()
-            mock_trino.return_value.__enter__.return_value = mock_conn
+        with patch.object(StagingStep, "silver_table_exists", new=True):
+            mock_silver_df = staging_step.spark.createDataFrame([("1",)], ["id"])
+            mock_dt.forName.return_value.toDF.return_value = mock_silver_df
 
-            mock_res = MagicMock()
-            mock_res.scalar.return_value = 5
-            mock_conn.execute.return_value = mock_res
+            result = staging_step._build_delete_records(["1"])
 
-            staging_step._validate_delete_cdf()
+            assert result is not None
+            assert result.filter(result.change_type == "DELETE").count() == 1
 
-    def test_validate_delete_cdf_failure(self, staging_step):
+    @patch("src.internal.common_assets.staging.DeltaTable")
+    def test_build_delete_records_empty(self, mock_dt, staging_step):
         staging_step.change_type = StagingChangeTypeEnum.DELETE
 
-        with (
-            patch("src.internal.common_assets.staging.get_trino_context") as mock_trino,
-            patch("src.internal.common_assets.staging.get_db_context") as mock_db_ctx,
-        ):
-            mock_conn = MagicMock()
-            mock_trino.return_value.__enter__.return_value = mock_conn
-            mock_res = MagicMock()
-            mock_res.scalar.return_value = 0
-            mock_conn.execute.return_value = mock_res
+        from pyspark.sql.types import StringType, StructField
 
-            mock_db = MagicMock()
-            mock_db_ctx.return_value.__enter__.return_value = mock_db
+        schema = StructType([StructField("id", StringType())])
 
-            with pytest.raises(RuntimeError, match="Delete CDF empty"):
-                staging_step._validate_delete_cdf()
+        with patch.object(StagingStep, "silver_table_exists", new=True):
+            mock_silver_df = staging_step.spark.createDataFrame([], schema)
+            mock_dt.forName.return_value.toDF.return_value = mock_silver_df
 
-            mock_db.execute.assert_called()
+            result = staging_step._build_delete_records(["1"])
+
+            assert result is None

@@ -1,5 +1,6 @@
 import gc
 import os
+import signal
 import sys
 import types
 from pathlib import Path
@@ -48,6 +49,23 @@ def set_dagster_home(tmp_path_factory):
     gc.collect()  # Force cleanup of DagsterInstances holding DB locks
     if "DAGSTER_HOME" in os.environ:
         del os.environ["DAGSTER_HOME"]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def signal_handler_fix():
+    """
+    Workaround for TypeError in Dagster/pytest-asyncio teardown:
+    'signal handler must be signal.SIG_IGN, signal.SIG_DFL, or a callable object'
+    Ensures signal handlers are reset to default during teardown.
+    """
+    yield
+    # Reset standard signals to SIG_DFL if they were set to something invalid by mistake
+    # or if the environment is in a weird state during teardown.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, signal.SIG_DFL)
+        except (ValueError, OSError):
+            pass
 
 
 @pytest.fixture(autouse=True)

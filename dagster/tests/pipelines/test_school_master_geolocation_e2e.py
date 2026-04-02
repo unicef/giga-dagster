@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 mock_trino = MagicMock()
 sys.modules["src.utils.db.trino"] = mock_trino
 
-import pandas as pd
 import pytest
 from src.assets.school_geolocation.assets import (
     geolocation_bronze,
@@ -123,40 +122,18 @@ async def test_geolocation_bronze(mock_file_config, spark_session, op_context):
                 ]
 
                 with patch(
-                    "src.assets.school_geolocation.assets.create_bronze_layer_columns"
-                ) as mock_create:
-                    mock_df = MagicMock()
-                    mock_df.toPandas.return_value = pd.DataFrame(
-                        [{"school_id_govt": "1"}]
+                    "src.assets.school_geolocation.assets.create_bronze_layer_columns_updated",
+                    side_effect=lambda df, *args, **kwargs: df,
+                ):
+                    result = await geolocation_bronze(
+                        context=context,
+                        geolocation_raw=raw_csv,
+                        config=mock_file_config,
+                        spark=MagicMock(spark_session=spark_session),
                     )
-                    mock_df.columns = ["school_id_govt"]
-                    mock_create.return_value = mock_df
 
-                    with patch(
-                        "src.assets.school_geolocation.assets.get_country_rt_schools"
-                    ) as mock_rt:
-                        mock_rt.return_value = MagicMock()
-
-                        with patch(
-                            "src.assets.school_geolocation.assets.merge_connectivity_to_df"
-                        ) as mock_merge:
-                            mock_merge.return_value = mock_df
-
-                            with patch(
-                                "src.assets.school_geolocation.assets.standardize_connectivity_type"
-                            ) as mock_std:
-                                mock_std.return_value = mock_df
-
-                                result = await geolocation_bronze(
-                                    context=context,
-                                    geolocation_raw=raw_csv,
-                                    config=mock_file_config,
-                                    spark=MagicMock(),
-                                )
-
-                                assert isinstance(result, Output)
-                                assert isinstance(result.value, pd.DataFrame)
-                                assert len(result.value) == 1
+                    assert isinstance(result, Output)
+                    assert result.value.count() == 1
 
 
 @pytest.mark.asyncio
@@ -181,10 +158,7 @@ async def test_geolocation_staging(mock_file_config, spark_session, op_context):
         patch("src.assets.school_geolocation.assets.get_table_preview") as mock_preview,
     ):
         mock_instance = MockStagingStep.return_value
-
-        mock_staging_result = MagicMock()
-        mock_staging_result.count.return_value = 1
-        mock_instance.return_value = mock_staging_result
+        mock_instance.return_value = None
 
         mock_get_schema.return_value = []
         mock_preview.return_value = "markdown_preview"
@@ -200,4 +174,4 @@ async def test_geolocation_staging(mock_file_config, spark_session, op_context):
 
         assert isinstance(result, Output)
         assert result.value is None
-        assert result.metadata["row_count"].value == 1
+        assert result.metadata["insert_count"].value == 0
