@@ -55,10 +55,12 @@ def duplicate_all_except_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate all except checks...")
 
+    existing_columns = [col for col in config_column_list if col in df.columns]
+
     df = df.withColumn(
         "dq_duplicate_all_except_school_code",
         f.when(
-            f.count("*").over(Window.partitionBy(config_column_list)) > 1,
+            f.count("*").over(Window.partitionBy(existing_columns)) > 1,
             1,
         ).otherwise(0),
     )
