@@ -191,6 +191,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             columns = incoming_schema.fields
             primary_key = "gigasync_id"
         else:
+            from src.utils.delta import apply_renames_and_deletes, persist_column_id_map
+
             columns = get_schema_columns(spark, schema_name)
             primary_key = get_primary_key(spark, schema_name)
 
@@ -202,6 +204,15 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
             context.log.info(f"incoming schema {data.schema}")
             context.log.info(f"existing schema {existing_df.schema}")
+
+            any_renames_deletes = apply_renames_and_deletes(
+                spark, full_table_name, schema_name, context
+            )
+
+            # Refresh after rename/delete
+            if any_renames_deletes:
+                existing_df = DeltaTable.forName(spark, full_table_name).toDF()
+                existing_columns = sorted(existing_df.schema.fieldNames())
 
             if updated_columns != existing_columns:
                 context.log.info("Updating schema...")
@@ -217,6 +228,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                     .mode("append")
                     .saveAsTable(full_table_name)
                 )
+
+            # Persist column-ID mapping
+            persist_column_id_map(spark, full_table_name, schema_name)
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)

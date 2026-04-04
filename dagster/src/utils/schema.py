@@ -42,6 +42,34 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
     ]
 
 
+def get_schema_columns_with_id(
+    spark: SparkSession, schema_name: str
+) -> list[tuple[str, StructField]]:
+    """Return schema columns paired with their stable UUID id.
+
+    Each tuple is ``(id, StructField)``.  The ``id`` is the fixed UUID
+    assigned to the column in the schema CSV stored in ADLS.  By comparing
+    IDs between the reference schema and an existing Delta table we can
+    detect:
+
+    * **Renames** – same ID, different ``StructField.name``
+    * **Deletes** – ID present in the table but absent from the reference
+    * **Adds**    – ID present in the reference but absent from the table
+    """
+    df = get_schema_table(spark, schema_name)
+    return [
+        (
+            row.id,
+            StructField(
+                row.name,
+                getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
+                row.is_nullable,
+            ),
+        )
+        for row in df.collect()
+    ]
+
+
 def get_schema_column_descriptions(
     spark: SparkSession, schema_name: str
 ) -> dict[str:str]:
