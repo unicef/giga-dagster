@@ -614,7 +614,7 @@ def geolocation_dq_failed_rows(
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
-def upload_errors(
+def geolocation_error_table(
     context: OpExecutionContext,
     geolocation_dq_failed_rows: pd.DataFrame,
     config: FileConfig,
@@ -640,8 +640,8 @@ def upload_errors(
     df = df.withColumn("country_code", f.lit(country_code))
     df = df.withColumn("created_at", f.current_timestamp())
 
-    schema_name = "school_master"
-    table_name = f"upload_errors_{country_code.lower()}"
+    schema_name = "school_geolocation_error_table"
+    table_name = country_code.lower()
     full_table_name = construct_full_table_name(schema_name, table_name)
 
     try:
