@@ -7,6 +7,10 @@
     </description>
   </property>
   <property>
+    <name>fs.azure.account.key.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>{ENV:AZURE_STORAGE_ACCOUNT_KEY}</value>
+  </property>
+  <property>
     <name>metastore.warehouse.dir</name>
     <value>{ENV:METASTORE_WAREHOUSE_DIR}</value>
   </property>
