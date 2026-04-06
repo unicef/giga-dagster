@@ -36,7 +36,9 @@ export METASTORE_PORT=${METASTORE_PORT:-9083}
 if $HIVE_HOME/bin/schematool --verbose -dbType postgres -validate | grep 'Done with metastore validation' | grep '[SUCCESS]'; then
   echo 'Database OK'
 else
-  $HIVE_HOME/bin/schematool --verbose -dbType postgres -initSchema
+  # $HIVE_HOME/bin/schematool --verbose -dbType postgres -initSchema
+  $HIVE_HOME/bin/schematool --verbose -dbType postgres -upgradeSchema || true
+  $HIVE_HOME/bin/schematool --verbose -dbType postgres -validate
 fi
 
 exec $HIVE_HOME/bin/hive --skiphadoopversion --skiphbasecp --service $SERVICE_NAME
