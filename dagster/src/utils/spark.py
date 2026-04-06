@@ -241,10 +241,11 @@ def transform_types(
 
     columns = get_schema_columns(df.sparkSession, schema_name)
     context.log.info(f"Schema name: {schema_name}")
-    context.log.info(f"Schema columns: {columns}")
 
-    if schema_name in ["qos", "qos_raw", "qos_availability"]:
-        columns = [c for c in columns if c.name in df.columns]
+    # Only process columns that exist in the dataframe.
+    # This prevents issues with schema definitions containing columns not relevant
+    # to the current ingestion (e.g., master or reference columns).
+    columns = [c for c in columns if c.name in df.columns]
 
     context.log.info(
         f"transform types schema columns before {df.schema.simpleString()}"

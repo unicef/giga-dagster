@@ -1,4 +1,3 @@
-from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, lit
 from pyspark.sql.types import (
@@ -96,32 +95,4 @@ def _add_file_metadata_columns(
                 column_name,
                 lit(metadata[column_name]).cast(data_type),
             )
-    return df
-
-
-def _align_to_target_schema(
-    df: DataFrame,
-    *,
-    spark: SparkSession,
-    schema_name: str,
-    table_name: str,
-) -> DataFrame:
-    """
-    Force dataframe schema to match existing Delta table schema.
-    Prevents IntegerType vs LongType conflicts.
-    """
-    try:
-        target_df = spark.table(f"{schema_name}.{table_name}")
-    except AnalysisException:
-        return df  # table does not exist yet
-
-    target_schema = target_df.schema
-
-    for field in target_schema.fields:
-        if field.name in df.columns:
-            df = df.withColumn(
-                field.name,
-                col(field.name).cast(field.dataType),
-            )
-
     return df
