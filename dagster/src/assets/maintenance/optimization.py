@@ -7,7 +7,7 @@ from dagster import asset
 
 @asset(
     group_name="maintenance",
-    description="Optimizes all school_geolocation_error_table.* tables using Z-Ordering on dataset_type.",
+    description="Optimizes all school_geolocation_error_table.* tables using Z-Ordering on giga_sync_file_id.",
 )
 def optimize_geolocation_error_table(context) -> None:
     """
@@ -32,7 +32,7 @@ def optimize_geolocation_error_table(context) -> None:
     for table_name in table_names:
         full_table_name = construct_full_table_name(schema_name, table_name)
         try:
-            query = f"OPTIMIZE {full_table_name} ZORDER BY (dataset_type)"
+            query = f"OPTIMIZE {full_table_name} ZORDER BY (giga_sync_file_id)"
             context.log.info(f"Executing: {query}")
             s.sql(query).collect()
             context.log.info(f"Optimization completed for {full_table_name}.")
