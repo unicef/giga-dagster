@@ -84,7 +84,12 @@ def connectivity_ping_checks(
     }
     df = _add_file_metadata_columns(df, metadata=metadata_values)
 
-    df = transform_types(df, config.target_schema, context)
+    df = transform_types(
+        df,
+        schema_name=config.target_schema,
+        context=context,
+        table_name=config.target_table,
+    )
 
     # Summary
     row_count = df.count()
