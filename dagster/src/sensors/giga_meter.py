@@ -55,7 +55,7 @@ def _collect_parquet_files(
 
 @sensor(
     job=giga_meter_connectivity_ping_checks,
-    minimum_interval_seconds=43200,  # 12 hours
+    minimum_interval_seconds=60,  # 12 hours
 )
 def giga_meter_parquet_to_delta_sensor(
     context: SensorEvaluationContext,
