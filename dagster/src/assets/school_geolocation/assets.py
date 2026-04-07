@@ -207,7 +207,9 @@ def geolocation_bronze(
             dtype_mapping=string_col_mapping,
             context=context,
         ).map(str)
-    context.log.info(f"pandas_loader completed in {time.time() - t0:.2f}s — {len(pdf)} rows")
+    context.log.info(
+        f"pandas_loader completed in {time.time() - t0:.2f}s — {len(pdf)} rows"
+    )
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     column_mapping_filtered = {
@@ -242,6 +244,7 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
+    context.log.info("Submitting Spark job (df.count) — waiting for executors...")
     t3 = time.time()
     df.cache()
     row_count = df.count()
