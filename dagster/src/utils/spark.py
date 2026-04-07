@@ -234,22 +234,50 @@ def transform_types(
     df: sql.DataFrame,
     schema_name: str,
     context: OpExecutionContext | OutputContext = None,
+    table_name: str = None,
 ) -> sql.DataFrame:
     """
     Retuns a dataframe with columns casted to use types in provided schema.
     """
 
-    columns = get_schema_columns(df.sparkSession, schema_name)
-    context.log.info(f"Schema name: {schema_name}")
+    try:
+        columns = get_schema_columns(df.sparkSession, schema_name)
+        if context:
+            context.log.info(f"Schema name: {schema_name}")
+    except Exception as exc:
+        if table_name:
+            if context:
+                context.log.info(
+                    f"Metaschema '{schema_name}' missing, falling back to dynamic "
+                    f"alignment against delta table '{schema_name}.{table_name}'"
+                )
+            try:
+                target_df = df.sparkSession.table(f"{schema_name}.{table_name}")
+                columns = target_df.schema.fields
+            except Exception:
+                if context:
+                    context.log.info(
+                        f"Target table '{schema_name}.{table_name}' does not exist yet. "
+                        "Returning original DataFrame."
+                    )
+                return df
+        else:
+            if context:
+                context.log.warning(
+                    f"Metaschema '{schema_name}' missing and no table_name provided. "
+                    f"Returning original DataFrame. Error: {exc}"
+                )
+            return df
 
     # Only process columns that exist in the dataframe.
     # This prevents issues with schema definitions containing columns not relevant
     # to the current ingestion (e.g., master or reference columns).
     columns = [c for c in columns if c.name in df.columns]
 
-    context.log.info(
-        f"transform types schema columns before {df.schema.simpleString()}"
-    )
+    if context:
+        context.log.info(
+            f"transform types schema columns before {df.schema.simpleString()}"
+        )
 
     columns_not_to_update = {"signature"}
     if settings.IN_PRODUCTION:
