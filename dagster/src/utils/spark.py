@@ -73,10 +73,21 @@ if settings.USE_AZURITE and settings.AZURE_STORAGE_ACCOUNT_KEY:
         settings.AZURE_STORAGE_ACCOUNT_NAME
     )
 else:
-    # SAS token authentication for Azure cloud
-    spark_common_config[
-        f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
-    ] = settings.AZURE_SAS_TOKEN
+    spark_common_config.update(
+        {
+            # ABFS driver credentials (abfss://) — used for all new reads/writes
+            f"spark.hadoop.fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
+            f"spark.hadoop.fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
+            f"spark.hadoop.fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN.lstrip(
+                "?"
+            ),
+            # WASBS driver credentials (wasbs://) — retained so that existing Delta
+            # tables whose locations were registered in the Hive Metastore as
+            # wasbs:// paths remain accessible. To be removed once all table locations
+            # in the metastore have been migrated to abfss://.
+            f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": settings.AZURE_SAS_TOKEN,
+        }
+    )
 
 if settings.IN_PRODUCTION:
     spark_common_config.update(
