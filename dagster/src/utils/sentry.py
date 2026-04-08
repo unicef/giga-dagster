@@ -51,7 +51,7 @@ def log_op_context(context: OpExecutionContext) -> None:
             "run_id": context.run_id,
             "run_tags": context.run_tags,
             "retry_number": context.retry_number,
-            "asset_key": context.asset_key,
+            "asset_key": context.asset_keys_for_node,
         },
     )
 

@@ -37,6 +37,8 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
             return config.destination_filepath_object
 
         config = FileConfig(**context.step_context.op_config)
+        if config.output_filepaths and context.name in config.output_filepaths:
+            return Path(config.output_filepaths[context.name])
         return config.destination_filepath_object
 
     @staticmethod
