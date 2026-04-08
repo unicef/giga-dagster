@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     MONGOLIA_API_PASSWORD: str = ""
     MONGOLIA_API_URL: str = ""
 
+    # GeoSpatial data directory for storing (Google/MS buildings, GHSL, WorldPop)
+    GEOSPATIAL_DATA_DIR: str = "/app"
+
     # Derived settings
     @property
     def IN_PRODUCTION(self) -> bool:

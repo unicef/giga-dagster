@@ -114,6 +114,21 @@ class Config(BaseSettings):
             "description": "Checks if the school entered is not yet in the system. If it is not yet in the system, it cannot be updated.",
             "type": "is_not_update",
         },
+        {
+            "assertion": "is_in_uninhabited_area",
+            "description": "Checks if the school is in an uninhabited area (no buildings within 150m AND no built surface).",
+            "type": "geospatial_checks",
+        },
+        {
+            "assertion": "is_suspect_location",
+            "description": "Checks if the school location is suspect (any signal: no buildings OR no built surface nearby).",
+            "type": "geospatial_checks",
+        },
+        {
+            "assertion": "duplicate_group_flag_50m",
+            "description": "Checks if the school has a potential duplicate within 50m proximity.",
+            "type": "geospatial_checks",
+        },
     ]
 
     DATA_TYPES: set[tuple[str, str]] = {  ## @RENZ are we not pulling this from schema?
@@ -169,10 +184,13 @@ class Config(BaseSettings):
         ("connectivity_RT", "STRING"),
         ("connectivity_RT_datasource", "STRING"),
         ("connectivity_RT_ingestion_timestamp", "TIMESTAMP"),
-        ("school_id_giga", "STRING"),
         ("pop_within_10km", "LONG"),
+        ("pop_within_5km", "LONG"),
         ("nearest_school_distance", "DOUBLE"),
+        ("schools_within_5km", "INT"),
         ("schools_within_10km", "INT"),
+        ("school_area_type_smod", "STRING"),
+        ("rural_urban", "STRING"),
         ("nearest_NR_id", "STRING"),
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),
@@ -315,6 +333,7 @@ class Config(BaseSettings):
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
         "school_funding_type": ["public", "private", "charitable", "others"],
+        "rural_urban": ["Urban", "Rural"],
     }
 
     VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
@@ -358,6 +377,7 @@ class Config(BaseSettings):
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
         "school_funding_type": ["public", "private", "charitable", "others"],
+        "rural_urban": ["Urban", "Rural"],
     }
 
     VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {
@@ -389,6 +409,10 @@ class Config(BaseSettings):
             "schools_within_1km": {"min": 0, "max": 20},
             "schools_within_2km": {"min": 0, "max": 40},
             "schools_within_3km": {"min": 0, "max": 60},
+            "schools_within_5km": {"min": 0, "max": 100},
+            "schools_within_10km": {"min": 0, "max": 200},
+            "pop_within_5km": {"min": 0, "max": 5000000},
+            "pop_within_10km": {"min": 0, "max": 20000000},
             "school_establishment_year": {"min": 1000, "max": self.current_year},
             "latitude": {"min": -90, "max": 90},
             "longitude": {"min": -180, "max": 180},
@@ -427,6 +451,8 @@ class Config(BaseSettings):
             "num_latrines": {"min": 0, "max": 200},
             "school_data_collection_year": {"min": 1000, "max": self.current_year},
             "download_speed_govt": {"min": 1, "max": 200},
+            "pop_within_5km": {"min": 0, "max": 5000000},
+            "pop_within_10km": {"min": 0, "max": 20000000},
         }
 
     VALUES_RANGE_COVERAGE: dict[str, dict[str, int]] = {
@@ -435,8 +461,9 @@ class Config(BaseSettings):
         "schools_within_1km": {"min": 0, "max": 20},
         "schools_within_2km": {"min": 0, "max": 40},
         "schools_within_3km": {"min": 0, "max": 60},
+        "schools_within_5km": {"min": 0, "max": 100},
         "nearest_school_distance": {"min": 0, "max": 10000000},
-        "schools_within_10km": {"min": 0, "max": 100},
+        "schools_within_10km": {"min": 0, "max": 200},
     }
 
     @property
@@ -579,6 +606,8 @@ class Config(BaseSettings):
         "school_address",
         "is_school_open",
         "school_location_ingestion_timestamp",
+        "school_area_type_smod",
+        "rural_urban",
     ]
 
     COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
@@ -596,6 +625,12 @@ class Config(BaseSettings):
         "pop_within_1km",
         "pop_within_2km",
         "pop_within_3km",
+        "pop_within_5km",
+        "pop_within_10km",
+        "schools_within_5km",
+        "schools_within_10km",
+        "school_area_type_smod",
+        "rural_urban",
         "connectivity_govt_collection_year",
         "connectivity_govt",
         # "school_id_giga",

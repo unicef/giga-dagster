@@ -123,6 +123,14 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         "dq_is_not_within_country": "Are the coordinates within the country",
     }
 
+    geospatial_checks_desc = {
+        "dq_is_in_uninhabited_area": "Is the school in an uninhabited area (no buildings within 150m AND no built surface)",
+        "dq_is_suspect_location": "Is the school location suspect (any signal: no buildings OR no built surface nearby)",
+        "dq_duplicate_group_flag_50m": "Does the school have a potential duplicate within 50m proximity",
+        "dq_duplicate_group_id_50m": "Cluster ID for schools within 50m of each other",
+        "dq_duplicate_group_count_50m": "Number of other schools within 50m proximity",
+    }
+
     geolocation_checks = {
         **create_update_desc,
         **is_not_within_country_desc,
@@ -134,6 +142,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         **duplicate_name_level_110_check_desc,
         **column_relation_checks_desc,
         **critical_error_checks_desc,
+        **geospatial_checks_desc,
     }
 
     return geolocation_checks
