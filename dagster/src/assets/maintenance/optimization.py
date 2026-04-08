@@ -7,32 +7,32 @@ from dagster import asset
 
 @asset(
     group_name="maintenance",
-    description="Optimizes all school_master.upload_errors_* tables using Z-Ordering on dataset_type.",
+    description="Optimizes all school_geolocation_error_table.* tables using Z-Ordering on giga_sync_file_id.",
 )
-def optimize_upload_errors_table(context) -> None:
+def optimize_geolocation_error_table(context) -> None:
     """
     Discovers all per-country upload_errors tables and runs OPTIMIZE + ZORDER BY
     on each one to improve query performance for the Error Table UI.
     """
     s: SparkSession = spark.spark_session
-    schema_name = "school_master"
+    schema_name = "school_geolocation_error_table"
 
-    context.log.info("Discovering upload_errors_* tables...")
+    context.log.info("Discovering all tables...")
 
     # Query the metastore for all upload_errors tables
-    tables_df = s.sql(f"SHOW TABLES IN {schema_name} LIKE 'upload_errors_*'")
+    tables_df = s.sql(f"SHOW TABLES IN {schema_name} LIKE '*'")
     table_names = [row.tableName for row in tables_df.collect()]
 
     if not table_names:
-        context.log.warning("No upload_errors_* tables found. Skipping optimization.")
+        context.log.warning("No tables found. Skipping optimization.")
         return
 
-    context.log.info(f"Found {len(table_names)} upload_errors tables to optimize.")
+    context.log.info(f"Found {len(table_names)} tables to optimize.")
 
     for table_name in table_names:
         full_table_name = construct_full_table_name(schema_name, table_name)
         try:
-            query = f"OPTIMIZE {full_table_name} ZORDER BY (dataset_type)"
+            query = f"OPTIMIZE {full_table_name} ZORDER BY (giga_sync_file_id)"
             context.log.info(f"Executing: {query}")
             s.sql(query).collect()
             context.log.info(f"Optimization completed for {full_table_name}.")

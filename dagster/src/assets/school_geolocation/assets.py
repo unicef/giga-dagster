@@ -634,27 +634,26 @@ def geolocation_dq_failed_rows(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@asset
 @capture_op_exceptions
-def upload_errors(
+def geolocation_error_table(
     context: OpExecutionContext,
-    geolocation_dq_failed_rows: pd.DataFrame,
+    geolocation_dq_failed_rows: sql.DataFrame,
     config: FileConfig,
     spark: PySparkResource,
-) -> Output[sql.DataFrame]:
+) -> Output[None]:
     s: SparkSession = spark.spark_session
 
-    if geolocation_dq_failed_rows.empty:
+    if geolocation_dq_failed_rows.isEmpty():
         context.log.info("No failed rows to write to aggregated error table.")
-        # Return empty DataFrame with an empty schema
-        return Output(s.createDataFrame([], schema=StructType([])))
+        return Output(None)
 
     file_id = config.filename_components.id
     file_name = Path(config.filepath).name
     country_code = config.country_code
     dataset_type = config.dataset_type
 
-    df = s.createDataFrame(geolocation_dq_failed_rows)
+    df = geolocation_dq_failed_rows
 
     df = df.withColumn("giga_sync_file_id", f.lit(file_id))
     df = df.withColumn("giga_sync_file_name", f.lit(file_name))
@@ -662,9 +661,11 @@ def upload_errors(
     df = df.withColumn("country_code", f.lit(country_code))
     df = df.withColumn("created_at", f.current_timestamp())
 
-    schema_name = "school_master"
-    table_name = f"upload_errors_{country_code.lower()}"
+    schema_name = "school_geolocation_error_table"
+    table_name = country_code.lower()
     full_table_name = construct_full_table_name(schema_name, table_name)
+
+    create_schema(s, schema_name)
 
     try:
         if s.catalog.tableExists(full_table_name):
@@ -678,7 +679,8 @@ def upload_errors(
     except Exception as exc:
         context.log.warning(f"Failed to delete existing rows: {exc}")
 
-    context.log.info(f"Appending natively failed rows to {full_table_name}")
+    context.log.info(f"Appending failed rows to {full_table_name}")
+    row_count = df.count()
 
     (
         df.write.format("delta")
@@ -688,10 +690,10 @@ def upload_errors(
     )
 
     return Output(
-        df,
+        None,
         metadata={
             **get_output_metadata(config),
-            "row_count": geolocation_dq_failed_rows.shape[0],
+            "row_count": row_count,
             "preview": get_table_preview(df),
         },
     )
