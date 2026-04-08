@@ -1,12 +1,9 @@
-from datetime import datetime
-
 from dagster_pyspark import PySparkResource
 from pyspark.sql import DataFrame, SparkSession
 
 from dagster import ConfigurableIOManager, InputContext, OutputContext
 from src.settings import settings
 from src.utils.delta import create_schema
-from src.utils.giga_meter_helpers import _append_manifest_record
 
 
 class GigaMeterDeltaIOManager(ConfigurableIOManager):
@@ -69,26 +66,6 @@ class GigaMeterDeltaIOManager(ConfigurableIOManager):
             )
 
         context.log.info(f"Successfully wrote to Delta table {table_full_name}.")
-
-        # Write per-file manifest records AFTER successful Delta write.
-        # Extract unique source file paths from the DataFrame.
-        manifest_table = config.get("manifest_table")
-        if manifest_table and "_source_file" in output.columns:
-            source_files = [
-                row._source_file
-                for row in output.select("_source_file").distinct().collect()
-            ]
-            for source_file in source_files:
-                full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{source_file}"
-                _append_manifest_record(
-                    spark,
-                    schema_name=schema_name,
-                    manifest_table=manifest_table,
-                    file_path=full_path,
-                    etag="",
-                    ingested_at=datetime.utcnow(),
-                )
-            context.log.info(f"Manifest updated for {len(source_files)} file(s).")
 
     def load_input(self, context: InputContext) -> DataFrame | None:
         """Read a Parquet file from ADLS.
