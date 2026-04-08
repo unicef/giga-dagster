@@ -74,10 +74,21 @@ if settings.USE_AZURITE and settings.AZURE_STORAGE_ACCOUNT_KEY:
         settings.AZURE_STORAGE_ACCOUNT_NAME
     )
 else:
-    # SAS token authentication for Azure cloud
-    spark_common_config[
-        f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net"
-    ] = settings.AZURE_SAS_TOKEN
+    spark_common_config.update(
+        {
+            # ABFS driver credentials (abfss://) — used for all new reads/writes
+            f"spark.hadoop.fs.azure.account.auth.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "SAS",
+            f"spark.hadoop.fs.azure.sas.token.provider.type.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider",
+            f"spark.hadoop.fs.azure.sas.fixed.token.{settings.AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net": settings.AZURE_SAS_TOKEN.lstrip(
+                "?"
+            ),
+            # WASBS driver credentials (wasbs://) — retained so that existing Delta
+            # tables whose locations were registered in the Hive Metastore as
+            # wasbs:// paths remain accessible. To be removed once all table locations
+            # in the metastore have been migrated to abfss://.
+            f"spark.hadoop.fs.azure.sas.{settings.AZURE_BLOB_CONTAINER_NAME}.{settings.AZURE_STORAGE_ACCOUNT_NAME}.blob.core.windows.net": settings.AZURE_SAS_TOKEN,
+        }
+    )
 
 if settings.IN_PRODUCTION:
     spark_common_config.update(
@@ -233,25 +244,81 @@ def transform_school_types(
     return df
 
 
+def _resolve_schema_columns(
+    df: sql.DataFrame,
+    schema_name: str,
+    table_name: str | None,
+    context: OpExecutionContext | OutputContext | None,
+) -> list | None:
+    """
+    Resolve schema columns from the metaschema registry. If the registry
+    table is missing, fall back to the target Delta table's live schema.
+    Returns None when no schema can be resolved (caller should return df as-is).
+    """
+    try:
+        columns = get_schema_columns(df.sparkSession, schema_name)
+        if context:
+            context.log.info(f"Schema name: {schema_name}")
+        return columns
+    except Exception as exc:
+        return _fallback_schema_columns(df, schema_name, table_name, context, exc)
+
+
+def _fallback_schema_columns(
+    df: sql.DataFrame,
+    schema_name: str,
+    table_name: str | None,
+    context: OpExecutionContext | OutputContext | None,
+    exc: Exception,
+) -> list | None:
+    """Attempt to resolve columns from the target Delta table when metaschema is missing."""
+    if not table_name:
+        if context:
+            context.log.warning(
+                f"Metaschema '{schema_name}' missing and no table_name provided. "
+                f"Returning original DataFrame. Error: {exc}"
+            )
+        return None
+
+    if context:
+        context.log.info(
+            f"Metaschema '{schema_name}' missing, falling back to dynamic "
+            f"alignment against delta table '{schema_name}.{table_name}'"
+        )
+    try:
+        target_df = df.sparkSession.table(f"{schema_name}.{table_name}")
+        return list(target_df.schema.fields)
+    except Exception:
+        if context:
+            context.log.info(
+                f"Target table '{schema_name}.{table_name}' does not exist yet. "
+                "Returning original DataFrame."
+            )
+        return None
+
+
 def transform_types(
     df: sql.DataFrame,
     schema_name: str,
     context: OpExecutionContext | OutputContext = None,
+    table_name: str = None,
 ) -> sql.DataFrame:
     """
     Retuns a dataframe with columns casted to use types in provided schema.
     """
+    columns = _resolve_schema_columns(df, schema_name, table_name, context)
+    if columns is None:
+        return df
 
-    columns = get_schema_columns(df.sparkSession, schema_name)
-    context.log.info(f"Schema name: {schema_name}")
-    context.log.info(f"Schema columns: {columns}")
+    # Only process columns that exist in the dataframe.
+    # This prevents issues with schema definitions containing columns not relevant
+    # to the current ingestion (e.g., master or reference columns).
+    columns = [c for c in columns if c.name in df.columns]
 
-    if schema_name in ["qos", "qos_raw", "qos_availability"]:
-        columns = [c for c in columns if c.name in df.columns]
-
-    context.log.info(
-        f"transform types schema columns before {df.schema.simpleString()}"
-    )
+    if context:
+        context.log.info(
+            f"transform types schema columns before {df.schema.simpleString()}"
+        )
 
     columns_not_to_update = {"signature"}
     if settings.IN_PRODUCTION:
@@ -264,9 +331,10 @@ def transform_types(
             if column.name not in columns_not_to_update
         },
     )
-    context.log.info(
-        f"transform types after df with columns {df.schema.simpleString()}"
-    )
+    if context:
+        context.log.info(
+            f"transform types after df with columns {df.schema.simpleString()}"
+        )
     df.printSchema()
     return df
 
