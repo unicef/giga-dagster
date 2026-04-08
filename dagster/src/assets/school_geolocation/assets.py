@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -197,6 +198,7 @@ def geolocation_bronze(
         if schema_name in ("school_id_govt", "latitude", "longitude")
     }
 
+    t0 = time.time()
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(
@@ -205,6 +207,9 @@ def geolocation_bronze(
             dtype_mapping=string_col_mapping,
             context=context,
         ).map(str)
+    context.log.info(
+        f"pandas_loader completed in {time.time() - t0:.2f}s — {len(pdf)} rows"
+    )
 
     pdf.rename(lambda name: name.strip(), axis="columns", inplace=True)
     column_mapping_filtered = {
@@ -214,8 +219,11 @@ def geolocation_bronze(
     }
     pdf = pdf[column_to_schema_mapping.keys()]
     pdf.rename(column_mapping_filtered, axis="columns", inplace=True)
+
+    t1 = time.time()
     df = s.createDataFrame(pdf)
     uploaded_columns = df.columns
+    context.log.info(f"createDataFrame completed in {time.time() - t1:.2f}s")
 
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
@@ -223,12 +231,14 @@ def geolocation_bronze(
         df, mode, uploaded_columns, country_code, s
     )
 
+    t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
         spark=spark,
         schema_reference=df,
     )
+    context.log.info(f"datahub_emit completed in {time.time() - t2:.2f}s")
 
     for column in config_expectations.TITLE_CASE_COLUMNS:
         if column in df.columns:
