@@ -244,11 +244,8 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
-    context.log.info("Submitting Spark job (df.count) — waiting for executors...")
-    t3 = time.time()
     df.cache()
     row_count = df.count()
-    context.log.info(f"df.count() completed in {time.time() - t3:.2f}s")
 
     return Output(
         df,
