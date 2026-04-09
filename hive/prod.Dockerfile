@@ -17,7 +17,7 @@ RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/had
 COPY FixedSASTokenProvider.java /tmp/sas/FixedSASTokenProvider.java
 RUN mkdir -p /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas /tmp/sas/classes && \
     cp /tmp/sas/FixedSASTokenProvider.java /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas/ && \
-    javac -cp "/opt/hive/lib/*:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*" \
+    javac -source 8 -target 8 -cp "/opt/hive/lib/*:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*" \
         -d /tmp/sas/classes \
         /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas/FixedSASTokenProvider.java && \
     jar cf /opt/hive/lib/fixed-sas-token-provider.jar -C /tmp/sas/classes . && \
