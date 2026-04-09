@@ -189,8 +189,7 @@ class Config(BaseSettings):
         ("nearest_school_distance", "DOUBLE"),
         ("schools_within_5km", "INT"),
         ("schools_within_10km", "INT"),
-        ("school_area_type_smod", "STRING"),
-        ("rural_urban", "STRING"),
+        ("rurban_detected", "STRING"),
         ("nearest_NR_id", "STRING"),
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),
@@ -333,7 +332,7 @@ class Config(BaseSettings):
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
         "school_funding_type": ["public", "private", "charitable", "others"],
-        "rural_urban": ["Urban", "Rural"],
+        "rurban_detected": ["Urban", "Rural"],
     }
 
     VALUES_DOMAIN_REFERENCE: dict[str, list[str]] = {
@@ -377,7 +376,7 @@ class Config(BaseSettings):
         "water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
         "school_funding_type": ["public", "private", "charitable", "others"],
-        "rural_urban": ["Urban", "Rural"],
+        "rurban_detected": ["Urban", "Rural"],
     }
 
     VALUES_DOMAIN_COVERAGE: dict[str, list[str]] = {
@@ -606,8 +605,7 @@ class Config(BaseSettings):
         "school_address",
         "is_school_open",
         "school_location_ingestion_timestamp",
-        "school_area_type_smod",
-        "rural_urban",
+        "rurban_detected",
     ]
 
     COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
@@ -629,8 +627,7 @@ class Config(BaseSettings):
         "pop_within_10km",
         "schools_within_5km",
         "schools_within_10km",
-        "school_area_type_smod",
-        "rural_urban",
+        "rurban_detected",
         "connectivity_govt_collection_year",
         "connectivity_govt",
         # "school_id_giga",

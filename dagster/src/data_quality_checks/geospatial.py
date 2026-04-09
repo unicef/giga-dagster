@@ -369,13 +369,12 @@ def smod_classification(
         via giga-spatial.
 
     Adds columns:
-        - school_area_type_smod: SMOD label (e.g. "Urban Centre", "Rural Cluster")
-        - rural_urban: ("Urban" or "Rural")
+        - rurban_detected: ("Urban" or "Rural")
     """
     logger = get_context_with_fallback_logger(context)
     logger.info("Running SMOD urban/rural classification...")
 
-    smod_cols_str = ["school_area_type_smod", "rural_urban"]
+    smod_cols_str = ["rurban_detected"]
 
     try:
         pdf = _spark_to_pandas_coords(df)
@@ -404,18 +403,14 @@ def smod_classification(
 
         # Map SMOD numeric classes to human-readable labels and urban/rural
         result_pdf = pdf.copy()
-        result_pdf["school_area_type_smod"] = None
-        result_pdf["rural_urban"] = None
+        result_pdf["rurban_detected"] = None
 
         smod_map = result.set_index("poi_id")["smod_class"].to_dict()
         for idx in result_pdf.index:
             sid = result_pdf.at[idx, "school_id_giga"]
             if sid in smod_map and pd.notna(smod_map[sid]):
                 smod_val = int(smod_map[sid])
-                result_pdf.at[idx, "school_area_type_smod"] = SMOD_CLASS_LABELS.get(
-                    smod_val, f"Unknown ({smod_val})"
-                )
-                result_pdf.at[idx, "rural_urban"] = (
+                result_pdf.at[idx, "rurban_detected"] = (
                     "Urban" if smod_val in SMOD_URBAN_CLASSES else "Rural"
                 )
 

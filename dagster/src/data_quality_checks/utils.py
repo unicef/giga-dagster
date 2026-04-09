@@ -482,7 +482,7 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):  # noq
         "water_availability",
         "school_area_type",
         "school_funding_type",
-        "rural_urban",
+        "rurban_detected",
     ]
 
     for column in cols_for_counts_summary:
