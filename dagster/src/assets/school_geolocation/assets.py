@@ -15,6 +15,7 @@ from pyspark.sql import (
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -244,11 +245,8 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
-    context.log.info("Submitting Spark job (df.count) — waiting for executors...")
-    t3 = time.time()
     df.cache()
     row_count = df.count()
-    context.log.info(f"df.count() completed in {time.time() - t3:.2f}s")
 
     return Output(
         df,
@@ -277,10 +275,16 @@ def geolocation_data_quality_results(
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
+    dq_mode_str = config.metadata.get("dq_mode", "master")
+    dq_mode = DQMode(dq_mode_str)
+    context.log.info(f"Running DQ checks in mode: {dq_mode.value}")
+
     columns = get_schema_columns(s, schema_name)
     schema = StructType(columns)
 
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+    if dq_mode == DQMode.MASTER and check_table_exists(
+        s, schema_name, country_code, DataTier.SILVER
+    ):
         silver_tier_schema_name = construct_schema_name_for_tier(
             "school_geolocation", DataTier.SILVER
         )
@@ -301,12 +305,17 @@ def geolocation_data_quality_results(
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
+    dq_context = DQContext(
+        dq_mode=dq_mode,
+        dataset_type=dataset_type,
+        country_code_iso3=country_code,
+        upload_mode=config.metadata["mode"],
+    )
+
     dq_results = row_level_checks(
         df=renamed_bronze,
+        dq_context=dq_context,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
         context=context,
     )
 
@@ -621,6 +630,71 @@ def geolocation_dq_failed_rows(
             **get_output_metadata(config),
             "row_count": row_count,
             "preview": get_table_preview(df_failed),
+        },
+    )
+
+
+@asset
+@capture_op_exceptions
+def geolocation_error_table(
+    context: OpExecutionContext,
+    geolocation_dq_failed_rows: sql.DataFrame,
+    config: FileConfig,
+    spark: PySparkResource,
+) -> Output[None]:
+    s: SparkSession = spark.spark_session
+
+    if geolocation_dq_failed_rows.isEmpty():
+        context.log.info("No failed rows to write to aggregated error table.")
+        return Output(None)
+
+    file_id = config.filename_components.id
+    file_name = Path(config.filepath).name
+    country_code = config.country_code
+    dataset_type = config.dataset_type
+
+    df = geolocation_dq_failed_rows
+
+    df = df.withColumn("giga_sync_file_id", f.lit(file_id))
+    df = df.withColumn("giga_sync_file_name", f.lit(file_name))
+    df = df.withColumn("dataset_type", f.lit(dataset_type))
+    df = df.withColumn("country_code", f.lit(country_code))
+    df = df.withColumn("created_at", f.current_timestamp())
+
+    schema_name = "school_geolocation_error_table"
+    table_name = country_code.lower()
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    create_schema(s, schema_name)
+
+    try:
+        if s.catalog.tableExists(full_table_name):
+            context.log.info(f"Deleting existing errors for file_id: {file_id}")
+            delta_table = DeltaTable.forName(s, full_table_name)
+            delta_table.delete(f.col("giga_sync_file_id") == f.lit(file_id))
+        else:
+            context.log.info(
+                f"Table {full_table_name} does not exist. It will be created on write."
+            )
+    except Exception as exc:
+        context.log.warning(f"Failed to delete existing rows: {exc}")
+
+    context.log.info(f"Appending failed rows to {full_table_name}")
+    row_count = df.count()
+
+    (
+        df.write.format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable(full_table_name)
+    )
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": row_count,
+            "preview": get_table_preview(df),
         },
     )
 

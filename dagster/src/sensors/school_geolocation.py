@@ -2,6 +2,7 @@ from pathlib import Path
 
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
+from src.jobs.school_geolocation import apply_fuzzy_corrections_job
 from src.jobs.school_master import (
     school_master_geolocation__admin_delete_rows_job,
     school_master_geolocation__automated_data_checks_job,
@@ -52,6 +53,22 @@ def school_master_geolocation__raw_file_uploads_sensor(
             )
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size
+
+            run_key = str(path)
+            try:
+                metadata_path = (
+                    adls_filepath.replace(
+                        constants.UPLOAD_PATH_PREFIX,
+                        constants.UPLOAD_METADATA_PATH_PREFIX,
+                        1,
+                    )
+                    + ".metadata.json"
+                )
+                metadata_adls = adls_file_client.download_json(metadata_path)
+                if isinstance(metadata_adls, dict):
+                    metadata = {**(metadata or {}), **metadata_adls}
+            except Exception:
+                pass
 
             ops_destination_mapping = {
                 "geolocation_raw": OpDestinationMapping(
@@ -132,7 +149,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
 
             context.log.info(f"FILE: {path}")
             yield RunRequest(
-                run_key=str(path),
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )
@@ -298,3 +315,78 @@ def school_master_geolocation__admin_delete_rows_sensor(
 
     if count == 0:
         yield SkipReason(f"No files detected in {source_directory}")
+
+
+@sensor(
+    job=apply_fuzzy_corrections_job,
+    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
+)
+def fuzzy_corrections_sensor(
+    context: SensorEvaluationContext,
+    adls_file_client: ADLSFileClient,
+):
+    """
+    Sensor that watches for new fuzzy correction files in ADLS and triggers the correction job.
+    Path: fuzzy-corrections/{upload_id}_{country_code}.json
+    """
+    corrections_dir = "fuzzy-corrections"
+
+    # helper to list paths
+    try:
+        paths = adls_file_client.list_paths_generator(corrections_dir, recursive=False)
+    except Exception as e:
+        # If directory doesn't exist yet, just return
+        context.log.info(f"Directory {corrections_dir} not found or error: {e}")
+        return SkipReason(f"Directory {corrections_dir} not accessible: {e}")
+
+    # Cursor format: timestamp
+    last_processed_timestamp = float(context.cursor) if context.cursor else 0.0
+    max_timestamp = last_processed_timestamp
+
+    for path in paths:
+        if path.is_directory:
+            continue
+
+        # path.last_modified is datetime. converting to timestamp
+        modified_ts = path.last_modified.timestamp()
+
+        if modified_ts > last_processed_timestamp:
+            filename = path.name.split("/")[-1]
+
+            if not filename.endswith(".json"):
+                continue
+
+            # Expected format: {upload_id}_{country_code}.json
+            clean_name = filename.replace(".json", "")
+
+            # Assuming upload_id (UUID) and country_code (3 chars) are separated by underscore
+            # UUIDs can contain hyphens but not underscores.
+            parts = clean_name.split("_")
+
+            if len(parts) >= 2:
+                # Last part is country code, rest is upload_id (rejoined in case of extra underscores, though unlikely for UUID)
+                c_code = parts[-1]
+                u_id = "_".join(parts[:-1])
+
+                run_key = f"{u_id}_{modified_ts}"
+
+                yield RunRequest(
+                    run_key=run_key,
+                    run_config={
+                        "ops": {
+                            "apply_fuzzy_corrections": {
+                                "config": {
+                                    "upload_id": u_id,
+                                    "country_code": c_code,
+                                    "corrections_json_path": path.name,
+                                }
+                            }
+                        }
+                    },
+                )
+
+                if modified_ts > max_timestamp:
+                    max_timestamp = modified_ts
+
+    if max_timestamp > last_processed_timestamp:
+        context.update_cursor(str(max_timestamp))
