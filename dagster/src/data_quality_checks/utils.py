@@ -11,17 +11,12 @@ from pyspark.sql import (
 from pyspark.sql.types import IntegerType, MapType, StringType
 
 from dagster import OpExecutionContext
-from src.constants import UploadMode
 from src.data_quality_checks.column_relation import column_relation_checks
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
     CONFIG_NONEMPTY_COLUMNS,
 )
 from src.data_quality_checks.coverage import fb_percent_sum_to_100_check
-from src.data_quality_checks.create_update import (
-    create_checks,
-    update_checks,
-)
 from src.data_quality_checks.critical import critical_error_checks
 from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
@@ -539,7 +534,7 @@ def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str], mode: str
+    df: sql.DataFrame, uploaded_columns: list[str]
 ):
     df = _normalize_dq_results_map(df)
 
@@ -550,13 +545,15 @@ def dq_geolocation_extract_relevant_columns(
         table_id=dq_column_name_table_id
     )
 
-    mode_column = f"{mode.title()} DQ"
-
+    # Union both mode columns — a check is mandatory if it's "always" in either mode,
+    # and optional if it's "if in file" in either mode.
     dq_table_mandatory = dq_column_name_table[
-        dq_column_name_table[mode_column].str.lower() == "always"
+        (dq_column_name_table["Create DQ"].str.lower() == "always")
+        | (dq_column_name_table["Update DQ"].str.lower() == "always")
     ]
-    dq_table_optional = dq_column_name_table.loc[
-        dq_column_name_table[mode_column].str.lower() == "if in file"
+    dq_table_optional = dq_column_name_table[
+        (dq_column_name_table["Create DQ"].str.lower() == "if in file")
+        | (dq_column_name_table["Update DQ"].str.lower() == "if in file")
     ]
 
     # get relevant dq checks from the checks that involve multiple columns
@@ -635,7 +632,6 @@ def row_level_checks(
     dataset_type: str,
     _country_code_iso3: str,
     silver: sql.DataFrame = None,
-    mode=None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
@@ -662,11 +658,6 @@ def row_level_checks(
             context,
         )
     elif dataset_type == "geolocation":
-        if mode == UploadMode.CREATE.value:
-            df = create_checks(bronze=df, silver=silver, context=context)
-        elif mode == UploadMode.UPDATE.value:
-            df = update_checks(bronze=df, silver=silver, context=context)
-
         df = is_not_within_country(df, _country_code_iso3, context)
         df = similar_name_level_within_110_check(df, context)
         df = school_density_check(df, context)
@@ -683,7 +674,6 @@ def row_level_checks(
             df,
             dataset_type,
             CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            mode,
             context,
         )
         df = column_relation_checks(df, dataset_type, context)
