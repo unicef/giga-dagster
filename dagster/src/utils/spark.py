@@ -233,21 +233,42 @@ def transform_types(
     df: sql.DataFrame,
     schema_name: str,
     context: OpExecutionContext | OutputContext = None,
+    table_name: str = None,
 ) -> sql.DataFrame:
     """
-    Retuns a dataframe with columns casted to use types in provided schema.
+    Returns a dataframe with columns casted to use types in provided schema.
+    If metaschema is missing, falls back to the schema of the existing Delta table if table_name is provided.
     """
+    logger = get_context_with_fallback_logger(context)
 
-    columns = get_schema_columns(df.sparkSession, schema_name)
-    context.log.info(f"Schema name: {schema_name}")
-    context.log.info(f"Schema columns: {columns}")
+    try:
+        columns = get_schema_columns(df.sparkSession, schema_name)
+    except Exception as e:
+        if table_name:
+            full_table_name = f"{schema_name}.{table_name}"
+            logger.warning(
+                f"Metaschema missing for {schema_name}. Falling back to Delta table schema for {full_table_name}: {e}"
+            )
+            try:
+                columns = df.sparkSession.table(full_table_name).schema.fields
+            except Exception as table_err:
+                logger.error(
+                    f"Failed to fall back to Delta table schema for {full_table_name}: {table_err}"
+                )
+                return df
+        else:
+            logger.warning(
+                f"Metaschema missing for {schema_name} and no table_name provided for fallback: {e}"
+            )
+            return df
+
+    logger.info(f"Schema name: {schema_name}")
+    logger.info(f"Schema columns: {columns}")
 
     if schema_name in ["qos", "qos_raw", "qos_availability"]:
         columns = [c for c in columns if c.name in df.columns]
 
-    context.log.info(
-        f"transform types schema columns before {df.schema.simpleString()}"
-    )
+    logger.info(f"transform types schema columns before {df.schema.simpleString()}")
 
     columns_not_to_update = {"signature"}
     if settings.IN_PRODUCTION:
@@ -260,9 +281,7 @@ def transform_types(
             if column.name not in columns_not_to_update
         },
     )
-    context.log.info(
-        f"transform types after df with columns {df.schema.simpleString()}"
-    )
+    logger.info(f"transform types after df with columns {df.schema.simpleString()}")
     df.printSchema()
     return df
 

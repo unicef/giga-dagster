@@ -1,47 +1,79 @@
-from src.assets.adhoc import health_master_csv_to_gold
+from unittest.mock import MagicMock, patch
+
+import pandas as pd
+import pytest
+from pyspark.sql.types import (
+    StringType,
+    StructField,
+)
 from src.assets.adhoc.health_master_csv_to_gold import (
-    ADLSFileClient,
-    PySparkResource,
-    add_missing_columns,
     adhoc__health_master_data_transforms,
     adhoc__load_health_master_csv,
-    adhoc__publish_health_master_to_gold,
-    f,
-    get_schema_columns,
 )
 
-
-def test_module_imports():
-    assert health_master_csv_to_gold is not None
+from dagster import Output
 
 
-def test_adhoc_load_health_master_csv_exists():
-    assert callable(adhoc__load_health_master_csv)
+@pytest.mark.asyncio
+async def test_adhoc__load_health_master_csv(
+    mock_adls_client, mock_file_config, op_context
+):
+    mock_adls_client.download_raw.return_value = b"raw_content"
+    result = adhoc__load_health_master_csv(
+        op_context, mock_adls_client, mock_file_config
+    )
+    assert result.value == b"raw_content"
 
 
-def test_adhoc_health_master_data_transforms_exists():
-    assert callable(adhoc__health_master_data_transforms)
+@pytest.mark.asyncio
+async def test_adhoc__health_master_data_transforms_functional(
+    spark_session, mock_file_config, op_context
+):
+    # Setup test data
+    raw_csv = b"name,lat,lon\nHealth A,12.3,45.6"
 
+    mock_adls_client = MagicMock()
+    mock_spark = MagicMock()
+    mock_spark.spark_session = spark_session
 
-def test_adhoc_publish_health_master_to_gold_exists():
-    assert callable(adhoc__publish_health_master_to_gold)
+    # Mock schema columns
+    mock_cols = [
+        StructField("name", StringType()),
+        StructField("lat", StringType()),
+        StructField("lon", StringType()),
+        StructField("health_id_giga", StringType()),
+    ]
 
+    with (
+        patch(
+            "src.assets.adhoc.health_master_csv_to_gold.get_schema_columns",
+            return_value=mock_cols,
+        ),
+        patch(
+            "src.assets.adhoc.health_master_csv_to_gold.get_output_metadata",
+            return_value={},
+        ),
+        patch(
+            "src.assets.adhoc.health_master_csv_to_gold.get_table_preview",
+            return_value="preview",
+        ),
+        patch(
+            "src.spark.transform_functions.get_admin_boundaries", return_value=None
+        ),  # Mock to return 'Unknown'
+    ):
+        result = await adhoc__health_master_data_transforms(
+            context=op_context,
+            adhoc__load_health_master_csv=raw_csv,
+            spark=mock_spark,
+            adls_file_client=mock_adls_client,
+            config=mock_file_config,
+        )
 
-def test_imports_pyspark_resource():
-    assert PySparkResource is not None
-
-
-def test_imports_spark_functions():
-    assert f is not None
-
-
-def test_imports_adls_client():
-    assert ADLSFileClient is not None
-
-
-def test_imports_schema_utils():
-    assert callable(get_schema_columns)
-
-
-def test_imports_transform_functions():
-    assert callable(add_missing_columns)
+    assert isinstance(result, Output)
+    df = result.value
+    assert isinstance(df, pd.DataFrame)
+    assert len(df) == 1
+    assert "health_id_giga" in df.columns
+    assert "admin1" in df.columns
+    assert df.iloc[0]["admin1"] == "Unknown"
+    mock_adls_client.upload_pandas_dataframe_as_file.assert_called()

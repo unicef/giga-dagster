@@ -120,14 +120,11 @@ async def test_qos_school_connectivity_bronze(
 async def test_qos_school_connectivity_data_quality_results(
     mock_file_config, spark_session, op_context
 ):
+    # Row 1 is valid, Row 2 has null school_id_giga (critical error)
     bronze_df = spark_session.createDataFrame(
-        [("1", "2023-01-01")], ["school_id", "timestamp"]
-    )
-    mock_dq_results_df = spark_session.createDataFrame(
-        [("1", "passed")], ["school_id", "dq_status"]
+        [("1", "2023-01-01"), (None, "2023-01-02")], ["school_id_giga", "timestamp"]
     )
     with (
-        patch("src.assets.school_connectivity.assets.row_level_checks") as mock_checks,
         patch(
             "src.assets.school_connectivity.assets.get_output_metadata", return_value={}
         ),
@@ -136,28 +133,26 @@ async def test_qos_school_connectivity_data_quality_results(
             return_value="preview",
         ),
     ):
-        mock_checks.return_value = mock_dq_results_df
         result = await qos_school_connectivity_data_quality_results(
             context=op_context,
             config=mock_file_config,
             qos_school_connectivity_bronze=bronze_df,
         )
         assert isinstance(result, Output)
-        assert not result.value.empty
+        df = result.value
+        assert not df.empty
+        assert "dq_has_critical_error" in df.columns
+        # verify row 1 passed, row 2 failed (school_id_giga is mandatory)
+        assert df[df["timestamp"] == "2023-01-01"]["dq_has_critical_error"].iloc[0] == 0
+        assert df[df["timestamp"] == "2023-01-02"]["dq_has_critical_error"].iloc[0] == 1
 
 
 @pytest.mark.asyncio
 async def test_qos_school_connectivity_dq_passed_rows(mock_file_config, spark_session):
     dq_results_df = spark_session.createDataFrame(
-        [("1", "passed")], ["school_id", "dq_status"]
-    )
-    mock_passed_df = spark_session.createDataFrame(
-        [("1", "passed")], ["school_id", "dq_status"]
+        [("1", 0), ("2", 1)], ["school_id_giga", "dq_has_critical_error"]
     )
     with (
-        patch(
-            "src.assets.school_connectivity.assets.dq_split_passed_rows"
-        ) as mock_split,
         patch(
             "src.assets.school_connectivity.assets.get_output_metadata", return_value={}
         ),
@@ -166,27 +161,21 @@ async def test_qos_school_connectivity_dq_passed_rows(mock_file_config, spark_se
             return_value="preview",
         ),
     ):
-        mock_split.return_value = mock_passed_df
         result = await qos_school_connectivity_dq_passed_rows(
             qos_school_connectivity_data_quality_results=dq_results_df,
             config=mock_file_config,
         )
         assert isinstance(result, Output)
-        assert not result.value.empty
+        assert len(result.value) == 1
+        assert result.value.iloc[0]["school_id_giga"] == "1"
 
 
 @pytest.mark.asyncio
 async def test_qos_school_connectivity_dq_failed_rows(mock_file_config, spark_session):
     dq_results_df = spark_session.createDataFrame(
-        [("1", "failed")], ["school_id", "dq_status"]
-    )
-    mock_failed_df = spark_session.createDataFrame(
-        [("1", "failed")], ["school_id", "dq_status"]
+        [("1", 0), ("2", 1)], ["school_id_giga", "dq_has_critical_error"]
     )
     with (
-        patch(
-            "src.assets.school_connectivity.assets.dq_split_failed_rows"
-        ) as mock_split,
         patch(
             "src.assets.school_connectivity.assets.get_output_metadata", return_value={}
         ),
@@ -195,13 +184,13 @@ async def test_qos_school_connectivity_dq_failed_rows(mock_file_config, spark_se
             return_value="preview",
         ),
     ):
-        mock_split.return_value = mock_failed_df
         result = await qos_school_connectivity_dq_failed_rows(
             qos_school_connectivity_data_quality_results=dq_results_df,
             config=mock_file_config,
         )
         assert isinstance(result, Output)
-        assert not result.value.empty
+        assert len(result.value) == 1
+        assert result.value.iloc[0]["school_id_giga"] == "2"
 
 
 @pytest.mark.asyncio

@@ -49,6 +49,28 @@ async def test_adhoc__load_master_csv(
 
 
 @pytest.mark.asyncio
+async def test_adhoc__load_reference_csv(
+    mock_adls_client, mock_file_config, mock_spark_resource, op_context
+):
+    mock_adls_client.download_raw.return_value = (
+        b"country_code,name\nBRA,Brazil\nPHL,Philippines"
+    )
+    with patch(
+        "src.assets.adhoc.master_csv_to_gold.datahub_emit_metadata_with_exception_catcher"
+    ) as mock_emit:
+        result = await adhoc__load_reference_csv(
+            context=op_context,
+            adls_file_client=mock_adls_client,
+            config=mock_file_config,
+            spark=mock_spark_resource,
+        )
+        assert isinstance(result, Output)
+        assert result.value == b"country_code,name\nBRA,Brazil\nPHL,Philippines"
+        mock_emit.assert_called_once()
+        mock_adls_client.download_raw.assert_called_with(mock_file_config.filepath)
+
+
+@pytest.mark.asyncio
 async def test_adhoc__master_data_transforms(
     mock_spark_resource, mock_file_config, spark_session, op_context
 ):
@@ -95,20 +117,65 @@ async def test_adhoc__df_duplicates(mock_file_config, spark_session, op_context)
 async def test_adhoc__master_data_quality_checks(
     mock_file_config, spark_session, op_context
 ):
-    data_with_rownum = [(1, "A", 1), (2, "B", 1)]
-    columns_with_rownum = ["school_id_govt", "name", "row_num"]
-    df_input = spark_session.createDataFrame(data_with_rownum, columns_with_rownum)
+    # row_num=1 is required for adhoc master DQ check (it deduplicates first)
+    # Providing all columns that column_relation_checks might look at for 'master'
+    data = [
+        (
+            "G01",
+            "1",
+            "School A",
+            "admin1",
+            "admin2",
+            12.3,
+            45.6,
+            "Primary",
+            1,
+            "yes",
+            "yes",
+            "yes",
+            10.0,
+            "yes",
+            "2g",
+            "src",
+            "2023-01-01",
+            "2023-01-01",
+            "yes",
+            "Grid",
+            1,
+        ),
+    ]
+    columns = [
+        "school_id_giga",
+        "school_id_govt",
+        "school_name",
+        "admin1",
+        "admin2",
+        "latitude",
+        "longitude",
+        "education_level",
+        "dq_is_not_within_country",  # will be overwritten but shouldn't fail
+        "connectivity",
+        "connectivity_RT",
+        "connectivity_govt",
+        "download_speed_contracted",
+        "cellular_coverage_availability",
+        "cellular_coverage_type",
+        "connectivity_RT_datasource",
+        "connectivity_RT_ingestion_timestamp",
+        "connectivity_govt_ingestion_timestamp",
+        "electricity_availability",
+        "electricity_type",
+        "row_num",
+    ]
+    df_input = spark_session.createDataFrame(data, columns)
+
     with (
-        patch(
-            "src.assets.adhoc.master_csv_to_gold.row_level_checks"
-        ) as mock_row_checks,
         patch("src.assets.adhoc.master_csv_to_gold.transform_types") as mock_transform,
         patch(
             "src.assets.adhoc.master_csv_to_gold.datahub_emit_metadata_with_exception_catcher"
         ),
     ):
-        mock_row_checks.return_value = df_input.drop("row_num")
-        mock_transform.return_value = df_input.drop("row_num")
+        mock_transform.side_effect = lambda df, *args: df
         result = await adhoc__master_data_quality_checks(
             context=op_context,
             adhoc__master_data_transforms=df_input,
@@ -116,7 +183,13 @@ async def test_adhoc__master_data_quality_checks(
         )
         assert isinstance(result, Output)
         assert isinstance(result.value, pd.DataFrame)
-        assert len(result.value) == 2
+        assert len(result.value) == 1
+        assert "dq_has_critical_error" in result.value.columns
+        # verify real DQ logic executed
+        assert (
+            "dq_column_relation_checks-cellular_coverage_availability_cellular_coverage_type"
+            in result.value.columns
+        )
 
 
 @pytest.mark.asyncio
@@ -124,19 +197,28 @@ async def test_adhoc__master_dq_checks_passed(
     mock_file_config, mock_spark_resource, spark_session, op_context
 ):
     mock_spark_resource.spark_session = spark_session
-    data = [(1, "A")]
-    columns = ["school_id_govt", "name"]
+    # Row 1 passed, Row 2 failed
+    data = [
+        (1, "A", 0),
+        (2, "B", 1),
+    ]
+    columns = ["school_id_govt", "name", "dq_has_critical_error"]
     df = spark_session.createDataFrame(data, columns)
     with (
-        patch(
-            "src.assets.adhoc.master_csv_to_gold.extract_dq_passed_rows",
-            return_value=df,
-        ),
         patch("src.assets.adhoc.master_csv_to_gold.get_schema_columns_datahub"),
         patch(
             "src.assets.adhoc.master_csv_to_gold.datahub_emit_metadata_with_exception_catcher"
         ),
+        # extract_dq_passed_rows calls get_schema_columns internally if master/reference
+        patch("src.data_quality_checks.utils.get_schema_columns") as mock_get_schema,
     ):
+        mock_get_schema.return_value = [
+            MagicMock(name="school_id_govt"),
+            MagicMock(name="name"),
+        ]
+        mock_get_schema.return_value[0].name = "school_id_govt"
+        mock_get_schema.return_value[1].name = "name"
+
         result = await adhoc__master_dq_checks_passed(
             context=op_context,
             adhoc__master_data_quality_checks=df,
@@ -145,6 +227,7 @@ async def test_adhoc__master_dq_checks_passed(
         )
         assert isinstance(result, Output)
         assert len(result.value) == 1
+        assert result.value.iloc[0]["school_id_govt"] == 1
 
 
 @pytest.mark.asyncio
@@ -184,49 +267,28 @@ async def test_adhoc__publish_master_to_gold(
 
 
 @pytest.mark.asyncio
-async def test_adhoc__load_reference_csv(
-    mock_adls_client, mock_file_config, mock_spark_resource, op_context
-):
-    mock_adls_client.download_raw.return_value = (
-        b"school_id,name\n1,School A\n2,School B"
-    )
-    with patch(
-        "src.assets.adhoc.master_csv_to_gold.datahub_emit_metadata_with_exception_catcher"
-    ):
-        result = await adhoc__load_reference_csv(
-            context=op_context,
-            adls_file_client=mock_adls_client,
-            config=mock_file_config,
-            spark=mock_spark_resource,
-        )
-        assert isinstance(result, Output)
-        assert result.value == b"school_id,name\n1,School A\n2,School B"
-
-
-@pytest.mark.asyncio
 async def test_adhoc__reference_data_quality_checks(
     mock_file_config, mock_spark_resource, spark_session, op_context
 ):
     mock_spark_resource.spark_session = spark_session
-    raw_content = b"school_id_govt,name\n1,School A\n2,School B"
-    mock_col = MagicMock()
-    mock_col.name = "school_id_govt"
-    mock_col_type = MagicMock()
-    mock_col_type.name = "school_id_govt_type"
-    data = [(1, "A")]
-    columns = ["school_id_govt", "name"]
-    df = spark_session.createDataFrame(data, columns)
+    # school_id_giga and education_level_govt are mandatory for reference
+    raw_content = b"school_id_giga,education_level_govt\nG01,Primary\nG02,Secondary"
+
+    mock_cols = [MagicMock(), MagicMock()]
+    mock_cols[0].name = "school_id_giga"
+    mock_cols[1].name = "education_level_govt"
+
     with (
         patch(
             "src.assets.adhoc.master_csv_to_gold.get_schema_columns",
-            return_value=[mock_col, mock_col_type],
+            return_value=mock_cols,
         ),
-        patch("src.assets.adhoc.master_csv_to_gold.row_level_checks", return_value=df),
-        patch("src.assets.adhoc.master_csv_to_gold.transform_types", return_value=df),
+        patch("src.assets.adhoc.master_csv_to_gold.transform_types") as mock_transform,
         patch(
             "src.assets.adhoc.master_csv_to_gold.datahub_emit_metadata_with_exception_catcher"
         ),
     ):
+        mock_transform.side_effect = lambda df, *args: df
         result = await adhoc__reference_data_quality_checks(
             context=op_context,
             spark=mock_spark_resource,
@@ -234,7 +296,9 @@ async def test_adhoc__reference_data_quality_checks(
             adhoc__load_reference_csv=raw_content,
         )
         assert isinstance(result, Output)
-        assert len(result.value) == 1
+        assert len(result.value) == 2
+        assert "dq_has_critical_error" in result.value.columns
+        assert all(result.value["dq_has_critical_error"] == 0)
 
 
 @pytest.mark.asyncio

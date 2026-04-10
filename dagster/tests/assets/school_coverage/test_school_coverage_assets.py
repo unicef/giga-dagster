@@ -2,6 +2,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pyspark.sql.types import StringType, StructField
 from src.assets.school_coverage.assets import (
     coverage_bronze,
     coverage_data_quality_results,
@@ -226,23 +227,37 @@ async def test_coverage_dq_failed_rows(mock_file_config, spark_session, op_conte
 @pytest.mark.asyncio
 async def test_coverage_bronze_fb(mock_file_config, spark_session, op_context):
     """Test coverage_bronze passes data through fb_transforms for fb source.
-    fb_transforms internally calls get_schema_columns (Delta infra) so we mock it,
-    but we let the rest of the coverage_bronze logic run for real."""
+    We mock only the schema lookup (Delta infra) but let the core transformation run for real."""
 
-    passed_data = [("G01", "yes", "4G")]
+    # FB input data as expected by fb_transforms
+    passed_data = [("G01", 0.0, 0.5, 0.0)]
     passed_df = spark_session.createDataFrame(
         passed_data,
-        ["school_id_giga", "cellular_coverage_availability", "cellular_coverage_type"],
+        ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
     )
 
     mock_spark = MagicMock()
     mock_spark.spark_session = spark_session
+    # FB source requires these columns (subset of school_coverage schema)
+    mock_columns = [
+        MagicMock(name="school_id_giga"),
+        MagicMock(name="cellular_coverage_type"),
+        MagicMock(name="cellular_coverage_availability"),
+    ]
+    for i, name in enumerate(
+        ["school_id_giga", "cellular_coverage_type", "cellular_coverage_availability"]
+    ):
+        mock_columns[i].name = name
+
+    # Create a new config with the desired filepath to trigger 'fb' source detection
+    fb_config = mock_file_config.copy(
+        update={"filepath": "123_BRA_school-coverage_fb_20230101-120000.csv"}
+    )
 
     with (
-        # fb_transforms calls get_schema_columns internally, so mock the whole transform
         patch(
-            "src.assets.school_coverage.assets.fb_transforms",
-            return_value=passed_df,
+            "src.spark.coverage_transform_functions.get_schema_columns",
+            return_value=mock_columns,
         ),
         patch(
             "src.assets.school_coverage.assets.get_schema_columns_datahub",
@@ -262,11 +277,78 @@ async def test_coverage_bronze_fb(mock_file_config, spark_session, op_context):
             context=op_context,
             coverage_dq_passed_rows=passed_df,
             spark=mock_spark,
-            config=mock_file_config,
+            config=fb_config,
         )
 
     assert isinstance(result, Output)
     df = result.value
     assert not df.empty
     assert "school_id_giga" in df.columns
+    # Real logic: percent_3G > 0 => cellular_coverage_type=3G, availability=yes
+    assert df.iloc[0]["cellular_coverage_type"] == "3G"
+    assert df.iloc[0]["cellular_coverage_availability"] == "yes"
     assert len(df) == 1
+
+
+# ---------------------------------------------------------------------------
+# coverage_bronze  –  standard path (source="standard")
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_coverage_bronze_standard(mock_file_config, spark_session, op_context):
+    """Test coverage_bronze standard path (not fb/itu).
+    Verifies add_missing_columns and selection logic run for real."""
+
+    passed_data = [("G01", "yes")]
+    passed_df = spark_session.createDataFrame(
+        passed_data,
+        ["school_id_giga", "cellular_coverage_availability"],
+    )
+
+    mock_spark = MagicMock()
+    mock_spark.spark_session = spark_session
+
+    # Schema with extra columns that should be added as nulls
+    mock_columns = [
+        StructField("school_id_giga", StringType()),
+        StructField("cellular_coverage_availability", StringType()),
+        StructField("cellular_coverage_type", StringType()),
+    ]
+
+    # Create a new config with the desired filepath to trigger 'standard' source detection
+    standard_config = mock_file_config.copy(
+        update={"filepath": "123_BRA_school-coverage_standard_20230101-120000.csv"}
+    )
+
+    with (
+        patch(
+            "src.assets.school_coverage.assets.get_schema_columns",
+            return_value=mock_columns,
+        ),
+        patch(
+            "src.assets.school_coverage.assets.get_schema_columns_datahub",
+            return_value=[],
+        ),
+        patch(
+            "src.assets.school_coverage.assets.datahub_emit_metadata_with_exception_catcher"
+        ),
+        patch("src.assets.school_coverage.assets.get_output_metadata", return_value={}),
+        patch(
+            "src.assets.school_coverage.assets.get_table_preview",
+            return_value="preview",
+        ),
+    ):
+        spark_session.catalog.tableExists = MagicMock(return_value=False)
+        result = await coverage_bronze(
+            context=op_context,
+            coverage_dq_passed_rows=passed_df,
+            spark=mock_spark,
+            config=standard_config,
+        )
+
+    assert isinstance(result, Output)
+    df = result.value
+    assert not df.empty
+    assert "cellular_coverage_type" in df.columns
+    assert df.iloc[0]["cellular_coverage_availability"] == "yes"
+    # Added as null by add_missing_columns
+    assert df.iloc[0]["cellular_coverage_type"] is None

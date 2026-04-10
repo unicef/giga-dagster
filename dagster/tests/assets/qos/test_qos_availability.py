@@ -1,11 +1,14 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
 from pyspark.sql.types import StringType, StructField, StructType
 from src.assets.qos.qos_availability import (
     publish_qos_availability_to_gold,
     qos_availability_raw,
     qos_availability_transforms,
 )
+
+from dagster import Output
 
 
 def test_qos_availability_raw(mock_adls_client, mock_file_config, op_context):
@@ -31,21 +34,38 @@ def test_qos_availability_transforms(spark_session, mock_file_config, op_context
     assert len(df) == 1
 
 
-@patch("src.assets.qos.qos_availability.transform_types")
-def test_publish_qos_availability_to_gold(
-    mock_transform, spark_session, mock_file_config, op_context
+@pytest.mark.asyncio
+async def test_publish_qos_availability_to_gold(
+    spark_session, mock_file_config, op_context
 ):
     context = op_context
     schema = StructType(
         [
             StructField("col1", StringType(), True),
             StructField("void_col", StringType(), True),
+            StructField("school_id_giga", StringType(), True),
         ]
     )
-    data = [("a", None)]
+    data = [("a", None, "G1")]
     df = spark_session.createDataFrame(data, schema)
-    mock_transform.return_value = df
+
     mock_spark = MagicMock()
-    result = publish_qos_availability_to_gold(context, mock_spark, mock_file_config, df)
-    mock_transform.assert_called()
-    assert result.value is not None
+    mock_spark.spark_session = spark_session
+
+    mock_cols = [
+        StructField("col1", StringType()),
+        StructField("void_col", StringType()),
+        StructField("school_id_giga", StringType()),
+    ]
+
+    with patch("src.utils.spark.get_schema_columns", return_value=mock_cols):
+        result = publish_qos_availability_to_gold(
+            context, mock_spark, mock_file_config, df
+        )
+
+    assert isinstance(result, Output)
+    df_out = result.value
+    assert "col1" in df_out.columns
+    # void_col casted to string
+    assert df_out.schema["void_col"].dataType == StringType()
+    assert df_out.count() == 1
