@@ -513,3 +513,228 @@ async def test_connectivity_broadcast_master_release_notes(
         )
         assert isinstance(result, Output)
         assert result.metadata["version"].text == "1.0"
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  BDD-style functional tests — real business logic validation
+# ════════════════════════════════════════════════════════════════════════
+
+
+class TestBronzeSignatureGeneration:
+    """GIVEN raw connectivity data joined with silver,
+    WHEN qos_school_connectivity_bronze runs,
+    THEN signature, gigasync_id, and date are correctly derived."""
+
+    @pytest.mark.asyncio
+    async def test_signature_is_sha256_hash(
+        self, mock_file_config, spark_session, op_context
+    ):
+        """GIVEN a raw row with school_id and timestamp,
+        WHEN bronze runs,
+        THEN signature should be a 64-char hex SHA-256 hash."""
+        mock_spark_resource = MagicMock()
+        mock_spark_resource.spark_session = spark_session
+        raw_df = spark_session.createDataFrame(
+            [("GIGA01", "2023-01-01T00:00:00")], ["school_id", "timestamp"]
+        )
+        silver_df = spark_session.createDataFrame([("GIGA01",)], ["school_id_giga"])
+
+        with (
+            patch("src.assets.school_connectivity.assets.DeltaTable") as mock_dt_class,
+            patch.object(spark_session.catalog, "tableExists", return_value=True),
+            patch(
+                "src.assets.school_connectivity.assets.get_output_metadata",
+                return_value={},
+            ),
+            patch(
+                "src.assets.school_connectivity.assets.get_table_preview",
+                return_value="",
+            ),
+        ):
+            mock_dt_class.forName.return_value.toDF.return_value = silver_df
+            result = await qos_school_connectivity_bronze(
+                context=op_context,
+                qos_school_connectivity_raw=raw_df,
+                config=mock_file_config,
+                spark=mock_spark_resource,
+            )
+
+        df = result.value
+        assert "signature" in df.columns
+        assert "gigasync_id" in df.columns
+        assert "date" in df.columns
+
+        sig = df.iloc[0]["signature"]
+        giga_id = df.iloc[0]["gigasync_id"]
+
+        # SHA-256 produces a 64-char hex string
+        assert len(sig) == 64
+        assert all(c in "0123456789abcdef" for c in sig)
+        assert len(giga_id) == 64
+
+    @pytest.mark.asyncio
+    async def test_gigasync_id_is_deterministic(
+        self, mock_file_config, spark_session, op_context
+    ):
+        """GIVEN two identical rows (same school_id_giga + timestamp),
+        WHEN bronze runs,
+        THEN they should produce the same gigasync_id and be deduplicated."""
+        mock_spark_resource = MagicMock()
+        mock_spark_resource.spark_session = spark_session
+        raw_df = spark_session.createDataFrame(
+            [
+                ("GIGA01", "2023-01-01T00:00:00"),
+                ("GIGA01", "2023-01-01T00:00:00"),  # duplicate
+            ],
+            ["school_id", "timestamp"],
+        )
+        silver_df = spark_session.createDataFrame([("GIGA01",)], ["school_id_giga"])
+
+        with (
+            patch("src.assets.school_connectivity.assets.DeltaTable") as mock_dt_class,
+            patch.object(spark_session.catalog, "tableExists", return_value=True),
+            patch(
+                "src.assets.school_connectivity.assets.get_output_metadata",
+                return_value={},
+            ),
+            patch(
+                "src.assets.school_connectivity.assets.get_table_preview",
+                return_value="",
+            ),
+        ):
+            mock_dt_class.forName.return_value.toDF.return_value = silver_df
+            result = await qos_school_connectivity_bronze(
+                context=op_context,
+                qos_school_connectivity_raw=raw_df,
+                config=mock_file_config,
+                spark=mock_spark_resource,
+            )
+
+        df = result.value
+        # Deduplicated by gigasync_id
+        assert len(df) == 1
+
+    @pytest.mark.asyncio
+    async def test_date_derived_from_timestamp(
+        self, mock_file_config, spark_session, op_context
+    ):
+        """GIVEN a raw row with timestamp '2023-06-15T12:30:00',
+        WHEN bronze runs,
+        THEN date column should be '2023-06-15'."""
+        mock_spark_resource = MagicMock()
+        mock_spark_resource.spark_session = spark_session
+        raw_df = spark_session.createDataFrame(
+            [("GIGA01", "2023-06-15T12:30:00")], ["school_id", "timestamp"]
+        )
+        silver_df = spark_session.createDataFrame([("GIGA01",)], ["school_id_giga"])
+
+        with (
+            patch("src.assets.school_connectivity.assets.DeltaTable") as mock_dt_class,
+            patch.object(spark_session.catalog, "tableExists", return_value=True),
+            patch(
+                "src.assets.school_connectivity.assets.get_output_metadata",
+                return_value={},
+            ),
+            patch(
+                "src.assets.school_connectivity.assets.get_table_preview",
+                return_value="",
+            ),
+        ):
+            mock_dt_class.forName.return_value.toDF.return_value = silver_df
+            result = await qos_school_connectivity_bronze(
+                context=op_context,
+                qos_school_connectivity_raw=raw_df,
+                config=mock_file_config,
+                spark=mock_spark_resource,
+            )
+
+        df = result.value
+        assert str(df.iloc[0]["date"]) == "2023-06-15"
+
+
+class TestConnectivityDqLogic:
+    """GIVEN bronze connectivity data,
+    WHEN qos DQ checks run for real,
+    THEN mandatory field violations produce critical errors."""
+
+    @pytest.mark.asyncio
+    async def test_null_school_id_giga_is_critical(
+        self, mock_file_config, spark_session, op_context
+    ):
+        """GIVEN row with null school_id_giga (mandatory for qos),
+        WHEN row_level_checks runs with dataset_type='qos',
+        THEN dq_has_critical_error should be 1."""
+        from pyspark.sql.types import StringType, StructField, StructType
+
+        schema = StructType(
+            [
+                StructField("school_id_giga", StringType()),
+                StructField("timestamp", StringType()),
+            ]
+        )
+        bronze_df = spark_session.createDataFrame(
+            [("GIGA01", "2023-01-01"), (None, "2023-01-02")], schema
+        )
+
+        with (
+            patch(
+                "src.assets.school_connectivity.assets.get_output_metadata",
+                return_value={},
+            ),
+            patch(
+                "src.assets.school_connectivity.assets.get_table_preview",
+                return_value="",
+            ),
+        ):
+            result = await qos_school_connectivity_data_quality_results(
+                context=op_context,
+                config=mock_file_config,
+                qos_school_connectivity_bronze=bronze_df,
+            )
+
+        df = result.value
+        # Row with school_id_giga='GIGA01' should pass
+        passed = df[df["school_id_giga"] == "GIGA01"]
+        assert len(passed) == 1
+        assert passed.iloc[0]["dq_has_critical_error"] == 0
+
+        # Row with null school_id_giga should fail
+        failed = df[df["school_id_giga"].isna()]
+        assert len(failed) == 1
+        assert failed.iloc[0]["dq_has_critical_error"] == 1
+
+    @pytest.mark.asyncio
+    async def test_dq_split_separates_passed_failed(
+        self, mock_file_config, spark_session
+    ):
+        """GIVEN DQ results with mixed pass/fail,
+        WHEN dq_split_passed/failed runs,
+        THEN correct rows are in each split."""
+        dq_df = spark_session.createDataFrame(
+            [("GIGA01", 0), ("GIGA02", 1)],
+            ["school_id_giga", "dq_has_critical_error"],
+        )
+
+        with (
+            patch(
+                "src.assets.school_connectivity.assets.get_output_metadata",
+                return_value={},
+            ),
+            patch(
+                "src.assets.school_connectivity.assets.get_table_preview",
+                return_value="",
+            ),
+        ):
+            passed = await qos_school_connectivity_dq_passed_rows(
+                qos_school_connectivity_data_quality_results=dq_df,
+                config=mock_file_config,
+            )
+            failed = await qos_school_connectivity_dq_failed_rows(
+                qos_school_connectivity_data_quality_results=dq_df,
+                config=mock_file_config,
+            )
+
+        assert len(passed.value) == 1
+        assert passed.value.iloc[0]["school_id_giga"] == "GIGA01"
+        assert len(failed.value) == 1
+        assert failed.value.iloc[0]["school_id_giga"] == "GIGA02"

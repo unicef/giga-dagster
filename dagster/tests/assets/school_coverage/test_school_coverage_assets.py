@@ -352,3 +352,157 @@ async def test_coverage_bronze_standard(mock_file_config, spark_session, op_cont
     assert df.iloc[0]["cellular_coverage_availability"] == "yes"
     # Added as null by add_missing_columns
     assert df.iloc[0]["cellular_coverage_type"] is None
+
+
+# ════════════════════════════════════════════════════════════════════════
+#  BDD-style functional tests — real business logic validation
+# ════════════════════════════════════════════════════════════════════════
+
+from src.data_quality_checks.standard import (
+    completeness_checks,
+    duplicate_checks,
+)
+from src.spark.coverage_transform_functions import (
+    fb_percent_to_boolean,
+)
+
+
+class TestFbPercentToBoolean:
+    """GIVEN Facebook coverage percent columns,
+    WHEN fb_percent_to_boolean runs,
+    THEN percent > 0 maps to True, 0 maps to False."""
+
+    def test_positive_percent_maps_to_true(self, spark_session):
+        df = spark_session.createDataFrame(
+            [("G01", 0.5, 0.0, 0.3)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        )
+        result = fb_percent_to_boolean(df)
+        row = result.collect()[0]
+
+        assert row["2G_coverage"] is True
+        assert row["3G_coverage"] is False
+        assert row["4G_coverage"] is True
+        # percent columns should be dropped
+        assert "percent_2G" not in result.columns
+        assert "percent_3G" not in result.columns
+        assert "percent_4G" not in result.columns
+
+    def test_zero_percent_maps_to_false(self, spark_session):
+        df = spark_session.createDataFrame(
+            [("G01", 0.0, 0.0, 0.0)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        )
+        result = fb_percent_to_boolean(df)
+        row = result.collect()[0]
+
+        assert row["2G_coverage"] is False
+        assert row["3G_coverage"] is False
+        assert row["4G_coverage"] is False
+
+
+class TestCoverageTypeDerivation:
+    """GIVEN FB coverage booleans,
+    WHEN cellular_coverage_type is derived,
+    THEN highest generation wins (4G > 3G > 2G)."""
+
+    def test_4g_takes_priority(self, spark_session):
+        """GIVEN 2G=True, 3G=True, 4G=True,
+        WHEN fb_transforms runs,
+        THEN cellular_coverage_type should be '4G'."""
+        from src.spark.coverage_transform_functions import fb_transforms
+
+        df = spark_session.createDataFrame(
+            [("G01", 0.5, 0.5, 0.5)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        )
+
+        with patch(
+            "src.spark.coverage_transform_functions.get_schema_columns",
+            return_value=[],
+        ):
+            result = fb_transforms(df)
+        row = result.collect()[0]
+        assert row["cellular_coverage_type"] == "4G"
+        assert row["cellular_coverage_availability"] == "yes"
+
+    def test_only_2g(self, spark_session):
+        """GIVEN 2G=0.5, 3G=0, 4G=0,
+        THEN cellular_coverage_type should be '2G'."""
+        from src.spark.coverage_transform_functions import fb_transforms
+
+        df = spark_session.createDataFrame(
+            [("G01", 0.5, 0.0, 0.0)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        )
+
+        with patch(
+            "src.spark.coverage_transform_functions.get_schema_columns",
+            return_value=[],
+        ):
+            result = fb_transforms(df)
+        row = result.collect()[0]
+        assert row["cellular_coverage_type"] == "2G"
+        assert row["cellular_coverage_availability"] == "yes"
+
+    def test_no_coverage(self, spark_session):
+        """GIVEN all percents = 0,
+        THEN cellular_coverage_type should be 'no coverage'
+        and availability should be 'no'."""
+        from src.spark.coverage_transform_functions import fb_transforms
+
+        df = spark_session.createDataFrame(
+            [("G01", 0.0, 0.0, 0.0)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        )
+
+        with patch(
+            "src.spark.coverage_transform_functions.get_schema_columns",
+            return_value=[],
+        ):
+            result = fb_transforms(df)
+        row = result.collect()[0]
+        assert row["cellular_coverage_type"] == "no coverage"
+        assert row["cellular_coverage_availability"] == "no"
+
+
+class TestCoverageDqChecks:
+    """GIVEN coverage data with known issues,
+    WHEN DQ checks run,
+    THEN specific violations are flagged."""
+
+    def test_duplicate_school_id_giga_flagged(self, spark_session):
+        """GIVEN two rows with the same school_id_giga,
+        WHEN duplicate_checks runs,
+        THEN both rows are flagged."""
+        df = spark_session.createDataFrame(
+            [("G01",), ("G01",), ("G02",)],
+            ["school_id_giga"],
+        )
+        result = duplicate_checks(df, ["school_id_giga"])
+        rows = {
+            r["school_id_giga"]: r["dq_duplicate-school_id_giga"]
+            for r in result.collect()
+        }
+        assert rows["G01"] == 1
+        assert rows["G02"] == 0
+
+    def test_null_mandatory_coverage_field(self, spark_session):
+        """GIVEN coverage data with null cellular_coverage_availability (mandatory),
+        WHEN completeness_checks runs,
+        THEN the null row is flagged."""
+        from pyspark.sql.types import StringType, StructField, StructType
+
+        schema = StructType(
+            [
+                StructField("school_id_giga", StringType()),
+                StructField("cellular_coverage_availability", StringType()),
+            ]
+        )
+        df = spark_session.createDataFrame([("G01", "yes"), ("G02", None)], schema)
+        result = completeness_checks(
+            df, ["school_id_giga", "cellular_coverage_availability"]
+        )
+        rows = result.collect()
+        g02 = [r for r in rows if r["school_id_giga"] == "G02"][0]
+        assert g02["dq_is_null_mandatory-cellular_coverage_availability"] == 1
