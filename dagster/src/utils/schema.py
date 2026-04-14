@@ -26,13 +26,18 @@ def get_schema_table(spark: SparkSession, schema_name: str) -> sql.DataFrame:
     metaschema_name = Schema.__schema_name__
     full_table_name = f"{metaschema_name}.{schema_name}"
 
-    # This should be cheap if the migrations.migrate_schema asset is caching the table properly
+    if not spark.catalog.tableExists(full_table_name):
+        # Fallback for local development naming convention
+        metadata_table_name = f"{full_table_name}_metadata"
+        if spark.catalog.tableExists(metadata_table_name):
+            full_table_name = metadata_table_name
+
     return DeltaTable.forName(spark, full_table_name).toDF()
 
 
 def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructField]:
     df = get_schema_table(spark, schema_name)
-    return [
+    existing_columns = [
         StructField(
             row.name,
             getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
@@ -40,6 +45,27 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
         )
         for row in df.collect()
     ]
+
+    if schema_name.startswith("school_geolocation"):
+        existing_names = {field.name for field in existing_columns}
+        core_fields = [
+            ("school_id_govt", "string", False),
+            ("school_name", "string", False),
+            ("education_level_govt", "string", False),
+            ("latitude", "double", False),
+            ("longitude", "double", False),
+        ]
+        for name, dtype, nullable in core_fields:
+            if name not in existing_names:
+                existing_columns.append(
+                    StructField(
+                        name,
+                        getattr(constants.TYPE_MAPPINGS, dtype).pyspark(),
+                        nullable,
+                    )
+                )
+
+    return existing_columns
 
 
 def get_schema_column_descriptions(
