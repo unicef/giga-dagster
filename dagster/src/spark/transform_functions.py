@@ -16,7 +16,9 @@ from pyspark.sql import (
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     FloatType,
+    StringType,
     StructField,
+    StructType,
     TimestampType,
 )
 
