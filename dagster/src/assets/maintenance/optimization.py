@@ -1,15 +1,17 @@
+from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
-from src.spark import spark
 from src.utils.schema import construct_full_table_name
 
 from dagster import asset
 
 
 @asset(
-    group_name="maintenance",
     description="Optimizes all school_geolocation_error_table.* tables using Z-Ordering on giga_sync_file_id.",
 )
-def optimize_geolocation_error_table(context) -> None:
+def optimize_geolocation_error_table(
+    context,
+    spark: PySparkResource,
+) -> None:
     """
     Discovers all per-country upload_errors tables and runs OPTIMIZE + ZORDER BY
     on each one to improve query performance for the Error Table UI.

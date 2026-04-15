@@ -1,7 +1,6 @@
 import io
 import re
 import uuid
-from datetime import datetime
 from itertools import chain
 
 import country_converter as coco
@@ -16,12 +15,10 @@ from pyspark.sql import (
 )
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
-    BooleanType,
     FloatType,
     StructField,
     TimestampType,
 )
-from rapidfuzz import fuzz, process, utils
 
 from dagster import OpExecutionContext
 from src.constants import UploadMode
@@ -34,7 +31,6 @@ from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
     get_nocodb_table_id_from_name,
-    get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
 
@@ -42,140 +38,6 @@ ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
 azure_blob_container_name = settings.AZURE_BLOB_CONTAINER_NAME
 container_name = azure_blob_container_name
-
-NOCODB_FUZZY_TABLES = {
-    "education_level": "EducationLevelMapping",
-    "connectivity_type": "ConnectivityTypeMapping",
-    "school_area_type": "SchoolAreaTypeMapping",
-    "electricity_type": "ElectricityTypeMapping",
-    "learning_platform_type": "LearningPlatformTypeMapping",
-}
-
-
-def get_fuzzy_match_config_from_nocodb() -> dict[str, list[str]]:
-    """
-    Fetches valid values for fuzzy matching from NocoDB.
-    Returns a dictionary where keys are column names and values are lists of valid strings.
-    """
-    config = {}
-    try:
-        for col_name, table_name in NOCODB_FUZZY_TABLES.items():
-            try:
-                table_id = get_nocodb_table_id_from_name(table_name)
-                target_column = "Giga"
-                rows = get_nocodb_table_rows(table_id, fields=target_column)
-                valid_values = [
-                    r.get(target_column) for r in rows if r.get(target_column)
-                ]
-                valid_values = list(set(valid_values))
-                if valid_values:
-                    config[col_name] = valid_values
-                else:
-                    logger.warning(
-                        f"No valid values found in NocoDB table {table_name} for {col_name}"
-                    )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to fetch fuzzy match config for {col_name} from {table_name}: {e}"
-                )
-    except Exception as e:
-        logger.error(f"Error connecting to NocoDB for fuzzy match config: {e}")
-
-    return config
-
-
-def fuzzy_match_wrapper(val, valid_values, score_cutoff):
-    if not val:
-        return val, val, 0.0, False
-
-    # extractOne returns (match, score, index)
-    result = process.extractOne(
-        str(val),
-        valid_values,
-        scorer=fuzz.WRatio,
-        score_cutoff=score_cutoff,
-        processor=utils.default_process,
-    )
-
-    if result:
-        matched_val, score, _ = result
-        was_changed = matched_val != val
-        return matched_val, val, float(score), was_changed
-
-    return val, val, 0.0, False
-
-
-def apply_fuzzy_matching(
-    df: sql.DataFrame, uploaded_columns: list[str], file_upload_id: str = None
-) -> tuple[sql.DataFrame, list[dict]]:
-    logger.info("Starting fuzzy matching...")
-
-    fuzzy_config = get_fuzzy_match_config_from_nocodb()
-    mismatches = []
-
-    result_struct_schema = StructType(
-        [
-            StructField("suggested", StringType(), True),
-            StructField("original", StringType(), True),
-            StructField("score", FloatType(), True),
-            StructField("changed", BooleanType(), True),
-        ]
-    )
-    for col_name, valid_values in fuzzy_config.items():
-        target_col = None
-        if col_name in df.columns:
-            target_col = col_name
-        elif f"{col_name}_govt" in df.columns:
-            target_col = f"{col_name}_govt"
-
-        if target_col and (
-            target_col in uploaded_columns
-            or target_col.replace("_govt", "") in uploaded_columns
-        ):
-            logger.info(f"Applying fuzzy matching to column: {target_col}")
-
-            match_udf = f.udf(
-                lambda x, vv=valid_values: fuzzy_match_wrapper(x, vv, 85),
-                result_struct_schema,
-            )
-
-            temp_col_name = f"{target_col}_fuzzy_struct"
-            df = df.withColumn(temp_col_name, match_udf(f.col(target_col)))
-
-            if file_upload_id:
-                mismatch_rows = (
-                    df.filter(f.col(f"{temp_col_name}.changed"))
-                    .select(
-                        f.col("school_id_govt"),
-                        f.col(f"{temp_col_name}.original").alias("original_value"),
-                        f.col(f"{temp_col_name}.suggested").alias("suggested_value"),
-                        f.col(f"{temp_col_name}.score").alias("match_score"),
-                    )
-                    .collect()
-                )
-
-                now = datetime.utcnow()
-
-                for row in mismatch_rows:
-                    mismatches.append(
-                        {
-                            "file_upload_id": file_upload_id,
-                            "row_index": None,
-                            "school_id_govt": row["school_id_govt"],
-                            "column_name": target_col,
-                            "original_value": row["original_value"],
-                            "suggested_value": row["suggested_value"],
-                            "match_score": row["match_score"],
-                            "is_accepted": None,
-                            "final_value": None,
-                            "created_at": now,
-                        }
-                    )
-
-            df = df.withColumn(target_col, f.col(f"{temp_col_name}.suggested"))
-            df = df.drop(temp_col_name)
-
-    return df, mismatches
 
 
 # STANDARDIZATION FUNCTIONS

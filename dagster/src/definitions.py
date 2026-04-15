@@ -7,6 +7,7 @@ from src.assets import (
     datahub_assets,
     debug,
     giga_meter,
+    maintenance,
     migrations,
     qos,
     school_connectivity,
@@ -15,6 +16,7 @@ from src.assets import (
     school_geolocation_api,
     school_list,
     unstructured,
+    upload_processing,
 )
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
@@ -82,6 +84,14 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=giga_meter,
             group_name=giga_meter.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=upload_processing,
+            group_name=upload_processing.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=maintenance,
+            group_name=maintenance.GROUP_NAME,
         ),
     ],
     resources=RESOURCE_DEFINITIONS,
