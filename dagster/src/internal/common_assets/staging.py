@@ -8,7 +8,13 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, StringType, StructField, TimestampType
+from pyspark.sql.types import (
+    ArrayType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+)
 from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
@@ -22,6 +28,7 @@ from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
+    sync_schema,
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -312,6 +319,17 @@ class StagingStep:
                 partition_by=["upload_id"],
             )
         else:
+            # Synchronise staging schema (handles renames/deletions)
+            existing_schema = self.spark.table(self.staging_table_name).schema
+            sync_schema(
+                table_name=self.staging_table_name,
+                existing_schema=existing_schema,
+                updated_schema=StructType(pending_schema),
+                spark=self.spark,
+                context=self.context,
+                schema_name=self.schema_name,
+            )
+
             upload_id = self.config.filename_components.id
             DeltaTable.forName(self.spark, self.staging_table_name).delete(
                 f.col("upload_id") == upload_id

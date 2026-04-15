@@ -55,22 +55,32 @@ def create_school_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     #     "school_id_giga", f.coalesce(f.col("school_id_giga"), f.lit(None))
     # )
 
-    school_id_giga_prereqs = [
-        "school_id_govt",
-        "school_name",
-        "education_level",
-        "latitude",
-        "longitude",
-    ]
-    for column in school_id_giga_prereqs:
-        if column not in df.columns:
-            return df.withColumn("school_id_giga", f.lit(None))
+    available_columns = set(df.columns)
+    if (
+        "school_id_govt" not in available_columns
+        or (
+            "school_name" not in available_columns
+            and "official_school_name" not in available_columns
+        )
+        or "education_level" not in available_columns
+        or "latitude" not in available_columns
+        or "longitude" not in available_columns
+    ):
+        return df.withColumn("school_id_giga", f.lit(None))
+
+    # Use official_school_name as fallback for school_name
+    school_name_col = f.coalesce(
+        f.col("school_name") if "school_name" in available_columns else f.lit(None),
+        f.col("official_school_name")
+        if "official_school_name" in available_columns
+        else f.lit(None),
+    )
 
     df = df.withColumn(
         "identifier_concat",
         f.concat(
             f.col("school_id_govt").cast(StringType()),
-            f.col("school_name").cast(StringType()),
+            school_name_col.cast(StringType()),
             f.col("education_level").cast(StringType()),
             f.col("latitude").cast(StringType()),
             f.col("longitude").cast(StringType()),
