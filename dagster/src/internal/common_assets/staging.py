@@ -19,19 +19,16 @@ from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
 from src.constants import DataTier
-from src.internal.merge import partial_in_cluster_merge
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.db.primary import get_db_context
 from src.utils.delta import (
-    build_deduped_delete_query,
-    build_deduped_merge_query,
     check_table_exists,
     create_delta_table,
     create_schema,
-    execute_query_with_error_handler,
+    sync_schema,
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -91,9 +88,6 @@ class StagingStep:
         self.adls_file_client = adls_file_client
         self.spark = spark
         self.change_type = change_type
-
-        # Store upload_id from filename components for tracking which upload this data came from
-        self.upload_id = config.filename_components.id
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
@@ -324,6 +318,25 @@ class StagingStep:
                 replace=True,
                 partition_by=["upload_id"],
             )
+        else:
+            # Synchronise staging schema (handles renames/deletions)
+            existing_schema = self.spark.table(self.staging_table_name).schema
+            sync_schema(
+                table_name=self.staging_table_name,
+                existing_schema=existing_schema,
+                updated_schema=StructType(pending_schema),
+                spark=self.spark,
+                context=self.context,
+                schema_name=self.schema_name,
+            )
+
+            upload_id = self.config.filename_components.id
+            DeltaTable.forName(self.spark, self.staging_table_name).delete(
+                f.col("upload_id") == upload_id
+            )
+            self.context.log.info(
+                f"Deleted existing pending_changes rows for upload_id={upload_id}"
+            )
 
         # Cast pending columns to the expected schema types before writing
         schema_type_map = {field.name: field.dataType for field in pending_schema}
@@ -500,10 +513,9 @@ class StagingStep:
         available = [c for c in schema_col_names if c in df.columns]
         return df.select(*available)
 
-    def standard_transforms(self, df: sql.DataFrame):
-        self.context.log.info("Performing standard transforms...")
-        df = add_missing_columns(df, self.schema_columns)
-        df = transform_types(df, self.schema_name, self.context)
+    def standard_transforms(self, df: sql.DataFrame) -> sql.DataFrame:
+        """Backward-compatible wrapper used by other pipelines."""
+        df = self._prepare_df(df)
         return compute_row_hash(df)
 
     def _emit_lineage(self) -> None:
@@ -534,173 +546,7 @@ class StagingStep:
             self.spark, self.schema_name, self.country_code, DataTier.STAGING
         )
 
-    def create_staging_table_from_silver(self):
-        """Create staging table as a complete clone of the silver table.
-
-        This creates a working copy containing all rows from silver. Subsequent changes
-        will be applied to this staging table via upserts/deletes. The staging table
-        represents what the silver table will look like after approval.
-        """
-        self.context.log.info("Creating staging from silver if not exists...")
-        silver = (
-            DeltaTable.forName(self.spark, self.silver_table_name)
-            .alias("silver")
-            .toDF()
-        )
-
-        # Add upload_id column to cloned silver data (NULL for existing rows from silver)
-        # New upload data will have actual upload_id added in standard_transforms
-
-        self.context.log.info("Added upload_id column (NULL) to cloned silver data")
-
-        create_schema(self.spark, self.staging_tier_schema_name)
-        create_delta_table(
-            self.spark,
-            self.staging_tier_schema_name,
-            self.country_code,
-            self.schema_columns,
-            self.context,
-            if_not_exists=True,
-        )
-        silver.write.format("delta").mode("append").saveAsTable(self.staging_table_name)
-
-    def create_empty_staging_table(self):
-        self.context.log.info("Creating empty staging table...")
-        create_schema(self.spark, self.staging_tier_schema_name)
-        create_delta_table(
-            self.spark,
-            self.staging_tier_schema_name,
-            self.country_code,
-            self.schema_columns,
-            self.context,
-            if_not_exists=True,
-        )
-
-    def sync_schema_staging(self):
-        """Update the schema of existing delta tables based on the reference schema delta tables.
-
-        Supports adding, renaming, and deleting columns.  Renames and deletes
-        are detected by comparing stable column UUIDs stored in the table
-        properties against the latest reference schema CSV.
-        """
-        from src.utils.delta import apply_renames_and_deletes, persist_column_id_map
-
-        self.context.log.info("Checking for schema update...")
-        updated_schema = StructType(self.schema_columns)
-        updated_columns = sorted(updated_schema.fieldNames())
-
-        existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
-        existing_columns = sorted(existing_df.schema.fieldNames())
-
-        any_renames_deletes = apply_renames_and_deletes(
-            self.spark, self.staging_table_name, self.schema_name, self.context
-        )
-
-        # Refresh schemas after rename/delete
-        if any_renames_deletes:
-            existing_df = DeltaTable.forName(self.spark, self.staging_table_name).toDF()
-            existing_columns = sorted(existing_df.schema.fieldNames())
-
-        # Sync changes in nullability flags
-        alter_sql = f"ALTER TABLE {self.staging_table_name}"
-        alter_stmts = []
-        for column in existing_df.schema:
-            if (
-                match_ := next(
-                    (c for c in updated_schema if c.name == column.name), None
-                )
-            ) is not None:
-                if match_.nullable != column.nullable:
-                    if match_.nullable:
-                        alter_stmts.append(f"ALTER COLUMN {column.name} DROP NOT NULL")
-                    else:
-                        alter_stmts.append(f"ALTER COLUMN {column.name} SET NOT NULL")
-
-        has_nullability_changed = len(alter_stmts) > 0
-        has_schema_changed = updated_columns != existing_columns
-
-        # Sync changes in columns & data types
-        if has_schema_changed:
-            self.context.log.info("Updating schema...")
-            updated_schema_df = self.spark.createDataFrame([], schema=updated_schema)
-            (
-                updated_schema_df.write.option("mergeSchema", "true")
-                .format("delta")
-                .mode("append")
-                .saveAsTable(self.staging_table_name)
-            )
-
-        if has_nullability_changed:
-            alter_sql = [f"{alter_sql} {alter_stmt}" for alter_stmt in alter_stmts]
-            for stmnt in alter_sql:
-                self.spark.sql(stmnt).show()
-
-        if has_schema_changed or has_nullability_changed or any_renames_deletes:
-            self.reload_schema()
-
-        # Persist column-ID mapping
-        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
-
-    def reload_schema(self):
-        self.schema_columns = get_schema_columns(self.spark, self.schema_name)
-
-    def upsert_rows(self, df: sql.DataFrame):
-        self.context.log.info("Performing upsert...")
-        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
-        update_columns = [
-            c.name for c in self.schema_columns if c.name != self.primary_key
-        ]
-        df = partial_in_cluster_merge(
-            staging_dt.toDF(),
-            df,
-            self.primary_key,
-            column_names=[c.name for c in self.schema_columns],
-        )
-        query = build_deduped_merge_query(
-            staging_dt,
-            df,
-            self.primary_key,
-            update_columns,
-        )
-
-        if query is not None:
-            execute_query_with_error_handler(
-                self.spark,
-                query,
-                self.staging_tier_schema_name,
-                self.country_code,
-                self.context,
-            )
-        return staging_dt.toDF()
-
-    def delete_rows(self, df: list[str]):
-        self.context.log.info("Performing delete...")
-        staging_dt = DeltaTable.forName(self.spark, self.staging_table_name)
-
-        # Pre-delete validation: Check if target rows exist in staging table
-        staging_df = staging_dt.toDF()
-        existing_rows = staging_df.filter(staging_df[self.primary_key].isin(df))
-        existing_count = existing_rows.count()
-
-        if existing_count == 0:
-            self.context.log.warning(
-                f"No target rows found in staging table for deletion. "
-                f"Skipping delete operation for {len(df)} row IDs."
-            )
-            return staging_dt.toDF()
-
-        self.context.log.info(
-            f"Found {existing_count} out of {len(df)} row IDs in staging table for deletion."
-        )
-
-        query = build_deduped_delete_query(staging_dt, df, self.primary_key)
-
-        if query is not None:
-            execute_query_with_error_handler(
-                self.spark,
-                query,
-                self.staging_tier_schema_name,
-                self.country_code,
-                self.context,
-            )
-        return staging_dt.toDF()
+    # Keep old property name as alias for callers that used staging_table_exists
+    @property
+    def staging_table_exists(self) -> bool:
+        return self.pending_changes_table_exists

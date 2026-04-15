@@ -1,6 +1,7 @@
 from delta import DeltaTable
 from models import Schema
 from pyspark import sql
+from pyspark.errors.exceptions.captured import AnalysisException
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.sql.types import StructField
@@ -12,6 +13,20 @@ from dagster import (
     OutputContext,
 )
 from src.constants import DataTier, constants
+from src.spark.config_expectations import config
+
+
+def _get_type_mapping(data_type: str):
+    """Map a data type string to its corresponding TypeMapping from constants.
+
+    Handles case-insensitivity and common aliases (e.g., 'INT' -> 'integer').
+    """
+    normalized_type = data_type.lower()
+    # Handle common aliases from config_expectations
+    if normalized_type == "int":
+        normalized_type = "integer"
+
+    return getattr(constants.TYPE_MAPPINGS, normalized_type)
 
 
 def get_schema_name(
@@ -22,50 +37,65 @@ def get_schema_name(
     return context.op_config["metastore_schema"]
 
 
+def _get_fallback_schema_df(spark: SparkSession, schema_name: str) -> sql.DataFrame:
+    """Return a fallback schema DataFrame from hardcoded configs if Delta table is missing."""
+    if schema_name == "school_geolocation":
+        columns = config.COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION + [
+            "school_id_govt",
+            "school_id_giga",
+        ]
+        data_types = dict(config.DATA_TYPES)
+
+        fallback_data = []
+        for col_name in columns:
+            data_type = data_types.get(col_name, "string")
+            fallback_data.append(
+                {
+                    "id": col_name,
+                    "name": col_name,
+                    "data_type": data_type,
+                    "is_nullable": True,
+                    "is_important": False,
+                    "is_system_generated": False,
+                    "description": "",
+                    "primary_key": col_name in config.UNIQUE_COLUMNS_GEOLOCATION,
+                    "partition_order": None,
+                    "license": None,
+                    "units": None,
+                    "hint": None,
+                }
+            )
+
+        # Define the schema explicitly to match SchemaModel
+        schema = Schema.schema
+        return spark.createDataFrame(fallback_data, schema=schema)
+
+    raise ValueError(f"No fallback schema available for `{schema_name}`")
+
+
 def get_schema_table(spark: SparkSession, schema_name: str) -> sql.DataFrame:
     metaschema_name = Schema.__schema_name__
     full_table_name = f"{metaschema_name}.{schema_name}"
 
-    if not spark.catalog.tableExists(full_table_name):
-        # Fallback for local development naming convention
-        metadata_table_name = f"{full_table_name}_metadata"
-        if spark.catalog.tableExists(metadata_table_name):
-            full_table_name = metadata_table_name
-
-    return DeltaTable.forName(spark, full_table_name).toDF()
+    try:
+        # This should be cheap if the migrations.migrate_schema asset is caching the table properly
+        return DeltaTable.forName(spark, full_table_name).toDF()
+    except AnalysisException as e:
+        if "DELTA_TABLE_NOT_FOUND" in str(e):
+            return _get_fallback_schema_df(spark, schema_name)
+        raise e
 
 
 def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructField]:
     df = get_schema_table(spark, schema_name)
-    existing_columns = [
+    return [
         StructField(
             row.name,
-            getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
+            _get_type_mapping(row.data_type).pyspark(),
             row.is_nullable,
         )
         for row in df.collect()
     ]
-
-    if schema_name.startswith("school_geolocation"):
-        existing_names = {field.name for field in existing_columns}
-        core_fields = [
-            ("school_id_govt", "string", False),
-            ("school_name", "string", False),
-            ("education_level_govt", "string", False),
-            ("latitude", "double", False),
-            ("longitude", "double", False),
-        ]
-        for name, dtype, nullable in core_fields:
-            if name not in existing_names:
-                existing_columns.append(
-                    StructField(
-                        name,
-                        getattr(constants.TYPE_MAPPINGS, dtype).pyspark(),
-                        nullable,
-                    )
-                )
-
-    return existing_columns
 
 
 def get_schema_columns_with_id(
@@ -88,7 +118,7 @@ def get_schema_columns_with_id(
             row.id,
             StructField(
                 row.name,
-                getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
+                _get_type_mapping(row.data_type).pyspark(),
                 row.is_nullable,
             ),
         )
@@ -106,8 +136,7 @@ def get_schema_column_descriptions(
 def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:
     df = get_schema_table(spark, schema_name)
     return [
-        (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())
-        for row in df.collect()
+        (row.name, _get_type_mapping(row.data_type).datahub()) for row in df.collect()
     ]
 
 

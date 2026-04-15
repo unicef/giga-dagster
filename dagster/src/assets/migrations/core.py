@@ -4,7 +4,10 @@ from delta import DeltaTable
 from models import VALID_PRIMITIVES, Schema
 from pyspark import sql
 from pyspark.sql.functions import col, when
-from src.utils.delta import execute_query_with_error_handler
+from src.utils.delta import (
+    create_delta_table,
+    sync_schema,
+)
 
 from dagster import OpExecutionContext
 
@@ -42,16 +45,27 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
     full_table_name = f"{schema_name}.{table_name}"
 
     columns = Schema.fields
-    query = (
-        DeltaTable.createOrReplace(spark).tableName(full_table_name).addColumns(columns)
+    create_delta_table(
+        spark,
+        schema_name,
+        table_name,
+        columns,
+        context,
+        if_not_exists=True,
     )
-    execute_query_with_error_handler(spark, query, schema_name, table_name, context)
+    sync_schema(
+        table_name=full_table_name,
+        existing_schema=spark.table(full_table_name).schema,
+        updated_schema=Schema.schema,
+        spark=spark,
+        context=context,
+    )
 
     spark.catalog.refreshTable(full_table_name)
     (
         DeltaTable.forName(spark, full_table_name)
         .alias("master")
-        .merge(df.alias("updates"), "master.name = updates.name")
+        .merge(df.alias("updates"), "master.id = updates.id")
         .whenMatchedUpdateAll()
         .whenNotMatchedInsertAll()
         .execute()
