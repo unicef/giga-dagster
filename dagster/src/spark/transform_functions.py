@@ -13,6 +13,7 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     FloatType,
     StringType,
@@ -568,7 +569,7 @@ def get_admin_boundaries(
         return None
 
 
-def add_admin_columns(  # noqa: C901
+def add_admin_columns(
     df: sql.DataFrame,
     country_code_iso3: str,
     admin_level: str,
@@ -589,56 +590,50 @@ def add_admin_columns(  # noqa: C901
     spark = df.sparkSession
     broadcasted_admin_boundaries = spark.sparkContext.broadcast(admin_boundaries)
 
-    def get_admin_en(latitude, longitude) -> str | None:
-        point = get_point(longitude=longitude, latitude=latitude)
-        for _, row in broadcasted_admin_boundaries.value.iterrows():
-            if row.geometry.contains(point):
-                return row.get("name_en")
-        return None
-
-    get_admin_en_udf = f.udf(get_admin_en, StringType())
-
-    def get_admin_native(latitude, longitude) -> str | None:
-        point = get_point(longitude=longitude, latitude=latitude)
-        for _, row in broadcasted_admin_boundaries.value.iterrows():
-            if row.geometry.contains(point):
-                return row.get("name")
-        return None
-
-    get_admin_native_udf = f.udf(get_admin_native, StringType())
-
-    def get_admin_id_giga(latitude, longitude) -> str | None:
-        point = get_point(longitude=longitude, latitude=latitude)
-        for _, row in broadcasted_admin_boundaries.value.iterrows():
-            if row.geometry.contains(point):
-                return row.get(f"{admin_level}_id_giga")
-        return None
-
-    get_admin_id_giga_udf = f.udf(get_admin_id_giga, StringType())
-
-    df = df.withColumns(
-        {
-            f"{admin_level}_en": get_admin_en_udf(df["latitude"], df["longitude"]),
-            f"{admin_level}_native": get_admin_native_udf(
-                df["latitude"], df["longitude"]
-            ),
-            f"{admin_level}_id_giga": get_admin_id_giga_udf(
-                df["latitude"], df["longitude"]
-            ),
-        }
+    result_schema = StructType(
+        [
+            StructField("name_en", StringType()),
+            StructField("name_native", StringType()),
+            StructField("id_giga", StringType()),
+        ]
     )
+
+    @pandas_udf(result_schema)
+    def get_admin_info(latitude: pd.Series, longitude: pd.Series) -> pd.DataFrame:
+        boundaries = broadcasted_admin_boundaries.value
+        gdf_points = gpd.GeoDataFrame(
+            {"orig_index": range(len(latitude))},
+            geometry=gpd.points_from_xy(longitude, latitude),
+            crs="epsg:4326",
+        )
+        joined = gpd.sjoin(gdf_points, boundaries, how="left", predicate="within")
+        # sjoin may produce duplicates for points on shared boundaries — keep first match
+        joined = joined[~joined.index.duplicated(keep="first")]
+        return pd.DataFrame(
+            {
+                "name_en": joined.get("name_en"),
+                "name_native": joined.get("name"),
+                "id_giga": joined.get(f"{admin_level}_id_giga"),
+            }
+        )
+
+    result_col = f"_admin_info_{admin_level}"
+    df = df.withColumn(result_col, get_admin_info(df["latitude"], df["longitude"]))
+
     coalesce_args = [
-        f.col(f"{admin_level}_en"),
-        f.col(f"{admin_level}_native"),
+        f.col(f"{result_col}.name_en"),
+        f.col(f"{result_col}.name_native"),
     ]
     if admin_level in df.columns:
         coalesce_args.append(f.col(admin_level))
     coalesce_args.append(f.lit("Unknown"))
 
-    return df.withColumn(
-        admin_level,
-        f.coalesce(*coalesce_args),
-    ).drop(f"{admin_level}_en", f"{admin_level}_native")
+    return df.withColumns(
+        {
+            admin_level: f.coalesce(*coalesce_args),
+            f"{admin_level}_id_giga": f.col(f"{result_col}.id_giga"),
+        }
+    ).drop(result_col)
 
 
 def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:

@@ -23,13 +23,25 @@ RUN apt-get update && \
 # Move to Spark JARs directory and download additional dependencies
 WORKDIR /opt/spark/jars
 
-RUN wget https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar \
+RUN wget --tries=3 \
+    https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-azure/3.3.4/hadoop-azure-3.3.4.jar \
     https://repo1.maven.org/maven2/com/microsoft/azure/azure-storage/8.6.6/azure-storage-8.6.6.jar \
     https://repo1.maven.org/maven2/com/azure/azure-storage-blob/12.24.0/azure-storage-blob-12.24.0.jar \
     https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util/9.4.51.v20230217/jetty-util-9.4.51.v20230217.jar \
     https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar \
     https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.0.0/delta-spark_2.12-3.0.0.jar \
-    https://repo1.maven.org/maven2/io/delta/delta-storage/3.0.0/delta-storage-3.0.0.jar
+    https://repo1.maven.org/maven2/io/delta/delta-storage/3.0.0/delta-storage-3.0.0.jar \
+    && unzip -t hadoop-azure-3.3.4.jar > /dev/null
+
+# Compile FixedSASTokenProvider (not included in the standard hadoop-azure JAR)
+COPY java/FixedSASTokenProvider.java /tmp/sas/FixedSASTokenProvider.java
+RUN mkdir -p /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas /tmp/sas/classes && \
+    cp /tmp/sas/FixedSASTokenProvider.java /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas/ && \
+    javac -cp "/opt/spark/jars/*" \
+        -d /tmp/sas/classes \
+        /tmp/sas/src/org/apache/hadoop/fs/azurebfs/sas/FixedSASTokenProvider.java && \
+    jar cf /opt/spark/jars/fixed-sas-token-provider.jar -C /tmp/sas/classes . && \
+    rm -rf /tmp/sas
 
 FROM base AS deps
 
