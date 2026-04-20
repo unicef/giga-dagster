@@ -21,10 +21,10 @@ COLUMN_CASTS: dict[str, DataType] = {
 }
 
 FILE_METADATA_COLUMNS: dict[str, DataType] = {
-    "_source_file": StringType(),
-    "_ingested_at": TimestampType(),
-    "_ingestion_run_id": StringType(),
-    "_storage_etag": StringType(),
+    "source_file": StringType(),
+    "ingested_at": TimestampType(),
+    "ingestion_run_id": StringType(),
+    "storage_etag": StringType(),
 }
 
 
