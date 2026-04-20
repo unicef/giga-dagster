@@ -29,7 +29,7 @@ INGESTION CONTRACT
 
 class ParquetToDeltaConfig(Config):
     upload_path: Optional[str] = constants.PING_PARQUET_PATH
-    files: Optional[list[str]] = None
+    file: Optional[str] = None
     target_schema: str = "giga_meter"
     target_table: str = "connectivity_ping_checks"
 
@@ -78,9 +78,9 @@ def connectivity_ping_checks(
     df = _normalize_schema_for_delta(df)
 
     metadata_values = {
-        "_source_file": file_path,
-        "_ingested_at": datetime.utcnow(),
-        "_ingestion_run_id": context.run_id,
+        "source_file": file_path,
+        "ingested_at": datetime.utcnow(),
+        "ingestion_run_id": context.run_id,
     }
     df = _add_file_metadata_columns(df, metadata=metadata_values)
 
