@@ -29,7 +29,7 @@ INGESTION CONTRACT
 
 class ParquetToDeltaConfig(Config):
     upload_path: Optional[str] = constants.PING_PARQUET_PATH
-    file: Optional[str] = None
+    file: Optional[list[str]] = None
     target_schema: str = "giga_meter"
     target_table: str = "connectivity_ping_checks"
 
@@ -58,11 +58,11 @@ def connectivity_ping_checks(
     if not base_path:
         raise ValueError("No upload_path provided in config.")
 
-    if not config.files:
-        context.log.info("No files provided in config. Skipping.")
+    if not config.file:
+        context.log.info("No file provided in config. Skipping.")
         return Output(None)
 
-    file_path = config.files[0]
+    file_path = config.file[0]
     full_path = f"{settings.AZURE_BLOB_CONNECTION_URI}/{file_path}"
 
     # Read — skip on failure
