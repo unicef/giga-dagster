@@ -7,6 +7,18 @@
     </description>
   </property>
   <property>
+    <name>fs.azure.account.auth.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>SAS</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.token.provider.type.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.fixed.token.{ENV:STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+    <value>{ENV:AZURE_SAS_TOKEN}</value>
+  </property>
+  <property>
     <name>metastore.warehouse.dir</name>
     <value>{ENV:METASTORE_WAREHOUSE_DIR}</value>
   </property>

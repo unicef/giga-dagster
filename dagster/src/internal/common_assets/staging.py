@@ -311,6 +311,14 @@ class StagingStep:
                 replace=True,
                 partition_by=["upload_id"],
             )
+        else:
+            upload_id = self.config.filename_components.id
+            DeltaTable.forName(self.spark, self.staging_table_name).delete(
+                f.col("upload_id") == upload_id
+            )
+            self.context.log.info(
+                f"Deleted existing pending_changes rows for upload_id={upload_id}"
+            )
 
         # Cast pending columns to the expected schema types before writing
         schema_type_map = {field.name: field.dataType for field in pending_schema}
