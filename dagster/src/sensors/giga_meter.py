@@ -89,7 +89,7 @@ def giga_meter_parquet_to_delta_sensor(
                 ops={
                     "connectivity_ping_checks": ParquetToDeltaConfig(
                         upload_path=upload_path,
-                        files=[file_name],
+                        file=[file_name],
                     )
                 }
             ),
