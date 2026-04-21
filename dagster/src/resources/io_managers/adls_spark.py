@@ -1,3 +1,5 @@
+import time
+
 import pandas as pd
 from dagster_pyspark import PySparkResource
 from pyspark import sql
@@ -35,9 +37,12 @@ class ADLSSparkIOManager(BaseConfigurableIOManager):
                 )
 
         # cache → isEmpty (populates cache) → write (reads from cache) → unpersist
+        t0 = time.time()
         output.cache()
         output.isEmpty()
+        context.log.info(f"Cache populated in {time.time() - t0:.2f}s")
 
+        t1 = time.time()
         match path.suffix:
             case ".parquet":
                 output.write.mode("overwrite").parquet(adls_path)
@@ -45,6 +50,7 @@ class ADLSSparkIOManager(BaseConfigurableIOManager):
                 output.write.mode("overwrite").csv(adls_path, header=True)
             case _:
                 raise OSError(f"Unsupported format for Spark write: {path.suffix}")
+        context.log.info(f"Write to ADLS completed in {time.time() - t1:.2f}s")
 
         output.unpersist()
         context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")
