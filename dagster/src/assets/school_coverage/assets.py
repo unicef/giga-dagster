@@ -9,6 +9,7 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -43,6 +44,7 @@ from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
+    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -273,8 +275,9 @@ def coverage_bronze(
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.country_code.lower()
-    full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
+    country_code = config.country_code
+    silver_schema = construct_schema_name_for_tier("school_coverage", DataTier.SILVER)
+    full_silver_table_name = construct_full_table_name(silver_schema, country_code)
 
     if source == "fb":
         df = fb_transforms(coverage_dq_passed_rows)
