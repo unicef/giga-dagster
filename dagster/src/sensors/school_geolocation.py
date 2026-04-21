@@ -190,6 +190,16 @@ def school_master_geolocation__post_manual_checks_sensor(
             country_code = filename_components.country_code
             metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
+            # Only process files with dq_mode="master" for the full merge pipeline.
+            # Files with dq_mode="uploaded" are assessment-only and should NOT
+            # trigger silver→gold merges.
+            if metadata.get("dq_mode") and metadata.get("dq_mode") != "master":
+                context.log.info(
+                    f"Skipping {adls_filepath}: dq_mode="
+                    f"{metadata.get('dq_mode')!r} (not master)"
+                )
+                continue
+
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
                     source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
