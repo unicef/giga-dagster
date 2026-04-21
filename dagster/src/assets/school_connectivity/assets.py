@@ -17,7 +17,6 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from src.constants import DataTier, constants
-from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -253,15 +252,10 @@ def qos_school_connectivity_data_quality_results(
     qos_school_connectivity_bronze: sql.DataFrame,
 ) -> Output[pd.DataFrame]:
     country_code = config.country_code
-
-    dq_context = DQContext(
-        dq_mode=DQMode.MASTER,
-        dataset_type="qos",
-        country_code_iso3=country_code,
-    )
     dq_results = row_level_checks(
-        df=qos_school_connectivity_bronze,
-        dq_context=dq_context,
+        qos_school_connectivity_bronze,
+        "qos",
+        country_code,
         context=context,
     )
 

@@ -53,22 +53,6 @@ def school_master_geolocation__raw_file_uploads_sensor(
             properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
             size = properties.size
 
-            run_key = str(path)
-            try:
-                metadata_path = (
-                    adls_filepath.replace(
-                        constants.UPLOAD_PATH_PREFIX,
-                        constants.UPLOAD_METADATA_PATH_PREFIX,
-                        1,
-                    )
-                    + ".metadata.json"
-                )
-                metadata_adls = adls_file_client.download_json(metadata_path)
-                if isinstance(metadata_adls, dict):
-                    metadata = {**(metadata or {}), **metadata_adls}
-            except Exception:
-                pass
-
             ops_destination_mapping = {
                 "geolocation_raw": OpDestinationMapping(
                     source_filepath=str(path),
@@ -148,7 +132,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
 
             context.log.info(f"FILE: {path}")
             yield RunRequest(
-                run_key=run_key,
+                run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )
@@ -189,16 +173,6 @@ def school_master_geolocation__post_manual_checks_sensor(
         else:
             country_code = filename_components.country_code
             metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
-
-            # Only process files with dq_mode="master" for the full merge pipeline.
-            # Files with dq_mode="uploaded" are assessment-only and should NOT
-            # trigger silver→gold merges.
-            if metadata.get("dq_mode") and metadata.get("dq_mode") != "master":
-                context.log.info(
-                    f"Skipping {adls_filepath}: dq_mode="
-                    f"{metadata.get('dq_mode')!r} (not master)"
-                )
-                continue
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(

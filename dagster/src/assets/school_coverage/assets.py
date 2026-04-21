@@ -9,7 +9,6 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
-from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -110,16 +109,10 @@ def coverage_data_quality_results(
     )
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
-
-    dq_context = DQContext(
-        dq_mode=DQMode.MASTER,
-        dataset_type=dataset_type,
-        country_code_iso3=country_code,
-        upload_id=config.upload_id,
-    )
     dq_results = row_level_checks(
         df=df,
-        dq_context=dq_context,
+        dataset_type=dataset_type,
+        _country_code_iso3=country_code,
         context=context,
     )
 

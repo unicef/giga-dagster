@@ -5,7 +5,6 @@ from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from src.constants import DataTier
-from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -145,14 +144,11 @@ def qos_school_list_data_quality_results(
         silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
-    dq_context = DQContext(
-        dq_mode=DQMode.MASTER,
-        dataset_type="geolocation",
-        country_code_iso3=config.country_code,
-    )
+
     dq_results = row_level_checks(
         df=qos_school_list_bronze,
-        dq_context=dq_context,
+        dataset_type="geolocation",
+        _country_code_iso3=config.country_code,
         silver=silver,
         context=context,
     )
