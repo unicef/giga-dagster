@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 from jinja2 import BaseLoader, Environment
@@ -767,7 +768,7 @@ def run_qos_checks(
     return df
 
 
-def row_level_checks(
+def _row_level_checks_internal(
     df: sql.DataFrame,
     dq_context: DQContext,
     silver: sql.DataFrame = None,
@@ -798,6 +799,35 @@ def row_level_checks(
         df = run_qos_checks(df, dq_context, context)
 
     return df
+
+
+def row_level_checks(
+    df: sql.DataFrame,
+    dq_context: Any = None,
+    _country_code_iso3: str = None,
+    silver: sql.DataFrame = None,
+    mode: str = None,
+    context: OpExecutionContext = None,
+    dataset_type: str = None,
+) -> sql.DataFrame:
+    # Resolve which signature is being used
+    if isinstance(dq_context, DQContext):
+        # Modern signature: row_level_checks(df, dq_context=DQContext(...), ...)
+        return _row_level_checks_internal(df, dq_context, silver, context)
+    else:
+        # Legacy signature: row_level_checks(df, dataset_type, country_code, ...)
+        if dq_context is not None and dataset_type is None:
+            dataset_type = dq_context  # Positional dataset_type
+
+        # Build a temporary DQContext for internal processing
+
+        internal_context = DQContext(
+            dq_mode=DQMode.MASTER,  # Legacy calls default to MASTER
+            dataset_type=dataset_type,
+            country_code_iso3=_country_code_iso3,
+            upload_mode=mode,
+        )
+        return _row_level_checks_internal(df, internal_context, silver, context)
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):

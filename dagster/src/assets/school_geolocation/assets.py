@@ -15,6 +15,7 @@ from pyspark.sql import (
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -304,9 +305,12 @@ def geolocation_data_quality_results(
     dq_results = row_level_checks(
         df=renamed_bronze,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
+        dq_context=DQContext(
+            dq_mode=DQMode(config.metadata["mode"]),
+            dataset_type=dataset_type,
+            country_code_iso3=country_code,
+            upload_id=id,
+        ),
         context=context,
     )
 
