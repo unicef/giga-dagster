@@ -638,6 +638,7 @@ def adhoc__publish_master_to_gold(
             updated_schema=updated_schema,
             spark=spark.spark_session,
             context=context,
+            schema_name=config.metastore_schema,
         )
 
     schema_reference = get_schema_columns_datahub(
@@ -720,6 +721,7 @@ def adhoc__publish_reference_to_gold(
             updated_schema=updated_schema,
             spark=spark.spark_session,
             context=context,
+            schema_name=config.metastore_schema,
         )
 
     schema_reference = get_schema_columns_datahub(

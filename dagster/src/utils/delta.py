@@ -294,13 +294,239 @@ def build_nullability_queries(
     return alter_stmts
 
 
+def _enable_column_mapping(spark: SparkSession, table_name: str) -> None:
+    """Enable column mapping mode on an existing Delta table if not already enabled."""
+    spark.sql(
+        f"ALTER TABLE {table_name} SET TBLPROPERTIES ("
+        f"  'delta.columnMapping.mode' = 'name',"
+        f"  'delta.minReaderVersion' = '2',"
+        f"  'delta.minWriterVersion' = '5'"
+        f")"
+    )
+
+
+def _get_stored_column_id_map(spark: SparkSession, table_name: str) -> dict[str, str]:
+    """Retrieve the column-name → schema-CSV-ID mapping stored in table properties.
+
+    Returns ``{column_name: csv_id}`` or an empty dict if no mapping has been
+    stored yet (e.g. tables created before this feature was added).
+    """
+    detail = spark.sql(f"DESCRIBE DETAIL {table_name}").collect()[0]
+    properties: dict = detail["properties"] if detail["properties"] else {}
+    result = {}
+    prefix = "giga.columnId."
+    for key, value in properties.items():
+        if key.startswith(prefix):
+            col_name = key[len(prefix) :]
+            result[col_name] = value
+    return result
+
+
+def _store_column_id_map(
+    spark: SparkSession,
+    table_name: str,
+    column_id_map: dict[str, str],
+) -> None:
+    """Persist the column-name → schema-CSV-ID mapping as Delta table properties."""
+    if not column_id_map:
+        return
+    props = ", ".join(
+        f"'giga.columnId.{col_name}' = '{csv_id}'"
+        for col_name, csv_id in column_id_map.items()
+    )
+    spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ({props})")
+
+
+def _remove_column_id_props(
+    spark: SparkSession,
+    table_name: str,
+    column_names: list[str],
+) -> None:
+    """Remove column-ID table properties for dropped columns."""
+    if not column_names:
+        return
+    props = ", ".join(f"'giga.columnId.{name}'" for name in column_names)
+    spark.sql(f"ALTER TABLE {table_name} UNSET TBLPROPERTIES IF EXISTS ({props})")
+
+
+def _detect_renames_and_deletes(
+    existing_id_map: dict[str, str],
+    updated_id_map: dict[str, str],
+) -> tuple[dict[str, str], list[str]]:
+    """Compare old and new column-ID mappings to detect renames and deletes.
+
+    Parameters
+    ----------
+    existing_id_map : dict[str, str]
+        ``{column_name: csv_id}`` from the current table properties.
+    updated_id_map : dict[str, str]
+        ``{column_name: csv_id}`` from the latest schema CSV.
+
+    Returns
+    -------
+    renames : dict[str, str]
+        ``{old_name: new_name}`` for columns whose ID stayed but name changed.
+    deletes : list[str]
+        Column names present in the table but whose ID is no longer in the
+        updated schema (i.e. the column should be dropped).
+    """
+    # Invert maps:  csv_id → column_name
+    existing_by_id = {v: k for k, v in existing_id_map.items()}
+    updated_by_id = {v: k for k, v in updated_id_map.items()}
+
+    renames: dict[str, str] = {}
+    deletes: list[str] = []
+
+    for csv_id, old_name in existing_by_id.items():
+        if csv_id in updated_by_id:
+            new_name = updated_by_id[csv_id]
+            if old_name != new_name:
+                renames[old_name] = new_name
+        else:
+            # ID no longer present in the reference schema → column deleted
+            deletes.append(old_name)
+
+    return renames, deletes
+
+
+def apply_renames_and_deletes(
+    spark: SparkSession,
+    table_name: str,
+    schema_name: str,
+    context: OpExecutionContext,
+) -> bool:
+    """Detect and apply column renames and deletes to a Delta table based on the reference schema.
+
+    Returns True if any schema change occurred (rename or delete).
+    """
+    from src.utils.schema import get_schema_columns_with_id
+
+    columns_with_id = get_schema_columns_with_id(spark, schema_name)
+    updated_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
+    existing_id_map = _get_stored_column_id_map(spark, table_name)
+
+    renames: dict[str, str] = {}
+    deletes: list[str] = []
+
+    if existing_id_map:
+        renames, deletes = _detect_renames_and_deletes(existing_id_map, updated_id_map)
+        context.log.info(f"Detected renames: {renames}")
+        context.log.info(f"Detected deletes: {deletes}")
+    else:
+        context.log.info(
+            "No stored column-ID mapping found; initialising mapping from current reference schema."
+        )
+
+    if renames or deletes:
+        context.log.info(
+            "Enabling column mapping on table for rename/delete support..."
+        )
+        _enable_column_mapping(spark, table_name)
+
+    if renames:
+        context.log.info(f"Renaming columns: {renames}")
+        for old_name, new_name in renames.items():
+            stmt = (
+                f"ALTER TABLE {table_name} RENAME COLUMN `{old_name}` TO `{new_name}`"
+            )
+            context.log.info(f"Executing: {stmt}")
+            spark.sql(stmt)
+        _remove_column_id_props(spark, table_name, list(renames.keys()))
+
+    if deletes:
+        context.log.info(f"Dropping columns: {deletes}")
+        for col_name in deletes:
+            stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
+            context.log.info(f"Executing: {stmt}")
+            spark.sql(stmt)
+        _remove_column_id_props(spark, table_name, deletes)
+
+    if renames or deletes:
+        spark.catalog.refreshTable(table_name)
+
+    return bool(renames or deletes)
+
+
+def persist_column_id_map(
+    spark: SparkSession, table_name: str, schema_name: str
+) -> None:
+    """Read the column ID mapping from the schema CSV and store it as table properties."""
+    from src.utils.schema import get_schema_columns_with_id
+
+    columns_with_id = get_schema_columns_with_id(spark, schema_name)
+    new_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
+    _store_column_id_map(spark, table_name, new_id_map)
+
+
+def apply_datatype_changes(
+    spark: SparkSession,
+    table_name: str,
+    changed_datatypes: dict,
+    context: OpExecutionContext,
+) -> None:
+    """Apply datatype changes by casting columns and overwriting the table schema."""
+    if not changed_datatypes:
+        return
+
+    context.log.info("Updating datatype...")
+    context.log.info(f"Changed datatypes: {changed_datatypes}")
+    existing_dataframe = spark.table(table_name)
+    updated_df = existing_dataframe
+
+    for column, datatype in changed_datatypes.items():
+        updated_df = updated_df.withColumn(
+            column, existing_dataframe[column].cast(datatype.typeName())
+        )
+
+    (
+        updated_df.write.option("overwriteSchema", "true")
+        .format("delta")
+        .mode("overwrite")
+        .saveAsTable(table_name)
+    )
+    spark.catalog.refreshTable(table_name)
+
+
 def sync_schema(
     table_name: str,
     existing_schema: StructType,
     updated_schema: StructType,
     spark: SparkSession,
     context: OpExecutionContext,
+    schema_name: str | None = None,
 ):
+    """Synchronise a Delta table's schema with the reference schema.
+
+    Supports:
+    * Adding columns (existing behaviour via ``mergeSchema``)
+    * Renaming columns (via ``ALTER TABLE RENAME COLUMN``)
+    * Dropping columns (via ``ALTER TABLE DROP COLUMN``)
+    * Changing data types (via overwrite with ``overwriteSchema``)
+    * Changing nullability constraints
+
+    Column renames and deletes require ``schema_name`` so that the stable
+    UUID column IDs from the schema CSV can be compared against the IDs
+    stored in the table properties.
+    """
+    # ------------------------------------------------------------------
+    # 1. Detect and apply renames & deletes
+    # ------------------------------------------------------------------
+    any_renames_deletes = False
+    if schema_name is not None:
+        any_renames_deletes = apply_renames_and_deletes(
+            spark, table_name, schema_name, context
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Refresh schemas after rename/delete to get accurate comparison
+    # ------------------------------------------------------------------
+    if any_renames_deletes:
+        spark.catalog.refreshTable(table_name)
+        existing_schema = spark.table(table_name).schema
+
+    # ------------------------------------------------------------------
+    # 3. Detect added columns & datatype changes (existing logic)
+    # ------------------------------------------------------------------
     alter_stmts = build_nullability_queries(
         context=context,
         existing_schema=existing_schema,
@@ -310,36 +536,18 @@ def sync_schema(
     context.log.info(f"alter_stmts {alter_stmts}")
     has_nullability_changed = len(alter_stmts) > 0
 
-    existing_columns = {field.name: field.name for field in existing_schema}
-    updated_columns = {field.name: field.name for field in updated_schema}
+    existing_columns = {field.name for field in existing_schema}
+    updated_columns_set = {field.name for field in updated_schema}
 
-    added_columns = set(updated_columns.keys()) - set(existing_columns.keys())
-    removed_columns = set(existing_columns.keys()) - set(updated_columns.keys())
+    added_columns = updated_columns_set - existing_columns
+    removed_columns = existing_columns - updated_columns_set
 
     has_schema_changed = len(added_columns) + len(removed_columns) > 0
 
     changed_datatypes = get_changed_datatypes(
         context=context, existing_schema=existing_schema, updated_schema=updated_schema
     )
-    has_datatype_changed = len(changed_datatypes) > 0
-
-    if has_datatype_changed:
-        context.log.info("Updating datatype...")
-        context.log.info(f"Changed datatypes: {changed_datatypes}")
-        existing_dataframe = spark.table(table_name)
-        updated_df = existing_dataframe
-
-        for column, datatype in changed_datatypes.items():
-            updated_df = updated_df.withColumn(
-                column, existing_dataframe[column].cast(datatype.typeName())
-            )
-
-        (
-            updated_df.write.option("overwriteSchema", "true")
-            .format("delta")
-            .mode("overwrite")
-            .saveAsTable(table_name)
-        )
+    apply_datatype_changes(spark, table_name, changed_datatypes, context)
 
     if has_schema_changed:
         context.log.info(f"Adding schema columns {added_columns}")
@@ -369,3 +577,9 @@ def sync_schema(
                     continue
                 else:
                     raise
+
+    # ------------------------------------------------------------------
+    # 4. Persist column-ID mapping for future rename/delete detection
+    # ------------------------------------------------------------------
+    if schema_name is not None:
+        persist_column_id_map(spark, table_name, schema_name)

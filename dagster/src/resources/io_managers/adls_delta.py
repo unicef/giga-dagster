@@ -12,7 +12,7 @@ from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import build_deduped_merge_query, execute_query_with_error_handler
+from src.utils.delta import build_deduped_merge_query
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
     construct_full_table_name,
@@ -157,9 +157,22 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
                 "delta.logRetentionDuration", constants.school_master_retention_period
             )
 
+        from src.utils.delta import (
+            execute_query_with_error_handler,
+            persist_column_id_map,
+        )
+
         execute_query_with_error_handler(
             spark, query, schema_name_for_tier, table_name, context
         )
+
+        if columns_schema_name not in [
+            "qos",
+            "qos_raw",
+            "qos_availability",
+            "custom_dataset",
+        ]:
+            persist_column_id_map(spark, full_table_name, columns_schema_name)
 
     def _upsert_data(
         self,
@@ -191,35 +204,28 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             columns = incoming_schema.fields
             primary_key = "gigasync_id"
         else:
+            from src.utils.delta import sync_schema
+
             columns = get_schema_columns(spark, schema_name)
             primary_key = get_primary_key(spark, schema_name)
 
             updated_schema = StructType(columns)
-            updated_columns = sorted(updated_schema.fieldNames())
+            existing_schema = spark.table(full_table_name).schema
 
-            existing_df = DeltaTable.forName(spark, full_table_name).toDF()
-            existing_columns = sorted(existing_df.schema.fieldNames())
-
-            context.log.info(f"incoming schema {data.schema}")
-            context.log.info(f"existing schema {existing_df.schema}")
-
-            if updated_columns != existing_columns:
-                context.log.info("Updating schema...")
-
-                empty_data = spark.sparkContext.emptyRDD()
-                updated_schema_df = spark.createDataFrame(
-                    data=empty_data, schema=updated_schema
-                )
-
-                (
-                    updated_schema_df.write.option("mergeSchema", "true")
-                    .format("delta")
-                    .mode("append")
-                    .saveAsTable(full_table_name)
-                )
+            sync_schema(
+                table_name=full_table_name,
+                existing_schema=existing_schema,
+                updated_schema=updated_schema,
+                spark=spark,
+                context=context,
+                schema_name=schema_name,
+            )
 
         update_columns = [c.name for c in columns if c.name != primary_key]
+
+        spark.catalog.refreshTable(full_table_name)
         master = DeltaTable.forName(spark, full_table_name)
+
         query = build_deduped_merge_query(
             master,
             data,
@@ -235,7 +241,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
     def _overwrite_data(
         self,
-        data: sql.dataframe,
+        data: sql.DataFrame,
         schema_name: str,
         full_table_name: str,
         context: OutputContext = None,
