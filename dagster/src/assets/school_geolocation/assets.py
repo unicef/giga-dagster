@@ -303,10 +303,11 @@ def geolocation_data_quality_results(
         df=renamed_bronze,
         silver=casted_silver,
         dq_context=DQContext(
-            dq_mode=DQMode(config.metadata["mode"]),
+            dq_mode=DQMode(config.metadata.get("dq_mode", "master")),
             dataset_type=dataset_type,
             country_code_iso3=country_code,
             upload_id=id,
+            upload_mode=config.metadata.get("mode"),
         ),
         context=context,
     )
