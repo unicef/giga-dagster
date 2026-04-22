@@ -441,6 +441,9 @@ def apply_renames_and_deletes(
             spark.sql(stmt)
         _remove_column_id_props(spark, table_name, deletes)
 
+    if renames or deletes:
+        spark.catalog.refreshTable(table_name)
+
     return bool(renames or deletes)
 
 
@@ -481,6 +484,7 @@ def apply_datatype_changes(
         .mode("overwrite")
         .saveAsTable(table_name)
     )
+    spark.catalog.refreshTable(table_name)
 
 
 def sync_schema(
@@ -517,6 +521,7 @@ def sync_schema(
     # 2. Refresh schemas after rename/delete to get accurate comparison
     # ------------------------------------------------------------------
     if any_renames_deletes:
+        spark.catalog.refreshTable(table_name)
         existing_schema = spark.table(table_name).schema
 
     # ------------------------------------------------------------------

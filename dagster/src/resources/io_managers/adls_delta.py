@@ -210,7 +210,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             primary_key = get_primary_key(spark, schema_name)
 
             updated_schema = StructType(columns)
-            existing_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
+            existing_schema = spark.table(full_table_name).schema
 
             sync_schema(
                 table_name=full_table_name,
@@ -222,7 +222,10 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             )
 
         update_columns = [c.name for c in columns if c.name != primary_key]
+
+        spark.catalog.refreshTable(full_table_name)
         master = DeltaTable.forName(spark, full_table_name)
+
         query = build_deduped_merge_query(
             master,
             data,
@@ -238,7 +241,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
     def _overwrite_data(
         self,
-        data: sql.dataframe,
+        data: sql.DataFrame,
         schema_name: str,
         full_table_name: str,
         context: OutputContext = None,
