@@ -209,6 +209,8 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             columns = get_schema_columns(spark, schema_name)
             primary_key = get_primary_key(spark, schema_name)
 
+            data = data.localCheckpoint()
+
             updated_schema = StructType(columns)
             existing_schema = spark.table(full_table_name).schema
 

@@ -294,7 +294,7 @@ def build_nullability_queries(
     return alter_stmts
 
 
-def _enable_column_mapping(spark: SparkSession, table_name: str) -> None:
+def enable_column_mapping(spark: SparkSession, table_name: str) -> None:
     """Enable column mapping mode on an existing Delta table if not already enabled."""
     spark.sql(
         f"ALTER TABLE {table_name} SET TBLPROPERTIES ("
@@ -305,7 +305,7 @@ def _enable_column_mapping(spark: SparkSession, table_name: str) -> None:
     )
 
 
-def _get_stored_column_id_map(spark: SparkSession, table_name: str) -> dict[str, str]:
+def get_stored_column_id_map(spark: SparkSession, table_name: str) -> dict[str, str]:
     """Retrieve the column-name → schema-CSV-ID mapping stored in table properties.
 
     Returns ``{column_name: csv_id}`` or an empty dict if no mapping has been
@@ -322,7 +322,7 @@ def _get_stored_column_id_map(spark: SparkSession, table_name: str) -> dict[str,
     return result
 
 
-def _store_column_id_map(
+def store_column_id_map(
     spark: SparkSession,
     table_name: str,
     column_id_map: dict[str, str],
@@ -337,7 +337,7 @@ def _store_column_id_map(
     spark.sql(f"ALTER TABLE {table_name} SET TBLPROPERTIES ({props})")
 
 
-def _remove_column_id_props(
+def remove_column_id_props(
     spark: SparkSession,
     table_name: str,
     column_names: list[str],
@@ -349,7 +349,7 @@ def _remove_column_id_props(
     spark.sql(f"ALTER TABLE {table_name} UNSET TBLPROPERTIES IF EXISTS ({props})")
 
 
-def _detect_renames_and_deletes(
+def detect_renames_and_deletes(
     existing_id_map: dict[str, str],
     updated_id_map: dict[str, str],
 ) -> tuple[dict[str, str], list[str]]:
@@ -403,13 +403,13 @@ def apply_renames_and_deletes(
 
     columns_with_id = get_schema_columns_with_id(spark, schema_name)
     updated_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
-    existing_id_map = _get_stored_column_id_map(spark, table_name)
+    existing_id_map = get_stored_column_id_map(spark, table_name)
 
     renames: dict[str, str] = {}
     deletes: list[str] = []
 
     if existing_id_map:
-        renames, deletes = _detect_renames_and_deletes(existing_id_map, updated_id_map)
+        renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
         context.log.info(f"Detected renames: {renames}")
         context.log.info(f"Detected deletes: {deletes}")
     else:
@@ -421,7 +421,7 @@ def apply_renames_and_deletes(
         context.log.info(
             "Enabling column mapping on table for rename/delete support..."
         )
-        _enable_column_mapping(spark, table_name)
+        enable_column_mapping(spark, table_name)
 
     if renames:
         context.log.info(f"Renaming columns: {renames}")
@@ -431,7 +431,7 @@ def apply_renames_and_deletes(
             )
             context.log.info(f"Executing: {stmt}")
             spark.sql(stmt)
-        _remove_column_id_props(spark, table_name, list(renames.keys()))
+        remove_column_id_props(spark, table_name, list(renames.keys()))
 
     if deletes:
         context.log.info(f"Dropping columns: {deletes}")
@@ -439,7 +439,7 @@ def apply_renames_and_deletes(
             stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
             context.log.info(f"Executing: {stmt}")
             spark.sql(stmt)
-        _remove_column_id_props(spark, table_name, deletes)
+        remove_column_id_props(spark, table_name, deletes)
 
     if renames or deletes:
         spark.catalog.refreshTable(table_name)
@@ -455,7 +455,7 @@ def persist_column_id_map(
 
     columns_with_id = get_schema_columns_with_id(spark, schema_name)
     new_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
-    _store_column_id_map(spark, table_name, new_id_map)
+    store_column_id_map(spark, table_name, new_id_map)
 
 
 def apply_datatype_changes(
