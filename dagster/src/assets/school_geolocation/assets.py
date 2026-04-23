@@ -701,6 +701,10 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if config.metadata.get("dq_mode") == "uploaded":
+        context.log.info("Skipping staging as dq_mode is 'uploaded'")
+        return Output(None)
+
     if geolocation_dq_passed_rows.isEmpty():
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
