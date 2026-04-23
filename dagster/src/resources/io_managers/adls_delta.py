@@ -209,7 +209,9 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             columns = get_schema_columns(spark, schema_name)
             primary_key = get_primary_key(spark, schema_name)
 
-            data = data.localCheckpoint()
+            # Break the lazy lineage to avoid DELTA_SCHEMA_CHANGE_SINCE_ANALYSIS
+            # if sync_schema renames columns or changes types.
+            data = spark.createDataFrame(data.rdd, data.schema).cache()
 
             updated_schema = StructType(columns)
             existing_schema = spark.table(full_table_name).schema
