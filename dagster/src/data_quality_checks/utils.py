@@ -768,7 +768,7 @@ def run_qos_checks(
     return df
 
 
-def _row_level_checks_internal(
+def row_level_checks_internal(
     df: sql.DataFrame,
     dq_context: DQContext,
     silver: sql.DataFrame = None,
@@ -813,7 +813,7 @@ def row_level_checks(
     # Resolve which signature is being used
     if isinstance(dq_context, DQContext):
         # Modern signature: row_level_checks(df, dq_context=DQContext(...), ...)
-        return _row_level_checks_internal(df, dq_context, silver, context)
+        return row_level_checks_internal(df, dq_context, silver, context)
     else:
         # Legacy signature: row_level_checks(df, dataset_type, country_code, ...)
         if dq_context is not None and dataset_type is None:
@@ -827,7 +827,7 @@ def row_level_checks(
             country_code_iso3=_country_code_iso3,
             upload_mode=mode,
         )
-        return _row_level_checks_internal(df, internal_context, silver, context)
+        return row_level_checks_internal(df, internal_context, silver, context)
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):
