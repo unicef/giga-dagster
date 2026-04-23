@@ -272,6 +272,64 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     )
 
 
+def _stamp_processed_and_reset_approval(
+    context: OpExecutionContext,
+    spark: SparkSession,
+    staging_table_name: str,
+    approved_change_ids: list,
+    upload_id: str,
+    approval_request_log_id: str | None,
+    country_code: str,
+    formatted_dataset: str,
+) -> None:
+    """Stamp approved staging rows PROCESSED and reset the ApprovalRequest.
+
+    Used by non-geolocation pipelines from the silver asset.  For geolocation this
+    is deferred to the master asset so that a failed silver IO manager write cannot
+    leave rows permanently marked PROCESSED with no corresponding silver data.
+    """
+    processed_condition = _build_processed_condition(approved_change_ids, upload_id)
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=processed_condition,
+        set={
+            "status": f.lit(_STATUS_PROCESSED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
+    )
+    context.log.info("Marked approved staging rows as PROCESSED.")
+
+    remaining_pending = (
+        DeltaTable.forName(spark, staging_table_name)
+        .toDF()
+        .filter(
+            (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != _CHANGE_UNCHANGED)
+        )
+        .count()
+    )
+    update_values = {ApprovalRequest.is_merge_processing: False}
+    if remaining_pending == 0:
+        update_values[ApprovalRequest.enabled] = False
+
+    with get_db_context() as db:
+        try:
+            with db.begin():
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(update_values)
+                )
+        except Exception as e:
+            context.log.error(
+                f"Failed to reset ApprovalRequest for {country_code} - "
+                f"{formatted_dataset}: {e}"
+            )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def silver(
@@ -417,52 +475,44 @@ def silver(
 
     new_silver = compute_row_hash(new_silver)
 
-    # Mark approved rows as PROCESSED in the staging table
-    processed_condition = _build_processed_condition(approved_change_ids, upload_id)
-    DeltaTable.forName(s, staging_table_name).update(
-        condition=processed_condition,
-        set={
-            "status": f.lit(_STATUS_PROCESSED),
-            "processed_at": f.current_timestamp(),
-            "approval_request_log_id": f.lit(approval_request_log_id),
-        },
-    )
-    context.log.info("Marked approved staging rows as PROCESSED.")
-
-    # Check if any PENDING non-UNCHANGED rows remain across all uploads
-    remaining_pending = (
-        DeltaTable.forName(s, staging_table_name)
-        .toDF()
-        .filter(
-            (f.col("status") == _STATUS_PENDING)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-        )
-        .count()
-    )
-
-    # Reset ApprovalRequest: always clear is_merge_processing; disable only when
-    # no other upload is waiting for approval
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    update_values = {ApprovalRequest.is_merge_processing: False}
-    if remaining_pending == 0:
-        update_values[ApprovalRequest.enabled] = False
 
-    with get_db_context() as db:
-        try:
-            with db.begin():
-                db.execute(
-                    update(ApprovalRequest)
-                    .where(
-                        (ApprovalRequest.country == country_code)
-                        & (ApprovalRequest.dataset == formatted_dataset)
+    if config.dataset_type == "geolocation":
+        # For geolocation the PROCESSED stamp is deferred to the master asset, which
+        # runs after the IO manager has confirmed the silver write succeeded.  Stamping
+        # here would mark rows PROCESSED even if the silver write then fails, leaving
+        # them orphaned.  Only clear is_merge_processing now; the remaining-pending
+        # check and enabled=False reset happen in master once the stamp is applied.
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values({ApprovalRequest.is_merge_processing: False})
                     )
-                    .values(update_values)
+            except Exception as e:
+                context.log.error(
+                    f"Failed to reset ApprovalRequest for {country_code} - "
+                    f"{formatted_dataset}: {e}"
                 )
-        except Exception as e:
-            context.log.error(
-                f"Failed to reset ApprovalRequest for {country_code} - "
-                f"{formatted_dataset}: {e}"
-            )
+    else:
+        # Non-geolocation pipelines: stamp PROCESSED immediately.  Their staging
+        # table is transient (reset after every merge cycle) so the atomicity
+        # guarantee is less critical.
+        _stamp_processed_and_reset_approval(
+            context,
+            s,
+            staging_table_name,
+            approved_change_ids,
+            upload_id,
+            approval_request_log_id,
+            country_code,
+            formatted_dataset,
+        )
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -638,10 +688,74 @@ def master(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
+    adls_file_client: ADLSFileClient,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     country_code = config.country_code
+
+    # For geolocation: stamp PROCESSED now that the silver IO manager write has
+    # succeeded.  The stamp was intentionally deferred from the silver asset so that
+    # a failed silver write cannot leave staging rows permanently marked PROCESSED
+    # with no corresponding silver data.
+    if config.dataset_type == "geolocation" and check_table_exists(
+        s, schema_name, country_code, DataTier.STAGING
+    ):
+        staging_tier_schema_name = construct_schema_name_for_tier(
+            schema_name, DataTier.STAGING
+        )
+        staging_table_name = construct_full_table_name(
+            staging_tier_schema_name, country_code
+        )
+        approval_data = adls_file_client.download_json(config.filepath)
+        upload_id_geo, approved_ids_geo, _, approval_log_id_geo = _parse_approval_file(
+            approval_data
+        )
+        processed_condition = _build_processed_condition(
+            approved_ids_geo, upload_id_geo
+        )
+        DeltaTable.forName(s, staging_table_name).update(
+            condition=processed_condition,
+            set={
+                "status": f.lit(_STATUS_PROCESSED),
+                "processed_at": f.current_timestamp(),
+                "approval_request_log_id": f.lit(approval_log_id_geo),
+            },
+        )
+        context.log.info(
+            "Marked approved staging rows as PROCESSED (silver confirmed written)."
+        )
+
+        remaining_pending = (
+            DeltaTable.forName(s, staging_table_name)
+            .toDF()
+            .filter(
+                (f.col("status") == _STATUS_PENDING)
+                & (f.col("change_type") != _CHANGE_UNCHANGED)
+            )
+            .count()
+        )
+        formatted_dataset = f"School {config.dataset_type.capitalize()}"
+        approval_update_values: dict = {ApprovalRequest.is_merge_processing: False}
+        if remaining_pending == 0:
+            approval_update_values[ApprovalRequest.enabled] = False
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values(approval_update_values)
+                    )
+            except Exception as e:
+                context.log.error(
+                    f"Failed to reset ApprovalRequest for {country_code} - "
+                    f"{formatted_dataset}: {e}"
+                )
+
     silver_tier_schema_name = construct_schema_name_for_tier(
         f"school_{config.dataset_type}", DataTier.SILVER
     )
@@ -749,6 +863,49 @@ def reference(
     )
 
 
+def _stamp_master_version(
+    context: OpExecutionContext,
+    spark: SparkSession,
+    config: FileConfig,
+) -> None:
+    """Backfill master_version on PROCESSED pending_changes rows that don't have one yet.
+
+    Called from broadcast_master_release_notes after the master Delta table has been
+    written, so the version read from history is the one that includes the current run.
+    Only runs for the geolocation pipeline (the only pipeline using pending_changes).
+    """
+    if config.dataset_type != "geolocation":
+        return
+
+    staging_tier_schema_name = construct_schema_name_for_tier(
+        config.metastore_schema, DataTier.STAGING
+    )
+    staging_table_name = construct_full_table_name(
+        staging_tier_schema_name, config.country_code
+    )
+    if not spark.catalog.tableExists(staging_table_name):
+        context.log.info("No staging table found; skipping master_version stamp.")
+        return
+
+    master_table_name = construct_full_table_name("school_master", config.country_code)
+    master_dt = DeltaTable.forName(spark, master_table_name)
+    master_version = (
+        master_dt.history().orderBy(f.col("version").desc()).first().version
+    )
+    if master_version is None:
+        context.log.warning("Could not determine master Delta version; skipping stamp.")
+        return
+
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=(f.col("status") == _STATUS_PROCESSED)
+        & f.col("master_version").isNull(),
+        set={"master_version": f.lit(master_version)},
+    )
+    context.log.info(
+        f"Stamped master_version={master_version} on PROCESSED staging rows."
+    )
+
+
 @asset
 @capture_op_exceptions
 async def broadcast_master_release_notes(
@@ -757,6 +914,9 @@ async def broadcast_master_release_notes(
     spark: PySparkResource,
     master: sql.DataFrame,
 ) -> Output[None]:
+    s: SparkSession = spark.spark_session
+    _stamp_master_version(context, s, config)
+
     metadata = await send_master_release_notes(context, config, spark, master)
     if metadata is None:
         return Output(None)
