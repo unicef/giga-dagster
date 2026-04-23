@@ -52,6 +52,37 @@ jobs:
                   --set image.repository="$(containerRegistryName).azurecr.io/giga-dagster-hive-metastore"
                   --set image.tag="$(Build.SourceVersion)"
 
+            - task: Kubernetes@1
+              displayName: Delete existing HMS CTLGS migration job (if any)
+              continueOnError: true
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: delete
+                arguments: job hms-migrate-ctlgs-location --ignore-not-found
+
+            - task: Kubernetes@1
+              displayName: Run HMS CTLGS location migration job
+              inputs:
+                namespace: $(kubernetesNamespace)
+                configurationType: configuration
+                command: apply
+                useConfigurationFile: true
+                configuration: $(Build.SourcesDirectory)/infra/k8s/migrate-hms-ctlgs-job.yaml
+
+            - task: Kubernetes@1
+              displayName: Wait for HMS CTLGS migration job to complete
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: wait
+                arguments: job/hms-migrate-ctlgs-location --for=condition=complete --timeout=120s
+
+            - task: Kubernetes@1
+              displayName: Delete HMS CTLGS migration job
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: delete
+                arguments: job hms-migrate-ctlgs-location --ignore-not-found
+
             - script: |
                 chmod +x $(Build.SourcesDirectory)/infra/helm/dagster/kustomize/kustomize-post-renderer.sh
               displayName: Make post-renderer executable
