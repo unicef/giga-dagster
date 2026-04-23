@@ -244,11 +244,8 @@ def geolocation_bronze(
         if column in df.columns:
             df = df.withColumn(column, f.initcap(f.col(column)))
 
-    context.log.info("Submitting Spark job (df.count) — waiting for executors...")
-    t3 = time.time()
     df.cache()
     row_count = df.count()
-    context.log.info(f"df.count() completed in {time.time() - t3:.2f}s")
 
     return Output(
         df,
@@ -621,6 +618,71 @@ def geolocation_dq_failed_rows(
             **get_output_metadata(config),
             "row_count": row_count,
             "preview": get_table_preview(df_failed),
+        },
+    )
+
+
+@asset
+@capture_op_exceptions
+def geolocation_error_table(
+    context: OpExecutionContext,
+    geolocation_dq_failed_rows: sql.DataFrame,
+    config: FileConfig,
+    spark: PySparkResource,
+) -> Output[None]:
+    s: SparkSession = spark.spark_session
+
+    if geolocation_dq_failed_rows.isEmpty():
+        context.log.info("No failed rows to write to aggregated error table.")
+        return Output(None)
+
+    file_id = config.filename_components.id
+    file_name = Path(config.filepath).name
+    country_code = config.country_code
+    dataset_type = config.dataset_type
+
+    df = geolocation_dq_failed_rows
+
+    df = df.withColumn("giga_sync_file_id", f.lit(file_id))
+    df = df.withColumn("giga_sync_file_name", f.lit(file_name))
+    df = df.withColumn("dataset_type", f.lit(dataset_type))
+    df = df.withColumn("country_code", f.lit(country_code))
+    df = df.withColumn("created_at", f.current_timestamp())
+
+    schema_name = "school_geolocation_error_table"
+    table_name = country_code.lower()
+    full_table_name = construct_full_table_name(schema_name, table_name)
+
+    create_schema(s, schema_name)
+
+    try:
+        if s.catalog.tableExists(full_table_name):
+            context.log.info(f"Deleting existing errors for file_id: {file_id}")
+            delta_table = DeltaTable.forName(s, full_table_name)
+            delta_table.delete(f.col("giga_sync_file_id") == f.lit(file_id))
+        else:
+            context.log.info(
+                f"Table {full_table_name} does not exist. It will be created on write."
+            )
+    except Exception as exc:
+        context.log.warning(f"Failed to delete existing rows: {exc}")
+
+    context.log.info(f"Appending failed rows to {full_table_name}")
+    row_count = df.count()
+
+    (
+        df.write.format("delta")
+        .mode("append")
+        .option("mergeSchema", "true")
+        .saveAsTable(full_table_name)
+    )
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "row_count": row_count,
+            "preview": get_table_preview(df),
         },
     )
 
