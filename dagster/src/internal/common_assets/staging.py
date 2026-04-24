@@ -13,6 +13,9 @@ from pyspark.sql.types import (
     StringType,
     StructField,
     StructType,
+    LongType,
+    StringType,
+    StructField,
     TimestampType,
 )
 from sqlalchemy import select, update
@@ -305,6 +308,7 @@ class StagingStep:
             StructField("created_at", TimestampType(), nullable=True),
             StructField("processed_at", TimestampType(), nullable=True),
             StructField("approval_request_log_id", StringType(), nullable=True),
+            StructField("master_version", LongType(), nullable=True),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
 
