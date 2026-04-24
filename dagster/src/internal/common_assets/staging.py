@@ -10,12 +10,10 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import (
     ArrayType,
-    StringType,
-    StructField,
-    StructType,
     LongType,
     StringType,
     StructField,
+    StructType,
     TimestampType,
 )
 from sqlalchemy import select, update
@@ -31,6 +29,7 @@ from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
+    persist_column_id_map,
     sync_schema,
 )
 from src.utils.op_config import FileConfig
@@ -358,6 +357,10 @@ class StagingStep:
             .option("mergeSchema", "true")
             .saveAsTable(self.staging_table_name)
         )
+
+        # Persist column-ID mapping after staging data is written
+
+        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
 
     def _update_approval_request_status(self) -> None:
         """Enable the ApprovalRequest if any actionable (non-UNCHANGED) rows exist."""

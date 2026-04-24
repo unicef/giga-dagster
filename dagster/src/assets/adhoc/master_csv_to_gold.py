@@ -42,7 +42,6 @@ from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
-    sync_schema,
 )
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
@@ -608,39 +607,6 @@ def adhoc__publish_master_to_gold(
     )
     gold = compute_row_hash(gold)
 
-    table_exists = check_table_exists(
-        spark=spark.spark_session,
-        schema_name="school_master",
-        table_name=config.country_code.lower(),
-        data_tier=DataTier.GOLD,
-    )
-
-    if table_exists:
-        table_name = f"{config.metastore_schema}.{config.country_code}"
-        updated_schema = StructType(
-            get_schema_columns(
-                spark=spark.spark_session, schema_name=config.metastore_schema
-            )
-        )
-
-        context.log.info(f"Existing table name: {table_name}")
-
-        spark.spark_session.catalog.refreshTable(table_name)
-        existing_df = DeltaTable.forName(
-            sparkSession=spark.spark_session, tableOrViewName=table_name
-        ).toDF()
-
-        existing_schema = existing_df.schema
-
-        sync_schema(
-            table_name=table_name,
-            existing_schema=existing_schema,
-            updated_schema=updated_schema,
-            spark=spark.spark_session,
-            context=context,
-            schema_name=config.metastore_schema,
-        )
-
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
         config.metastore_schema,
@@ -690,39 +656,6 @@ def adhoc__publish_reference_to_gold(
         context,
     )
     gold = compute_row_hash(gold)
-
-    table_exists = check_table_exists(
-        spark=spark.spark_session,
-        schema_name="school_reference",
-        table_name=config.country_code.lower(),
-        data_tier=DataTier.GOLD,
-    )
-
-    if table_exists:
-        table_name = f"{config.metastore_schema}.{config.country_code}"
-        updated_schema = StructType(
-            get_schema_columns(
-                spark=spark.spark_session, schema_name=config.metastore_schema
-            )
-        )
-
-        context.log.info(f"Existing table name: {table_name}")
-
-        spark.spark_session.catalog.refreshTable(table_name)
-        existing_df = DeltaTable.forName(
-            sparkSession=spark.spark_session,
-            tableOrViewName=table_name,
-        ).toDF()
-        existing_schema = existing_df.schema
-
-        sync_schema(
-            table_name=table_name,
-            existing_schema=existing_schema,
-            updated_schema=updated_schema,
-            spark=spark.spark_session,
-            context=context,
-            schema_name=config.metastore_schema,
-        )
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,

@@ -6,6 +6,7 @@ from pyspark import sql
 from pyspark.sql.functions import col, when
 from src.utils.delta import (
     create_delta_table,
+    persist_column_id_map,
     sync_schema,
 )
 
@@ -70,3 +71,6 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
         .whenNotMatchedInsertAll()
         .execute()
     )
+
+    # Persist column-ID mapping after merge succeeds
+    persist_column_id_map(spark, full_table_name, table_name)

@@ -12,7 +12,7 @@ from src.resources.io_managers.base import BaseConfigurableIOManager
 from src.settings import settings
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
-from src.utils.delta import build_deduped_merge_query
+from src.utils.delta import build_deduped_merge_query, persist_column_id_map
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
     construct_full_table_name,
@@ -242,6 +242,11 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         if query is not None:
             query.execute()
+
+        # Persist column-ID mapping after merge succeeds
+        # This ensures mapping is only updated when data is successfully merged
+        if not is_qos:
+            persist_column_id_map(spark, full_table_name, schema_name)
 
     def _overwrite_data(
         self,
