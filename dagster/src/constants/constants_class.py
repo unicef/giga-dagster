@@ -60,6 +60,11 @@ class Constants(BaseSettings):
             pyspark=IntegerType,
             datahub=NumberTypeClass,
         ),
+        int=TypeMapping(
+            native=int,
+            pyspark=IntegerType,
+            datahub=NumberTypeClass,
+        ),
         long=TypeMapping(
             native=int,
             pyspark=LongType,

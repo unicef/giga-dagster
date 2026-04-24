@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 
 import pandas as pd
 from jinja2 import BaseLoader, Environment
@@ -23,6 +24,7 @@ from src.data_quality_checks.create_update import (
     update_checks,
 )
 from src.data_quality_checks.critical import critical_error_checks
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
     duplicate_set_checks,
@@ -630,99 +632,202 @@ def dq_geolocation_extract_relevant_columns(
     return df, human_readable_mappings
 
 
-def row_level_checks(
+def run_master_checks(
     df: sql.DataFrame,
-    dataset_type: str,
-    _country_code_iso3: str,
+    dq_context: DQContext,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    df = is_not_within_country(df, dq_context.country_code_iso3, context)
+    df = similar_name_level_within_110_check(df, context)
+    df = school_density_check(df, context)
+    df = standard_checks(df, dq_context.dataset_type, context)
+    df = duplicate_all_except_checks(
+        df,
+        CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type],
+        context,
+    )
+    df = precision_check(df, config.PRECISION, context)
+    df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
+    df = duplicate_name_level_110_check(df, context)
+    df = column_relation_checks(df, dq_context.dataset_type, context)
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        context,
+    )
+    return df
+
+
+def run_geolocation_checks(
+    df: sql.DataFrame,
+    dq_context: DQContext,
     silver: sql.DataFrame = None,
-    mode=None,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    if dq_context.dq_mode == DQMode.MASTER:
+        if dq_context.upload_mode == UploadMode.CREATE.value:
+            df = create_checks(bronze=df, silver=silver, context=context)
+        elif dq_context.upload_mode == UploadMode.UPDATE.value:
+            df = update_checks(bronze=df, silver=silver, context=context)
+    else:
+        # For assessment-only (uploaded mode), skip cross-checks against silver
+        # but ensure the columns exist to avoid downstream errors.
+        if dq_context.upload_mode == UploadMode.CREATE.value:
+            df = df.withColumn("dq_is_not_create", f.lit(0))
+        elif dq_context.upload_mode == UploadMode.UPDATE.value:
+            df = df.withColumn("dq_is_not_update", f.lit(0))
+
+    df = is_not_within_country(df, dq_context.country_code_iso3, context)
+    df = similar_name_level_within_110_check(df, context)
+    df = school_density_check(df, context)
+    df = standard_checks(df, dq_context.dataset_type, context)
+    df = duplicate_all_except_checks(
+        df,
+        CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type],
+        context,
+    )
+    df = precision_check(df, config.PRECISION, context)
+    df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
+    df = duplicate_name_level_110_check(df, context)
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        dq_context.upload_mode,
+        context,
+    )
+    df = column_relation_checks(df, dq_context.dataset_type, context)
+    return df
+
+
+def run_reference_checks(
+    df: sql.DataFrame,
+    dq_context: DQContext,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    df = standard_checks(df, dq_context.dataset_type, context)
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        context,
+    )
+    return df
+
+
+def run_coverage_checks(
+    df: sql.DataFrame,
+    dq_context: DQContext,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    df = standard_checks(df, dq_context.dataset_type, context)
+    df = column_relation_checks(df, dq_context.dataset_type, context)
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        context,
+    )
+    return df
+
+
+def run_coverage_fb_checks(
+    df: sql.DataFrame,
+    dq_context: DQContext,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    df = standard_checks(
+        df, dq_context.dataset_type, context, domain=False, range_=False
+    )
+    df = fb_percent_sum_to_100_check(df, context)
+    df = column_relation_checks(df, dq_context.dataset_type, context)
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        context,
+    )
+    return df
+
+
+def run_qos_checks(
+    df: sql.DataFrame,
+    dq_context: DQContext,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    df = standard_checks(
+        df, dq_context.dataset_type, context, domain=False, range_=False
+    )
+    df = critical_error_checks(
+        df,
+        dq_context.dataset_type,
+        CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
+        context,
+    )
+    return df
+
+
+def row_level_checks_internal(
+    df: sql.DataFrame,
+    dq_context: DQContext,
+    silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
-    logger.info("Starting row level checks...")
+    logger.info(
+        "Starting row level checks",
+        extra={
+            "dq_mode": dq_context.mode.value,
+            "dataset_type": dq_context.dataset_type,
+            "country": dq_context.country_code_iso3,
+            "upload_mode": dq_context.upload_mode,
+        },
+    )
 
-    if dataset_type == "master":
-        df = is_not_within_country(df, _country_code_iso3, context)
-        df = similar_name_level_within_110_check(df, context)
-        df = school_density_check(df, context)
-        df = standard_checks(df, dataset_type, context)
-        df = duplicate_all_except_checks(
-            df,
-            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type],
-            context,
-        )
-        df = precision_check(df, config.PRECISION, context)
-        df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
-        df = duplicate_name_level_110_check(df, context)
-        df = column_relation_checks(df, dataset_type, context)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            context,
-        )
-    elif dataset_type == "geolocation":
-        if mode == UploadMode.CREATE.value:
-            df = create_checks(bronze=df, silver=silver, context=context)
-        elif mode == UploadMode.UPDATE.value:
-            df = update_checks(bronze=df, silver=silver, context=context)
+    if dq_context.dataset_type == "master":
+        df = run_master_checks(df, dq_context, context)
+    elif dq_context.dataset_type == "geolocation":
+        df = run_geolocation_checks(df, dq_context, silver, context)
+    elif dq_context.dataset_type == "reference":
+        df = run_reference_checks(df, dq_context, context)
+    elif dq_context.dataset_type in ["coverage", "coverage_itu"]:
+        df = run_coverage_checks(df, dq_context, context)
+    elif dq_context.dataset_type == "coverage_fb":
+        df = run_coverage_fb_checks(df, dq_context, context)
+    elif dq_context.dataset_type == "qos":
+        df = run_qos_checks(df, dq_context, context)
 
-        df = is_not_within_country(df, _country_code_iso3, context)
-        df = similar_name_level_within_110_check(df, context)
-        df = school_density_check(df, context)
-        df = standard_checks(df, dataset_type, context)
-        df = duplicate_all_except_checks(
-            df,
-            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dataset_type],
-            context,
-        )
-        df = precision_check(df, config.PRECISION, context)
-        df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
-        df = duplicate_name_level_110_check(df, context)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            mode,
-            context,
-        )
-        df = column_relation_checks(df, dataset_type, context)
-    elif dataset_type == "reference":
-        df = standard_checks(df, dataset_type, context)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            context,
-        )
-    elif dataset_type in ["coverage", "coverage_itu"]:
-        df = standard_checks(df, dataset_type, context)
-        df = column_relation_checks(df, dataset_type, context)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            context,
-        )
-    elif dataset_type == "coverage_fb":
-        df = standard_checks(df, dataset_type, context, domain=False, range_=False)
-        df = fb_percent_sum_to_100_check(df, context)
-        df = column_relation_checks(df, dataset_type, context)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            context,
-        )
-    elif dataset_type == "qos":
-        df = standard_checks(df, dataset_type, context, domain=False, range_=False)
-        df = critical_error_checks(
-            df,
-            dataset_type,
-            CONFIG_NONEMPTY_COLUMNS[dataset_type],
-            context,
-        )
     return df
+
+
+def row_level_checks(
+    df: sql.DataFrame,
+    dq_context: Any = None,
+    _country_code_iso3: str = None,
+    silver: sql.DataFrame = None,
+    mode: str = None,
+    context: OpExecutionContext = None,
+    dataset_type: str = None,
+) -> sql.DataFrame:
+    # Resolve which signature is being used
+    if isinstance(dq_context, DQContext):
+        # Modern signature: row_level_checks(df, dq_context=DQContext(...), ...)
+        return row_level_checks_internal(df, dq_context, silver, context)
+    else:
+        # Legacy signature: row_level_checks(df, dataset_type, country_code, ...)
+        if dq_context is not None and dataset_type is None:
+            dataset_type = dq_context  # Positional dataset_type
+
+        # Build a temporary DQContext for internal processing
+
+        internal_context = DQContext(
+            dq_mode=DQMode.MASTER,  # Legacy calls default to MASTER
+            dataset_type=dataset_type,
+            country_code_iso3=_country_code_iso3,
+            upload_mode=mode,
+        )
+        return row_level_checks_internal(df, internal_context, silver, context)
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):
