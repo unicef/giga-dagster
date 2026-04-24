@@ -13,6 +13,7 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     StructField,
+    StructType,
     TimestampType,
 )
 from sqlalchemy import select, update
@@ -28,6 +29,8 @@ from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
+    persist_column_id_map,
+    sync_schema,
 )
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -319,6 +322,17 @@ class StagingStep:
                 partition_by=["upload_id"],
             )
         else:
+            # Synchronise staging schema (handles renames/deletions)
+            existing_schema = self.spark.table(self.staging_table_name).schema
+            sync_schema(
+                table_name=self.staging_table_name,
+                existing_schema=existing_schema,
+                updated_schema=StructType(pending_schema),
+                spark=self.spark,
+                context=self.context,
+                schema_name=self.schema_name,
+            )
+
             upload_id = self.config.filename_components.id
             DeltaTable.forName(self.spark, self.staging_table_name).delete(
                 f.col("upload_id") == upload_id
@@ -343,6 +357,10 @@ class StagingStep:
             .option("mergeSchema", "true")
             .saveAsTable(self.staging_table_name)
         )
+
+        # Persist column-ID mapping after staging data is written
+
+        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
 
     def _update_approval_request_status(self) -> None:
         """Enable the ApprovalRequest if any actionable (non-UNCHANGED) rows exist."""
