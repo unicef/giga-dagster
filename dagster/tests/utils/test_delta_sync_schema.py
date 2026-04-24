@@ -1,0 +1,298 @@
+"""Tests for the Delta Lake column rename/delete detection helpers in src.utils.delta."""
+
+from src.utils.delta import detect_renames_and_deletes
+
+
+class TestDetectRenamesAndDeletes:
+    """Unit tests for detect_renames_and_deletes."""
+
+    def test_no_changes(self):
+        existing = {"col_a": "id-1", "col_b": "id-2", "col_c": "id-3"}
+        updated = {"col_a": "id-1", "col_b": "id-2", "col_c": "id-3"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {}
+        assert deletes == []
+
+    def test_column_renamed(self):
+        existing = {"old_name": "id-1", "col_b": "id-2"}
+        updated = {"new_name": "id-1", "col_b": "id-2"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {"old_name": "new_name"}
+        assert deletes == []
+
+    def test_column_deleted(self):
+        existing = {"col_a": "id-1", "col_b": "id-2", "col_c": "id-3"}
+        updated = {"col_a": "id-1", "col_b": "id-2"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {}
+        assert deletes == ["col_c"]
+
+    def test_column_added_only(self):
+        """Adding a column (ID in updated but not existing) should not trigger renames or deletes."""
+        existing = {"col_a": "id-1"}
+        updated = {"col_a": "id-1", "col_new": "id-new"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {}
+        assert deletes == []
+
+    def test_rename_and_delete_combined(self):
+        existing = {
+            "old_name": "id-1",
+            "col_b": "id-2",
+            "col_to_drop": "id-3",
+        }
+        updated = {
+            "new_name": "id-1",
+            "col_b": "id-2",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {"old_name": "new_name"}
+        assert deletes == ["col_to_drop"]
+
+    def test_rename_delete_and_add(self):
+        existing = {
+            "old_name": "id-1",
+            "col_b": "id-2",
+            "col_drop": "id-3",
+        }
+        updated = {
+            "new_name": "id-1",
+            "col_b": "id-2",
+            "col_new": "id-4",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {"old_name": "new_name"}
+        assert deletes == ["col_drop"]
+
+    def test_multiple_renames(self):
+        existing = {"a": "id-1", "b": "id-2", "c": "id-3"}
+        updated = {"x": "id-1", "y": "id-2", "c": "id-3"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {"a": "x", "b": "y"}
+        assert deletes == []
+
+    def test_multiple_deletes(self):
+        existing = {"a": "id-1", "b": "id-2", "c": "id-3"}
+        updated = {"a": "id-1"}
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {}
+        assert sorted(deletes) == ["b", "c"]
+
+    def test_empty_existing(self):
+        """If existing is empty, there should be no changes."""
+        renames, deletes = detect_renames_and_deletes({}, {"a": "id-1"})
+        assert renames == {}
+        assert deletes == []
+
+    def test_empty_updated_deletes_all(self):
+        """If updated is empty, all existing columns should be deleted."""
+        existing = {"a": "id-1", "b": "id-2"}
+        renames, deletes = detect_renames_and_deletes(existing, {})
+        assert renames == {}
+        assert sorted(deletes) == ["a", "b"]
+
+    def test_both_empty(self):
+        renames, deletes = detect_renames_and_deletes({}, {})
+        assert renames == {}
+        assert deletes == []
+
+
+class TestSyncSchemaRemovedColumns:
+    """Unit tests for sync_schema removed_columns calculation logic."""
+
+    def test_removed_columns_detection(self):
+        """Test that removed_columns is correctly calculated after renames."""
+        existing_columns = {"col_a", "col_b", "col_c"}
+        updated_columns_set = {"col_a", "col_x"}
+        removed_columns = existing_columns - updated_columns_set
+        assert removed_columns == {"col_b", "col_c"}
+
+    def test_removed_columns_after_rename_applied(self):
+        """Test that after rename is applied, only orphaned columns are removed."""
+        existing_after_rename = {"col_a", "col_x", "col_c"}
+        updated_columns_set = {"col_a", "col_x"}
+        removed_columns = existing_after_rename - updated_columns_set
+        assert removed_columns == {"col_c"}
+
+    def test_removed_columns_empty_when_no_deletions(self):
+        """Test that removed_columns is empty when no columns are deleted."""
+        existing_columns = {"col_a", "col_b", "col_c"}
+        updated_columns_set = {"col_a", "col_b", "col_c"}
+        removed_columns = existing_columns - updated_columns_set
+        assert removed_columns == set()
+
+
+class TestApplyRenamesAndDeletesInitialization:
+    """Unit tests for apply_renames_and_deletes mapping initialization."""
+
+    def test_empty_mapping_initialization_logic(self):
+        """Test the logic for initializing column ID mapping when empty."""
+        current_table_columns = ["col_a", "col_b", "col_to_delete"]
+        updated_id_map = {"col_a": "id-1", "col_b": "id-2"}
+        existing_id_map = {}
+        for col_name in current_table_columns:
+            if col_name not in updated_id_map:
+                existing_id_map[col_name] = f"table_{col_name}"
+        assert "col_to_delete" in existing_id_map
+        assert existing_id_map["col_to_delete"] == "table_col_to_delete"
+        assert "col_a" not in existing_id_map
+        assert "col_b" not in existing_id_map
+        renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
+        assert deletes == ["col_to_delete"]
+        assert renames == {}
+
+
+class TestMultipleOperations:
+    """Test handling of multiple simultaneous add, rename, and delete operations."""
+
+    def test_multiple_renames_simultaneous(self):
+        """Test that multiple columns can be renamed at once."""
+        existing = {
+            "old_col_a": "id-1",
+            "old_col_b": "id-2",
+            "old_col_c": "id-3",
+            "unchanged": "id-4",
+        }
+        updated = {
+            "new_col_a": "id-1",
+            "new_col_b": "id-2",
+            "new_col_c": "id-3",
+            "unchanged": "id-4",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {
+            "old_col_a": "new_col_a",
+            "old_col_b": "new_col_b",
+            "old_col_c": "new_col_c",
+        }
+        assert deletes == []
+
+    def test_multiple_deletes_simultaneous(self):
+        """Test that multiple columns can be deleted at once."""
+        existing = {
+            "col_a": "id-1",
+            "col_to_drop_1": "id-2",
+            "col_b": "id-3",
+            "col_to_drop_2": "id-4",
+            "col_to_drop_3": "id-5",
+        }
+        updated = {
+            "col_a": "id-1",
+            "col_b": "id-3",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {}
+        assert sorted(deletes) == ["col_to_drop_1", "col_to_drop_2", "col_to_drop_3"]
+
+    def test_multiple_renames_and_deletes_simultaneous(self):
+        """Test multiple renames and deletes happening together."""
+        existing = {
+            "old_a": "id-1",
+            "to_drop_1": "id-2",
+            "old_b": "id-3",
+            "to_drop_2": "id-4",
+            "unchanged": "id-5",
+        }
+        updated = {
+            "new_a": "id-1",
+            "new_b": "id-3",
+            "unchanged": "id-5",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {"old_a": "new_a", "old_b": "new_b"}
+        assert sorted(deletes) == ["to_drop_1", "to_drop_2"]
+
+    def test_full_schema_evolution_add_rename_delete(self):
+        """Test complete schema evolution: adds, renames, and deletes simultaneously."""
+        existing = {
+            "school_id": "id-1",
+            "old_funding_type": "id-2",
+            "num_teachers_female": "id-3",
+            "num_teachers_male": "id-4",
+            "old_tablet_count": "id-5",
+        }
+        updated = {
+            "school_id": "id-1",
+            "school_funding_source": "id-2",
+            "num_tablets_used": "id-5",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {
+            "old_funding_type": "school_funding_source",
+            "old_tablet_count": "num_tablets_used",
+        }
+        assert sorted(deletes) == ["num_teachers_female", "num_teachers_male"]
+
+    def test_complex_multi_country_scenario(self):
+        """Test scenario matching the user's Gambia case with multiple changes."""
+        existing = {
+            "school_id_giga": "csv-id-001",
+            "school_name": "csv-id-002",
+            "school_funding_type": "csv-id-010",
+            "num_tablets": "csv-id-015",
+            "num_teachers_female": "csv-id-020",
+            "num_teachers_male": "csv-id-021",
+            "latitude": "csv-id-030",
+            "longitude": "csv-id-031",
+        }
+        updated = {
+            "school_id_giga": "csv-id-001",
+            "school_name": "csv-id-002",
+            "school_funding_source": "csv-id-010",
+            "num_tablets_used": "csv-id-015",
+            "latitude": "csv-id-030",
+            "longitude": "csv-id-031",
+        }
+        renames, deletes = detect_renames_and_deletes(existing, updated)
+        assert renames == {
+            "school_funding_type": "school_funding_source",
+            "num_tablets": "num_tablets_used",
+        }
+        assert sorted(deletes) == ["num_teachers_female", "num_teachers_male"]
+
+    def test_multiple_adds_simultaneous(self):
+        """Test that multiple columns can be added at once."""
+        existing_columns = {"col_a", "col_b", "col_c"}
+        updated_columns_set = {
+            "col_a",
+            "col_b",
+            "col_c",
+            "new_col_x",
+            "new_col_y",
+            "new_col_z",
+        }
+        added_columns = updated_columns_set - existing_columns
+        assert added_columns == {"new_col_x", "new_col_y", "new_col_z"}
+
+    def test_complete_workflow_add_rename_delete_together(self):
+        """Test the complete workflow: adds, renames, and deletes all together."""
+        existing_id_map = {
+            "school_id": "uuid-001",
+            "old_name_a": "uuid-002",
+            "old_name_b": "uuid-003",
+            "to_delete_1": "uuid-100",
+            "to_delete_2": "uuid-101",
+        }
+        updated_id_map = {
+            "school_id": "uuid-001",
+            "new_name_a": "uuid-002",
+            "new_name_b": "uuid-003",
+            "new_col_x": "uuid-200",
+            "new_col_y": "uuid-201",
+            "new_col_z": "uuid-202",
+        }
+        renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
+        assert renames == {"old_name_a": "new_name_a", "old_name_b": "new_name_b"}
+        assert sorted(deletes) == ["to_delete_1", "to_delete_2"]
+        existing_after_renames = {
+            "school_id",
+            "new_name_a",
+            "new_name_b",
+            "to_delete_1",
+            "to_delete_2",
+        }
+        updated_columns_set = set(updated_id_map.keys())
+        added_columns = updated_columns_set - existing_after_renames
+        removed_columns = existing_after_renames - updated_columns_set
+        assert added_columns == {"new_col_x", "new_col_y", "new_col_z"}
+        assert removed_columns == {"to_delete_1", "to_delete_2"}
