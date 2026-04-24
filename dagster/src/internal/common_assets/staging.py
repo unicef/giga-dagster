@@ -10,6 +10,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import (
     ArrayType,
+    LongType,
     StringType,
     StructField,
     StructType,
@@ -28,6 +29,7 @@ from src.utils.delta import (
     check_table_exists,
     create_delta_table,
     create_schema,
+    persist_column_id_map,
     sync_schema,
 )
 from src.utils.op_config import FileConfig
@@ -305,6 +307,7 @@ class StagingStep:
             StructField("created_at", TimestampType(), nullable=True),
             StructField("processed_at", TimestampType(), nullable=True),
             StructField("approval_request_log_id", StringType(), nullable=True),
+            StructField("master_version", LongType(), nullable=True),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
 
@@ -354,6 +357,10 @@ class StagingStep:
             .option("mergeSchema", "true")
             .saveAsTable(self.staging_table_name)
         )
+
+        # Persist column-ID mapping after staging data is written
+
+        persist_column_id_map(self.spark, self.staging_table_name, self.schema_name)
 
     def _update_approval_request_status(self) -> None:
         """Enable the ApprovalRequest if any actionable (non-UNCHANGED) rows exist."""

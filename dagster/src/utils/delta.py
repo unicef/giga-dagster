@@ -389,6 +389,69 @@ def detect_renames_and_deletes(
     return renames, deletes
 
 
+def initialize_column_id_map(
+    spark: SparkSession,
+    table_name: str,
+    updated_id_map: dict[str, str],
+    context: OpExecutionContext,
+) -> tuple[dict[str, str], dict[str, str], list[str]]:
+    """Initialize column ID mapping from table schema when no stored mapping exists.
+
+    Returns tuple of (initialized_id_map, renames, deletes).
+    """
+    context.log.info(
+        "No stored column-ID mapping found; initialising mapping from current table schema."
+    )
+    existing_id_map: dict[str, str] = {}
+    # Initialize mapping from current table columns so deletions can be detected
+    # This handles the case where columns were dropped from CSV but table still has them
+    current_columns = spark.table(table_name).schema.fieldNames()
+    for col_name in current_columns:
+        if col_name not in updated_id_map:
+            # Column exists in table but not in reference schema - will be detected as delete
+            # Use a deterministic ID based on column name for tracking
+            existing_id_map[col_name] = f"table_{col_name}"
+
+    renames: dict[str, str] = {}
+    deletes: list[str] = []
+    if existing_id_map:
+        renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
+        context.log.info(f"Detected renames after init: {renames}")
+        context.log.info(f"Detected deletes after init: {deletes}")
+
+    return existing_id_map, renames, deletes
+
+
+def execute_renames(
+    spark: SparkSession,
+    table_name: str,
+    renames: dict[str, str],
+    context: OpExecutionContext,
+) -> None:
+    """Execute column rename SQL statements."""
+    context.log.info(f"Renaming columns: {renames}")
+    for old_name, new_name in renames.items():
+        stmt = f"ALTER TABLE {table_name} RENAME COLUMN `{old_name}` TO `{new_name}`"
+        context.log.info(f"Executing: {stmt}")
+        spark.sql(stmt)
+    remove_column_id_props(spark, table_name, list(renames.keys()))
+
+
+def execute_deletes(
+    spark: SparkSession,
+    table_name: str,
+    deletes: list[str],
+    context: OpExecutionContext,
+) -> None:
+    """Execute column drop SQL statements."""
+    context.log.info(f"Dropping columns: {deletes}")
+    for col_name in deletes:
+        stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
+        context.log.info(f"Executing: {stmt}")
+        spark.sql(stmt)
+    remove_column_id_props(spark, table_name, deletes)
+
+
 def apply_renames_and_deletes(
     spark: SparkSession,
     table_name: str,
@@ -413,8 +476,8 @@ def apply_renames_and_deletes(
         context.log.info(f"Detected renames: {renames}")
         context.log.info(f"Detected deletes: {deletes}")
     else:
-        context.log.info(
-            "No stored column-ID mapping found; initialising mapping from current reference schema."
+        existing_id_map, renames, deletes = initialize_column_id_map(
+            spark, table_name, updated_id_map, context
         )
 
     if renames or deletes:
@@ -424,22 +487,10 @@ def apply_renames_and_deletes(
         enable_column_mapping(spark, table_name)
 
     if renames:
-        context.log.info(f"Renaming columns: {renames}")
-        for old_name, new_name in renames.items():
-            stmt = (
-                f"ALTER TABLE {table_name} RENAME COLUMN `{old_name}` TO `{new_name}`"
-            )
-            context.log.info(f"Executing: {stmt}")
-            spark.sql(stmt)
-        remove_column_id_props(spark, table_name, list(renames.keys()))
+        execute_renames(spark, table_name, renames, context)
 
     if deletes:
-        context.log.info(f"Dropping columns: {deletes}")
-        for col_name in deletes:
-            stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
-            context.log.info(f"Executing: {stmt}")
-            spark.sql(stmt)
-        remove_column_id_props(spark, table_name, deletes)
+        execute_deletes(spark, table_name, deletes, context)
 
     if renames or deletes:
         spark.catalog.refreshTable(table_name)
@@ -540,16 +591,16 @@ def sync_schema(
     updated_columns_set = {field.name for field in updated_schema}
 
     added_columns = updated_columns_set - existing_columns
+    # Recalculate removed_columns after renames/deletes were applied
+    # This ensures we correctly identify columns that should be dropped
     removed_columns = existing_columns - updated_columns_set
-
-    has_schema_changed = len(added_columns) + len(removed_columns) > 0
 
     changed_datatypes = get_changed_datatypes(
         context=context, existing_schema=existing_schema, updated_schema=updated_schema
     )
     apply_datatype_changes(spark, table_name, changed_datatypes, context)
 
-    if has_schema_changed:
+    if added_columns:
         context.log.info(f"Adding schema columns {added_columns}")
 
         empty_dataframe_with_updated_schema = spark.createDataFrame(
@@ -561,6 +612,15 @@ def sync_schema(
             .mode("append")
             .saveAsTable(table_name)
         )
+
+    # Drop columns that are no longer in the updated schema
+    if removed_columns:
+        context.log.info(f"Dropping columns not in updated schema: {removed_columns}")
+        for col_name in removed_columns:
+            stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
+            context.log.info(f"Executing: {stmt}")
+            spark.sql(stmt)
+
     context.log.info(f"has_nullability_changed {has_nullability_changed}")
 
     if has_nullability_changed:
@@ -577,9 +637,3 @@ def sync_schema(
                     continue
                 else:
                     raise
-
-    # ------------------------------------------------------------------
-    # 4. Persist column-ID mapping for future rename/delete detection
-    # ------------------------------------------------------------------
-    if schema_name is not None:
-        persist_column_id_map(spark, table_name, schema_name)
