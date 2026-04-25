@@ -409,21 +409,22 @@ def create_bronze_layer_columns(
 
     # Join with silver data
     joined_df = df.alias("df").join(
-        silver.alias("silver"), on="school_id_govt", how="left"
+        silver.alias("silver"),
+        df["school_id_govt"] == silver["school_id_govt"],
+        how="left",
     )
 
     # Get column lists
     columns_in_silver_only = [col for col in silver.columns if col not in df.columns]
     common_columns = [col for col in df.columns if col in silver.columns]
+    columns_in_df_only = [col for col in df.columns if col not in silver.columns]
 
     # Build select expression
     select_expr = [
-        f.coalesce(f.col(f"df.{col}"), f.col(f"silver.{col}")).alias(col)
-        for col in common_columns
+        f.coalesce(df[col], silver[col]).alias(col) for col in common_columns
     ]
-    select_expr.extend(
-        [f.col(f"silver.{col}").alias(col) for col in columns_in_silver_only]
-    )
+    select_expr.extend([silver[col].alias(col) for col in columns_in_silver_only])
+    select_expr.extend([df[col].alias(col) for col in columns_in_df_only])
 
     # Select columns from joined DataFrame
     df = joined_df.select(*select_expr)
@@ -437,10 +438,15 @@ def create_bronze_layer_columns(
         df = create_school_id_giga(df)
 
     if mode == UploadMode.CREATE.value or "school_id_govt_type" in uploaded_columns:
+        col_to_coalesce = (
+            f.col("school_id_govt_type")
+            if "school_id_govt_type" in df.columns
+            else f.lit(None).cast(StringType())
+        )
         df = df.withColumn(
             "school_id_govt_type",
             f.coalesce(
-                f.col("school_id_govt_type"),
+                col_to_coalesce,
                 f.lit("Unknown")
                 if mode == UploadMode.CREATE.value
                 else f.lit(None).cast(StringType()),

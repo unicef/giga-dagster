@@ -301,7 +301,8 @@ def transform_types(
     table_name: str = None,
 ) -> sql.DataFrame:
     """
-    Retuns a dataframe with columns casted to use types in provided schema.
+    Returns a dataframe with columns casted to use types in provided schema.
+    If metaschema is missing, falls back to the schema of the existing Delta table if table_name is provided.
     """
     columns = _resolve_schema_columns(df, schema_name, table_name, context)
     if columns is None:
