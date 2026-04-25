@@ -56,6 +56,7 @@ spark_common_config = {
     "spark.databricks.delta.properties.defaults.appendOnly": "false",
     "spark.databricks.delta.schema.autoMerge.enabled": "false",
     "spark.databricks.delta.catalog.update.enabled": "true",
+    "spark.sql.legacy.parquet.nanosAsLong": "true",
 }
 
 # Configure Azure Storage authentication
@@ -240,6 +241,59 @@ def transform_school_types(
     return df
 
 
+def _resolve_schema_columns(
+    df: sql.DataFrame,
+    schema_name: str,
+    table_name: str | None,
+    context: OpExecutionContext | OutputContext | None,
+) -> list | None:
+    """
+    Resolve schema columns from the metaschema registry. If the registry
+    table is missing, fall back to the target Delta table's live schema.
+    Returns None when no schema can be resolved (caller should return df as-is).
+    """
+    try:
+        columns = get_schema_columns(df.sparkSession, schema_name)
+        if context:
+            context.log.info(f"Schema name: {schema_name}")
+        return columns
+    except Exception as exc:
+        return _fallback_schema_columns(df, schema_name, table_name, context, exc)
+
+
+def _fallback_schema_columns(
+    df: sql.DataFrame,
+    schema_name: str,
+    table_name: str | None,
+    context: OpExecutionContext | OutputContext | None,
+    exc: Exception,
+) -> list | None:
+    """Attempt to resolve columns from the target Delta table when metaschema is missing."""
+    if not table_name:
+        if context:
+            context.log.warning(
+                f"Metaschema '{schema_name}' missing and no table_name provided. "
+                f"Returning original DataFrame. Error: {exc}"
+            )
+        return None
+
+    if context:
+        context.log.info(
+            f"Metaschema '{schema_name}' missing, falling back to dynamic "
+            f"alignment against delta table '{schema_name}.{table_name}'"
+        )
+    try:
+        target_df = df.sparkSession.table(f"{schema_name}.{table_name}")
+        return list(target_df.schema.fields)
+    except Exception:
+        if context:
+            context.log.info(
+                f"Target table '{schema_name}.{table_name}' does not exist yet. "
+                "Returning original DataFrame."
+            )
+        return None
+
+
 def transform_types(
     df: sql.DataFrame,
     schema_name: str,
@@ -250,36 +304,19 @@ def transform_types(
     Returns a dataframe with columns casted to use types in provided schema.
     If metaschema is missing, falls back to the schema of the existing Delta table if table_name is provided.
     """
-    logger = get_context_with_fallback_logger(context)
+    columns = _resolve_schema_columns(df, schema_name, table_name, context)
+    if columns is None:
+        return df
 
-    try:
-        columns = get_schema_columns(df.sparkSession, schema_name)
-    except Exception as e:
-        if table_name:
-            full_table_name = f"{schema_name}.{table_name}"
-            logger.warning(
-                f"Metaschema missing for {schema_name}. Falling back to Delta table schema for {full_table_name}: {e}"
-            )
-            try:
-                columns = df.sparkSession.table(full_table_name).schema.fields
-            except Exception as table_err:
-                logger.error(
-                    f"Failed to fall back to Delta table schema for {full_table_name}: {table_err}"
-                )
-                return df
-        else:
-            logger.warning(
-                f"Metaschema missing for {schema_name} and no table_name provided for fallback: {e}"
-            )
-            return df
+    # Only process columns that exist in the dataframe.
+    # This prevents issues with schema definitions containing columns not relevant
+    # to the current ingestion (e.g., master or reference columns).
+    columns = [c for c in columns if c.name in df.columns]
 
-    logger.info(f"Schema name: {schema_name}")
-    logger.info(f"Schema columns: {columns}")
-
-    if schema_name in ["qos", "qos_raw", "qos_availability"]:
-        columns = [c for c in columns if c.name in df.columns]
-
-    logger.info(f"transform types schema columns before {df.schema.simpleString()}")
+    if context:
+        context.log.info(
+            f"transform types schema columns before {df.schema.simpleString()}"
+        )
 
     columns_not_to_update = {"signature"}
     if settings.IN_PRODUCTION:
@@ -292,7 +329,10 @@ def transform_types(
             if column.name not in columns_not_to_update
         },
     )
-    logger.info(f"transform types after df with columns {df.schema.simpleString()}")
+    if context:
+        context.log.info(
+            f"transform types after df with columns {df.schema.simpleString()}"
+        )
     df.printSchema()
     return df
 
