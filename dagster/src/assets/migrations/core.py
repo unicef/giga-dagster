@@ -69,6 +69,7 @@ def save_schema_delta_table(context: OpExecutionContext, df: sql.DataFrame):
         .merge(df.alias("updates"), "master.id = updates.id")
         .whenMatchedUpdateAll()
         .whenNotMatchedInsertAll()
+        .whenNotMatchedBySourceDelete()
         .execute()
     )
 
