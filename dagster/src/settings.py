@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     NOCODB_BASE_URL: str = ""
     NOCODB_TOKEN: str = ""
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
+    GIGAMETER_API_BASE_URL: str = ""
+    GIGAMETER_API_TOKEN: str = ""
     TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
     MONGOLIA_API_USER: str = ""

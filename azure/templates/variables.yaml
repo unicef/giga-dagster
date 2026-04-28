@@ -52,4 +52,6 @@ variables:
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
   slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
+  gigameterApiBaseUrl: $(GIGAMETER_API_BASE_URL)
+  gigameterApiToken: $(GIGAMETER_API_TOKEN)
   system.debug: true
