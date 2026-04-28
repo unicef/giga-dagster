@@ -118,17 +118,18 @@ def write_to_nocodb(context: HookContext, file_upload: FileUpload) -> None:
     """Write school registration to NoCoDB."""
     if not settings.NOCODB_BASE_URL or not settings.NOCODB_TOKEN:
         context.log.warning(
-            "NOCODB_BASE_URL or NOCODB_TOKEN not configured. " "Skipping NoCoDB write."
+            "NOCODB_BASE_URL or NOCODB_TOKEN not configured. Skipping NoCoDB write."
         )
         return
 
+    mapping = file_upload.column_to_schema_mapping
+    giga_id_school = mapping.get("school_id_giga")
     try:
         # Get the NoCoDB table ID for school registrations
         table_id = get_nocodb_table_id_from_name("SchoolRegistrations")
 
-        mapping = file_upload.column_to_schema_mapping
         record_data = {
-            "giga_id_school": mapping.get("school_id_giga"),
+            "giga_id_school": giga_id_school,
             "school_id": mapping.get("school_id_govt"),
             "school_name": mapping.get("school_name", ""),
             "latitude": float(mapping.get("latitude", 0)),
@@ -141,12 +142,10 @@ def write_to_nocodb(context: HookContext, file_upload: FileUpload) -> None:
         }
 
         create_nocodb_table_record(table_id, record_data)
-        context.log.info(
-            f"NoCoDB write successful for giga_id_school={record_data['giga_id_school']}"
-        )
+        context.log.info(f"NoCoDB write successful for giga_id_school={giga_id_school}")
     except Exception as exc:
         context.log.error(
-            f"NoCoDB write failed for giga_id_school={mapping.get('school_id_giga')}: {exc}"
+            f"NoCoDB write failed for giga_id_school={giga_id_school}: {exc}"
         )
 
 
