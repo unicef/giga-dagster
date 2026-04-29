@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from dagster import HookContext, failure_hook, success_hook
 from src.settings import settings
+from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
 from src.utils.nocodb.get_nocodb_data import (
     create_nocodb_table_record,
@@ -122,31 +123,36 @@ def write_to_nocodb(context: HookContext, file_upload: FileUpload) -> None:
         )
         return
 
-    mapping = file_upload.column_to_schema_mapping
-    giga_id_school = mapping.get("school_id_giga")
     try:
+        if not file_upload.metadata_json_path:
+            raise ValueError(
+                f"No metadata_json_path found for FileUpload {file_upload.id}"
+            )
+
+        adls_client = ADLSFileClient()
+        metadata_payload = adls_client.download_json(file_upload.metadata_json_path)
+
+        giga_id_school = metadata_payload.get("giga_id_school")
         # Get the NoCoDB table ID for school registrations
         table_id = get_nocodb_table_id_from_name("SchoolRegistrations")
 
         record_data = {
             "giga_id_school": giga_id_school,
-            "school_id": mapping.get("school_id_govt"),
-            "school_name": mapping.get("school_name", ""),
-            "latitude": mapping.get("latitude", ""),
-            "longitude": mapping.get("longitude", ""),
+            "school_id": metadata_payload.get("school_id"),
+            "school_name": metadata_payload.get("school_name", ""),
+            "latitude": metadata_payload.get("latitude", ""),
+            "longitude": metadata_payload.get("longitude", ""),
             "country_iso3_code": file_upload.country,
-            "education_level": mapping.get("education_level", ""),
-            "contact_name": mapping.get("contact_name", ""),
-            "contact_email": mapping.get("contact_email", ""),
+            "education_level": metadata_payload.get("education_level", ""),
+            "contact_name": metadata_payload.get("contact_name", ""),
+            "contact_email": metadata_payload.get("contact_email", ""),
             "status": "unverified",
         }
 
         create_nocodb_table_record(table_id, record_data)
         context.log.info(f"NoCoDB write successful for giga_id_school={giga_id_school}")
     except Exception as exc:
-        context.log.error(
-            f"NoCoDB write failed for giga_id_school={giga_id_school}: {exc}"
-        )
+        context.log.error(f"NoCoDB write failed: {exc}")
 
 
 def call_gigameter_soft_delete(
