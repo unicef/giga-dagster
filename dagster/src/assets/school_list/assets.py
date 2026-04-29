@@ -96,11 +96,7 @@ def qos_school_list_bronze(
     else:
         silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
 
-    mode = config.metadata.get("mode", "Create")
-    uploaded_columns = df.columns
-    df = create_bronze_layer_columns(
-        df, silver, country_code, mode, uploaded_columns, is_qos=True
-    )
+    df = create_bronze_layer_columns(df, silver, country_code, is_qos=True)
 
     config.metadata.update({"column_mapping": column_mapping})
 

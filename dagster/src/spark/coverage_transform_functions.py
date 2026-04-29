@@ -45,7 +45,8 @@ def fb_transforms(fb: sql.DataFrame):
     fb = fb.withColumn(
         "cellular_coverage_type",
         (
-            f.when(f.col("4G_coverage"), f.lit("4G"))
+            f.when(f.col("5G_coverage"), f.lit("5G"))
+            .when(f.col("4G_coverage"), f.lit("4G"))
             .when(f.col("3G_coverage"), f.lit("3G"))
             .when(f.col("2G_coverage"), f.lit("2G"))
             .otherwise(f.lit("no coverage"))

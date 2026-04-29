@@ -265,9 +265,7 @@ def adhoc__reference_data_quality_checks(
 
     columns_non_nullable = ["school_id_govt_type"]
     column_actions = {
-        c: f.coalesce(f.col(c), f.lit("Unknown"))
-        for c in columns_non_nullable
-        if c in sdf.columns
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
 
     sdf = sdf.withColumns(columns_to_add)
@@ -490,9 +488,7 @@ def adhoc__publish_silver_geolocation(
         "education_level_govt",
     ]
     column_actions = {
-        c: f.coalesce(f.col(c), f.lit("Unknown"))
-        for c in columns_non_nullable
-        if c in df_silver.columns
+        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
     df_silver = df_silver.withColumns(column_actions)
     df_silver = transform_types(df_silver, schema_name, context)
