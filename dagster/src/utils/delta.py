@@ -311,6 +311,7 @@ def get_stored_column_id_map(spark: SparkSession, table_name: str) -> dict[str, 
     Returns ``{column_name: csv_id}`` or an empty dict if no mapping has been
     stored yet (e.g. tables created before this feature was added).
     """
+    spark.catalog.refreshTable(table_name)
     detail = spark.sql(f"DESCRIBE DETAIL {table_name}").collect()[0]
     properties: dict = detail["properties"] if detail["properties"] else {}
     result = {}
@@ -327,9 +328,24 @@ def store_column_id_map(
     table_name: str,
     column_id_map: dict[str, str],
 ) -> None:
-    """Persist the column-name → schema-CSV-ID mapping as Delta table properties."""
+    """Persist the column-name → schema-CSV-ID mapping as Delta table properties.
+
+    Also removes any stale ``giga.columnId.*`` properties for columns that are
+    not present in the new mapping.  This prevents accumulation of old column
+    name props across renames, which would otherwise cause future rename
+    detection to misbehave (e.g. multiple props pointing to the same UUID).
+    """
     if not column_id_map:
         return
+
+    # Remove stale props for columns that no longer exist in the new mapping
+    current_props = get_stored_column_id_map(spark, table_name)
+    stale_columns = [
+        col_name for col_name in current_props if col_name not in column_id_map
+    ]
+    if stale_columns:
+        remove_column_id_props(spark, table_name, stale_columns)
+
     props = ", ".join(
         f"'giga.columnId.{col_name}' = '{csv_id}'"
         for col_name, csv_id in column_id_map.items()
@@ -405,7 +421,7 @@ def initialize_column_id_map(
     existing_id_map: dict[str, str] = {}
     # Initialize mapping from current table columns so deletions can be detected
     # This handles the case where columns were dropped from CSV but table still has them
-    current_columns = spark.table(table_name).schema.fieldNames()
+    current_columns = DeltaTable.forName(spark, table_name).toDF().schema.fieldNames()
     for col_name in current_columns:
         if col_name not in updated_id_map:
             # Column exists in table but not in reference schema - will be detected as delete
@@ -461,6 +477,13 @@ def apply_renames_and_deletes(
     """Detect and apply column renames and deletes to a Delta table based on the reference schema.
 
     Returns True if any schema change occurred (rename or delete).
+
+    IMPORTANT: This function ALWAYS supplements ``existing_id_map`` with any
+    table columns that lack stored UUIDs.  This prevents the situation where a
+    partially-populated ``column_id_map`` causes some columns to be silently
+    ignored by rename/delete detection (which previously led to those columns
+    being dropped by the fallback path in :func:`sync_schema`, causing data
+    loss).
     """
     from src.utils.schema import get_schema_columns_with_id
 
@@ -468,17 +491,37 @@ def apply_renames_and_deletes(
     updated_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
     existing_id_map = get_stored_column_id_map(spark, table_name)
 
-    renames: dict[str, str] = {}
-    deletes: list[str] = []
-
-    if existing_id_map:
-        renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
-        context.log.info(f"Detected renames: {renames}")
-        context.log.info(f"Detected deletes: {deletes}")
-    else:
-        existing_id_map, renames, deletes = initialize_column_id_map(
-            spark, table_name, updated_id_map, context
+    # If the table has NO stored UUIDs at all (pre-existing table that was
+    # created before UUID-based tracking was introduced), bootstrapping is
+    # needed first.  We must NOT treat all columns as deletes — that would
+    # cause data loss by dropping every column.  Instead, persist the current
+    # mapping now and skip rename/delete detection for this run.
+    if not existing_id_map:
+        context.log.info(
+            f"No stored column-ID mapping found for {table_name}. "
+            "Bootstrapping UUID props from current schema. "
+            "Rename/delete detection will be active from the next run onwards."
         )
+        persist_column_id_map(spark, table_name, schema_name)
+        return False
+
+    # Supplement existing_id_map with table columns that lack stored UUIDs.
+    # This handles columns added via mergeSchema after the initial bootstrap
+    # (e.g. ADD operations that ran before persist_column_id_map was called).
+    # Tag them with a synthetic ID so they are treated as deletes if they are
+    # no longer in the reference schema.
+    current_columns = DeltaTable.forName(spark, table_name).toDF().schema.fieldNames()
+    for col_name in current_columns:
+        if col_name not in existing_id_map:
+            existing_id_map[col_name] = f"table_{col_name}"
+            context.log.info(
+                f"Column '{col_name}' exists in table but has no stored UUID; "
+                f"tagging with synthetic ID for delete detection."
+            )
+
+    renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
+    context.log.info(f"Detected renames: {renames}")
+    context.log.info(f"Detected deletes: {deletes}")
 
     if renames or deletes:
         context.log.info(
@@ -536,6 +579,44 @@ def apply_datatype_changes(
         .saveAsTable(table_name)
     )
     spark.catalog.refreshTable(table_name)
+
+
+def handle_removed_columns(
+    spark: SparkSession,
+    table_name: str,
+    removed_columns: set[str],
+    schema_name: str | None,
+    context: OpExecutionContext,
+) -> None:
+    """Safely handle columns that exist in the table but not in the updated schema.
+
+    When ``schema_name`` is provided, :func:`apply_renames_and_deletes` is the
+    authoritative path for both renames and deletes (UUID-based detection).
+    If columns end up here despite that, it likely means rename detection
+    failed for them.  Log a clear warning instead of silently dropping to
+    prevent data loss.
+
+    When ``schema_name`` is None (legacy callers, schema-tables migration),
+    fall back to dropping by name as before.
+    """
+    if not removed_columns:
+        return
+
+    if schema_name is not None:
+        context.log.warning(
+            f"Columns exist in table but not in updated schema: "
+            f"{removed_columns}. These were NOT handled by "
+            f"apply_renames_and_deletes - leaving them in place to avoid "
+            f"unintended data loss. If you intend to drop them, remove the "
+            f"column from the schema CSV (with its UUID) and re-run."
+        )
+        return
+
+    context.log.info(f"Dropping columns not in updated schema: {removed_columns}")
+    for col_name in removed_columns:
+        stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
+        context.log.info(f"Executing: {stmt}")
+        spark.sql(stmt)
 
 
 def sync_schema(
@@ -613,13 +694,7 @@ def sync_schema(
             .saveAsTable(table_name)
         )
 
-    # Drop columns that are no longer in the updated schema
-    if removed_columns:
-        context.log.info(f"Dropping columns not in updated schema: {removed_columns}")
-        for col_name in removed_columns:
-            stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
-            context.log.info(f"Executing: {stmt}")
-            spark.sql(stmt)
+    handle_removed_columns(spark, table_name, removed_columns, schema_name, context)
 
     context.log.info(f"has_nullability_changed {has_nullability_changed}")
 
