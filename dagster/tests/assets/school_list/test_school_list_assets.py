@@ -239,7 +239,12 @@ class TestCreateBronzeLayerColumns:
             StructType(
                 [
                     StructField(c, StringType())
-                    for c in ["school_id_govt", "school_name"]
+                    for c in [
+                        "school_id_govt",
+                        "school_name",
+                        "education_level_govt",
+                        "school_id_govt_type",
+                    ]
                 ]
                 + [
                     StructField("latitude", DoubleType()),

@@ -1,5 +1,7 @@
+import asyncio
 from unittest.mock import MagicMock, patch
 
+import pytest
 from src.utils.sentry import (
     capture_op_exceptions,
     log_op_context,
@@ -47,3 +49,41 @@ def test_capture_op_exceptions_disabled():
 
     assert test_func is not None
     assert callable(test_func)
+
+
+@patch("src.utils.sentry.SENTRY_ENABLED", False)
+def test_capture_op_exceptions_disabled_async():
+    """Test async function with SENTRY_ENABLED=False."""
+
+    @capture_op_exceptions
+    async def async_test_func(context):
+        return "async_result"
+
+    assert async_test_func is not None
+    assert callable(async_test_func)
+
+
+@patch("src.utils.sentry.SENTRY_ENABLED", False)
+def test_capture_op_exceptions_runs_sync_func():
+    """The decorator wraps sync in async wrapper; call it with asyncio.run."""
+
+    @capture_op_exceptions
+    def test_func():
+        return "result"
+
+    # capture_op_exceptions always returns an async wrapper
+    result = asyncio.run(test_func())
+    assert result == "result"
+
+
+@pytest.mark.asyncio
+@patch("src.utils.sentry.SENTRY_ENABLED", False)
+async def test_capture_op_exceptions_async_call():
+    """Test that async decorated function returns correct value."""
+
+    @capture_op_exceptions
+    async def test_func(context):
+        return "async_result"
+
+    result = await test_func(MagicMock())
+    assert result == "async_result"

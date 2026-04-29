@@ -230,10 +230,10 @@ async def test_coverage_bronze_fb(mock_file_config, spark_session, op_context):
     We mock only the schema lookup (Delta infra) but let the core transformation run for real."""
 
     # FB input data as expected by fb_transforms
-    passed_data = [("G01", 0.0, 0.5, 0.0)]
+    passed_data = [("G01", 0.0, 0.5, 0.0, False)]
     passed_df = spark_session.createDataFrame(
         passed_data,
-        ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+        ["school_id_giga", "percent_2G", "percent_3G", "percent_4G", "5G_coverage"],
     )
 
     mock_spark = MagicMock()
@@ -270,6 +270,16 @@ async def test_coverage_bronze_fb(mock_file_config, spark_session, op_context):
         patch(
             "src.assets.school_coverage.assets.get_table_preview",
             return_value="preview",
+        ),
+        patch(
+            "src.spark.coverage_transform_functions.config.FB_COLUMNS",
+            [
+                "school_id_giga",
+                "2G_coverage",
+                "3G_coverage",
+                "4G_coverage",
+                "5G_coverage",
+            ],
         ),
     ):
         spark_session.catalog.tableExists = MagicMock(return_value=False)
@@ -413,13 +423,25 @@ class TestCoverageTypeDerivation:
         from src.spark.coverage_transform_functions import fb_transforms
 
         df = spark_session.createDataFrame(
-            [("G01", 0.5, 0.5, 0.5)],
-            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+            [("G01", 0.5, 0.5, 0.5, False)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G", "5G_coverage"],
         )
 
-        with patch(
-            "src.spark.coverage_transform_functions.get_schema_columns",
-            return_value=[],
+        with (
+            patch(
+                "src.spark.coverage_transform_functions.get_schema_columns",
+                return_value=[],
+            ),
+            patch(
+                "src.spark.coverage_transform_functions.config.FB_COLUMNS",
+                [
+                    "school_id_giga",
+                    "2G_coverage",
+                    "3G_coverage",
+                    "4G_coverage",
+                    "5G_coverage",
+                ],
+            ),
         ):
             result = fb_transforms(df)
         row = result.collect()[0]
@@ -432,13 +454,25 @@ class TestCoverageTypeDerivation:
         from src.spark.coverage_transform_functions import fb_transforms
 
         df = spark_session.createDataFrame(
-            [("G01", 0.5, 0.0, 0.0)],
-            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+            [("G01", 0.5, 0.0, 0.0, False)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G", "5G_coverage"],
         )
 
-        with patch(
-            "src.spark.coverage_transform_functions.get_schema_columns",
-            return_value=[],
+        with (
+            patch(
+                "src.spark.coverage_transform_functions.get_schema_columns",
+                return_value=[],
+            ),
+            patch(
+                "src.spark.coverage_transform_functions.config.FB_COLUMNS",
+                [
+                    "school_id_giga",
+                    "2G_coverage",
+                    "3G_coverage",
+                    "4G_coverage",
+                    "5G_coverage",
+                ],
+            ),
         ):
             result = fb_transforms(df)
         row = result.collect()[0]
@@ -452,13 +486,25 @@ class TestCoverageTypeDerivation:
         from src.spark.coverage_transform_functions import fb_transforms
 
         df = spark_session.createDataFrame(
-            [("G01", 0.0, 0.0, 0.0)],
-            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G"],
+            [("G01", 0.0, 0.0, 0.0, False)],
+            ["school_id_giga", "percent_2G", "percent_3G", "percent_4G", "5G_coverage"],
         )
 
-        with patch(
-            "src.spark.coverage_transform_functions.get_schema_columns",
-            return_value=[],
+        with (
+            patch(
+                "src.spark.coverage_transform_functions.get_schema_columns",
+                return_value=[],
+            ),
+            patch(
+                "src.spark.coverage_transform_functions.config.FB_COLUMNS",
+                [
+                    "school_id_giga",
+                    "2G_coverage",
+                    "3G_coverage",
+                    "4G_coverage",
+                    "5G_coverage",
+                ],
+            ),
         ):
             result = fb_transforms(df)
         row = result.collect()[0]

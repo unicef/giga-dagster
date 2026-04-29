@@ -66,3 +66,21 @@ def test_construct_full_table_name_complex():
     for schema, table, expected in test_cases:
         result = construct_full_table_name(schema, table)
         assert result == expected
+
+
+def test_construct_schema_name_no_tier():
+    """Edge case: no tier returns lowercase schema name."""
+    result = construct_schema_name_for_tier("MySchema")
+    assert result == "myschema"
+
+
+def test_construct_schema_name_tier_none():
+    """Edge case: tier=None explicitly."""
+    result = construct_schema_name_for_tier("MySchema", tier=None)
+    assert result == "myschema"
+
+
+def test_construct_full_table_name_empty():
+    """Edge case: empty strings."""
+    result = construct_full_table_name("", "")
+    assert result == "."

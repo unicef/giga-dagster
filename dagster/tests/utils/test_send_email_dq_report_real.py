@@ -61,3 +61,55 @@ async def test_send_email_dq_report_with_config():
             dq_results={}, config=config, context=context
         )
         mock_send_base.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_email_dq_report_with_config_upload_not_found():
+    """Negative case: when upload is not found in database.
+
+    Note: The function catches all exceptions and logs them, so no exception is raised.
+    Instead, we verify that send_email_dq_report is not called when upload is not found.
+    """
+    context = MagicMock()
+    config = MagicMock()
+    config.filename_components.id = "123"
+    config.domain = "Domain"
+    with (
+        patch("src.utils.send_email_dq_report.get_db_context") as mock_db_ctx,
+        patch("src.utils.send_email_dq_report.send_email_dq_report") as mock_send,
+        patch(
+            "src.utils.send_email_dq_report.sentry_sdk.capture_exception"
+        ) as mock_sentry,
+    ):
+        mock_session = MagicMock()
+        mock_db_ctx.return_value.__enter__.return_value = mock_session
+        mock_session.scalar.return_value = None  # Upload not found
+
+        # The function catches the exception and logs it, so no exception is raised
+        await send_email_dq_report_with_config(
+            dq_results={}, config=config, context=context
+        )
+        # Verify send_email_dq_report was not called since upload was not found
+        mock_send.assert_not_called()
+        # Verify the error was captured by sentry
+        mock_sentry.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_email_dq_report_empty_dq_results():
+    """Edge case: empty DQ results should still send email."""
+    context = MagicMock()
+    with (
+        patch("src.utils.send_email_dq_report.send_email_base") as mock_send,
+        patch("src.utils.send_email_dq_report.GroupsApi") as mock_groups,
+    ):
+        mock_groups.list_role_members.return_value = {"admin@example.com"}
+        await send_email_dq_report(
+            dq_results={},  # Empty results
+            dataset_type="Test",
+            upload_date="2023-01-01",
+            upload_id="123",
+            uploader_email="user@example.com",
+            context=context,
+        )
+        mock_send.assert_called_once()

@@ -68,3 +68,20 @@ def test_pandas_loader_with_dtype_mapping():
     dtype_mapping = {"id": str}
     df = pandas_loader(data, "test.csv", dtype_mapping=dtype_mapping)
     assert df["id"].dtype == object
+
+
+def test_pandas_loader_empty_csv():
+    """Edge case: empty CSV with only header."""
+    csv_data = "name,age"
+    data = BytesIO(csv_data.encode("utf-8"))
+    df = pandas_loader(data, "test.csv")
+    assert len(df) == 0
+
+
+def test_pandas_loader_csv_with_whitespace():
+    """Edge case: CSV with whitespace in values."""
+    csv_data = "name,age\n  John  ,  30  "
+    data = BytesIO(csv_data.encode("utf-8"))
+    df = pandas_loader(data, "test.csv")
+    assert len(df) == 1
+    assert df["name"].iloc[0] == "  John  "

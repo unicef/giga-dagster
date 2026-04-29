@@ -72,7 +72,7 @@ async def test_broadcast_master_release_notes(
 
 
 @pytest.mark.asyncio
-async def test_master(mock_file_config, spark_session, op_context):
+async def test_master(mock_file_config, mock_adls_client, spark_session, op_context):
     context = op_context
     mock_spark_resource = MagicMock()
     mock_spark_resource.spark_session = spark_session
@@ -80,6 +80,11 @@ async def test_master(mock_file_config, spark_session, op_context):
     params = [(1, "A")]
     columns = ["school_id_govt", "name"]
     silver_df = spark_session.createDataFrame(params, columns)
+    mock_adls_client.download_json.return_value = {
+        "upload_id": "test_upload",
+        "approved_change_ids": ["__all__"],
+        "rejected_change_ids": [],
+    }
     with (
         patch("src.assets.common.assets.DeltaTable.forName") as mock_dt,
         patch("src.assets.common.assets.check_table_exists", return_value=False),
@@ -99,7 +104,10 @@ async def test_master(mock_file_config, spark_session, op_context):
         mock_col.dataType = "string"
         mock_get_schema.return_value = [mock_col]
         result = await master(
-            context=context, spark=mock_spark_resource, config=mock_file_config
+            context=context,
+            spark=mock_spark_resource,
+            config=mock_file_config,
+            adls_file_client=mock_adls_client,
         )
         assert isinstance(result, Output)
         assert result.value.count() == 1

@@ -54,3 +54,24 @@ def test_get_table_preview_default_count(spark_session):
     df = spark_session.createDataFrame(data, ["id", "value"])
     preview = get_table_preview(df)
     assert preview is not None
+
+
+def test_get_table_preview_empty_pandas():
+    """Edge case: empty pandas DataFrame."""
+    df = pd.DataFrame({"col1": [], "col2": []})
+    preview = get_table_preview(df)
+    assert preview is not None
+
+
+def test_get_table_preview_single_row_pandas():
+    """Edge case: single row pandas DataFrame."""
+    df = pd.DataFrame({"col1": [1], "col2": ["a"]})
+    preview = get_table_preview(df, count=5)  # count > rows
+    assert preview is not None
+
+
+def test_get_table_preview_large_count_pandas():
+    """Edge case: request more rows than available."""
+    df = pd.DataFrame({"col1": [1, 2], "col2": ["a", "b"]})
+    preview = get_table_preview(df, count=100)
+    assert preview is not None

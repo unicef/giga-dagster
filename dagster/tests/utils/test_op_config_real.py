@@ -85,3 +85,48 @@ def test_generate_run_ops():
         assert config.destination_filepath == "dst1.csv"
         assert config.file_size_bytes == 1000
         assert config.country_code == "BRA"
+
+
+def test_file_config_datahub_urns_without_suffix():
+    """Test datahub URNs when filepath has no suffix (deltaLake platform branch)."""
+    from unittest.mock import patch
+
+    config = FileConfig(
+        filepath="raw/folder",  # no extension
+        dataset_type="test",
+        country_code="BRA",
+        file_size_bytes=100,
+        destination_filepath="bronze/folder",  # no extension
+        metastore_schema="schema",
+        tier=DataTier.RAW,
+    )
+
+    with patch(
+        "src.utils.op_config.build_dataset_urn",
+        return_value="urn:li:dataset:(deltaLake,raw/folder,PROD)",
+    ):
+        # Both source and destination should go through the deltaLake branch
+        assert "deltaLake" in config.datahub_source_dataset_urn
+        assert "deltaLake" in config.datahub_destination_dataset_urn
+
+
+def test_file_config_datahub_urns_with_suffix():
+    """Test datahub URNs when filepath has suffix."""
+    from unittest.mock import patch
+
+    config = FileConfig(
+        filepath="raw/test.csv",
+        dataset_type="test",
+        country_code="BRA",
+        file_size_bytes=100,
+        destination_filepath="raw/dest.csv",
+        metastore_schema="schema",
+        tier=DataTier.RAW,
+    )
+
+    with patch(
+        "src.utils.op_config.build_dataset_urn",
+        return_value="urn:li:dataset:(file,test.csv,PROD)",
+    ):
+        assert "file" in config.datahub_source_dataset_urn
+        assert "file" in config.datahub_destination_dataset_urn

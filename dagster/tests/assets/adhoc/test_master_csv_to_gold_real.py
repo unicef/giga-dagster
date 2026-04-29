@@ -274,9 +274,10 @@ async def test_adhoc__reference_data_quality_checks(
     # school_id_giga and education_level_govt are mandatory for reference
     raw_content = b"school_id_giga,education_level_govt\nG01,Primary\nG02,Secondary"
 
-    mock_cols = [MagicMock(), MagicMock()]
+    mock_cols = [MagicMock(), MagicMock(), MagicMock()]
     mock_cols[0].name = "school_id_giga"
     mock_cols[1].name = "education_level_govt"
+    mock_cols[2].name = "school_id_govt_type"
 
     with (
         patch(
