@@ -254,6 +254,48 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     )
 
 
+def _release_merge_lock(
+    context: OpExecutionContext,
+    spark: SparkSession,
+    staging_table_name: str,
+    country_code: str,
+    formatted_dataset: str,
+) -> None:
+    """Reset is_merge_processing and disable the ApprovalRequest if no PENDING rows remain.
+
+    Called when the silver asset finds no approved rows to process, ensuring the
+    merge lock is always released even when the approved set is empty.
+    """
+    remaining_pending = (
+        DeltaTable.forName(spark, staging_table_name)
+        .toDF()
+        .filter(
+            (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != _CHANGE_UNCHANGED)
+        )
+        .count()
+    )
+    update_values: dict = {ApprovalRequest.is_merge_processing: False}
+    if remaining_pending == 0:
+        update_values[ApprovalRequest.enabled] = False
+    with get_db_context() as db:
+        try:
+            with db.begin():
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(update_values)
+                )
+        except Exception as e:
+            context.log.error(
+                f"Failed to reset ApprovalRequest for {country_code} - "
+                f"{formatted_dataset}: {e}"
+            )
+
+
 def _stamp_processed_and_reset_approval(
     context: OpExecutionContext,
     spark: SparkSession,
@@ -375,6 +417,16 @@ def silver(
     if approved.isEmpty():
         context.log.info(
             "No approved rows for this upload. Returning current silver unchanged."
+        )
+        # Even with no approved rows we must release the merge lock, otherwise
+        # is_merge_processing stays True and every subsequent approval for this
+        # country/dataset gets a 409 forever.
+        _release_merge_lock(
+            context,
+            s,
+            staging_table_name,
+            country_code,
+            f"School {config.dataset_type.capitalize()}",
         )
         if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
             s.catalog.refreshTable(silver_table_name)
