@@ -632,7 +632,7 @@ def reset_staging_table(
             raise
 
 
-def _handle_null_columns(schema_columns, primary_key):
+def handle_null_columns(schema_columns, primary_key):
     """Handle null columns by providing default values based on data type.
 
     If the column value is NULL, add a placeholder value if the following
@@ -765,7 +765,7 @@ def master(
     else:
         new_master = silver
 
-    column_actions = _handle_null_columns(schema_columns, primary_key)
+    column_actions = handle_null_columns(schema_columns, primary_key)
     new_master = new_master.withColumns(column_actions)
     new_master = compute_row_hash(new_master)
 
@@ -823,7 +823,7 @@ def reference(
     else:
         new_reference = silver
 
-    column_actions = _handle_null_columns(schema_columns, primary_key)
+    column_actions = handle_null_columns(schema_columns, primary_key)
     new_reference = new_reference.withColumns(column_actions)
     new_reference = compute_row_hash(new_reference)
 

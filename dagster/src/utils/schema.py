@@ -14,6 +14,19 @@ from dagster import (
 from src.constants import DataTier, constants
 
 
+def get_type_mapping(data_type: str):
+    """Map a data type string to its corresponding TypeMapping from constants.
+
+    Handles case-insensitivity and common aliases (e.g., 'INT' -> 'integer').
+    """
+    normalized_type = data_type.lower()
+    # Handle common aliases from config_expectations
+    if normalized_type == "int":
+        normalized_type = "integer"
+
+    return getattr(constants.TYPE_MAPPINGS, normalized_type)
+
+
 def get_schema_name(
     context: InputContext | OutputContext | OpExecutionContext | AssetExecutionContext,
 ) -> str:
@@ -40,7 +53,7 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
     existing_columns = [
         StructField(
             row.name,
-            getattr(constants.TYPE_MAPPINGS, row.data_type).pyspark(),
+            get_type_mapping(row.data_type).pyspark(),
             row.is_nullable,
         )
         for row in df.collect()
@@ -68,6 +81,34 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
     return existing_columns
 
 
+def get_schema_columns_with_id(
+    spark: SparkSession, schema_name: str
+) -> list[tuple[str, StructField]]:
+    """Return schema columns paired with their stable UUID id.
+
+    Each tuple is ``(id, StructField)``.  The ``id`` is the fixed UUID
+    assigned to the column in the schema CSV stored in ADLS.  By comparing
+    IDs between the reference schema and an existing Delta table we can
+    detect:
+
+    * **Renames** – same ID, different ``StructField.name``
+    * **Deletes** – ID present in the table but absent from the reference
+    * **Adds**    – ID present in the reference but absent from the table
+    """
+    df = get_schema_table(spark, schema_name)
+    return [
+        (
+            row.id,
+            StructField(
+                row.name,
+                get_type_mapping(row.data_type).pyspark(),
+                row.is_nullable,
+            ),
+        )
+        for row in df.collect()
+    ]
+
+
 def get_schema_column_descriptions(
     spark: SparkSession, schema_name: str
 ) -> dict[str:str]:
@@ -78,8 +119,7 @@ def get_schema_column_descriptions(
 def get_schema_columns_datahub(spark: SparkSession, schema_name: str) -> list[tuple]:
     df = get_schema_table(spark, schema_name)
     return [
-        (row.name, getattr(constants.TYPE_MAPPINGS, row.data_type).datahub())
-        for row in df.collect()
+        (row.name, get_type_mapping(row.data_type).datahub()) for row in df.collect()
     ]
 
 
