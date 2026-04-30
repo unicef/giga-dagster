@@ -256,3 +256,8 @@ tasks:
     desc: Spawn a Beeline shell
     cmds:
       - task exec -- -it hive-metastore beeline -u {{.HMS_DATABASE_URL}} -n {{.HMS_POSTGRESQL_USERNAME}} -p {{.HMS_POSTGRESQL_PASSWORD}}
+  test:
+    desc: Run tests
+    dir: dagster
+    cmds:
+      - poetry run pytest {{.CLI_ARGS}}
