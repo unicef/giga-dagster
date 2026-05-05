@@ -221,38 +221,20 @@ def _log_staging_diagnostics(
     upload_id: str,
 ) -> None:
     total_staging = staging_df.count()
-    context.log.info(f"[silver] total rows in staging table: {total_staging}")
-
-    if total_staging > 0:
-        sample_upload_ids = [
-            r.upload_id
-            for r in staging_df.select("upload_id").distinct().limit(5).collect()
-        ]
-        sample_statuses = [
-            r.status for r in staging_df.select("status").distinct().limit(5).collect()
-        ]
-        sample_change_types = [
-            r.change_type
-            for r in staging_df.select("change_type").distinct().limit(5).collect()
-        ]
-        context.log.info(f"[silver] distinct upload_ids (up to 5): {sample_upload_ids}")
-        context.log.info(f"[silver] distinct statuses: {sample_statuses}")
-        context.log.info(f"[silver] distinct change_types: {sample_change_types}")
-
     matched_upload = staging_df.filter(f.col("upload_id") == upload_id).count()
     matched_non_unchanged = staging_df.filter(
         (f.col("upload_id") == upload_id) & (f.col("change_type") != _CHANGE_UNCHANGED)
     ).count()
-    matched_all = staging_df.filter(
+    matched_pending = staging_df.filter(
         (f.col("upload_id") == upload_id)
         & (f.col("change_type") != _CHANGE_UNCHANGED)
         & (f.col("status") == _STATUS_PENDING)
     ).count()
     context.log.info(
-        f"[silver] filter breakdown: "
+        f"[silver] staging table: total={total_staging}, "
         f"upload_id match={matched_upload}, "
         f"+non-unchanged={matched_non_unchanged}, "
-        f"+status=PENDING={matched_all}"
+        f"+status=PENDING={matched_pending}"
     )
 
 
