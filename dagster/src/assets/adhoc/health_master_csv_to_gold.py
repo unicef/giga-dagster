@@ -67,6 +67,36 @@ def adhoc__health_master_data_transforms(
     sdf = s.createDataFrame(df)
 
     sdf = add_missing_columns(sdf, schema_columns)
+    mandatory_columns = [c.name for c in schema_columns if not c.nullable]
+    available_mandatory_columns = [
+        col_name for col_name in mandatory_columns if col_name in sdf.columns
+    ]
+
+    row_count_before_drop = sdf.count()
+    if available_mandatory_columns:
+        non_empty_checks = []
+        for col_name in available_mandatory_columns:
+            col_expr = f.col(col_name)
+            non_empty_checks.append(
+                f.when(
+                    col_expr.cast("string").isNull(),
+                    f.lit(False),
+                ).otherwise(f.length(f.trim(col_expr.cast("string"))) > 0)
+            )
+
+        mandatory_row_condition = non_empty_checks[0]
+        for check in non_empty_checks[1:]:
+            mandatory_row_condition = mandatory_row_condition & check
+        sdf = sdf.filter(mandatory_row_condition)
+
+    row_count_after_drop = sdf.count()
+    context.log.info(
+        "health mandatory checks: required=%s dropped=%s kept=%s",
+        available_mandatory_columns,
+        row_count_before_drop - row_count_after_drop,
+        row_count_after_drop,
+    )
+
     sdf = create_health_id_giga(sdf)
 
     sdf = add_admin_columns(
@@ -90,6 +120,61 @@ def adhoc__health_master_data_transforms(
 
     return Output(
         df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
+def adhoc__health_master_failed_rows(
+    context: OpExecutionContext,
+    adhoc__load_health_master_csv: bytes,
+    spark: PySparkResource,
+    config: FileConfig,
+) -> Output[pd.DataFrame]:
+    s: SparkSession = spark.spark_session
+
+    schema_columns = get_schema_columns(s, config.metastore_schema)
+    with BytesIO(adhoc__load_health_master_csv) as buffer:
+        buffer.seek(0)
+        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+
+    df = df[[column.name for column in schema_columns if column.name in df.columns]]
+    for column, dtype in df.dtypes.items():
+        if dtype == "object":
+            df[column] = df[column].astype("string")
+
+    sdf = s.createDataFrame(df)
+    sdf = add_missing_columns(sdf, schema_columns)
+
+    mandatory_columns = [c.name for c in schema_columns if not c.nullable]
+    available_mandatory_columns = [
+        col_name for col_name in mandatory_columns if col_name in sdf.columns
+    ]
+
+    failed = sdf
+    if available_mandatory_columns:
+        non_empty_checks = []
+        for col_name in available_mandatory_columns:
+            col_expr = f.col(col_name)
+            non_empty_checks.append(
+                f.when(
+                    col_expr.cast("string").isNull(),
+                    f.lit(False),
+                ).otherwise(f.length(f.trim(col_expr.cast("string"))) > 0)
+            )
+
+        mandatory_row_condition = non_empty_checks[0]
+        for check in non_empty_checks[1:]:
+            mandatory_row_condition = mandatory_row_condition & check
+        failed = sdf.filter(~mandatory_row_condition)
+    else:
+        failed = sdf.limit(0)
+
+    failed_df = failed.toPandas()
+    context.log.info(f"failed rows count: {len(failed_df)}")
+    return Output(
+        failed_df,
+        metadata={**get_output_metadata(config), "preview": get_table_preview(failed_df)},
     )
 
 
