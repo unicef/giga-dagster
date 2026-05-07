@@ -229,7 +229,7 @@ def geolocation_bronze(
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
     df = create_bronze_layer_columns_updated(
-        df, mode, uploaded_columns, country_code, s
+        df, mode, uploaded_columns, country_code, file_upload.source, s
     )
 
     t2 = time.time()

@@ -395,6 +395,7 @@ def create_bronze_layer_columns(
     mode: str,
     uploaded_columns: list[str],
     is_qos: bool = False,
+    source: str = None,
 ) -> sql.DataFrame:
     """Create bronze layer columns with optional QoS-specific handling.
 
@@ -403,6 +404,7 @@ def create_bronze_layer_columns(
         silver: Reference silver DataFrame
         country_code_iso3: Country code in ISO3 format
         is_qos: Whether to apply QoS-specific transformations
+        source: Source of the upload (e.g., "gigameter", "nocodb")
 
     Returns:
         DataFrame with bronze layer columns added
@@ -495,6 +497,18 @@ def create_bronze_layer_columns(
                 ).otherwise(f.col(column)),
             )
 
+    if "verification_status" in uploaded_columns:
+        # Preserve the value from CSV, fallback to default if null
+        default_value = "unverified" if source == "gigameter" else "verified"
+        df = df.withColumn(
+            "verification_status",
+            f.coalesce(f.col("verification_status"), f.lit(default_value)),
+        )
+    else:
+        # Column not in CSV, set default based on source
+        default_value = "unverified" if source == "gigameter" else "verified"
+        df = df.withColumn("verification_status", f.lit(default_value))
+
     return df
 
 
@@ -503,6 +517,7 @@ def create_bronze_layer_columns_updated(
     mode: str,
     uploaded_columns: list[str],
     country_code_iso3: str,
+    source: str = None,
     spark: SparkSession = None,
 ):
     # standardize education level
@@ -550,6 +565,18 @@ def create_bronze_layer_columns_updated(
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         connectivity = get_country_rt_schools(spark, country_code_iso3)
         df = merge_connectivity_to_master(df, connectivity, uploaded_columns, mode)
+
+    if "verification_status" in uploaded_columns:
+        # Preserve the value from CSV, fallback to default if null
+        default_value = "unverified" if source == "gigameter" else "verified"
+        df = df.withColumn(
+            "verification_status",
+            f.coalesce(f.col("verification_status"), f.lit(default_value)),
+        )
+    else:
+        # Column not in CSV, set default based on source
+        default_value = "unverified" if source == "gigameter" else "verified"
+        df = df.withColumn("verification_status", f.lit(default_value))
 
     return df
 

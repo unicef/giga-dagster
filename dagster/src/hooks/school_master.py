@@ -146,7 +146,7 @@ def write_to_nocodb(context: HookContext, file_upload: FileUpload) -> None:
             "education_level": metadata_payload.get("education_level", ""),
             "contact_name": metadata_payload.get("contact_name", ""),
             "contact_email": metadata_payload.get("contact_email", ""),
-            "status": "unverified",
+            "verification_status": "unverified",
         }
 
         create_nocodb_table_record(table_id, record_data)
