@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     MONGOLIA_API_USER: str = ""
     MONGOLIA_API_PASSWORD: str = ""
     MONGOLIA_API_URL: str = ""
+    API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
+    API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
 
     # Derived settings
     @property
@@ -134,9 +136,9 @@ class Settings(BaseSettings):
     @property
     def AZURE_BLOB_CONNECTION_URI(self) -> str:
         if self.USE_AZURITE:
-            # Use wasb:// (HTTP) with Azurite - wasbs:// (HTTPS) doesn't work
+            # Use wasb:// (HTTP) with Azurite - abfss:// is not supported by Azurite
             return f"wasb://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
-        return f"wasbs://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_BLOB_SAS_HOST}"
+        return f"abfss://{self.AZURE_BLOB_CONTAINER_NAME}@{self.AZURE_DFS_SAS_HOST}"
 
     @property
     def AZURE_STORAGE_CONNECTION_STRING(self) -> str:
