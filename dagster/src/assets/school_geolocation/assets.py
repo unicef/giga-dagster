@@ -238,7 +238,12 @@ def geolocation_bronze(
     context.log.info(casted_bronze)
 
     df = create_bronze_layer_columns(
-        casted_bronze, casted_geolocation_base, country_code, mode, uploaded_columns
+        casted_bronze,
+        casted_geolocation_base,
+        country_code,
+        mode,
+        uploaded_columns,
+        source=file_upload.source,
     )
     context.log.info("DF from create_bronze_layer_columns")
     context.log.info(df)
