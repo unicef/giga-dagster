@@ -681,10 +681,10 @@ def master(
     # a failed silver write cannot leave staging rows permanently marked PROCESSED
     # with no corresponding silver data.
     if config.dataset_type == "geolocation" and check_table_exists(
-        s, schema_name, country_code, DataTier.STAGING
+        s, f"school_{config.dataset_type}", country_code, DataTier.STAGING
     ):
         staging_tier_schema_name = construct_schema_name_for_tier(
-            schema_name, DataTier.STAGING
+            f"school_{config.dataset_type}", DataTier.STAGING
         )
         staging_table_name = construct_full_table_name(
             staging_tier_schema_name, country_code
@@ -860,7 +860,7 @@ def _stamp_master_version(
         return
 
     staging_tier_schema_name = construct_schema_name_for_tier(
-        config.metastore_schema, DataTier.STAGING
+        f"school_{config.dataset_type}", DataTier.STAGING
     )
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, config.country_code
