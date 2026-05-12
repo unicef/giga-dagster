@@ -19,7 +19,7 @@ tasks:
     desc: Build and start Docker containers
     cmds:
       - docker compose --project-name giga-dataops --file docker-compose-network.yaml up --build --detach --remove-orphans {{.CLI_ARGS}}
-      - docker compose --project-name {{.PROJECT_NAME}} --file docker-compose.local.yaml up --build --detach --remove-orphans {{.CLI_ARGS}}
+      - docker compose --project-name {{.PROJECT_NAME}} up --build --detach --remove-orphans {{.CLI_ARGS}}
 
   setup:
     desc: Run all first-time setup tasks
