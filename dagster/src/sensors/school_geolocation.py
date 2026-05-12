@@ -209,7 +209,7 @@ def school_master_geolocation__post_manual_checks_sensor(
                     tier=DataTier.STAGING,
                 ),
                 "master": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{country_code.lower()}",
+                    source_filepath=str(path),
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
