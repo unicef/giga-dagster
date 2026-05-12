@@ -128,9 +128,18 @@ def geolocation_metadata(
     context.log.info("Create spark dataframe")
     metadata_df = s.createDataFrame(metadata_df)
 
-    table_columns = get_schema_columns(s, "school_geolocation_metadata")
     table_name = "school_geolocation_metadata"
     table_schema_name = "pipeline_tables"
+
+    context.log.info("Get schema columns for metadata table")
+    try:
+        table_columns = get_schema_columns(s, "school_geolocation_metadata")
+    except Exception:
+        context.log.warning(
+            "Schema table schemas.school_geolocation_metadata not found; "
+            "using DataFrame schema for metadata table creation"
+        )
+        table_columns = list(metadata_df.schema.fields)
 
     context.log.info("Create the schema and table if they do not exist")
     metadata_df = add_missing_columns(metadata_df, table_columns)
@@ -327,7 +336,9 @@ def geolocation_data_quality_results(
     )
 
     dq_results_schema_name = f"{schema_name}_dq_results"
-    table_name = f"{id}_{country_code}_{current_timestamp}"
+    # Replace hyphens with underscores so the identifier is valid in Spark SQL
+    safe_id = id.replace("-", "_")
+    table_name = f"{safe_id}_{country_code}_{current_timestamp}"
 
     schema_columns = [
         StructField(field.name, field.dataType, nullable=True)

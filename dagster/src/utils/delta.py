@@ -1,3 +1,5 @@
+import uuid
+
 from delta.tables import DeltaMergeBuilder, DeltaTable, DeltaTableBuilder
 from icecream import ic
 from pyspark import sql
@@ -365,6 +367,39 @@ def remove_column_id_props(
     spark.sql(f"ALTER TABLE {table_name} UNSET TBLPROPERTIES IF EXISTS ({props})")
 
 
+_PK_PROPERTY_KEY = "giga.pkColumnIds"
+
+
+def get_stored_pk_uuids(spark: SparkSession, table_name: str) -> set[str]:
+    """Return the set of UUIDs marked as primary keys on this table.
+
+    Returns an empty set if the property is absent (e.g. tables created
+    before PK persistence was added).
+    """
+    spark.catalog.refreshTable(table_name)
+    detail = spark.sql(f"DESCRIBE DETAIL {table_name}").collect()[0]
+    properties: dict = detail["properties"] if detail["properties"] else {}
+    raw = properties.get(_PK_PROPERTY_KEY)
+    if not raw:
+        return set()
+    return {part.strip() for part in raw.split(",") if part.strip()}
+
+
+def store_pk_uuids(
+    spark: SparkSession,
+    table_name: str,
+    pk_uuids: set[str],
+) -> None:
+    """Persist (or update) the set of primary-key UUIDs for this table."""
+    if not pk_uuids:
+        return
+    joined = ",".join(sorted(pk_uuids))
+    spark.sql(
+        f"ALTER TABLE {table_name} SET TBLPROPERTIES "
+        f"('{_PK_PROPERTY_KEY}' = '{joined}')"
+    )
+
+
 def detect_renames_and_deletes(
     existing_id_map: dict[str, str],
     updated_id_map: dict[str, str],
@@ -460,66 +495,173 @@ def execute_deletes(
     context: OpExecutionContext,
 ) -> None:
     """Execute column drop SQL statements."""
-    context.log.info(f"Dropping columns: {deletes}")
-    for col_name in deletes:
+    detail = spark.sql(f"DESCRIBE DETAIL {table_name}").collect()[0]
+    partition_columns: set[str] = set(detail["partitionColumns"] or [])
+
+    skipped = [c for c in deletes if c in partition_columns]
+    to_drop = [c for c in deletes if c not in partition_columns]
+
+    if skipped:
+        context.log.info(
+            f"Skipping delete for partition column(s) {skipped} on {table_name} "
+            f"— Delta Lake does not allow dropping partition columns."
+        )
+
+    context.log.info(f"Dropping columns: {to_drop}")
+    for col_name in to_drop:
         stmt = f"ALTER TABLE {table_name} DROP COLUMN `{col_name}`"
         context.log.info(f"Executing: {stmt}")
         spark.sql(stmt)
-    remove_column_id_props(spark, table_name, deletes)
+    remove_column_id_props(spark, table_name, to_drop)
 
 
-def apply_renames_and_deletes(
+def build_excluded_columns(
+    partition_columns: set[str],
+    updated_schema: StructType | None,
+    updated_id_map: dict[str, str],
+) -> set[str]:
+    """Return columns that should be excluded from rename/delete detection."""
+    caller_managed = (
+        set(updated_schema.fieldNames()) if updated_schema is not None else set()
+    )
+    excluded = set(partition_columns)
+    if caller_managed:
+        excluded |= {c for c in caller_managed if c not in updated_id_map}
+    return excluded
+
+
+def bootstrap_orphan_columns(
     spark: SparkSession,
     table_name: str,
-    schema_name: str,
+    existing_id_map: dict[str, str],
+    updated_id_map: dict[str, str],
+    excluded: set[str],
     context: OpExecutionContext,
-) -> bool:
-    """Detect and apply column renames and deletes to a Delta table based on the reference schema.
-
-    Returns True if any schema change occurred (rename or delete).
-
-    IMPORTANT: This function ALWAYS supplements ``existing_id_map`` with any
-    table columns that lack stored UUIDs.  This prevents the situation where a
-    partially-populated ``column_id_map`` causes some columns to be silently
-    ignored by rename/delete detection (which previously led to those columns
-    being dropped by the fallback path in :func:`sync_schema`, causing data
-    loss).
-    """
-    from src.utils.schema import get_schema_columns_with_id
-
-    columns_with_id = get_schema_columns_with_id(spark, schema_name)
-    updated_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
-    existing_id_map = get_stored_column_id_map(spark, table_name)
-
-    # If the table has NO stored UUIDs at all (pre-existing table that was
-    # created before UUID-based tracking was introduced), bootstrapping is
-    # needed first.  We must NOT treat all columns as deletes — that would
-    # cause data loss by dropping every column.  Instead, persist the current
-    # mapping now and skip rename/delete detection for this run.
-    if not existing_id_map:
-        context.log.info(
-            f"No stored column-ID mapping found for {table_name}. "
-            "Bootstrapping UUID props from current schema. "
-            "Rename/delete detection will be active from the next run onwards."
-        )
-        persist_column_id_map(spark, table_name, schema_name)
-        return False
-
-    # Supplement existing_id_map with table columns that lack stored UUIDs.
-    # This handles columns added via mergeSchema after the initial bootstrap
-    # (e.g. ADD operations that ran before persist_column_id_map was called).
-    # Tag them with a synthetic ID so they are treated as deletes if they are
-    # no longer in the reference schema.
+) -> None:
+    """Supplement existing_id_map for columns present in the table but lacking stored UUIDs."""
     current_columns = DeltaTable.forName(spark, table_name).toDF().schema.fieldNames()
     for col_name in current_columns:
+        if col_name in excluded:
+            continue
         if col_name not in existing_id_map:
-            existing_id_map[col_name] = f"table_{col_name}"
-            context.log.info(
-                f"Column '{col_name}' exists in table but has no stored UUID; "
-                f"tagging with synthetic ID for delete detection."
+            if col_name in updated_id_map:
+                existing_id_map[col_name] = updated_id_map[col_name]
+                context.log.info(
+                    f"Column '{col_name}' exists in table but has no stored UUID; "
+                    f"matched to schema UUID '{updated_id_map[col_name]}'."
+                )
+            else:
+                existing_id_map[col_name] = f"table_{col_name}"
+                context.log.info(
+                    f"Column '{col_name}' exists in table but has no stored UUID "
+                    f"and is not in the updated schema; "
+                    f"tagging with synthetic ID for delete detection."
+                )
+
+
+def filter_pk_changes(
+    existing_id_map: dict[str, str],
+    updated_id_map: dict[str, str],
+    renames: dict[str, str],
+    deletes: list[str],
+    primary_key_columns: set[str],
+    persisted_pk_uuids: set[str],
+    context: OpExecutionContext,
+) -> tuple[dict[str, str], list[str], set[str], dict[str, str]]:
+    """Filter renames and deletes that touch primary-key columns.
+
+    Returns (filtered_renames, filtered_deletes, blocked_renames, renames_original).
+    """
+    pk_uuids = {
+        updated_id_map[name] for name in primary_key_columns if name in updated_id_map
+    }
+    pk_uuids |= persisted_pk_uuids
+    renames_original = dict(renames)
+
+    blocked_renames: set[str] = set()
+    if pk_uuids:
+        blocked_renames = {
+            old_name
+            for old_name, new_name in renames.items()
+            if existing_id_map.get(old_name) in pk_uuids
+        }
+        if blocked_renames:
+            context.log.warning(
+                f"Blocked rename of primary key columns: {blocked_renames}"
             )
+            for old_name in blocked_renames:
+                del renames[old_name]
+
+        blocked_deletes = [
+            col_name
+            for col_name in deletes
+            if existing_id_map.get(col_name) in pk_uuids
+        ]
+        if blocked_deletes:
+            context.log.warning(
+                f"Blocked delete of primary key columns: {blocked_deletes}"
+            )
+            for col_name in blocked_deletes:
+                deletes.remove(col_name)
+
+    return renames, deletes, blocked_renames, renames_original
+
+
+def detect_and_filter_changes(
+    spark: SparkSession,
+    table_name: str,
+    existing_id_map: dict[str, str],
+    updated_id_map: dict[str, str],
+    updated_schema: StructType | None,
+    partition_columns: set[str],
+    primary_key_columns: set[str],
+    persisted_pk_uuids: set[str],
+    context: OpExecutionContext,
+) -> tuple[dict[str, str], list[str], set[str], dict[str, str]]:
+    """Detect renames/deletes, exclude partition/caller-managed cols, and filter PK changes."""
+    excluded = build_excluded_columns(partition_columns, updated_schema, updated_id_map)
+
+    if excluded:
+        for col_name in list(existing_id_map.keys()):
+            if col_name in excluded:
+                reason = (
+                    "partition column"
+                    if col_name in partition_columns
+                    else "caller-managed column"
+                )
+                context.log.info(
+                    f"Excluding '{col_name}' from rename/delete detection ({reason})."
+                )
+                del existing_id_map[col_name]
+        for col_name in list(updated_id_map.keys()):
+            if col_name in excluded:
+                del updated_id_map[col_name]
+
+    bootstrap_orphan_columns(
+        spark, table_name, existing_id_map, updated_id_map, excluded, context
+    )
 
     renames, deletes = detect_renames_and_deletes(existing_id_map, updated_id_map)
+
+    return filter_pk_changes(
+        existing_id_map,
+        updated_id_map,
+        renames,
+        deletes,
+        primary_key_columns,
+        persisted_pk_uuids,
+        context,
+    )
+
+
+def execute_renames_and_deletes(
+    spark: SparkSession,
+    table_name: str,
+    renames: dict[str, str],
+    deletes: list[str],
+    context: OpExecutionContext,
+) -> None:
+    """Enable column mapping and execute any renames or deletes."""
     context.log.info(f"Detected renames: {renames}")
     context.log.info(f"Detected deletes: {deletes}")
 
@@ -538,7 +680,79 @@ def apply_renames_and_deletes(
     if renames or deletes:
         spark.catalog.refreshTable(table_name)
 
-    return bool(renames or deletes)
+
+def apply_renames_and_deletes(
+    spark: SparkSession,
+    table_name: str,
+    schema_name: str,
+    context: OpExecutionContext,
+    updated_schema: StructType | None = None,
+) -> tuple[bool, set[str]]:
+    """Detect and apply column renames and deletes to a Delta table based on the reference schema."""
+
+    from src.utils.schema import get_schema_columns_with_id
+
+    columns_with_id = get_schema_columns_with_id(spark, schema_name)
+    updated_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
+    existing_id_map = get_stored_column_id_map(spark, table_name)
+
+    if not existing_id_map:
+        context.log.info(
+            f"No stored column-ID mapping found for {table_name}. "
+            "Bootstrapping UUID props from current schema. "
+            "Rename/delete detection will be active from the next run onwards."
+        )
+        persist_column_id_map(spark, table_name, schema_name)
+        return False, set()
+
+    detail = spark.sql(f"DESCRIBE DETAIL {table_name}").collect()[0]
+    partition_columns: set[str] = set(detail["partitionColumns"] or [])
+
+    # Discover primary key columns from the reference schema.
+    # The schemas Delta table has a ``primary_key`` boolean column.
+    primary_key_columns: set[str] = set()
+    try:
+        pk_rows = spark.sql(
+            f"SELECT name FROM schemas.{schema_name} WHERE primary_key = true"  # nosec B608
+        ).collect()
+        primary_key_columns = {row["name"] for row in pk_rows}
+        if primary_key_columns:
+            context.log.info(
+                f"Primary key columns detected: {sorted(primary_key_columns)}"
+            )
+    except Exception:
+        # Schema table may not exist or lack the primary_key column
+        pass
+
+    persisted_pk_uuids: set[str] = get_stored_pk_uuids(spark, table_name)
+    if persisted_pk_uuids:
+        context.log.info(f"Persisted PK UUIDs on table: {sorted(persisted_pk_uuids)}")
+
+    renames, deletes, blocked_renames, renames_original = detect_and_filter_changes(
+        spark,
+        table_name,
+        existing_id_map,
+        updated_id_map,
+        updated_schema,
+        partition_columns,
+        primary_key_columns,
+        persisted_pk_uuids,
+        context,
+    )
+
+    execute_renames_and_deletes(spark, table_name, renames, deletes, context)
+
+    # Collect the new names of blocked renames so that sync_schema can
+    # avoid adding them as new columns (since the rename was blocked).
+    blocked_new_names: set[str] = set()
+    if blocked_renames:
+        blocked_new_names = {
+            new_name
+            for old_name, new_name in renames_original.items()
+            if old_name in blocked_renames
+        }
+
+    return bool(renames or deletes), blocked_new_names
 
 
 def persist_column_id_map(
@@ -548,8 +762,57 @@ def persist_column_id_map(
     from src.utils.schema import get_schema_columns_with_id
 
     columns_with_id = get_schema_columns_with_id(spark, schema_name)
-    new_id_map = {field.name: csv_id for csv_id, field in columns_with_id}
+    # uuid -> schema_column_name
+    schema_uuid_to_name = {csv_id: field.name for csv_id, field in columns_with_id}
+    # schema_column_name -> uuid
+    schema_name_to_uuid = {field.name: csv_id for csv_id, field in columns_with_id}
+
+    # Previous stored map (may have old names for blocked renames)
+    previous_map = get_stored_column_id_map(spark, table_name)
+
+    spark.catalog.refreshTable(table_name)
+    table_columns = spark.table(table_name).columns
+
+    new_id_map: dict[str, str] = {}
+    for col_name in table_columns:
+        # 1. If the column name exactly matches a schema column → use schema UUID
+        if col_name in schema_name_to_uuid:
+            new_id_map[col_name] = schema_name_to_uuid[col_name]
+            continue
+
+        # 2. If the column has a stored UUID that maps to a schema column
+        #    (rename was blocked, old table name with valid UUID)
+        prev_uuid = previous_map.get(col_name)
+        if prev_uuid and prev_uuid in schema_uuid_to_name:
+            new_id_map[col_name] = prev_uuid
+            continue
+
+        # 3. Otherwise keep previous UUID if any, or generate new one
+        if prev_uuid:
+            new_id_map[col_name] = prev_uuid
+        else:
+            new_id_map[col_name] = str(uuid.uuid4())
+
     store_column_id_map(spark, table_name, new_id_map)
+
+    # Persist PK UUIDs for protection across schema removals.
+    # We accumulate (union) so a PK once registered stays protected.
+    try:
+        pk_rows = spark.sql(
+            f"SELECT name FROM schemas.{schema_name} WHERE primary_key = true"  # nosec B608
+        ).collect()
+        current_pk_uuids = {
+            schema_name_to_uuid[row["name"]]
+            for row in pk_rows
+            if row["name"] in schema_name_to_uuid
+        }
+    except Exception:
+        current_pk_uuids = set()
+
+    previous_pk_uuids = get_stored_pk_uuids(spark, table_name)
+    merged_pk_uuids = previous_pk_uuids | current_pk_uuids
+    if merged_pk_uuids and merged_pk_uuids != previous_pk_uuids:
+        store_pk_uuids(spark, table_name, merged_pk_uuids)
 
 
 def apply_datatype_changes(
@@ -644,9 +907,10 @@ def sync_schema(
     # 1. Detect and apply renames & deletes
     # ------------------------------------------------------------------
     any_renames_deletes = False
+    blocked_new_names: set[str] = set()
     if schema_name is not None:
-        any_renames_deletes = apply_renames_and_deletes(
-            spark, table_name, schema_name, context
+        any_renames_deletes, blocked_new_names = apply_renames_and_deletes(
+            spark, table_name, schema_name, context, updated_schema=updated_schema
         )
 
     # ------------------------------------------------------------------
@@ -655,6 +919,20 @@ def sync_schema(
     if any_renames_deletes:
         spark.catalog.refreshTable(table_name)
         existing_schema = spark.table(table_name).schema
+
+    # ------------------------------------------------------------------
+    # 2a. Remove blocked-new names from updated_schema so they are not
+    #     incorrectly added as new columns (e.g. a primary key rename
+    #     that was blocked should not create a duplicate column).
+    # ------------------------------------------------------------------
+    if blocked_new_names:
+        context.log.info(
+            f"Blocked rename targets excluded from add logic: {blocked_new_names}"
+        )
+        filtered_fields = [
+            f for f in updated_schema.fields if f.name not in blocked_new_names
+        ]
+        updated_schema = StructType(filtered_fields)
 
     # ------------------------------------------------------------------
     # 3. Detect added columns & datatype changes (existing logic)
