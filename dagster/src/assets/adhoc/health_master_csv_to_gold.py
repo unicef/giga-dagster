@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+from functools import reduce
 
 import numpy as np
 import pandas as pd
@@ -85,20 +86,43 @@ def adhoc__health_master_data_transforms(
     )
     sdf = sdf.withColumn("signature", sha2(concat_ws("|", *sorted(sdf.columns)), 256))
 
+    mandatory_columns = [
+        col.name for col in schema_columns if not col.nullable and col.name in sdf.columns
+    ]
+    context.log.info(f"Mandatory columns: {mandatory_columns}")
+
+    country_code = config.country_code
+    path = Path(config.filepath)
+    stem = path.stem
+
+    if mandatory_columns:
+        mandatory_null_condition = reduce(
+            lambda a, b: a | b,
+            [f.col(c).isNull() for c in mandatory_columns],
+        )
+        sdf_failed = sdf.filter(mandatory_null_condition)
+        sdf = sdf.filter(~mandatory_null_condition)
+
+        context.log.info(
+            f"Mandatory check: {sdf_failed.count()} rows dropped, {sdf.count()} rows passed"
+        )
+    else:
+        sdf_failed = sdf.limit(0)
+
     df = sdf.toPandas()
     df = df.drop_duplicates("health_id_giga")
 
-    path = Path(config.filepath)
-    stem = path.stem
-    df_failed = df[df["health_id_giga"].isna()]
-    output_filepath = (
-        f"{constants.gold_folder}/dq-results/health-master/failed/{stem}.csv"
+    df_failed = sdf_failed.toPandas()
+
+    failed_filepath = (
+        f"{constants.gold_folder}/dq-results/failed/{country_code}/{stem}.csv"
     )
     adls_file_client.upload_pandas_dataframe_as_file(
         context=context,
         data=df_failed,
-        filepath=str(output_filepath),
+        filepath=str(failed_filepath),
     )
+    context.log.info(f"Failed rows written to {failed_filepath}: {len(df_failed)} rows")
 
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
