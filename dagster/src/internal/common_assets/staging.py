@@ -158,39 +158,22 @@ class StagingStep:
             "left",
         )
 
-        # For columns not in the upload file: use silver's value for existing rows
+        # For every schema column: use the Bronze value when it is non-null;
+        # otherwise fall back to the Silver value for existing rows.
+        # This handles uploaded columns, columns derived from uploaded columns
+        # (e.g. education_level from education_level_govt, admin columns from
+        # lat/lon), and columns absent from the file — all with one rule.
         row_in_silver = f.col(f"_s_{self.primary_key}").isNotNull()
         for col_name in schema_col_names:
             s_col = f"_s_{col_name}"
-            if col_name not in uploaded_columns and s_col in joined.columns:
-                joined = joined.withColumn(
-                    col_name,
-                    f.when(row_in_silver, f.col(s_col)).otherwise(f.col(col_name)),
-                )
-
-        # Admin columns may be null per-row when lat/lon is absent for that row,
-        # even though lat/lon is present in the file (and admin columns therefore
-        # appear in uploaded_columns).  For existing rows, fall back to silver so
-        # we preserve a previously-computed admin value and avoid spurious UPDATEs.
-        _admin_cols = (
-            "admin1",
-            "admin2",
-            "admin3",
-            "admin4",
-            "admin1_id_giga",
-            "admin2_id_giga",
-            "admin3_id_giga",
-            "admin4_id_giga",
-        )
-        for col_name in _admin_cols:
-            s_col = f"_s_{col_name}"
-            if col_name in uploaded_columns and s_col in joined.columns:
-                joined = joined.withColumn(
-                    col_name,
-                    f.when(
-                        row_in_silver & f.col(col_name).isNull(), f.col(s_col)
-                    ).otherwise(f.col(col_name)),
-                )
+            if s_col not in joined.columns:
+                continue
+            joined = joined.withColumn(
+                col_name,
+                f.when(
+                    row_in_silver & f.col(col_name).isNull(), f.col(s_col)
+                ).otherwise(f.col(col_name)),
+            )
 
         # Drop all silver-prefixed columns (including _s_signature)
         s_cols_to_drop = [c for c in joined.columns if c.startswith("_s_")]
@@ -409,13 +392,10 @@ class StagingStep:
         )
 
     def _get_uploaded_columns(self) -> list[str]:
-        """Return the list of schema column names present in the upload file.
+        """Return the schema column names explicitly present in the upload file.
 
-        Expands the raw upload columns to include columns that are derived
-        from uploaded columns and computed in bronze (admin, connectivity_type,
-        connectivity_govt_ingestion_timestamp).  Without this expansion the
-        staging step would copy the old silver value for these derived columns
-        instead of using the freshly-computed bronze values.
+        Used for audit purposes only (saved on each staging row).  Silver-preservation
+        is driven by the null-fallback loop in _build_upsert_records, not by this list.
 
         Falls back to all schema column names if no FileUpload record is found,
         which preserves backward-compatible behaviour for non-geolocation pipelines.
@@ -433,32 +413,6 @@ class StagingStep:
                     )
             file_upload = FileUploadConfig.from_orm(file_upload)
             columns = set(file_upload.column_to_schema_mapping.values())
-
-            # Admin columns are derived from lat/lon in geolocation_bronze.
-            # Treat them as uploaded so staging uses the freshly-computed values.
-            if {"latitude", "longitude"}.issubset(columns):
-                columns.update(
-                    {
-                        "admin1",
-                        "admin1_id_giga",
-                        "admin2",
-                        "admin2_id_giga",
-                        "admin3",
-                        "admin3_id_giga",
-                        "admin4",
-                        "admin4_id_giga",
-                        "disputed_region",
-                    }
-                )
-
-            # connectivity_type/root are derived from connectivity_type_govt.
-            if "connectivity_type_govt" in columns:
-                columns.update({"connectivity_type", "connectivity_type_root"})
-
-            # connectivity_govt_ingestion_timestamp is derived from connectivity_govt.
-            if "connectivity_govt" in columns:
-                columns.add("connectivity_govt_ingestion_timestamp")
-
             return list(columns)
         except Exception as e:
             self.context.log.warning(
