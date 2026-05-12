@@ -1,6 +1,6 @@
+from functools import reduce
 from io import BytesIO
 from pathlib import Path
-from functools import reduce
 
 import numpy as np
 import pandas as pd
@@ -87,7 +87,9 @@ def adhoc__health_master_data_transforms(
     sdf = sdf.withColumn("signature", sha2(concat_ws("|", *sorted(sdf.columns)), 256))
 
     mandatory_columns = [
-        col.name for col in schema_columns if not col.nullable and col.name in sdf.columns
+        col.name
+        for col in schema_columns
+        if not col.nullable and col.name in sdf.columns
     ]
     context.log.info(f"Mandatory columns: {mandatory_columns}")
 
