@@ -988,5 +988,10 @@ def sync_schema(
             except AnalysisException as exc:
                 if "DELTA_CONSTRAINT_ALREADY_EXISTS" in str(exc):
                     continue
+                elif "DELTA_NEW_CHECK_CONSTRAINT_VIOLATION" in str(exc):
+                    context.log.warning(
+                        f"Skipping NOT NULL constraint because existing data has nulls: {exc}"
+                    )
+                    continue
                 else:
                     raise
