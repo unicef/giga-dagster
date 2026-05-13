@@ -16,7 +16,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
@@ -343,7 +343,7 @@ def coverage_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+        StagingMode.UPDATE,
     )
     staging = staging_step(coverage_bronze)
     row_count = 0 if staging is None else staging.count()
@@ -376,7 +376,7 @@ def coverage_delete_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.DELETE,
+        StagingMode.DELETE,
     )
     staging = staging_step(delete_row_ids)
 
