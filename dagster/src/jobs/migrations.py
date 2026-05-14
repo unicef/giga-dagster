@@ -9,3 +9,9 @@ migrate__schema = define_asset_job(
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+add_default_value_to_metaschemas__job = define_asset_job(
+    name="add_default_value_to_metaschemas__job",
+    selection=["add_default_value_to_metaschemas"],
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)

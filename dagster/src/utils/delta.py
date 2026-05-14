@@ -1,3 +1,4 @@
+import pandas as pd
 from delta.tables import DeltaMergeBuilder, DeltaTable, DeltaTableBuilder
 from icecream import ic
 from pyspark import sql
@@ -71,6 +72,7 @@ def create_delta_table(
         .tableName(full_table_name)
         .addColumns(columns)
         .property("delta.enableChangeDataFeed", "true")
+        .property("delta.columnMapping.mode", "name")
     )
     if partition_by:
         query = query.partitionedBy(*partition_by)
@@ -294,78 +296,185 @@ def build_nullability_queries(
     return alter_stmts
 
 
-def sync_schema(
-    table_name: str,
-    existing_schema: StructType,
-    updated_schema: StructType,
+def apply_physical_schema_changes(
     spark: SparkSession,
     context: OpExecutionContext,
-):
-    alter_stmts = build_nullability_queries(
-        context=context,
-        existing_schema=existing_schema,
-        updated_schema=updated_schema,
-        table_name=table_name,
-    )
-    context.log.info(f"alter_stmts {alter_stmts}")
-    has_nullability_changed = len(alter_stmts) > 0
+    additions_pdf: pd.DataFrame,
+    renames: dict[str, str],
+    deletions: list[str],
+    type_changes: dict[str, str],
+    nullability_changes: dict[str, bool],
+    physical_schemas: list[str],
+) -> None:
+    for schema_name in physical_schemas:
+        if not spark.catalog.databaseExists(schema_name):
+            context.log.info(f"Schema '{schema_name}' does not exist yet — skipping")
+            continue
 
-    existing_columns = {field.name: field.name for field in existing_schema}
-    updated_columns = {field.name: field.name for field in updated_schema}
+        for table_row in spark.sql(f"SHOW TABLES IN `{schema_name}`").collect():
+            tbl = table_row.tableName
+            full = f"`{schema_name}`.`{tbl}`"
+            try:
+                existing = {field.name for field in spark.table(full).schema}
+            except AnalysisException as exc:
+                if "DELTA_TABLE_NOT_FOUND" in str(exc):
+                    context.log.warning(
+                        f"[SKIP] {full}: table files missing in storage — skipping"
+                    )
+                    continue
+                raise
 
-    added_columns = set(updated_columns.keys()) - set(existing_columns.keys())
-    removed_columns = set(existing_columns.keys()) - set(updated_columns.keys())
+            if renames or deletions:
+                _ensure_column_mapping_enabled(spark, full, context)
 
-    has_schema_changed = len(added_columns) + len(removed_columns) > 0
-
-    changed_datatypes = get_changed_datatypes(
-        context=context, existing_schema=existing_schema, updated_schema=updated_schema
-    )
-    has_datatype_changed = len(changed_datatypes) > 0
-
-    if has_datatype_changed:
-        context.log.info("Updating datatype...")
-        context.log.info(f"Changed datatypes: {changed_datatypes}")
-        existing_dataframe = spark.table(table_name)
-        updated_df = existing_dataframe
-
-        for column, datatype in changed_datatypes.items():
-            updated_df = updated_df.withColumn(
-                column, existing_dataframe[column].cast(datatype.typeName())
+            _apply_additions(spark, context, full, existing, additions_pdf)
+            _apply_renames(spark, context, full, existing, renames)
+            _apply_deletions(spark, context, full, existing, deletions)
+            _apply_type_changes(spark, context, full, existing, type_changes)
+            _apply_nullability_changes(
+                spark, context, full, existing, nullability_changes
             )
 
-        (
-            updated_df.write.option("overwriteSchema", "true")
-            .format("delta")
-            .mode("overwrite")
-            .saveAsTable(table_name)
-        )
 
-    if has_schema_changed:
-        context.log.info(f"Adding schema columns {added_columns}")
+def _apply_additions(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    full: str,
+    existing: set[str],
+    additions_pdf: pd.DataFrame,
+) -> None:
+    for _, row in additions_pdf.iterrows():
+        col_name = row["name"]
+        type_sql = _data_type_to_sql(row["data_type"])
+        default = row.get("default_value")
+        if col_name in existing:
+            context.log.info(f"[ADD] {full}: '{col_name}' already exists — skipping")
+            continue
+        has_default = pd.notna(default) and str(default).strip()
+        safe_default = str(default).replace("'", "''") if has_default else None
+        if safe_default:
+            spark.sql(
+                f"ALTER TABLE {full} ADD COLUMNS (`{col_name}` {type_sql} DEFAULT '{safe_default}')"  # nosec B608
+            )
+            spark.sql(
+                f"UPDATE {full} SET `{col_name}` = '{safe_default}' WHERE `{col_name}` IS NULL"  # nosec B608
+            )
+        else:
+            spark.sql(f"ALTER TABLE {full} ADD COLUMNS (`{col_name}` {type_sql})")
+        context.log.info(f"[ADD] {full}: +{col_name} ({type_sql})")
 
-        empty_dataframe_with_updated_schema = spark.createDataFrame(
-            [], schema=updated_schema
-        )
-        (
-            empty_dataframe_with_updated_schema.write.option("mergeSchema", "true")
-            .format("delta")
-            .mode("append")
-            .saveAsTable(table_name)
-        )
-    context.log.info(f"has_nullability_changed {has_nullability_changed}")
 
-    if has_nullability_changed:
-        context.log.info(
-            f"Modifying column nullabilities with the SQL statements{alter_stmts}..."
-        )
+def _apply_renames(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    full: str,
+    existing: set[str],
+    renames: dict[str, str],
+) -> None:
+    for old_name, new_name in renames.items():
+        if old_name in existing:
+            spark.sql(f"ALTER TABLE {full} RENAME COLUMN `{old_name}` TO `{new_name}`")
+            context.log.info(f"[RENAME] {full}: {old_name} → {new_name}")
+        elif new_name not in existing:
+            context.log.warning(
+                f"[RENAME] {full}: neither '{old_name}' nor '{new_name}' found — skipping"
+            )
 
-        for stmnt in alter_stmts:
-            context.log.info(f"executing sql: {stmnt}")
+
+def _apply_deletions(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    full: str,
+    existing: set[str],
+    deletions: list[str],
+) -> None:
+    for col_name in deletions:
+        if col_name in existing:
+            spark.sql(f"ALTER TABLE {full} DROP COLUMN `{col_name}`")
+            context.log.info(f"[DROP] {full}: -{col_name}")
+
+
+def _apply_type_changes(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    full: str,
+    existing: set[str],
+    type_changes: dict[str, str],
+) -> None:
+    if not type_changes:
+        return
+    existing_df = spark.table(full)
+    updated_df = existing_df
+    for col_name, new_type in type_changes.items():
+        if col_name in existing:
+            updated_df = updated_df.withColumn(
+                col_name, existing_df[col_name].cast(_data_type_to_sql(new_type))
+            )
+    (
+        updated_df.write.option("overwriteSchema", "true")
+        .format("delta")
+        .mode("overwrite")
+        .saveAsTable(full.replace("`", ""))
+    )
+    context.log.info(f"[TYPE CHANGE] {full}: {type_changes}")
+
+
+def _apply_nullability_changes(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    full: str,
+    existing: set[str],
+    nullability_changes: dict[str, bool],
+) -> None:
+    for col_name, new_nullable in nullability_changes.items():
+        if col_name not in existing:
+            continue
+        if new_nullable:
+            spark.sql(
+                f"ALTER TABLE {full} DROP CONSTRAINT IF EXISTS {col_name}_not_null"
+            )
+            spark.sql(f"ALTER TABLE {full} ALTER COLUMN `{col_name}` DROP NOT NULL")
+        else:
             try:
-                spark.sql(stmnt).show()
+                spark.sql(f"ALTER TABLE {full} ALTER COLUMN `{col_name}` SET NOT NULL")
+                spark.sql(
+                    f"ALTER TABLE {full} ADD CONSTRAINT {col_name}_not_null "
+                    f"CHECK (`{col_name}` IS NOT NULL)"
+                )
             except AnalysisException as exc:
-                if "DELTA_CONSTRAINT_ALREADY_EXISTS" in str(exc):
-                    continue
-                else:
+                if "DELTA_CONSTRAINT_ALREADY_EXISTS" not in str(exc):
                     raise
+        context.log.info(
+            f"[NULLABILITY] {full}: {col_name} → {'nullable' if new_nullable else 'NOT NULL'}"
+        )
+
+
+def _data_type_to_sql(data_type: str) -> str:
+    return {
+        "string": "STRING",
+        "integer": "INT",
+        "long": "BIGINT",
+        "float": "FLOAT",
+        "double": "DOUBLE",
+        "timestamp": "TIMESTAMP",
+        "boolean": "BOOLEAN",
+    }[data_type.lower()]
+
+
+def _ensure_column_mapping_enabled(
+    spark: SparkSession,
+    full_table: str,
+    context: OpExecutionContext,
+) -> None:
+    props = {
+        r.key: r.value for r in spark.sql(f"SHOW TBLPROPERTIES {full_table}").collect()
+    }
+    if props.get("delta.columnMapping.mode") == "name":
+        return
+    context.log.info(f"Enabling column mapping on {full_table}")
+    spark.sql(
+        f"ALTER TABLE {full_table} SET TBLPROPERTIES ("
+        f"'delta.minReaderVersion' = '2', "
+        f"'delta.minWriterVersion' = '5', "
+        f"'delta.columnMapping.mode' = 'name')"
+    )

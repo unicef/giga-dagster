@@ -8,7 +8,34 @@ from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, asset
 
-from .core import get_filepath, save_schema_delta_table, validate_raw_schema
+from .core import (
+    get_filepath,
+    save_schema_delta_table,
+    validate_raw_schema,
+)
+
+
+@asset
+@capture_op_exceptions
+def add_default_value_to_metaschemas(
+    context: OpExecutionContext, spark: PySparkResource
+) -> None:
+    s: SparkSession = spark.spark_session
+    schema_name = Schema.__schema_name__
+    tables = [
+        "school_geolocation",
+        "school_master",
+        "school_coverage",
+        "school_reference",
+    ]
+    for table in tables:
+        full = f"`{schema_name}`.`{table}`"
+        existing = {r.col_name for r in s.sql(f"SHOW COLUMNS IN {full}").collect()}
+        if "default_value" in existing:
+            context.log.info(f"{full}: default_value already exists — skipping")
+        else:
+            s.sql(f"ALTER TABLE {full} ADD COLUMNS (`default_value` STRING)")
+            context.log.info(f"{full}: added default_value column")
 
 
 @asset

@@ -27,6 +27,7 @@ class SchemaModel(BaseModel):
             StructField("license", StringType(), True),
             StructField("units", StringType(), True),
             StructField("hint", StringType(), True),
+            StructField("default_value", StringType(), True),
         ]
 
     @property
