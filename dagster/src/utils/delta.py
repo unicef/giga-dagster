@@ -552,10 +552,15 @@ def bootstrap_orphan_columns(
                 )
             else:
                 existing_id_map[col_name] = f"table_{col_name}"
-                context.log.info(
+                context.log.warning(
                     f"Column '{col_name}' exists in table but has no stored UUID "
-                    f"and is not in the updated schema; "
-                    f"tagging with synthetic ID for delete detection."
+                    f"and is not in the updated schema. "
+                    f"This can happen when a schema rename occurred before the column-ID "
+                    f"mapping was ever persisted for this table. "
+                    f"The column will NOT be auto-renamed. "
+                    f"To resolve: manually run "
+                    f"`ALTER TABLE {table_name} RENAME COLUMN `{col_name}` TO <new_name>` "
+                    f"and then re-run persist_column_id_map for this table."
                 )
 
 
