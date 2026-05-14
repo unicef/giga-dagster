@@ -18,7 +18,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from sqlalchemy import select, update
-from src.constants import DataTier
+from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
     core_merge_logic,
@@ -49,18 +49,6 @@ from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
-
-# Pending-changes status constants (mirror staging.py)
-_STATUS_PENDING = "PENDING"
-_STATUS_APPROVED = "APPROVED"
-_STATUS_REJECTED = "REJECTED"
-_STATUS_PROCESSED = "PROCESSED"
-
-# Pending-changes change_type constants (mirror staging.py)
-_CHANGE_INSERT = "INSERT"
-_CHANGE_UPDATE = "UPDATE"
-_CHANGE_DELETE = "DELETE"
-_CHANGE_UNCHANGED = "UNCHANGED"
 
 # Approval file shorthands
 _APPROVE_ALL = "__all__"
@@ -152,25 +140,25 @@ def manual_review_failed_rows(
         f"rejected_change_ids={rejected_change_ids!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     rejected_rows = _resolve_change_ids(
         upload_rows, rejected_change_ids, s.sparkContext
     ).select(*column_names)
 
-    # Mark rejected rows as REJECTED in pending_changes
+    # Mark rejected rows as REJECTED in the staging table
     if rejected_change_ids == [_APPROVE_ALL]:
         reject_condition = (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     elif not rejected_change_ids:
         reject_condition = f.lit(False)
@@ -178,11 +166,11 @@ def manual_review_failed_rows(
         reject_condition = (
             (f.col("upload_id") == upload_id)
             & f.col("change_id").isin(rejected_change_ids)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     DeltaTable.forName(s, staging_table_name).update(
         condition=reject_condition,
-        set={"status": f.lit(_STATUS_REJECTED)},
+        set={"status": f.lit(StagingStatus.REJECTED)},
     )
     context.log.info("Marked rejected staging rows as REJECTED.")
 
@@ -221,38 +209,21 @@ def _log_staging_diagnostics(
     upload_id: str,
 ) -> None:
     total_staging = staging_df.count()
-    context.log.info(f"[silver] total rows in staging table: {total_staging}")
-
-    if total_staging > 0:
-        sample_upload_ids = [
-            r.upload_id
-            for r in staging_df.select("upload_id").distinct().limit(5).collect()
-        ]
-        sample_statuses = [
-            r.status for r in staging_df.select("status").distinct().limit(5).collect()
-        ]
-        sample_change_types = [
-            r.change_type
-            for r in staging_df.select("change_type").distinct().limit(5).collect()
-        ]
-        context.log.info(f"[silver] distinct upload_ids (up to 5): {sample_upload_ids}")
-        context.log.info(f"[silver] distinct statuses: {sample_statuses}")
-        context.log.info(f"[silver] distinct change_types: {sample_change_types}")
-
     matched_upload = staging_df.filter(f.col("upload_id") == upload_id).count()
     matched_non_unchanged = staging_df.filter(
-        (f.col("upload_id") == upload_id) & (f.col("change_type") != _CHANGE_UNCHANGED)
-    ).count()
-    matched_all = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+    ).count()
+    matched_pending = staging_df.filter(
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     ).count()
     context.log.info(
-        f"[silver] filter breakdown: "
+        f"[silver] staging table: total={total_staging}, "
         f"upload_id match={matched_upload}, "
         f"+non-unchanged={matched_non_unchanged}, "
-        f"+status=PENDING={matched_all}"
+        f"+status=PENDING={matched_pending}"
     )
 
 
@@ -260,16 +231,84 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     if approved_change_ids == [_APPROVE_ALL]:
         return (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     if not approved_change_ids:
         return f.lit(False)
     return (
         (f.col("upload_id") == upload_id)
         & f.col("change_id").isin(approved_change_ids)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("status") == StagingStatus.PENDING)
     )
+
+
+def _stamp_processed_and_reset_approval(
+    context: OpExecutionContext,
+    spark: SparkSession,
+    staging_table_name: str,
+    approved_change_ids: list,
+    upload_id: str,
+    approval_request_log_id: str | None,
+    country_code: str,
+    formatted_dataset: str,
+) -> None:
+    """Stamp approved staging rows PROCESSED and reset the ApprovalRequest.
+
+    Used by non-geolocation pipelines from the silver asset.  For geolocation this
+    is deferred to the master asset so that a failed silver IO manager write cannot
+    leave rows permanently marked PROCESSED with no corresponding silver data.
+    """
+    processed_condition = _build_processed_condition(approved_change_ids, upload_id)
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=processed_condition,
+        set={
+            "status": f.lit(StagingStatus.PROCESSED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
+    )
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=(f.col("upload_id") == upload_id)
+        & (f.col("change_type") == StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING),
+        set={
+            "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
+    )
+    context.log.info("Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED.")
+
+    remaining_pending = (
+        DeltaTable.forName(spark, staging_table_name)
+        .toDF()
+        .filter(
+            (f.col("status") == StagingStatus.PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        )
+        .count()
+    )
+    update_values = {ApprovalRequest.is_merge_processing: False}
+    if remaining_pending == 0:
+        update_values[ApprovalRequest.enabled] = False
+
+    with get_db_context() as db:
+        try:
+            with db.begin():
+                db.execute(
+                    update(ApprovalRequest)
+                    .where(
+                        (ApprovalRequest.country == country_code)
+                        & (ApprovalRequest.dataset == formatted_dataset)
+                    )
+                    .values(update_values)
+                )
+        except Exception as e:
+            context.log.error(
+                f"Failed to reset ApprovalRequest for {country_code} - "
+                f"{formatted_dataset}: {e}"
+            )
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
@@ -310,7 +349,7 @@ def silver(
         f"approval_request_log_id={approval_request_log_id!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
 
@@ -318,8 +357,8 @@ def silver(
 
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     approved = _resolve_change_ids(upload_rows, approved_change_ids, s.sparkContext)
@@ -357,13 +396,13 @@ def silver(
             },
         )
 
-    inserts = approved.filter(f.col("change_type") == _CHANGE_INSERT).select(
+    inserts = approved.filter(f.col("change_type") == StagingChangeType.INSERT).select(
         *column_names
     )
-    updates = approved.filter(f.col("change_type") == _CHANGE_UPDATE).select(
+    updates = approved.filter(f.col("change_type") == StagingChangeType.UPDATE).select(
         *column_names
     )
-    deletes = approved.filter(f.col("change_type") == _CHANGE_DELETE).select(
+    deletes = approved.filter(f.col("change_type") == StagingChangeType.DELETE).select(
         *column_names
     )
 
@@ -417,52 +456,44 @@ def silver(
 
     new_silver = compute_row_hash(new_silver)
 
-    # Mark approved rows as PROCESSED in the staging table
-    processed_condition = _build_processed_condition(approved_change_ids, upload_id)
-    DeltaTable.forName(s, staging_table_name).update(
-        condition=processed_condition,
-        set={
-            "status": f.lit(_STATUS_PROCESSED),
-            "processed_at": f.current_timestamp(),
-            "approval_request_log_id": f.lit(approval_request_log_id),
-        },
-    )
-    context.log.info("Marked approved staging rows as PROCESSED.")
-
-    # Check if any PENDING non-UNCHANGED rows remain across all uploads
-    remaining_pending = (
-        DeltaTable.forName(s, staging_table_name)
-        .toDF()
-        .filter(
-            (f.col("status") == _STATUS_PENDING)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-        )
-        .count()
-    )
-
-    # Reset ApprovalRequest: always clear is_merge_processing; disable only when
-    # no other upload is waiting for approval
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    update_values = {ApprovalRequest.is_merge_processing: False}
-    if remaining_pending == 0:
-        update_values[ApprovalRequest.enabled] = False
 
-    with get_db_context() as db:
-        try:
-            with db.begin():
-                db.execute(
-                    update(ApprovalRequest)
-                    .where(
-                        (ApprovalRequest.country == country_code)
-                        & (ApprovalRequest.dataset == formatted_dataset)
+    if config.dataset_type == "geolocation":
+        # For geolocation the PROCESSED stamp is deferred to the master asset, which
+        # runs after the IO manager has confirmed the silver write succeeded.  Stamping
+        # here would mark rows PROCESSED even if the silver write then fails, leaving
+        # them orphaned.  Only clear is_merge_processing now; the remaining-pending
+        # check and enabled=False reset happen in master once the stamp is applied.
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values({ApprovalRequest.is_merge_processing: False})
                     )
-                    .values(update_values)
+            except Exception as e:
+                context.log.error(
+                    f"Failed to reset ApprovalRequest for {country_code} - "
+                    f"{formatted_dataset}: {e}"
                 )
-        except Exception as e:
-            context.log.error(
-                f"Failed to reset ApprovalRequest for {country_code} - "
-                f"{formatted_dataset}: {e}"
-            )
+    else:
+        # Non-geolocation pipelines: stamp PROCESSED immediately.  Their staging
+        # table is transient (reset after every merge cycle) so the atomicity
+        # guarantee is less critical.
+        _stamp_processed_and_reset_approval(
+            context,
+            s,
+            staging_table_name,
+            approved_change_ids,
+            upload_id,
+            approval_request_log_id,
+            country_code,
+            formatted_dataset,
+        )
 
     schema_reference = get_schema_columns_datahub(s, schema_name)
     datahub_emit_metadata_with_exception_catcher(
@@ -493,13 +524,13 @@ def reset_staging_table(
     config: FileConfig,
 ) -> None:
     """
-    No-op for pipelines that use the persistent pending_changes staging design
+    No-op for pipelines that use the persistent staging table design
     (geolocation, coverage). The staging table accumulates history partitioned by
     upload_id and must not be dropped/re-cloned between merge cycles.
     """
     if config.dataset_type in ("geolocation", "coverage"):
         context.log.info(
-            f"{config.dataset_type} uses the pending_changes staging design; skipping reset."
+            f"{config.dataset_type} uses the staging table design; skipping reset."
         )
         return
 
@@ -637,10 +668,83 @@ def master(
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
+    adls_file_client: ADLSFileClient,
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     schema_name = config.metastore_schema
     country_code = config.country_code
+
+    # For geolocation: stamp PROCESSED now that the silver IO manager write has
+    # succeeded.  The stamp was intentionally deferred from the silver asset so that
+    # a failed silver write cannot leave staging rows permanently marked PROCESSED
+    # with no corresponding silver data.
+    if config.dataset_type == "geolocation" and check_table_exists(
+        s, f"school_{config.dataset_type}", country_code, DataTier.STAGING
+    ):
+        staging_tier_schema_name = construct_schema_name_for_tier(
+            f"school_{config.dataset_type}", DataTier.STAGING
+        )
+        staging_table_name = construct_full_table_name(
+            staging_tier_schema_name, country_code
+        )
+        approval_data = adls_file_client.download_json(config.filepath)
+        upload_id, approved_ids, _, approval_log_id = _parse_approval_file(
+            approval_data
+        )
+        processed_condition = _build_processed_condition(approved_ids, upload_id)
+        DeltaTable.forName(s, staging_table_name).update(
+            condition=processed_condition,
+            set={
+                "status": f.lit(StagingStatus.PROCESSED),
+                "processed_at": f.current_timestamp(),
+                "approval_request_log_id": f.lit(approval_log_id),
+            },
+        )
+        DeltaTable.forName(s, staging_table_name).update(
+            condition=(f.col("upload_id") == upload_id)
+            & (f.col("change_type") == StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING),
+            set={
+                "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+                "processed_at": f.current_timestamp(),
+                "approval_request_log_id": f.lit(approval_log_id),
+            },
+        )
+        context.log.info(
+            "Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED "
+            "(silver confirmed written)."
+        )
+
+        remaining_pending = (
+            DeltaTable.forName(s, staging_table_name)
+            .toDF()
+            .filter(
+                (f.col("status") == StagingStatus.PENDING)
+                & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            )
+            .count()
+        )
+        formatted_dataset = f"School {config.dataset_type.capitalize()}"
+        approval_update_values: dict = {ApprovalRequest.is_merge_processing: False}
+        if remaining_pending == 0:
+            approval_update_values[ApprovalRequest.enabled] = False
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    db.execute(
+                        update(ApprovalRequest)
+                        .where(
+                            (ApprovalRequest.country == country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                        )
+                        .values(approval_update_values)
+                    )
+            except Exception as e:
+                context.log.error(
+                    f"Failed to reset ApprovalRequest for {country_code} - "
+                    f"{formatted_dataset}: {e}"
+                )
+
     silver_tier_schema_name = construct_schema_name_for_tier(
         f"school_{config.dataset_type}", DataTier.SILVER
     )
@@ -780,6 +884,51 @@ def reference(
     )
 
 
+def _stamp_master_version(
+    context: OpExecutionContext,
+    spark: SparkSession,
+    config: FileConfig,
+) -> None:
+    """Backfill master_version on PROCESSED rows in the staging table that don't have one yet.
+
+    Called from broadcast_master_release_notes after the master Delta table has been
+    written, so the version read from history is the one that includes the current run.
+    Only runs for the geolocation pipeline (the only pipeline using the staging table).
+    """
+    if config.dataset_type != "geolocation":
+        return
+
+    staging_tier_schema_name = construct_schema_name_for_tier(
+        f"school_{config.dataset_type}", DataTier.STAGING
+    )
+    staging_table_name = construct_full_table_name(
+        staging_tier_schema_name, config.country_code
+    )
+    if not spark.catalog.tableExists(staging_table_name):
+        context.log.info("No staging table found; skipping master_version stamp.")
+        return
+
+    master_table_name = construct_full_table_name("school_master", config.country_code)
+    master_dt = DeltaTable.forName(spark, master_table_name)
+    master_version = (
+        master_dt.history().orderBy(f.col("version").desc()).first().version
+    )
+    if master_version is None:
+        context.log.warning("Could not determine master Delta version; skipping stamp.")
+        return
+
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=f.col("status").isin(
+            StagingStatus.PROCESSED, StagingStatus.PROCESSED_UNCHANGED
+        )
+        & f.col("master_version").isNull(),
+        set={"master_version": f.lit(master_version)},
+    )
+    context.log.info(
+        f"Stamped master_version={master_version} on PROCESSED staging rows."
+    )
+
+
 @asset
 @capture_op_exceptions
 async def broadcast_master_release_notes(
@@ -788,6 +937,9 @@ async def broadcast_master_release_notes(
     spark: PySparkResource,
     master: sql.DataFrame,
 ) -> Output[None]:
+    s: SparkSession = spark.spark_session
+    _stamp_master_version(context, s, config)
+
     metadata = await send_master_release_notes(context, config, spark, master)
     if metadata is None:
         return Output(None)

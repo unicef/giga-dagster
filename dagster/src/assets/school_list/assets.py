@@ -12,7 +12,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
     column_mapping_rename,
@@ -258,7 +258,7 @@ def qos_school_list_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+        StagingMode.UPDATE,
     )
     staging = staging_step(upstream_df=qos_school_list_dq_passed_rows)
     row_count = 0 if staging is None else staging.count()
