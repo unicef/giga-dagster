@@ -530,7 +530,7 @@ def reset_staging_table(
     """
     if config.dataset_type in ("geolocation", "coverage"):
         context.log.info(
-            f"{config.dataset_type} uses the staging table design; skipping reset."
+            f"{config.dataset_type} uses a persistent staging table; skipping reset."
         )
         return
 
@@ -774,10 +774,10 @@ def master(
             column_names_no_pk = [c for c in column_names if c != primary_key]
             new_master = (
                 current_master.alias("master")
-                .join(silver.alias("cov"), primary_key, "left")
+                .join(silver.alias("silver"), primary_key, "left")
                 .withColumns(
                     {
-                        c: f.coalesce(f.col(f"cov.{c}"), f.col(f"master.{c}"))
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"master.{c}"))
                         for c in column_names_no_pk
                     }
                 )
@@ -845,11 +845,11 @@ def reference(
         if config.dataset_type == "coverage":
             column_names_no_pk = [c for c in column_names if c != primary_key]
             new_reference = (
-                current_reference.alias("master")
-                .join(silver.alias("cov"), primary_key, "left")
+                current_reference.alias("reference")
+                .join(silver.alias("silver"), primary_key, "left")
                 .withColumns(
                     {
-                        c: f.coalesce(f.col(f"cov.{c}"), f.col(f"master.{c}"))
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"reference.{c}"))
                         for c in column_names_no_pk
                     }
                 )
