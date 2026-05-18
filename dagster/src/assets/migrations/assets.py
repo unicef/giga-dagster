@@ -7,7 +7,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.delta import _ensure_column_mapping_enabled
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import Config, MetadataValue, OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, asset
 
 from .core import (
     get_filepath,
@@ -72,74 +72,54 @@ def migrate_schema(
         s.catalog.cacheTable(full_table_name)
 
 
-class SetTablePropertiesConfig(Config):
-    schema_name: str
-    table_name: str
+_DDL_SCHEMA = "school_master"
+_DDL_TABLES = ["afg", "bih", "lka"]
+_RENAME_OLD = "school_name"
+_RENAME_NEW = "school_name_govt"
+_DROP_COLUMN = "disputed_region"
 
 
 @asset
 @capture_op_exceptions
 def migrate__set_table_properties(
     context: OpExecutionContext,
-    config: SetTablePropertiesConfig,
     spark: PySparkResource,
-) -> Output:
+) -> None:
     s: SparkSession = spark.spark_session
-    full = f"`{config.schema_name}`.`{config.table_name}`"
-    s.sql(
-        f"ALTER TABLE {full} SET TBLPROPERTIES ("
-        f"'delta.minReaderVersion' = '2', "
-        f"'delta.minWriterVersion' = '5', "
-        f"'delta.columnMapping.mode' = 'name')"
-    )
-    context.log.info(f"Set column mapping properties on {full}")
-    props = {r.key: r.value for r in s.sql(f"SHOW TBLPROPERTIES {full}").collect()}
-    return Output(
-        None,
-        metadata={"tblproperties": MetadataValue.json(props)},
-    )
-
-
-class RenameColumnConfig(Config):
-    schema_name: str
-    table_name: str
-    old_column_name: str
-    new_column_name: str
+    for tbl in _DDL_TABLES:
+        full = f"`{_DDL_SCHEMA}`.`{tbl}`"
+        s.sql(
+            f"ALTER TABLE {full} SET TBLPROPERTIES ("
+            f"'delta.minReaderVersion' = '2', "
+            f"'delta.minWriterVersion' = '5', "
+            f"'delta.columnMapping.mode' = 'name')"
+        )
+        context.log.info(f"Set column mapping properties on {full}")
 
 
 @asset
 @capture_op_exceptions
 def migrate__rename_column(
     context: OpExecutionContext,
-    config: RenameColumnConfig,
     spark: PySparkResource,
 ) -> None:
     s: SparkSession = spark.spark_session
-    full = f"`{config.schema_name}`.`{config.table_name}`"
-    _ensure_column_mapping_enabled(s, full, context)
-    s.sql(
-        f"ALTER TABLE {full} RENAME COLUMN `{config.old_column_name}` TO `{config.new_column_name}`"
-    )
-    context.log.info(
-        f"Renamed column '{config.old_column_name}' → '{config.new_column_name}' on {full}"
-    )
-
-
-class DropColumnConfig(Config):
-    schema_name: str
-    table_name: str
-    column_name: str
+    for tbl in _DDL_TABLES:
+        full = f"`{_DDL_SCHEMA}`.`{tbl}`"
+        _ensure_column_mapping_enabled(s, full, context)
+        s.sql(f"ALTER TABLE {full} RENAME COLUMN `{_RENAME_OLD}` TO `{_RENAME_NEW}`")
+        context.log.info(f"Renamed '{_RENAME_OLD}' → '{_RENAME_NEW}' on {full}")
 
 
 @asset
 @capture_op_exceptions
 def migrate__drop_column(
     context: OpExecutionContext,
-    config: DropColumnConfig,
     spark: PySparkResource,
 ) -> None:
     s: SparkSession = spark.spark_session
-    full = f"`{config.schema_name}`.`{config.table_name}`"
-    _ensure_column_mapping_enabled(s, full, context)
-    s.sql(f"ALTER TABLE {full} DROP COLUMN `{config.column_name}`")
-    context.log.info(f"Dropped column '{config.column_name}' from {full}")
+    for tbl in _DDL_TABLES:
+        full = f"`{_DDL_SCHEMA}`.`{tbl}`"
+        _ensure_column_mapping_enabled(s, full, context)
+        s.sql(f"ALTER TABLE {full} DROP COLUMN `{_DROP_COLUMN}`")
+        context.log.info(f"Dropped '{_DROP_COLUMN}' from {full}")
