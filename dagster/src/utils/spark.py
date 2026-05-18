@@ -1,3 +1,4 @@
+import os
 import subprocess
 from uuid import uuid4
 
@@ -88,9 +89,10 @@ else:
     )
 
 if settings.IN_PRODUCTION:
+    os.environ["SPARK_LOCAL_IP"] = _get_host_ip()
     spark_common_config.update(
         {
-            "spark.driver.host": _get_host_ip(),
+            "spark.driver.bindAddress": "0.0.0.0",
             "spark.driver.port": "4040",
         },
     )
