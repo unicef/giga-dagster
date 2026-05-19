@@ -2,7 +2,6 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: hms-migrate-ctlgs-location
-  namespace: giga-dagster
   labels:
     app.kubernetes.io/name: hms-migrate-ctlgs-location
     app.kubernetes.io/part-of: giga-dataops-platform
