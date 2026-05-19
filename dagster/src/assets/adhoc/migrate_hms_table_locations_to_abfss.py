@@ -33,11 +33,7 @@ def _migrate_locations(
         try:
             db_detail = s.sql(f"DESCRIBE DATABASE EXTENDED `{db}`").collect()
             db_location = next(
-                (
-                    r["database_description_value"]
-                    for r in db_detail
-                    if r["database_description_item"] == "Location"
-                ),
+                (r["info_value"] for r in db_detail if r["info_name"] == "Location"),
                 None,
             )
         except Exception as e:
