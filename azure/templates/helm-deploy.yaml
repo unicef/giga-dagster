@@ -76,13 +76,6 @@ jobs:
                 command: wait
                 arguments: job/hms-migrate-ctlgs-location --for=condition=complete --timeout=120s
 
-            - task: Kubernetes@1
-              displayName: Delete HMS CTLGS migration job
-              inputs:
-                namespace: $(kubernetesNamespace)
-                command: delete
-                arguments: job hms-migrate-ctlgs-location --ignore-not-found
-
             - script: |
                 chmod +x $(Build.SourcesDirectory)/infra/helm/dagster/kustomize/kustomize-post-renderer.sh
               displayName: Make post-renderer executable
