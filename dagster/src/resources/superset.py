@@ -75,7 +75,7 @@ def fetch_saved_query():
 
 
 def run_query(query, access_token):
-    timeout = 600
+    timeout = 1800
     max_retries = 3
     headers = {
         "Authorization": f"Bearer {access_token}",

@@ -6,6 +6,7 @@ from src.assets import (
     common,
     datahub_assets,
     debug,
+    giga_meter,
     migrations,
     qos,
     school_connectivity,
@@ -77,6 +78,10 @@ defs = Definitions(
         *load_assets_from_package_module(
             package_module=qos,
             group_name=qos.GROUP_NAME,
+        ),
+        *load_assets_from_package_module(
+            package_module=giga_meter,
+            group_name=giga_meter.GROUP_NAME,
         ),
     ],
     resources=RESOURCE_DEFINITIONS,
