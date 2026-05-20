@@ -91,20 +91,25 @@ def _migrate_locations(
             context.log.info(f"    new: {new_location}")
 
             try:
-                # Update SDS.LOCATION
                 s.sql(f"ALTER TABLE {full_name} SET LOCATION '{new_location}'")
-                # Update SERDE_PARAMS.path (Delta stores the path here too)
-                s.sql(
-                    f"ALTER TABLE {full_name} SET SERDEPROPERTIES ('path' = '{new_location}')"
-                )
-                results["tables"]["migrated"].append(
-                    {"table": full_name, "old": location, "new": new_location}
-                )
             except Exception as e:
-                context.log.error(f"  {full_name}: ALTER TABLE failed: {e}")
+                context.log.error(f"  {full_name}: ALTER TABLE SET LOCATION failed: {e}")
                 results["tables"]["errors"].append(
                     {"table": full_name, "error": str(e)}
                 )
+                continue
+
+            try:
+                s.sql(
+                    f"ALTER TABLE {full_name} SET SERDEPROPERTIES ('path' = '{new_location}')"
+                )
+            except Exception as e:
+                # v2 tables (Delta) do not support SET SERDEPROPERTIES; SET LOCATION above is sufficient
+                context.log.warning(f"  {full_name}: SET SERDEPROPERTIES skipped: {e}")
+
+            results["tables"]["migrated"].append(
+                {"table": full_name, "old": location, "new": new_location}
+            )
 
     return results
 
