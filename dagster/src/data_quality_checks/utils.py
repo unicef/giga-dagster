@@ -35,6 +35,9 @@ from src.data_quality_checks.geometry import (
     school_density_check,
     similar_name_level_within_110_check,
 )
+from src.data_quality_checks.geospatial import (
+    run_geospatial_checks,
+)
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.settings import settings
@@ -682,6 +685,7 @@ def run_master_checks(
     df = precision_check(df, config.PRECISION, context)
     df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
     df = duplicate_name_level_110_check(df, context)
+    df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
     df = column_relation_checks(df, dq_context.dataset_type, context)
     df = critical_error_checks(
         df,
@@ -713,6 +717,7 @@ def run_geolocation_checks(
 
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
+    df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
     df = school_density_check(df, context)
     df = standard_checks(df, dq_context.dataset_type, context)
     df = duplicate_all_except_checks(
