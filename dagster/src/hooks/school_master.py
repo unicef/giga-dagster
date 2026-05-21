@@ -17,13 +17,20 @@ def school_dq_checks_location_db_update_hook(context: HookContext):
     config = FileConfig(**context.op_config)
 
     with get_db_context() as db:
+        dq_mode = config.metadata.get("dq_mode", "master")
+        target_status = (
+            DQStatusEnum.FILE_CHECKED
+            if dq_mode == "uploaded"
+            else DQStatusEnum.COMPLETED
+        )
+
         db.execute(
             update(FileUpload)
             .where(FileUpload.id == config.filename_components.id)
             .values(
                 {
                     FileUpload.dq_report_path: str(config.destination_filepath_object),
-                    FileUpload.dq_status: DQStatusEnum.COMPLETED,
+                    FileUpload.dq_status: target_status,
                 },
             ),
         )
