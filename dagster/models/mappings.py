@@ -5,6 +5,7 @@ from pyspark.sql.types import DataType
 VALID_PRIMITIVES = [
     "string",
     "integer",
+    "int",
     "long",
     "float",
     "double",
@@ -22,6 +23,7 @@ class TypeMapping(BaseModel):
 class TypeMappings(BaseModel):
     string: TypeMapping
     integer: TypeMapping
+    int: TypeMapping  # Alias for integer
     long: TypeMapping
     float: TypeMapping
     double: TypeMapping
