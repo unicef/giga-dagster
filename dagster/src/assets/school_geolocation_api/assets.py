@@ -269,16 +269,24 @@ def school_geolocation_emis_api_mng(
             schools_sdf.alias("updates"),
             "current.ingestion_id = updates.ingestion_id",
         )
-        .whenMatchedUpdateAll()
         .whenNotMatchedInsertAll()
         .execute()
     )
     context.log.info("Upsert operation completed")
 
     if table_exists and last_update_date is not None:
-        # Incremental run: push create/update/delete to portal
+        # Incremental run: push only genuinely new records (inserted, not already-pushed matches).
+        # Query from the table rather than schools_pdf so boundary records re-returned by the API
+        # (UPDATED_AFTER uses >= semantics) are not re-pushed if already ingested.
         context.log.info("Push create and update schools to ADLS and create DB entries")
-        _push_to_portal(s, schools_pdf, full_table_name, adls_file_client, context)
+        new_records_sdf = s.sql(
+            f"SELECT * FROM {full_table_name} WHERE is_pushed_to_pipeline = false"  # nosec B608
+        )
+        if not new_records_sdf.isEmpty():
+            new_records_pdf = new_records_sdf.drop("is_pushed_to_pipeline").toPandas()
+            _push_to_portal(
+                s, new_records_pdf, full_table_name, adls_file_client, context
+            )
     else:
         # First run (initial load): mark all records as handled so the next incremental
         # run does not try to re-push the entire backfill as "previously un-ingested".
