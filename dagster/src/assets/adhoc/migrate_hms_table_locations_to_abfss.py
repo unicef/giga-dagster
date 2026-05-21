@@ -69,10 +69,15 @@ def _migrate_locations(
             full_name = f"`{db}`.`{table_name}`"
 
             try:
-                detail = s.sql(f"DESCRIBE DETAIL {full_name}").collect()
-                location = detail[0]["location"] if detail else None
+                # DESCRIBE EXTENDED reads from the HMS catalog — much cheaper than
+                # DESCRIBE DETAIL which scans the Delta log and OOMs on large tables.
+                rows = s.sql(f"DESCRIBE EXTENDED {full_name}").collect()
+                location = next(
+                    (r["data_type"] for r in rows if r["col_name"] == "Location"),
+                    None,
+                )
             except Exception as e:
-                context.log.warning(f"  {full_name}: could not DESCRIBE DETAIL: {e}")
+                context.log.warning(f"  {full_name}: could not DESCRIBE EXTENDED: {e}")
                 results["tables"]["errors"].append(
                     {"table": full_name, "error": str(e)}
                 )
@@ -93,7 +98,9 @@ def _migrate_locations(
             try:
                 s.sql(f"ALTER TABLE {full_name} SET LOCATION '{new_location}'")
             except Exception as e:
-                context.log.error(f"  {full_name}: ALTER TABLE SET LOCATION failed: {e}")
+                context.log.error(
+                    f"  {full_name}: ALTER TABLE SET LOCATION failed: {e}"
+                )
                 results["tables"]["errors"].append(
                     {"table": full_name, "error": str(e)}
                 )
