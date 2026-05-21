@@ -53,17 +53,20 @@ async def send_master_release_notes(
         .table(f"school_master.{country_code}")
     )
 
-    if cdf.count() == 0:
+    # Cache once — cdf is scanned by aggregate_changes_by_column_and_type,
+    # get_change_operation_counts, and the count check below.
+    cdf.cache()
+    cdf_count = cdf.count()  # populates cache; reuse value instead of re-counting
+    if cdf_count == 0:
         context.log.warning("No changes to master, skipping email.")
+        cdf.unpersist()
         return None
 
     column_changes_count = aggregate_changes_by_column_and_type(cdf)
-
-    context.log.info(
-        f"Preview of the column changes dataframe:\n{column_changes_count.show()}"
-    )
+    context.log.info("Column changes computed.")
 
     counts = get_change_operation_counts(cdf)
+    cdf.unpersist()
     country = coco.convert(country_code, to="name_short")
 
     detail = dt.detail().first()
@@ -124,59 +127,65 @@ async def send_master_release_notes(
 
 def aggregate_changes_by_column_and_type(cdf: sql.DataFrame) -> sql.DataFrame:
     """
-    Aggregate of the changes of each column for each change type including inserts, updates and deletions
+    Aggregate of the changes of each column for each change type including inserts and updates.
+
+    Uses array+explode instead of a per-column union chain so the Spark plan stays
+    O(1) nodes regardless of schema width (~120 columns for geolocation).
 
     :param cdf: delta lake change data capture dataframe
     :return: DataFrame with columns: [column_name, operation, change_count]
     """
+    master_data_cols = [
+        c
+        for c in cdf.columns
+        if c not in ("_change_type", "_commit_version", "_commit_timestamp")
+    ]
 
-    # Filter update preimage and postimage
     preimage_df = cdf.filter(f.col("_change_type") == "update_preimage").alias(
         "preimage"
     )
     postimage_df = cdf.filter(f.col("_change_type") == "update_postimage").alias(
         "postimage"
     )
-
     pre_post_image_df = preimage_df.join(postimage_df, on="school_id_giga")
-    master_data_cols = [
-        column
-        for column in cdf.columns
-        if column not in ("_change_type", "_commit_version", "_commit_timestamp")
-    ]
 
-    # Updates
-    update_changes_dfs = []
-    for column in master_data_cols:
-        has_changed_condition = f"preimage.{column} IS DISTINCT FROM postimage.{column}"
-        update_changes_dfs.append(
-            pre_post_image_df.filter(f.expr(has_changed_condition)).selectExpr(
-                f"'{column}' as column_name", "'update' as change_type"
+    # For each row: produce an array of column names where the value changed.
+    # eqNullSafe is <=> (IS NOT DISTINCT FROM), so ~eqNullSafe is IS DISTINCT FROM.
+    # when(...) returns the column name when changed, null otherwise;
+    # array_compact removes the nulls; explode turns the array into one row per entry.
+    update_changes = pre_post_image_df.select(
+        f.explode(
+            f.array_compact(
+                f.array(
+                    *[
+                        f.when(
+                            ~f.col(f"preimage.{c}").eqNullSafe(f.col(f"postimage.{c}")),
+                            f.lit(c),
+                        )
+                        for c in master_data_cols
+                    ]
+                )
             )
-        )
+        ).alias("column_name")
+    ).withColumn("change_type", f.lit("update"))
 
-    # Inserts
     inserts_df = cdf.filter(f.col("_change_type") == "insert")
-    insert_changes_dfs = []
-    for column in master_data_cols:
-        insert_changes_dfs.append(
-            inserts_df.filter(f.col(column).isNotNull()).selectExpr(
-                f"'{column}' as column_name", "'insert' as change_type"
+
+    # For each inserted row: produce an array of non-null column names.
+    insert_changes = inserts_df.select(
+        f.explode(
+            f.array_compact(
+                f.array(
+                    *[f.when(f.col(c).isNotNull(), f.lit(c)) for c in master_data_cols]
+                )
             )
-        )
+        ).alias("column_name")
+    ).withColumn("change_type", f.lit("insert"))
 
-    # Combine all the changes
-    combined_changes_df = update_changes_dfs[0]
-    for df_list in [update_changes_dfs[1:], insert_changes_dfs]:
-        for df in df_list:
-            combined_changes_df = combined_changes_df.union(df)
-
-    # count of changes by column and change type
-    column_changes_count = (
-        combined_changes_df.groupBy("column_name", "change_type")
+    return (
+        update_changes.union(insert_changes)
+        .groupBy("column_name", "change_type")
         .count()
         .withColumnsRenamed({"count": "change_count", "change_type": "operation"})
         .orderBy(f.col("change_count").desc())
     )
-
-    return column_changes_count

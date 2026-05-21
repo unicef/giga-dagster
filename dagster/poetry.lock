@@ -7957,7 +7957,7 @@ version = "9.1.4"
 description = "Retry code until it succeeds"
 optional = false
 python-versions = ">=3.10"
-groups = ["pipelines"]
+groups = ["main", "pipelines"]
 files = [
     {file = "tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55"},
     {file = "tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a"},
@@ -9106,4 +9106,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "b3f076bf4cf635df041957e5ea3869570230151ae0f228a43864cbe5818d2041"
+content-hash = "3e5052e864fa91fcbb7acec6ce8a5604490ab80ffb75fbaca5896e0ce4ddabd2"

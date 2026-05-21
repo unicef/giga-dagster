@@ -61,3 +61,9 @@ custom_dataset_create_bronze_job = define_asset_job(
     ],
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+hms_migrate_table_locations_to_abfss_job = define_asset_job(
+    name="hms_migrate_table_locations_to_abfss_job",
+    selection="adhoc__migrate_hms_table_locations_to_abfss",
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
