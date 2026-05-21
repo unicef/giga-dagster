@@ -25,7 +25,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.config_expectations import config as config_expectations
@@ -724,7 +724,7 @@ def geolocation_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+        StagingMode.UPDATE,
     )
     pending = staging_step(geolocation_dq_passed_rows)
 
@@ -772,7 +772,7 @@ def geolocation_delete_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.DELETE,
+        StagingMode.DELETE,
     )
     staging = staging_step(delete_row_ids)
 

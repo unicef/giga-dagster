@@ -18,7 +18,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from sqlalchemy import select, update
-from src.constants import DataTier
+from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
     core_merge_logic,
@@ -49,18 +49,6 @@ from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
-
-# Pending-changes status constants (mirror staging.py)
-_STATUS_PENDING = "PENDING"
-_STATUS_APPROVED = "APPROVED"
-_STATUS_REJECTED = "REJECTED"
-_STATUS_PROCESSED = "PROCESSED"
-
-# Pending-changes change_type constants (mirror staging.py)
-_CHANGE_INSERT = "INSERT"
-_CHANGE_UPDATE = "UPDATE"
-_CHANGE_DELETE = "DELETE"
-_CHANGE_UNCHANGED = "UNCHANGED"
 
 # Approval file shorthands
 _APPROVE_ALL = "__all__"
@@ -152,25 +140,25 @@ def manual_review_failed_rows(
         f"rejected_change_ids={rejected_change_ids!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     rejected_rows = _resolve_change_ids(
         upload_rows, rejected_change_ids, s.sparkContext
     ).select(*column_names)
 
-    # Mark rejected rows as REJECTED in pending_changes
+    # Mark rejected rows as REJECTED in the staging table
     if rejected_change_ids == [_APPROVE_ALL]:
         reject_condition = (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     elif not rejected_change_ids:
         reject_condition = f.lit(False)
@@ -178,11 +166,11 @@ def manual_review_failed_rows(
         reject_condition = (
             (f.col("upload_id") == upload_id)
             & f.col("change_id").isin(rejected_change_ids)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     DeltaTable.forName(s, staging_table_name).update(
         condition=reject_condition,
-        set={"status": f.lit(_STATUS_REJECTED)},
+        set={"status": f.lit(StagingStatus.REJECTED)},
     )
     context.log.info("Marked rejected staging rows as REJECTED.")
 
@@ -223,12 +211,13 @@ def _log_staging_diagnostics(
     total_staging = staging_df.count()
     matched_upload = staging_df.filter(f.col("upload_id") == upload_id).count()
     matched_non_unchanged = staging_df.filter(
-        (f.col("upload_id") == upload_id) & (f.col("change_type") != _CHANGE_UNCHANGED)
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
     ).count()
     matched_pending = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     ).count()
     context.log.info(
         f"[silver] staging table: total={total_staging}, "
@@ -242,15 +231,15 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     if approved_change_ids == [_APPROVE_ALL]:
         return (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     if not approved_change_ids:
         return f.lit(False)
     return (
         (f.col("upload_id") == upload_id)
         & f.col("change_id").isin(approved_change_ids)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
 
@@ -274,19 +263,29 @@ def _stamp_processed_and_reset_approval(
     DeltaTable.forName(spark, staging_table_name).update(
         condition=processed_condition,
         set={
-            "status": f.lit(_STATUS_PROCESSED),
+            "status": f.lit(StagingStatus.PROCESSED),
             "processed_at": f.current_timestamp(),
             "approval_request_log_id": f.lit(approval_request_log_id),
         },
     )
-    context.log.info("Marked approved staging rows as PROCESSED.")
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=(f.col("upload_id") == upload_id)
+        & (f.col("change_type") == StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING),
+        set={
+            "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
+    )
+    context.log.info("Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED.")
 
     remaining_pending = (
         DeltaTable.forName(spark, staging_table_name)
         .toDF()
         .filter(
-            (f.col("status") == _STATUS_PENDING)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
+            (f.col("status") == StagingStatus.PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
         )
         .count()
     )
@@ -350,7 +349,7 @@ def silver(
         f"approval_request_log_id={approval_request_log_id!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
 
@@ -358,8 +357,8 @@ def silver(
 
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     approved = _resolve_change_ids(upload_rows, approved_change_ids, s.sparkContext)
@@ -397,13 +396,13 @@ def silver(
             },
         )
 
-    inserts = approved.filter(f.col("change_type") == _CHANGE_INSERT).select(
+    inserts = approved.filter(f.col("change_type") == StagingChangeType.INSERT).select(
         *column_names
     )
-    updates = approved.filter(f.col("change_type") == _CHANGE_UPDATE).select(
+    updates = approved.filter(f.col("change_type") == StagingChangeType.UPDATE).select(
         *column_names
     )
-    deletes = approved.filter(f.col("change_type") == _CHANGE_DELETE).select(
+    deletes = approved.filter(f.col("change_type") == StagingChangeType.DELETE).select(
         *column_names
     )
 
@@ -525,14 +524,13 @@ def reset_staging_table(
     config: FileConfig,
 ) -> None:
     """
-    No-op for the geolocation pipeline: the pending_changes staging table is a
-    persistent history log and does not need to be reset between merge cycles.
-
-    For other pipelines (coverage) this asset still performs the silver-clone reset.
+    No-op for pipelines that use the persistent staging table design
+    (geolocation, coverage). The staging table accumulates history partitioned by
+    upload_id and must not be dropped/re-cloned between merge cycles.
     """
-    if config.dataset_type == "geolocation":
+    if config.dataset_type in ("geolocation", "coverage"):
         context.log.info(
-            "Geolocation uses the pending_changes staging design; skipping reset."
+            f"{config.dataset_type} uses a persistent staging table; skipping reset."
         )
         return
 
@@ -681,39 +679,48 @@ def master(
     # a failed silver write cannot leave staging rows permanently marked PROCESSED
     # with no corresponding silver data.
     if config.dataset_type == "geolocation" and check_table_exists(
-        s, schema_name, country_code, DataTier.STAGING
+        s, f"school_{config.dataset_type}", country_code, DataTier.STAGING
     ):
         staging_tier_schema_name = construct_schema_name_for_tier(
-            schema_name, DataTier.STAGING
+            f"school_{config.dataset_type}", DataTier.STAGING
         )
         staging_table_name = construct_full_table_name(
             staging_tier_schema_name, country_code
         )
         approval_data = adls_file_client.download_json(config.filepath)
-        upload_id_geo, approved_ids_geo, _, approval_log_id_geo = _parse_approval_file(
+        upload_id, approved_ids, _, approval_log_id = _parse_approval_file(
             approval_data
         )
-        processed_condition = _build_processed_condition(
-            approved_ids_geo, upload_id_geo
-        )
+        processed_condition = _build_processed_condition(approved_ids, upload_id)
         DeltaTable.forName(s, staging_table_name).update(
             condition=processed_condition,
             set={
-                "status": f.lit(_STATUS_PROCESSED),
+                "status": f.lit(StagingStatus.PROCESSED),
                 "processed_at": f.current_timestamp(),
-                "approval_request_log_id": f.lit(approval_log_id_geo),
+                "approval_request_log_id": f.lit(approval_log_id),
+            },
+        )
+        DeltaTable.forName(s, staging_table_name).update(
+            condition=(f.col("upload_id") == upload_id)
+            & (f.col("change_type") == StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING),
+            set={
+                "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+                "processed_at": f.current_timestamp(),
+                "approval_request_log_id": f.lit(approval_log_id),
             },
         )
         context.log.info(
-            "Marked approved staging rows as PROCESSED (silver confirmed written)."
+            "Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED "
+            "(silver confirmed written)."
         )
 
         remaining_pending = (
             DeltaTable.forName(s, staging_table_name)
             .toDF()
             .filter(
-                (f.col("status") == _STATUS_PENDING)
-                & (f.col("change_type") != _CHANGE_UNCHANGED)
+                (f.col("status") == StagingStatus.PENDING)
+                & (f.col("change_type") != StagingChangeType.UNCHANGED)
             )
             .count()
         )
@@ -759,9 +766,27 @@ def master(
         s.catalog.refreshTable(master_table_name)
         current_master = DeltaTable.forName(s, master_table_name).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
-        new_master = full_in_cluster_merge(
-            current_master, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            # Coverage is not authoritative for which schools exist — geolocation is.
+            # Keep every row already in master; only update coverage columns for schools
+            # present in school_coverage_silver (coalesce preserves existing master values
+            # for schools absent from coverage silver). Never insert or delete.
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_master = (
+                current_master.alias("master")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"master.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_master = full_in_cluster_merge(
+                current_master, silver, primary_key, column_names
+            )
     else:
         new_master = silver
 
@@ -817,9 +842,23 @@ def reference(
         s.catalog.refreshTable(reference_table_name)
         current_reference = DeltaTable.forName(s, reference_table_name).toDF()
         current_reference = add_missing_columns(current_reference, schema_columns)
-        new_reference = full_in_cluster_merge(
-            current_reference, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_reference = (
+                current_reference.alias("reference")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"reference.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_reference = full_in_cluster_merge(
+                current_reference, silver, primary_key, column_names
+            )
     else:
         new_reference = silver
 
@@ -850,17 +889,17 @@ def _stamp_master_version(
     spark: SparkSession,
     config: FileConfig,
 ) -> None:
-    """Backfill master_version on PROCESSED pending_changes rows that don't have one yet.
+    """Backfill master_version on PROCESSED rows in the staging table that don't have one yet.
 
     Called from broadcast_master_release_notes after the master Delta table has been
     written, so the version read from history is the one that includes the current run.
-    Only runs for the geolocation pipeline (the only pipeline using pending_changes).
+    Only runs for the geolocation pipeline (the only pipeline using the staging table).
     """
     if config.dataset_type != "geolocation":
         return
 
     staging_tier_schema_name = construct_schema_name_for_tier(
-        config.metastore_schema, DataTier.STAGING
+        f"school_{config.dataset_type}", DataTier.STAGING
     )
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, config.country_code
@@ -879,7 +918,9 @@ def _stamp_master_version(
         return
 
     DeltaTable.forName(spark, staging_table_name).update(
-        condition=(f.col("status") == _STATUS_PROCESSED)
+        condition=f.col("status").isin(
+            StagingStatus.PROCESSED, StagingStatus.PROCESSED_UNCHANGED
+        )
         & f.col("master_version").isNull(),
         set={"master_version": f.lit(master_version)},
     )
