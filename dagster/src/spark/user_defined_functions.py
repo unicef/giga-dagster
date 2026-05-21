@@ -4,7 +4,7 @@ from math import isnan
 
 import numpy as np
 import pandas as pd
-from h3 import geo_to_h3
+from h3 import latlng_to_cell
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import ArrayType, StringType
 
@@ -60,7 +60,7 @@ def h3_geo_to_h3_udf(latitude: pd.Series, longitude: pd.Series) -> pd.Series:
     def convert_to_h3(lat, lon):
         if pd.isna(lat) or pd.isna(lon):
             return "0"
-        return geo_to_h3(lat, lon, resolution=8)
+        return latlng_to_cell(lat, lon, res=8)
 
     vectorized_h3 = np.vectorize(convert_to_h3)
     return pd.Series(

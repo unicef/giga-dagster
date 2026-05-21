@@ -36,7 +36,7 @@ class FileConfig(Config):
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
         """,
     )
-    database_data: str = Field(
+    database_data: str | None = Field(
         default=None,
         description="""
         The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
@@ -85,10 +85,10 @@ class FileConfig(Config):
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
         """,
     )
-    domain: str = Field(
+    domain: str | None = Field(
         default=None,
     )
-    table_name: str = Field(
+    table_name: str | None = Field(
         description="""
         The name of the table which refers to this dataset. Used if the output format is a Delta Table
         """,

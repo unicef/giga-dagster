@@ -524,13 +524,14 @@ def reset_staging_table(
     config: FileConfig,
 ) -> None:
     """
-    No-op for the geolocation pipeline: the staging table is a
-    persistent history log and does not need to be reset between merge cycles.
-
-    For other pipelines (coverage) this asset still performs the silver-clone reset.
+    No-op for pipelines that use the persistent staging table design
+    (geolocation, coverage). The staging table accumulates history partitioned by
+    upload_id and must not be dropped/re-cloned between merge cycles.
     """
-    if config.dataset_type == "geolocation":
-        context.log.info("Geolocation uses a persistent staging table; skipping reset.")
+    if config.dataset_type in ("geolocation", "coverage"):
+        context.log.info(
+            f"{config.dataset_type} uses a persistent staging table; skipping reset."
+        )
         return
 
     from src.utils.adls import ADLSFileClient
@@ -765,9 +766,27 @@ def master(
         s.catalog.refreshTable(master_table_name)
         current_master = DeltaTable.forName(s, master_table_name).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
-        new_master = full_in_cluster_merge(
-            current_master, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            # Coverage is not authoritative for which schools exist — geolocation is.
+            # Keep every row already in master; only update coverage columns for schools
+            # present in school_coverage_silver (coalesce preserves existing master values
+            # for schools absent from coverage silver). Never insert or delete.
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_master = (
+                current_master.alias("master")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"master.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_master = full_in_cluster_merge(
+                current_master, silver, primary_key, column_names
+            )
     else:
         new_master = silver
 
@@ -823,9 +842,23 @@ def reference(
         s.catalog.refreshTable(reference_table_name)
         current_reference = DeltaTable.forName(s, reference_table_name).toDF()
         current_reference = add_missing_columns(current_reference, schema_columns)
-        new_reference = full_in_cluster_merge(
-            current_reference, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_reference = (
+                current_reference.alias("reference")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"reference.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_reference = full_in_cluster_merge(
+                current_reference, silver, primary_key, column_names
+            )
     else:
         new_reference = silver
 
