@@ -23,21 +23,26 @@ def school_dq_checks_location_db_update_hook(context: HookContext):
     context.log.info("Running database update hook for DQ checks location...")
     config = FileConfig(**context.op_config)
 
-    with get_db_context() as db:
-        dq_mode = config.metadata.get("dq_mode", "master")
-        target_status = (
-            DQStatusEnum.FILE_CHECKED
-            if dq_mode == "uploaded"
-            else DQStatusEnum.COMPLETED
-        )
+    # Get DQ mode from the file metadata to determine the correct status.
+    # The mode flows in via the metadata JSON updated by the API (`dq_run` endpoint).
+    dq_mode = (config.metadata or {}).get("dq_mode", "master")
 
+    # Map DQ mode to DQ status:
+    # - "uploaded" -> FILE_CHECKED (initial uploaded-file check; awaiting master submit)
+    # - "master"   -> COMPLETED   (full master-data validation finished)
+    if dq_mode == "uploaded":
+        dq_status = DQStatusEnum.FILE_CHECKED
+    else:
+        dq_status = DQStatusEnum.COMPLETED
+
+    with get_db_context() as db:
         db.execute(
             update(FileUpload)
             .where(FileUpload.id == config.filename_components.id)
             .values(
                 {
                     FileUpload.dq_report_path: str(config.destination_filepath_object),
-                    FileUpload.dq_status: target_status,
+                    FileUpload.dq_status: dq_status,
                 },
             ),
         )
