@@ -59,6 +59,18 @@ spec:
                 WHERE \"LOCATION_URI\" LIKE '${OLD_PREFIX}%';
               "
 
-              UPDATED=$(psql -t -A -c "SELECT COUNT(*) FROM \"CTLGS\" WHERE \"LOCATION_URI\" LIKE 'abfss://%';")
-              echo "CTLGS rows now using abfss://: ${UPDATED}"
+              CTLGS_UPDATED=$(psql -t -A -c "SELECT COUNT(*) FROM \"CTLGS\" WHERE \"LOCATION_URI\" LIKE 'abfss://%';")
+              echo "CTLGS rows now using abfss://: ${CTLGS_UPDATED}"
+
+              echo "Updating DBS.DB_LOCATION_URI: ${OLD_PREFIX} -> ${NEW_PREFIX}"
+
+              psql -v ON_ERROR_STOP=1 -c "
+                UPDATE \"DBS\"
+                SET \"DB_LOCATION_URI\" = replace(\"DB_LOCATION_URI\", '${OLD_PREFIX}', '${NEW_PREFIX}')
+                WHERE \"DB_LOCATION_URI\" LIKE '${OLD_PREFIX}%';
+              "
+
+              DBS_UPDATED=$(psql -t -A -c "SELECT COUNT(*) FROM \"DBS\" WHERE \"DB_LOCATION_URI\" LIKE 'abfss://%';")
+              echo "DBS rows now using abfss://: ${DBS_UPDATED}"
+
               echo "Migration complete"
