@@ -912,7 +912,7 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
     from src.internal.connectivity_queries import (
         get_all_gigameter_schools,
         get_all_mlab_schools,
-        get_qos_schools_by_country,
+        get_all_qos_schools,
         get_rt_schools,
     )
 
@@ -930,15 +930,8 @@ def get_all_connectivity_rt_schools(context, spark: SparkSession, table_exists=T
         for table in qos_schema_tables
         if coco.convert(table, to="short_name") != "not found"
     ]
-    qos_schools = pd.DataFrame()
-    for country_code in qos_countries:
-        context.log.info(f"Fetching QoS data for {country_code.upper()}")
-        country_qos_schools = get_qos_schools_by_country(country_iso3_code=country_code)
-        context.log.info(
-            f"Pulled {country_qos_schools.shape[0]} schools for {country_code.upper()}"
-        )
-        qos_schools = pd.concat([qos_schools, country_qos_schools])
-
+    context.log.info(f"Fetching QoS data for {len(qos_countries)} countries")
+    qos_schools = get_all_qos_schools(qos_countries)
     context.log.info(f"Total number of QoS schools is {qos_schools.shape[0]}")
 
     gigameter_schools_df = spark.createDataFrame(gigameter_schools)
