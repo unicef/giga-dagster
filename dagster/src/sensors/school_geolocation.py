@@ -124,6 +124,18 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.STAGING,
                 ),
+                "geolocation_school_map": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/dq-map/school_map_{country_code}_{stem}.html",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_kit_zip": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/dq-map/school_map_{country_code}_{stem}.html",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/dq-kit/DQ_Kit_{country_code}_{DATASET_TYPE}_{stem}.zip",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
             }
 
             run_ops = generate_run_ops(

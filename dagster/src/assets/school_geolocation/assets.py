@@ -789,3 +789,92 @@ def geolocation_delete_staging(
             "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_school_map(
+    context: OpExecutionContext,
+    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
+    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
+    config: FileConfig,
+) -> Output[str]:
+    """
+    Generate an interactive HTML map showing passed and failed schools.
+    """
+    from src.utils.map_generator import generate_school_map_html
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+
+    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
+    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
+
+    map_html = generate_school_map_html(
+        country_code=country_code,
+        passed_df=passed_pdf,
+        failed_df=failed_pdf,
+        context=context,
+    )
+
+    passed_count = len(passed_pdf)
+    failed_count = len(failed_pdf)
+
+    context.log.info(
+        f"Generated map for {country_code} (upload: {upload_id}): "
+        f"{passed_count} passed, {failed_count} failed schools"
+    )
+
+    return Output(
+        map_html,
+        metadata={
+            **get_output_metadata(config),
+            "passed_schools": passed_count,
+            "failed_schools": failed_count,
+            "total_schools": passed_count + failed_count,
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_dq_kit_zip(
+    context: OpExecutionContext,
+    geolocation_school_map: str,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+) -> Output[bytes]:
+    """
+    Generate a DQ Kit ZIP bundle containing all DQ artifacts.
+    """
+    from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
+
+    # `geolocation_school_map` is consumed only as a dependency marker.
+    _ = geolocation_school_map
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+    dataset = config.dataset_type
+    original_filename = Path(config.filepath).name
+    stem = Path(config.filepath).stem
+
+    zip_bytes, filename = generate_dq_kit_zip_bytes(
+        country_code=country_code,
+        upload_id=upload_id,
+        dataset=dataset,
+        original_filename=original_filename,
+        stem=stem,
+        adls_client=adls_file_client,
+        context=context,
+    )
+
+    context.log.info(f"Generated DQ Kit ZIP: {filename} ({len(zip_bytes)} bytes)")
+
+    return Output(
+        zip_bytes,
+        metadata={
+            **get_output_metadata(config),
+            "zip_filename": filename,
+            "zip_size_bytes": len(zip_bytes),
+        },
+    )
