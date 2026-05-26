@@ -1,6 +1,8 @@
+from typing import Annotated
+
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
-from pydantic import conint
+from pydantic import Field
 from pyspark.sql import SparkSession
 from src.constants.constants_class import constants
 from src.settings import settings
@@ -47,7 +49,7 @@ def admin__terminate_all_runs(context: OpExecutionContext):
 class RollbackTableConfig(Config):
     schema_name: str
     table_name: str
-    version: conint(ge=0)
+    version: Annotated[int, Field(ge=0)]
 
 
 @asset

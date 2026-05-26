@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +36,7 @@ class FileConfig(Config):
         The file metadata including entries from the Ingestion Portal, as well as other system-generated metadata.
         """,
     )
-    database_data: str = Field(
+    database_data: str | None = Field(
         default=None,
         description="""
         The user- and system-generated data from the Ingestion Portal, for API-based ingestion.
@@ -60,7 +60,7 @@ class FileConfig(Config):
         instead of destination_filepath.
         """,
     )
-    dq_target_filepath: str = Field(
+    dq_target_filepath: str | None = Field(
         description="""
         The path of the file inside the ADLS container where we run data quality checks on.
         """,
@@ -85,10 +85,10 @@ class FileConfig(Config):
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
         """,
     )
-    domain: str = Field(
+    domain: str | None = Field(
         default=None,
     )
-    table_name: str = Field(
+    table_name: str | None = Field(
         description="""
         The name of the table which refers to this dataset. Used if the output format is a Delta Table
         """,
@@ -145,7 +145,7 @@ class OpDestinationMapping(BaseModel):
     destination_filepath: str
     metastore_schema: str
     tier: DataTier
-    table_name: Optional[str] = None
+    table_name: str | None = None
     output_filepaths: dict[str, str] = Field(default_factory=dict)
 
 
@@ -156,7 +156,7 @@ def generate_run_ops(
     file_size_bytes: int,
     domain: str,
     country_code: str,
-    dq_target_filepath: str = None,
+    dq_target_filepath: str | None = None,
     database_data: str = None,
 ) -> dict[str, FileConfig]:
     run_ops = {}

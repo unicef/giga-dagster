@@ -1,7 +1,6 @@
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from icecream import ic
-from pydantic import AnyUrl
 from pyspark import sql
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
@@ -96,7 +95,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     @staticmethod
     def _get_table_path(
         context: InputContext | OutputContext,
-    ) -> tuple[str, str, AnyUrl]:
+    ) -> tuple[str, str, str]:
         config = FileConfig(**context.step_context.op_config)
         table_name = config.table_name if config.table_name else config.country_code
         table_root_path = f"{settings.SPARK_WAREHOUSE_DIR}/{config.metastore_schema}.db"

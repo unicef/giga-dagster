@@ -33,6 +33,9 @@ from src.data_quality_checks.geometry import (
     school_density_check,
     similar_name_level_within_110_check,
 )
+from src.data_quality_checks.geospatial import (
+    run_geospatial_checks,
+)
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.settings import settings
@@ -204,7 +207,7 @@ def aggregate_report_json(
     return transformed_data
 
 
-def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
+def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):  # noqa: C901
     df = _normalize_dq_results_map(df)
 
     # dq_results is now a map<string, int>; access specific keys via element_at().
@@ -267,6 +270,16 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "dq_missing_location",
         "dq_is_null_connectivity_type_when_connectivity_govt",
     ]
+
+    # Add geospatial columns if they exist in the DataFrame
+    geospatial_dq_columns = [
+        "dq_is_in_uninhabited_area",
+        "dq_is_suspect_location",
+        "dq_duplicate_group_flag_50m",
+    ]
+    for col_name in geospatial_dq_columns:
+        if col_name in df.columns:
+            dq_report_columns.append(col_name)
 
     dq_duplicate_columns = [
         col for col in dq_report_columns if col.startswith("dq_duplicate")
@@ -432,6 +445,28 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         ],
     }
 
+    # Geospatial check stats (added conditionally if columns exist)
+    if "is_in_uninhabited_area" in columns_in_dataset:
+        uninhabited_count = agg_df_pd.at["is_in_uninhabited_area", "count_schools"]
+        stats["count_uninhabited_area"] = uninhabited_count
+        stats["percent_uninhabited_area"] = round(
+            100 * uninhabited_count / count_schools_raw_file, 2
+        )
+
+    if "is_suspect_location" in columns_in_dataset:
+        suspect_count = agg_df_pd.at["is_suspect_location", "count_schools"]
+        stats["count_suspect_location"] = suspect_count
+        stats["percent_suspect_location"] = round(
+            100 * suspect_count / count_schools_raw_file, 2
+        )
+
+    if "duplicate_group_flag_50m" in columns_in_dataset:
+        dup_50m_count = agg_df_pd.at["duplicate_group_flag_50m", "count_schools"]
+        stats["count_duplicate_proximity_50m"] = dup_50m_count
+        stats["percent_duplicate_proximity_50m"] = round(
+            100 * dup_50m_count / count_schools_raw_file, 2
+        )
+
     def add_null_count_and_pct(dq_column_name):
         col_base_name = dq_column_name.split("-")[-1]
         counts_name = f"count_null_{col_base_name}"
@@ -470,6 +505,7 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "water_availability",
         "school_area_type",
         "school_funding_type",
+        "rurban_detected",
     ]
 
     for column in cols_for_counts_summary:
@@ -654,6 +690,7 @@ def row_level_checks(
         df = precision_check(df, config.PRECISION, context)
         df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
+        df = run_geospatial_checks(df, _country_code_iso3, context)
         df = column_relation_checks(df, dataset_type, context)
         df = critical_error_checks(
             df,
@@ -679,6 +716,7 @@ def row_level_checks(
         df = precision_check(df, config.PRECISION, context)
         df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
         df = duplicate_name_level_110_check(df, context)
+        df = run_geospatial_checks(df, _country_code_iso3, context)
         df = critical_error_checks(
             df,
             dataset_type,
