@@ -50,7 +50,6 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
 )
-from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
@@ -272,8 +271,7 @@ def qos_school_connectivity_data_quality_results(
 
 @asset(io_manager_key=ResourceKey.ADLS_JSON_IO_MANAGER.value)
 @capture_op_exceptions
-async def qos_school_connectivity_data_quality_results_summary(
-    context: OpExecutionContext,
+def qos_school_connectivity_data_quality_results_summary(
     qos_school_connectivity_raw: sql.DataFrame,
     qos_school_connectivity_data_quality_results: sql.DataFrame,
     spark: PySparkResource,
@@ -286,13 +284,6 @@ async def qos_school_connectivity_data_quality_results_summary(
         ),
         df_bronze=qos_school_connectivity_raw,
         df_data_quality_checks=qos_school_connectivity_data_quality_results,
-    )
-
-    # Send email + generate/store PDF in ADLS (same helper as geolocation/coverage)
-    await send_email_dq_report_with_config(
-        dq_results=dq_summary_statistics,
-        config=config,
-        context=context,
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
