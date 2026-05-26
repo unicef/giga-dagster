@@ -81,6 +81,24 @@ def _get_valid_coords_mask(pdf: pd.DataFrame) -> pd.Series:
     )
 
 
+def _log_coordinate_summary(
+    logger,
+    check_name: str,
+    total_rows: int,
+    valid_rows: int,
+) -> None:
+    logger.info(
+        f"{check_name}: coordinates total={total_rows}, valid={valid_rows}, invalid={total_rows - valid_rows}"
+    )
+
+
+def _log_non_null_counts(
+    logger, check_name: str, pdf: pd.DataFrame, columns: list[str]
+):
+    counts = {col: int(pdf[col].notna().sum()) for col in columns if col in pdf.columns}
+    logger.info(f"{check_name}: non-null output counts={counts}")
+
+
 def _join_pandas_result_to_spark(
     df: sql.DataFrame,
     result_pdf: pd.DataFrame,
@@ -150,6 +168,9 @@ def uninhabited_area_check(  # noqa
         pdf = _spark_to_pandas_coords(df)
         valid_mask = _get_valid_coords_mask(pdf)
         pdf_valid = pdf[valid_mask].copy()
+        _log_coordinate_summary(
+            logger, "Uninhabited area check", len(pdf), len(pdf_valid)
+        )
 
         if pdf_valid.empty:
             logger.warning("No valid coordinates found for uninhabited area check")
@@ -172,6 +193,9 @@ def uninhabited_area_check(  # noqa
         view.map_built_s(map_radius_meters=BUILT_SURFACE_BUFFER_M)
 
         view_df = view.view
+        logger.info(
+            f"Uninhabited area check: Giga Spatial columns={list(view_df.columns)}"
+        )
         view_indexed = view_df.set_index("poi_id")
 
         result_pdf = pdf.copy()
@@ -213,6 +237,7 @@ def uninhabited_area_check(  # noqa
                     1 if any(conditions) else 0
                 )
 
+        _log_non_null_counts(logger, "Uninhabited area check", result_pdf, null_cols)
         df = _join_pandas_result_to_spark(df, result_pdf, null_cols)
 
     except Exception as e:
@@ -282,6 +307,9 @@ def proximity_duplicate_check(  # noqa
     pdf = _spark_to_pandas_coords(df)
     valid_mask = _get_valid_coords_mask(pdf)
     pdf_valid = pdf[valid_mask].copy()
+    _log_coordinate_summary(
+        logger, "Proximity duplicate check", len(pdf), len(pdf_valid)
+    )
 
     if pdf_valid.empty or len(pdf_valid) < 2:
         logger.warning("Not enough valid coordinates for proximity duplicate check")
@@ -299,6 +327,9 @@ def proximity_duplicate_check(  # noqa
 
         # Build distance graph using giga-spatial (geodesic distance)
         G = build_distance_graph(gdf, gdf, PROXIMITY_DUPLICATE_THRESHOLD_M)
+        logger.info(
+            f"Proximity duplicate check: distance graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
+        )
 
         # Find connected components and partition with cliques
         connected_components = [
@@ -341,6 +372,7 @@ def proximity_duplicate_check(  # noqa
             if sid in degree_dict:
                 result_pdf.at[idx, "dq_duplicate_group_count_50m"] = degree_dict[sid]
 
+        _log_non_null_counts(logger, "Proximity duplicate check", result_pdf, dup_cols)
         df = _join_pandas_result_to_spark(df, result_pdf, dup_cols)
 
         num_flagged = len(duplicate_map)
@@ -380,6 +412,7 @@ def smod_classification(
         pdf = _spark_to_pandas_coords(df)
         valid_mask = _get_valid_coords_mask(pdf)
         pdf_valid = pdf[valid_mask].copy()
+        _log_coordinate_summary(logger, "SMOD classification", len(pdf), len(pdf_valid))
 
         if pdf_valid.empty:
             logger.warning("No valid coordinates found for SMOD classification")
@@ -394,6 +427,7 @@ def smod_classification(
             data_store=data_store,
         )
         result = view.map_smod(output_column="smod_class")
+        logger.info(f"SMOD classification: Giga Spatial columns={list(result.columns)}")
 
         if "smod_class" not in result.columns:
             logger.warning("No SMOD data available")
@@ -414,6 +448,7 @@ def smod_classification(
                     "Urban" if smod_val in SMOD_URBAN_CLASSES else "Rural"
                 )
 
+        _log_non_null_counts(logger, "SMOD classification", result_pdf, smod_cols_str)
         df = _join_pandas_result_to_spark(df, result_pdf, smod_cols_str)
 
     except Exception as e:
@@ -442,6 +477,9 @@ def population_context_check(  # noqa
         pdf = _spark_to_pandas_coords(df)
         valid_mask = _get_valid_coords_mask(pdf)
         pdf_valid = pdf[valid_mask].copy()
+        _log_coordinate_summary(
+            logger, "Population context check", len(pdf), len(pdf_valid)
+        )
 
         if pdf_valid.empty:
             logger.warning("No valid coordinates found for population check")
@@ -463,7 +501,17 @@ def population_context_check(  # noqa
                 view.map_wp_pop(
                     country=country_code_iso3,
                     map_radius_meters=radius_m,
+                    predicate="centroid_within",
                     output_column=col_name,
+                )
+                view_df = view.view
+                non_null_count = (
+                    int(view_df[col_name].notna().sum())
+                    if col_name in view_df.columns
+                    else 0
+                )
+                logger.info(
+                    f"Population context check: {col_name} returned, non_null={non_null_count}, columns={list(view_df.columns)}"
                 )
             except Exception as e:
                 logger.error(f"Population check failed for {col_name}: {e}")
@@ -482,6 +530,10 @@ def population_context_check(  # noqa
                     sid = result_pdf.at[idx, "school_id_giga"]
                     if sid in pop_map and pd.notna(pop_map[sid]):
                         result_pdf.at[idx, col_name] = int(pop_map[sid])
+
+        _log_non_null_counts(
+            logger, "Population context check", result_pdf, pop_columns
+        )
 
         # Drop existing population columns from Spark DF before joining
         existing_pop_cols = [c for c in pop_columns if c in df.columns]
@@ -534,6 +586,9 @@ def surrounding_schools_check(
     pdf = _spark_to_pandas_coords(df)
     valid_mask = _get_valid_coords_mask(pdf)
     pdf_valid = pdf[valid_mask].copy()
+    _log_coordinate_summary(
+        logger, "Surrounding schools check", len(pdf), len(pdf_valid)
+    )
 
     if pdf_valid.empty or len(pdf_valid) < 2:
         logger.warning("Not enough valid coordinates for surrounding schools check")
@@ -555,9 +610,13 @@ def surrounding_schools_check(
         ):
             logger.info(f"Computing {col_name} (radius={radius}m)...")
             G = build_distance_graph(gdf, gdf, radius)
+            logger.info(
+                f"Surrounding schools check: {col_name} graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
+            )
             neighbor_counts = {node: len(list(G.neighbors(node))) for node in G.nodes}
             result_pdf[col_name] = result_pdf["school_id_giga"].map(neighbor_counts)
 
+        _log_non_null_counts(logger, "Surrounding schools check", result_pdf, col_names)
         df = _join_pandas_result_to_spark(df, result_pdf, col_names)
 
     except Exception as e:
