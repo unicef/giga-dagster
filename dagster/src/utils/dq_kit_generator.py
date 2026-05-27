@@ -53,7 +53,7 @@ def generate_dq_kit_zip_bytes(
         "dq_report_txt": f"{dq_root}/dq-report/{country_code}/{stem}.txt",
         "passed_rows": f"{dq_root}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
         "failed_rows": f"{dq_root}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
-        "map_html": f"{dq_root}/{country_code}/dq-map/school_map_{country_code}_{stem}.html",
+        "map_html": f"{dq_root}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
     }
 
     context.log.info(f"Generating DQ Kit ZIP for {country_code}/{upload_id}")
