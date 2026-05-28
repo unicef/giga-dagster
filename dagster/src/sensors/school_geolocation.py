@@ -235,6 +235,12 @@ def school_master_geolocation__post_manual_checks_sensor(
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
+                "dq_kit_post_approval": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath="",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
             }
 
             run_ops = generate_run_ops(

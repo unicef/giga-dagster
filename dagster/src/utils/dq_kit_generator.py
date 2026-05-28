@@ -54,6 +54,7 @@ def generate_dq_kit_zip_bytes(
         "passed_rows": f"{dq_root}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
         "failed_rows": f"{dq_root}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
         "map_html": f"{dq_root}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
+        "master_export": f"{dq_root}/master-export/{country_code}/{stem}.csv",
     }
 
     context.log.info(f"Generating DQ Kit ZIP for {country_code}/{upload_id}")
@@ -94,6 +95,11 @@ def generate_dq_kit_zip_bytes(
         if data := _safe_download(adls_client, paths["map_html"], context):
             zipf.writestr(f"5_map_visualization/school_map_{country_code}.html", data)
             context.log.info("Added map_html")
+
+        # School master snapshot (only present after the post-approval run has exported it;
+        if data := _safe_download(adls_client, paths["master_export"], context):
+            zipf.writestr(f"6_school_master/school_master_{country_code}.csv", data)
+            context.log.info("Added master_export")
 
     zip_buffer.seek(0)
     zip_bytes = zip_buffer.getvalue()
@@ -139,6 +145,10 @@ Original File: {original_filename}
     *.html  - Interactive map showing passed (green) and failed (red) schools.
               Open in a web browser to view.
 
+6_school_master/
+    *.csv   - Snapshot of the school_master table for this country, taken
+              immediately after the approved rows were merged. Only present
+              for kits regenerated after the approval flow.
 ================================================================================
                            HOW TO USE
 ================================================================================
