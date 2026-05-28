@@ -465,6 +465,9 @@ def silver(  # noqa: C901
         dq_flag_columns_with_types = [
             ("dq_is_in_uninhabited_area", "int"),
             ("dq_is_suspect_location", "int"),
+            ("dq_duplicate_group_flag_50m", "int"),
+            ("dq_duplicate_group_count_50m", "int"),
+            ("dq_duplicate_group_id_50m", "int"),
         ]
         for col_name, col_type in dq_flag_columns_with_types:
             if col_name in existing_columns and col_name not in new_silver.columns:
