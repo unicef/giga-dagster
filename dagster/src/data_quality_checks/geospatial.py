@@ -654,18 +654,36 @@ def run_geospatial_checks(
 
     # 1. Uninhabited area + suspect flag
     df = uninhabited_area_check(df, country_code_iso3, context)
+    uninhabited_cols = [
+        c
+        for c in df.columns
+        if c in ["dq_is_in_uninhabited_area", "dq_is_suspect_location"]
+    ]
+    logger.info(f"After uninhabited_area_check: {uninhabited_cols}")
 
     # 2. Proximity duplicate detection
     df = proximity_duplicate_check(df, context)
+    dup_cols = [c for c in df.columns if "duplicate" in c]
+    logger.info(f"After proximity_duplicate_check: {dup_cols}")
 
     # 3. SMOD classification
     df = smod_classification(df, country_code_iso3, context)
+    smod_cols = [c for c in df.columns if c == "rurban_detected"]
+    logger.info(f"After smod_classification: {smod_cols}")
 
     # 4. Population context
     df = population_context_check(df, country_code_iso3, context)
+    pop_cols = [c for c in df.columns if c.startswith("pop_within_")]
+    logger.info(f"After population_context_check: {pop_cols}")
 
     # 5. Surrounding schools count
     df = surrounding_schools_check(df, context)
+    schools_cols = [
+        c
+        for c in df.columns
+        if c.startswith("schools_within_") or c.startswith("dq_schools_within_")
+    ]
+    logger.info(f"After surrounding_schools_check: {schools_cols}")
 
     final_count = df.count()
     logger.info(f"Geospatial checks complete. Rows: {initial_count} -> {final_count}")

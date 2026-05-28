@@ -313,7 +313,7 @@ def _stamp_processed_and_reset_approval(
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
-def silver(
+def silver(  # noqa: C901
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
@@ -455,6 +455,23 @@ def silver(
         new_silver = s.createDataFrame([], StructType(schema_columns))
 
     new_silver = compute_row_hash(new_silver)
+
+    # Add NULL columns for DQ flags only if the Delta table schema already has them.
+    # This avoids adding them to new tables in staging/production.
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        existing_silver = DeltaTable.forName(s, silver_table_name).toDF()
+        existing_columns = set(existing_silver.columns)
+
+        dq_flag_columns_with_types = [
+            ("dq_is_in_uninhabited_area", "int"),
+            ("dq_is_suspect_location", "int"),
+        ]
+        for col_name, col_type in dq_flag_columns_with_types:
+            if col_name in existing_columns and col_name not in new_silver.columns:
+                context.log.info(
+                    f"Adding NULL column {col_name} to match existing table schema"
+                )
+                new_silver = new_silver.withColumn(col_name, f.lit(None).cast(col_type))
 
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
 
