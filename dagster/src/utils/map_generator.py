@@ -34,8 +34,12 @@ def _get_map_bounds(
     failed_df: pd.DataFrame,
     context: OpExecutionContext,
 ) -> tuple[float, float, list[list[float]] | None]:
-    all_lats = passed_df["latitude"].tolist() + failed_df["latitude"].tolist()
-    all_lons = passed_df["longitude"].tolist() + failed_df["longitude"].tolist()
+    all_lats = (
+        passed_df["latitude"].tolist() if "latitude" in passed_df.columns else []
+    ) + (failed_df["latitude"].tolist() if "latitude" in failed_df.columns else [])
+    all_lons = (
+        passed_df["longitude"].tolist() if "longitude" in passed_df.columns else []
+    ) + (failed_df["longitude"].tolist() if "longitude" in failed_df.columns else [])
 
     if not all_lats:
         context.log.warning("No location data available for map generation")
