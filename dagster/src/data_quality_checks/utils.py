@@ -630,10 +630,19 @@ def dq_geolocation_extract_relevant_columns(
     # The dq_results map keys are the check names without the "dq_" prefix.
     relevant_map_keys = [col.replace("dq_", "", 1) for col in dq_columns_list]
 
+    # Add required columns for Map Visualization
+    MAP_CONTEXT_COLUMNS = [
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "rurban_detected",
+    ]
+
     columns_to_keep = [
         col
         for col in [
             *uploaded_columns,
+            *MAP_CONTEXT_COLUMNS,
             "dq_has_critical_error",
             "failure_reason",
             "dq_results",
