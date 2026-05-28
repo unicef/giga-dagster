@@ -539,7 +539,10 @@ def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str], mode: str
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    mode: str,
+    context: OpExecutionContext = None,
 ):
     df = _normalize_dq_results_map(df)
 
@@ -613,17 +616,31 @@ def dq_geolocation_extract_relevant_columns(
         "rurban_detected",
     ]
 
-    columns_to_keep = [
-        col
-        for col in [
-            *uploaded_columns,
-            *MAP_CONTEXT_COLUMNS,
-            "dq_has_critical_error",
-            "failure_reason",
-            "dq_results",
-        ]
-        if col in df.columns
+    # Always preserve MAP_CONTEXT_COLUMNS and DQ columns, plus uploaded columns
+    required_columns = [
+        *MAP_CONTEXT_COLUMNS,
+        "dq_has_critical_error",
+        "failure_reason",
+        "dq_results",
     ]
+
+    columns_to_keep = [
+        col for col in required_columns + uploaded_columns if col in df.columns
+    ]
+
+    # Remove duplicates while preserving order
+    seen = set()
+    columns_to_keep = [x for x in columns_to_keep if not (x in seen or seen.add(x))]
+
+    # Log missing critical columns for debugging
+    logger = get_context_with_fallback_logger(context)
+    missing_map_cols = [c for c in MAP_CONTEXT_COLUMNS if c not in df.columns]
+    if missing_map_cols:
+        logger.warning(
+            f"MAP_CONTEXT_COLUMNS missing from DataFrame: {missing_map_cols}"
+        )
+    logger.info(f"Columns to keep for map/output: {len(columns_to_keep)} columns")
+
     df = df.select(*columns_to_keep)
 
     # Extract raw integer DQ values needed for map tooltip and filter layers.

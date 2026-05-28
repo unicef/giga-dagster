@@ -212,8 +212,22 @@ def generate_school_map_html(
     context: OpExecutionContext,
 ) -> str:
     """Generate interactive HTML map with passed/failed schools."""
+    context.log.info(
+        f"Map generation input: passed={len(passed_df)}, failed={len(failed_df)}"
+    )
+    context.log.info(
+        f"Passed columns: {list(passed_df.columns) if not passed_df.empty else []}"
+    )
+    context.log.info(
+        f"Failed columns: {list(failed_df.columns) if not failed_df.empty else []}"
+    )
+
     passed_df = _coerce_coords(passed_df)
     failed_df = _coerce_coords(failed_df)
+
+    context.log.info(
+        f"After coordinate coercion: passed={len(passed_df)}, failed={len(failed_df)}"
+    )
     center_lat, center_lon, bounds = _get_map_bounds(passed_df, failed_df, context)
 
     m = folium.Map(
@@ -293,7 +307,7 @@ def generate_school_map_html(
     folium.LayerControl(collapsed=False).add_to(m)
 
     context.log.info(
-        f"Added {passed_count} passed schools and {failed_count} failed schools to map."
+        f"Map generation complete: {passed_count} passed schools and {failed_count} failed schools added."
     )
 
     return m.get_root().render()

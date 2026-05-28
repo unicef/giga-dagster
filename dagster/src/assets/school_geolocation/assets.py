@@ -402,7 +402,7 @@ def geolocation_data_quality_results_human_readable(
 
     context.log.info("Create a new dataframe with only the relevant columns")
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode
+        geolocation_data_quality_results, uploaded_columns, mode, context
     )
     for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
@@ -467,7 +467,7 @@ async def geolocation_data_quality_results_summary(
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode=mode
+        geolocation_data_quality_results, uploaded_columns, mode=mode, context=context
     )
 
     dq_summary_statistics = aggregate_report_json(
