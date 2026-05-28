@@ -87,7 +87,6 @@ def geolocation_metadata(
     config: FileConfig,
     spark: PySparkResource,
 ):
-    return None
     s: SparkSession = spark.spark_session
 
     context.log.info("Get upload details")
@@ -837,20 +836,31 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
-    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
-    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
+    geolocation_data_quality_results_human_readable,  # Dependency to ensure files are written
     config: FileConfig,
+    adls_file_client: ADLSFileClient,
 ) -> Output[str]:
     """
     Generate an interactive HTML map showing passed and failed schools.
+    Reads CSV files directly from ADLS.
     """
+    from src.constants import constants
     from src.utils.map_generator import generate_school_map_html
 
     country_code = config.country_code
     upload_id = config.filename_components.id
+    stem = config.filename_components.stem
 
-    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
-    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
+    # Construct file paths
+    passed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-passed-rows-human-readable/{country_code}/{stem}.csv"
+    failed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-failed-rows-human-readable/{country_code}/{stem}.csv"
+
+    context.log.info(f"Reading passed schools from: {passed_filepath}")
+    context.log.info(f"Reading failed schools from: {failed_filepath}")
+
+    # Read CSV files directly from ADLS as pandas DataFrames
+    passed_pdf = adls_file_client.download_csv_as_pandas_dataframe(passed_filepath)
+    failed_pdf = adls_file_client.download_csv_as_pandas_dataframe(failed_filepath)
 
     map_html = generate_school_map_html(
         country_code=country_code,
