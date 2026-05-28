@@ -96,7 +96,7 @@ def similar_name_level_within_110_check(
     school_names_grouped = (
         df.filter((df["duplicate_level_within_110m_radius"] == 1) & valid_coords_filter)
         .groupBy("education_level", "lat_110", "long_110")
-        .agg(f.collect_list("school_name").alias("school_names"))
+        .agg(f.collect_set("school_name").alias("school_names"))
     )
 
     # Find similar names within each group using vectorized comparison
