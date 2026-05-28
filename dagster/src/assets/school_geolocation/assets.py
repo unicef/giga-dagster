@@ -836,7 +836,7 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
-    geolocation_data_quality_results_human_readable,  # Dependency to ensure files are written
+    geolocation_data_quality_results_human_readable,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
 ) -> Output[str]:
@@ -847,6 +847,7 @@ def geolocation_school_map(
     from src.constants import constants
     from src.utils.map_generator import generate_school_map_html
 
+    _ = geolocation_data_quality_results_human_readable
     country_code = config.country_code
     upload_id = config.filename_components.id
     stem = config.filename_components.stem
