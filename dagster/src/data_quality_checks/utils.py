@@ -632,6 +632,17 @@ def dq_geolocation_extract_relevant_columns(
 
     # Add required columns for Map Visualization
     MAP_CONTEXT_COLUMNS = [
+        "school_id_giga",
+        "school_id_govt",
+        "latitude",
+        "longitude",
+        "school_name",
+        "education_level",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+        # Geospatial context columns
         "pop_within_1km",
         "pop_within_2km",
         "pop_within_3km",
@@ -650,6 +661,20 @@ def dq_geolocation_extract_relevant_columns(
         if col in df.columns
     ]
     df = df.select(*columns_to_keep)
+
+    # Extract raw integer DQ values needed for map tooltip and filter layers.
+    MAP_EXTRA_DQ_KEYS = [
+        "is_in_uninhabited_area",
+        "duplicate_group_flag_50m",
+        "duplicate_group_count_50m",
+        "duplicate_group_id_50m",
+    ]
+    if "dq_results" in df.columns:
+        for map_key in MAP_EXTRA_DQ_KEYS:
+            df = df.withColumn(
+                f"dq_{map_key}",
+                f.element_at(f.col("dq_results"), map_key),
+            )
 
     # Narrow the dq_results map to only checks that are relevant for the uploaded
     # columns and mode. This avoids exposing checks that do not apply.
