@@ -850,7 +850,7 @@ def geolocation_school_map(
     _ = geolocation_dq_schools_passed_human_readable
     country_code = config.country_code
     upload_id = config.filename_components.id
-    stem = config.filename_components.stem
+    stem = Path(config.filepath).stem
 
     # Construct file paths
     passed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-passed-rows-human-readable/{country_code}/{stem}.csv"
