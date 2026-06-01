@@ -107,6 +107,7 @@ class StagingStep:
 
         self._write_pending_records(pending)
         self._update_approval_request_status()
+        self._stamp_file_upload_staging_complete()
         self._emit_lineage()
 
         return pending
@@ -382,6 +383,45 @@ class StagingStep:
                     f"Failed to update ApprovalRequest for "
                     f"{self.country_code} - {formatted_dataset}: {e}"
                 )
+
+    def _stamp_file_upload_staging_complete(self) -> None:
+        """Set is_processed_in_staging=True and approval_status='PENDING' when enabled."""
+        upload_id = self.config.filename_components.id
+        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        try:
+            with get_db_context() as db:
+                with db.begin():
+                    file_upload = db.scalar(
+                        select(FileUpload).where(FileUpload.id == upload_id)
+                    )
+                    if file_upload is None:
+                        self.context.log.warning(
+                            f"FileUpload with id `{upload_id}` not found; "
+                            "cannot stamp is_processed_in_staging."
+                        )
+                        return
+
+                    approval_request = db.scalar(
+                        select(ApprovalRequest).where(
+                            (ApprovalRequest.country == self.country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                            & (ApprovalRequest.enabled == True)  # noqa: E712
+                        )
+                    )
+
+                    file_upload.is_processed_in_staging = True
+                    if approval_request:
+                        file_upload.approval_status = "PENDING"
+
+                    self.context.log.info(
+                        f"Stamped FileUpload {upload_id}: "
+                        f"is_processed_in_staging=True, "
+                        f"approval_status={'PENDING' if approval_request else 'null'}"
+                    )
+        except Exception as e:
+            self.context.log.error(
+                f"Failed to stamp FileUpload {upload_id} after staging: {e}"
+            )
 
     def _get_current_approval_request(self, db, formatted_dataset: str):
         return db.scalar(
