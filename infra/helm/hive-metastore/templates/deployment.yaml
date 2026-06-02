@@ -70,7 +70,7 @@ spec:
           {{- end }}
       initContainers:
         - name: init-wait-db
-          image: uniconnectacr.azurecr.io/bitnami/postgresql:9.6.24
+          image: uniappsoigiga.azurecr.io/bitnami/postgresql:9.6.24
           command:
             - /bin/sh
             - -c

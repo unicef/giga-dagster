@@ -93,7 +93,7 @@ diagnosticMode:
 ## @param image.debug Enable image debug mode
 ##
 image:
-  registry: uniconnectacr.azurecr.io
+  registry: uniappsoigiga.azurecr.io
   repository: bitnami/spark
   tag: 3.5.0-debian-11-r10
   digest: ""

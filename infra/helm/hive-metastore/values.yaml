@@ -118,7 +118,7 @@ postgresql:
   image:
     tag: 9.6.24
   global:
-    imageRegistry: "uniconnectacr.azurecr.io"
+    imageRegistry: "uniappsoigiga.azurecr.io"
   volumePermissions:
     enabled: true
     image:

@@ -161,7 +161,7 @@ services:
 
   dagster-storage:
     <<: *common-config
-    image: uniconnectacr.azurecr.io/bitnami/postgresql:14.6.0-debian-11-r33
+    image: uniappsoigiga.azurecr.io/bitnami/postgresql:14.6.0-debian-11-r33
     env_file: .env
     environment:
       POSTGRESQL_USERNAME: ${POSTGRESQL_USERNAME}
@@ -281,7 +281,7 @@ services:
 
   hms-database:
     <<: *common-config
-    image: uniconnectacr.azurecr.io/bitnami/postgresql:14.6.0-debian-11-r33
+    image: uniappsoigiga.azurecr.io/bitnami/postgresql:14.6.0-debian-11-r33
     env_file: .env
     environment:
       POSTGRESQL_USERNAME: ${HMS_POSTGRESQL_USERNAME}

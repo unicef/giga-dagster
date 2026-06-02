@@ -9,7 +9,7 @@ WORKDIR /tmp
 COPY dagster/pyproject.toml dagster/poetry.lock ./
 RUN poetry export --without-hashes --with pipelines,spark -f requirements.txt > requirements.txt
 
-FROM uniconnectacr.azurecr.io/bitnami/spark:3.5.0-debian-11-r10
+FROM uniappsoigiga.azurecr.io/bitnami/spark:3.5.0-debian-11-r10
 
 ENV PYTHONPATH /opt/bitnami/spark/app
 
