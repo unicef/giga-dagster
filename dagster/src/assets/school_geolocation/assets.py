@@ -298,17 +298,6 @@ def geolocation_data_quality_results(
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
-    # Diagnose duplicates at the start of DQ pipeline
-    bronze_total = renamed_bronze.count()
-    bronze_unique = renamed_bronze.select("school_id_giga").distinct().count()
-    context.log.info(
-        f"Bronze input: {bronze_total} rows, {bronze_unique} unique school_id_giga"
-    )
-    if bronze_total != bronze_unique:
-        context.log.warning(
-            f"Bronze already has {bronze_total - bronze_unique} duplicate school_id_giga!"
-        )
-
     dq_results = row_level_checks(
         df=renamed_bronze,
         silver=casted_silver,
@@ -319,17 +308,6 @@ def geolocation_data_quality_results(
     )
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
-
-    # Check for duplicates after row_level_checks
-    dq_total = dq_results.count()
-    dq_unique = dq_results.select("school_id_giga").distinct().count()
-    context.log.info(
-        f"After row_level_checks: {dq_total} rows, {dq_unique} unique school_id_giga"
-    )
-    if dq_total != dq_unique:
-        context.log.error(
-            f"row_level_checks created {dq_total - dq_unique} duplicate rows!"
-        )
 
     # Collapse all individual dq_ check columns into a single map<string, int> column.
     # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
@@ -423,13 +401,11 @@ def geolocation_data_quality_results_human_readable(
     mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
-    context.log.info(
-        f"Input DQ results: {geolocation_data_quality_results.count()} rows"
-    )
+
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns, mode, context
     )
-    context.log.info(f"After extract_relevant_columns: {df.count()} rows")
+
     for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
             human_name,
@@ -441,15 +417,6 @@ def geolocation_data_quality_results_human_readable(
 
     # Cache once — both filters read from the same plan
     df.cache()
-
-    # Diagnose duplicate school_id_giga values
-    total_rows = df.count()
-    unique_ids = df.select("school_id_giga").distinct().count()
-    context.log.info(f"Total rows: {total_rows}, Unique school_id_giga: {unique_ids}")
-    if total_rows != unique_ids:
-        context.log.warning(
-            f"Found {total_rows - unique_ids} duplicate school_id_giga values!"
-        )
 
     df_passed = df.filter(df.dq_has_critical_error == 0).drop(
         "dq_has_critical_error", "failure_reason"
@@ -508,7 +475,7 @@ async def geolocation_data_quality_results_summary(
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode=mode, context=context
+        geolocation_data_quality_results, uploaded_columns, mode=mode
     )
 
     dq_summary_statistics = aggregate_report_json(
