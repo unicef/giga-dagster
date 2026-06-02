@@ -297,7 +297,7 @@ initContainers:
   waitForRedis:
     enabled: true
     image:
-      repository: "uniappsoigiga.azurecr.io/bitnami/kubectl:latest"
+      repository: "public.ecr.aws/bitnami/kubectl"
       pullPolicy: "IfNotPresent"
     # uses the kubernetes version of the cluster
     # the chart is deployed on, if not set
@@ -376,7 +376,7 @@ redis:
   #   enabled: false
   #   slaveCount: 1
   global:
-    imageRegistry: "uniappsoigiga.azurecr.io"
+    imageRegistry: "public.ecr.aws"
 
 # Enables apiVersion deprecation checks
 checkDeprecation: true
