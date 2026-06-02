@@ -456,26 +456,6 @@ def silver(  # noqa: C901
 
     new_silver = compute_row_hash(new_silver)
 
-    # Add NULL columns for DQ flags only if the Delta table schema already has them.
-    # This avoids adding them to new tables in staging/production.
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
-        existing_silver = DeltaTable.forName(s, silver_table_name).toDF()
-        existing_columns = set(existing_silver.columns)
-
-        dq_flag_columns_with_types = [
-            ("dq_is_in_uninhabited_area", "int"),
-            ("dq_is_suspect_location", "int"),
-            ("dq_duplicate_group_flag_50m", "int"),
-            ("dq_duplicate_group_count_50m", "int"),
-            ("dq_duplicate_group_id_50m", "int"),
-        ]
-        for col_name, col_type in dq_flag_columns_with_types:
-            if col_name in existing_columns and col_name not in new_silver.columns:
-                context.log.info(
-                    f"Adding NULL column {col_name} to match existing table schema"
-                )
-                new_silver = new_silver.withColumn(col_name, f.lit(None).cast(col_type))
-
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
 
     if config.dataset_type == "geolocation":
