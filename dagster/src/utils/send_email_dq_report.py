@@ -22,6 +22,25 @@ from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
 
 
+def _entity_for_dataset(dataset: str) -> dict[str, str]:
+    if dataset in {"health", "health-master"}:
+        return {
+            "plural": "Health Centers",
+            "lowerPlural": "health centers",
+            "lowerSingular": "health center",
+        }
+    return {
+        "plural": "Schools",
+        "lowerPlural": "schools",
+        "lowerSingular": "school",
+    }
+
+
+def _field_mapping_from_upload(file_upload: FileUploadConfig) -> list[dict[str, str]]:
+    mapping = file_upload.column_to_schema_mapping or {}
+    return [{"from": k, "to": v} for k, v in mapping.items() if v]
+
+
 def _make_json_safe(obj: Any) -> Any:
     """Replace float nan/inf with None so payload is JSON-serializable."""
     if isinstance(obj, dict):
@@ -50,23 +69,33 @@ def _generate_pdf_attachment_and_store_in_adls(
     )
     adls = ADLSFileClient()
 
-    # Safety: try using an existing PDF from ADLS first
-    try:
-        adls.get_file_metadata(pdf_path)
-        pdf_bytes_existing = ADLSFileClient.download_raw(pdf_path)
-        pdf_base64_existing = b64encode(pdf_bytes_existing).decode("ascii")
-        logger.info(f"Using existing DQ report PDF from ADLS at {pdf_path}")
-        return [
-            {
-                "Content-type": "application/pdf",
-                "Filename": f"data-quality-report-{country_code}-{upload_id}.pdf",
-                "content": pdf_base64_existing,
-            }
-        ]
-    except Exception:
-        # If file doesn't exist or can't be read, fall back to renderer
+    # Regenerate when field mapping is present so cached PDFs from before mapping
+    # support do not omit the Original field / Will be mapped to section.
+    has_field_mapping = bool(metadata.get("fieldMapping"))
+
+    # Safety: try using an existing PDF from ADLS first (only when no column mapping)
+    if not has_field_mapping:
+        try:
+            adls.get_file_metadata(pdf_path)
+            pdf_bytes_existing = ADLSFileClient.download_raw(pdf_path)
+            pdf_base64_existing = b64encode(pdf_bytes_existing).decode("ascii")
+            logger.info(f"Using existing DQ report PDF from ADLS at {pdf_path}")
+            return [
+                {
+                    "Content-type": "application/pdf",
+                    "Filename": f"data-quality-report-{country_code}-{upload_id}.pdf",
+                    "content": pdf_base64_existing,
+                }
+            ]
+        except Exception:
+            # If file doesn't exist or can't be read, fall back to renderer
+            logger.info(
+                "No existing DQ report PDF found at %s; falling back to renderer",
+                pdf_path,
+            )
+    else:
         logger.info(
-            "No existing DQ report PDF found at %s; falling back to renderer", pdf_path
+            "Regenerating DQ report PDF (field mapping present) instead of ADLS cache"
         )
 
     # Call renderer to generate a fresh PDF (sanitize nan/inf so JSON is valid)
@@ -142,6 +171,7 @@ async def send_email_dq_report(
     upload_id: str,
     uploader_email: str,
     country_code: str = None,
+    file_upload: FileUploadConfig | None = None,
     context: OpExecutionContext = None,
 ) -> None:
     # Prepare metadata for email renderer
@@ -175,6 +205,14 @@ async def send_email_dq_report(
     # Add country if provided (required for PDF generation)
     if country_code:
         metadata["country"] = country_code
+
+    if file_upload is not None:
+        if file_upload.original_filename:
+            metadata["uploadedFileName"] = file_upload.original_filename
+        field_mapping = _field_mapping_from_upload(file_upload)
+        if field_mapping:
+            metadata["fieldMapping"] = field_mapping
+        metadata["entity"] = _entity_for_dataset(file_upload.dataset)
 
     # Ensure payload is JSON-serializable (replace float nan/inf with None)
     metadata = _make_json_safe(metadata)
@@ -247,6 +285,7 @@ async def send_email_dq_report_with_config(
             upload_id=upload_id,
             uploader_email=uploader_email,
             country_code=country_code,
+            file_upload=file_upload,
             context=context,
         )
     except Exception as error:
