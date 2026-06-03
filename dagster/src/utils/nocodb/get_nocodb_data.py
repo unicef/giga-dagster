@@ -126,7 +126,7 @@ def get_nocodb_table_as_key_value_mapping(
     mapping_dict = {
         item[key_column]: item[value_column]
         for item in rows_list
-        if (item[key_column] or item[value_column])
+        if item[key_column] and item[value_column]
     }
 
     return mapping_dict
