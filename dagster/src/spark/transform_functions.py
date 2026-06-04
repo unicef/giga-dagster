@@ -414,6 +414,7 @@ def create_bronze_layer_columns_updated(
     df = map_govt_to_giga_columns(df, uploaded_columns)
 
     if "connectivity_type_govt" in uploaded_columns:
+        df = df.withColumn("connectivity_type", f.lower(f.col("connectivity_type")))
         get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
         df = df.withColumn(
             "connectivity_type_root",
