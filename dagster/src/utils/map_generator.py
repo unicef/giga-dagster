@@ -140,13 +140,41 @@ def _add_circle_marker(
     ).add_to(cluster)
 
 
+def _get_rurality_filter_key(row: dict) -> str:
+    """Return the rurality layer key for a school row."""
+    rurban = str(row.get("rurban_detected", "")).strip().lower()
+    if rurban == "urban":
+        return "urban"
+    if rurban == "rural":
+        return "rural"
+    return "unknown"
+
+
+def _is_uninhabited(row: dict) -> bool:
+    """Return whether a school row is flagged as in an uninhabited area."""
+    try:
+        return int(float(row.get(_UNINHABITED_COL, 0))) == 1
+    except (TypeError, ValueError):
+        return False
+
+
+def _calculate_filter_counts(*dfs: pd.DataFrame) -> dict[str, int]:
+    """Calculate filter layer counts using the same rules as marker placement."""
+    counts = {"urban": 0, "rural": 0, "unknown": 0, "uninhabited": 0}
+    for df in dfs:
+        for row in df.to_dict("records"):
+            counts[_get_rurality_filter_key(row)] += 1
+            if _is_uninhabited(row):
+                counts["uninhabited"] += 1
+    return counts
+
+
 def _add_school_markers_to_clusters(
     df: pd.DataFrame,
     base_color: str,
     status: str,
     main_cluster: MarkerCluster,
     filter_clusters: dict[str, MarkerCluster],
-    counts: dict[str, int],
     include_failure_reason: bool,
 ) -> None:
     """Add school markers to the main status cluster and matching filter clusters."""
@@ -158,27 +186,23 @@ def _add_school_markers_to_clusters(
         )
         _add_circle_marker(main_cluster, row, base_color, popup_html)
 
-        rurban = str(row.get("rurban_detected", "")).strip().lower()
-        if rurban == "urban":
-            _add_circle_marker(filter_clusters["urban"], row, "#0d6efd", popup_html)
-            counts["urban"] += 1
-        elif rurban == "rural":
-            _add_circle_marker(filter_clusters["rural"], row, "#fd7e14", popup_html)
-            counts["rural"] += 1
-        else:
-            _add_circle_marker(filter_clusters["unknown"], row, "#6c757d", popup_html)
-            counts["unknown"] += 1
+        rurality_key = _get_rurality_filter_key(row)
+        rurality_colors = {
+            "urban": "#0d6efd",
+            "rural": "#fd7e14",
+            "unknown": "#6c757d",
+        }
+        _add_circle_marker(
+            filter_clusters[rurality_key],
+            row,
+            rurality_colors[rurality_key],
+            popup_html,
+        )
 
-        try:
-            is_uninhabited = int(float(row.get(_UNINHABITED_COL, 0))) == 1
-        except (TypeError, ValueError):
-            is_uninhabited = False
-
-        if is_uninhabited:
+        if _is_uninhabited(row):
             _add_circle_marker(
                 filter_clusters["uninhabited"], row, "#6f42c1", popup_html
             )
-            counts["uninhabited"] += 1
 
 
 def _add_non_empty_filter_clusters_to_map(
@@ -233,14 +257,18 @@ def generate_school_map_html(
         name=f"Schools Failed ({len(failed_filtered)})", show=True
     )
 
+    counts = _calculate_filter_counts(passed_filtered, failed_filtered)
     filter_clusters = {
-        "urban": MarkerCluster(name="Urban (0)", show=False),
-        "rural": MarkerCluster(name="Rural (0)", show=False),
-        "unknown": MarkerCluster(name="Rurality Unknown (0)", show=False),
-        "uninhabited": MarkerCluster(name="In Uninhabited Area (0)", show=False),
+        "urban": MarkerCluster(name=f"Urban ({counts['urban']})", show=False),
+        "rural": MarkerCluster(name=f"Rural ({counts['rural']})", show=False),
+        "unknown": MarkerCluster(
+            name=f"Rurality Unknown ({counts['unknown']})", show=False
+        ),
+        "uninhabited": MarkerCluster(
+            name=f"In Uninhabited Area ({counts['uninhabited']})", show=False
+        ),
     }
 
-    counts = {"urban": 0, "rural": 0, "unknown": 0, "uninhabited": 0}
     datasets = [
         (passed_filtered, PASSED_COLOR, "Passed", passed_cluster, False),
         (failed_filtered, FAILED_COLOR, "Failed", failed_cluster, True),
@@ -253,7 +281,6 @@ def generate_school_map_html(
             status,
             main_cluster,
             filter_clusters,
-            counts,
             include_fail,
         )
 
