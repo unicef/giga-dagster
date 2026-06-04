@@ -803,6 +803,7 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
+    geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
 ) -> Output[str]:
@@ -863,9 +864,6 @@ def geolocation_dq_kit_zip(
     Generate a DQ Kit ZIP bundle containing all DQ artifacts.
     """
     from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
-
-    # `geolocation_school_map` is consumed only as a dependency marker.
-    # _ = geolocation_school_map
 
     country_code = config.country_code
     upload_id = config.filename_components.id
