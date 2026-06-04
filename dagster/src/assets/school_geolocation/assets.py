@@ -403,7 +403,7 @@ def geolocation_data_quality_results_human_readable(
     context.log.info("Create a new dataframe with only the relevant columns")
 
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode, context
+        geolocation_data_quality_results, uploaded_columns, mode
     )
 
     for map_key, human_name in human_readable_mappings.items():
@@ -803,7 +803,6 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
-    geolocation_dq_schools_passed_human_readable,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
 ) -> Output[str]:
@@ -814,7 +813,6 @@ def geolocation_school_map(
     from src.constants import constants
     from src.utils.map_generator import generate_school_map_html
 
-    _ = geolocation_dq_schools_passed_human_readable
     country_code = config.country_code
     upload_id = config.filename_components.id
     stem = Path(config.filepath).stem
@@ -822,9 +820,6 @@ def geolocation_school_map(
     # Construct file paths
     passed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-passed-rows-human-readable/{country_code}/{stem}.csv"
     failed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-failed-rows-human-readable/{country_code}/{stem}.csv"
-
-    context.log.info(f"Reading passed schools from: {passed_filepath}")
-    context.log.info(f"Reading failed schools from: {failed_filepath}")
 
     # Read CSV files directly from ADLS as pandas DataFrames
     passed_pdf = adls_file_client.download_csv_as_pandas_dataframe(passed_filepath)
