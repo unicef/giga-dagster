@@ -870,7 +870,7 @@ def geolocation_dq_kit_zip(
     from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
 
     # `geolocation_school_map` is consumed only as a dependency marker.
-    _ = geolocation_school_map
+    # _ = geolocation_school_map
 
     country_code = config.country_code
     upload_id = config.filename_components.id
