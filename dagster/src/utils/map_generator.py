@@ -5,204 +5,198 @@ Utility for generating interactive school maps using Folium.
 import folium
 import pandas as pd
 from folium.plugins import MarkerCluster
+from jinja2 import BaseLoader, Environment
 
 from dagster import OpExecutionContext
 
 PASSED_COLOR = "#28a745"
 FAILED_COLOR = "#dc3545"
 
-# Raw integer DQ column written by dq_geolocation_extract_relevant_columns
 _UNINHABITED_COL = "dq_is_in_uninhabited_area"
 _DUP_FLAG_COL = "dq_duplicate_group_flag_50m"
 _DUP_COUNT_COL = "dq_duplicate_group_count_50m"
 _DUP_GROUP_COL = "dq_duplicate_group_id_50m"
 
+_POPUP_TEMPLATE = Environment(
+    loader=BaseLoader(),
+    autoescape=True,
+).from_string(
+    """
+{%- for label, value in fields -%}
+<b>{{ label }}</b>: {{ value }}{% if not loop.last %}<br>{% endif %}
+{%- endfor -%}
+"""
+)
 
-def _coerce_coords(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty or not {"latitude", "longitude"}.issubset(df.columns):
+
+def _filter_rows_with_valid_coordinates(df: pd.DataFrame) -> pd.DataFrame:
+    """Return rows with numeric latitude/longitude inside valid coordinate ranges."""
+    if df.empty:
+        return df.copy()
+
+    if not {"latitude", "longitude"}.issubset(df.columns):
         return df.iloc[0:0].copy()
 
-    df = df.copy()
-    df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-    df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-    df = df.dropna(subset=["latitude", "longitude"])
-    return df[df["latitude"].between(-90, 90) & df["longitude"].between(-180, 180)]
+    lat = pd.to_numeric(df["latitude"], errors="coerce")
+    lon = pd.to_numeric(df["longitude"], errors="coerce")
+
+    valid_coordinate_mask = (
+        lat.notna() & lon.notna() & lat.between(-90, 90) & lon.between(-180, 180)
+    )
+
+    filtered_df = df[valid_coordinate_mask].copy()
+    filtered_df["latitude"] = lat[valid_coordinate_mask]
+    filtered_df["longitude"] = lon[valid_coordinate_mask]
+    return filtered_df
 
 
-def _get_map_bounds(
-    passed_df: pd.DataFrame,
-    failed_df: pd.DataFrame,
-    context: OpExecutionContext,
-) -> tuple[float, float, list[list[float]] | None]:
-    all_lats = (
-        passed_df["latitude"].tolist() if "latitude" in passed_df.columns else []
-    ) + (failed_df["latitude"].tolist() if "latitude" in failed_df.columns else [])
-    all_lons = (
-        passed_df["longitude"].tolist() if "longitude" in passed_df.columns else []
-    ) + (failed_df["longitude"].tolist() if "longitude" in failed_df.columns else [])
-
-    if not all_lats:
-        context.log.warning("No location data available for map generation")
-        return 0.0, 0.0, None
-
+def _calculate_coordinate_bounds(
+    school_coordinates_df: pd.DataFrame,
+) -> tuple[float, float, list[list[float]]]:
+    """Calculate map center and bounds from valid school latitude/longitude rows."""
     return (
-        sum(all_lats) / len(all_lats),
-        sum(all_lons) / len(all_lons),
+        school_coordinates_df["latitude"].mean(),
+        school_coordinates_df["longitude"].mean(),
         [
-            [min(all_lats), min(all_lons)],
-            [max(all_lats), max(all_lons)],
+            [
+                school_coordinates_df["latitude"].min(),
+                school_coordinates_df["longitude"].min(),
+            ],
+            [
+                school_coordinates_df["latitude"].max(),
+                school_coordinates_df["longitude"].max(),
+            ],
         ],
     )
 
 
-def _fmt(value) -> str:
+def _format_popup_value(value) -> str:
     """Render a popup value, treating NaN / None / empty as 'N/A'."""
-    if value is None:
+    if value is None or pd.isna(value):
         return "N/A"
-    try:
-        if pd.isna(value):
-            return "N/A"
-    except (TypeError, ValueError):
-        pass
     if isinstance(value, float) and value.is_integer():
         value = int(value)
     s = str(value).strip()
     return s if s else "N/A"
 
 
-def _fmt_int(value) -> str:
-    """Format population counts with thousands separators."""
-    formatted = _fmt(value)
-    if formatted == "N/A":
-        return formatted
-    try:
-        return f"{int(float(formatted)):,}"
-    except (TypeError, ValueError):
-        return formatted
-
-
-def _flag(value) -> str:
+def _format_dq_flag(value) -> str:
     """Convert raw int DQ flag (1/0/None) to true/false string."""
-    if value is None:
+    if value is None or pd.isna(value):
         return "N/A"
-    try:
-        if pd.isna(value):
-            return "N/A"
-    except (TypeError, ValueError):
-        pass
     try:
         return "true" if int(float(value)) == 1 else "false"
     except (TypeError, ValueError):
         return "N/A"
 
 
-def _build_popup(
+def _render_school_popup_html(
     row: dict,
     status: str,
     include_failure_reason: bool,
 ) -> str:
-    admin1 = _fmt(row.get("admin1"))
-    admin1_id = _fmt(row.get("admin1_id_giga"))
-    admin2 = _fmt(row.get("admin2"))
-    admin2_id = _fmt(row.get("admin2_id_giga"))
+    """Render the HTML popup content for a school marker."""
+    admin1 = _format_popup_value(row.get("admin1"))
+    admin1_id = _format_popup_value(row.get("admin1_id_giga"))
+    admin2 = _format_popup_value(row.get("admin2"))
+    admin2_id = _format_popup_value(row.get("admin2_id_giga"))
 
-    parts = [
-        f"<b>school_id_giga</b>: {_fmt(row.get('school_id_giga'))}",
-        f"<b>school_id_govt</b>: {_fmt(row.get('school_id_govt'))}",
-        f"<b>latitude</b>: {_fmt(row.get('latitude'))}",
-        f"<b>longitude</b>: {_fmt(row.get('longitude'))}",
-        f"<b>school_name</b>: {_fmt(row.get('school_name'))}",
-        f"<b>education_level</b>: {_fmt(row.get('education_level'))}",
-        f"<b>admin1</b>: {admin1} ({admin1_id})",
-        f"<b>admin2</b>: {admin2} ({admin2_id})",
-        f"<b>rurban</b>: {_fmt(row.get('rurban_detected'))}",
-        f"<b>uninhabited</b>: {_flag(row.get(_UNINHABITED_COL))}",
-        f"<b>duplicate_50_flag</b>: {_flag(row.get(_DUP_FLAG_COL))}",
-        f"<b>duplicate_50_group_id</b>: {_fmt(row.get(_DUP_GROUP_COL))}",
-        f"<b>duplicate_50_count</b>: {_fmt(row.get(_DUP_COUNT_COL))}",
-        f"<b>Status</b>: {status}",
+    fields = [
+        ("school_id_giga", _format_popup_value(row.get("school_id_giga"))),
+        ("school_id_govt", _format_popup_value(row.get("school_id_govt"))),
+        ("latitude", _format_popup_value(row.get("latitude"))),
+        ("longitude", _format_popup_value(row.get("longitude"))),
+        ("school_name", _format_popup_value(row.get("school_name"))),
+        ("education_level", _format_popup_value(row.get("education_level"))),
+        ("admin1", f"{admin1} ({admin1_id})"),
+        ("admin2", f"{admin2} ({admin2_id})"),
+        ("rurban", _format_popup_value(row.get("rurban_detected"))),
+        ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
+        ("duplicate_50_flag", _format_dq_flag(row.get(_DUP_FLAG_COL))),
+        ("duplicate_50_group_id", _format_popup_value(row.get(_DUP_GROUP_COL))),
+        ("duplicate_50_count", _format_popup_value(row.get(_DUP_COUNT_COL))),
+        ("Status", status),
     ]
     if include_failure_reason:
-        parts.append(f"<b>Reason:</b> {_fmt(row.get('failure_reason'))}")
-    return "<br>".join(parts)
+        fields.append(("Reason", _format_popup_value(row.get("failure_reason"))))
+    return _POPUP_TEMPLATE.render(fields=fields)
 
 
-def _add_school_markers(
-    df: pd.DataFrame,
+def _add_circle_marker(
     cluster: MarkerCluster,
+    row: dict,
     color: str,
+    popup_html: str,
+) -> None:
+    """Add one school coordinate marker to a Folium marker cluster."""
+    folium.CircleMarker(
+        location=[row["latitude"], row["longitude"]],
+        radius=5,
+        color=color,
+        fill=True,
+        fillColor=color,
+        fillOpacity=0.7,
+        popup=folium.Popup(popup_html, max_width=380),
+    ).add_to(cluster)
+
+
+def _add_school_markers_to_clusters(
+    df: pd.DataFrame,
+    base_color: str,
     status: str,
-    include_failure_reason: bool = False,
-) -> int:
-    if df.empty:
-        return 0
-    # to_dict("records") preserves original column names (incl. spaces / special
-    # chars from NocoDB human-readable labels), unlike itertuples which mangles
-    # them into Python identifiers.
-    records = df.to_dict("records")
-    for row in records:
-        popup_html = _build_popup(
+    main_cluster: MarkerCluster,
+    filter_clusters: dict[str, MarkerCluster],
+    counts: dict[str, int],
+    include_failure_reason: bool,
+) -> None:
+    """Add school markers to the main status cluster and matching filter clusters."""
+    for row in df.to_dict("records"):
+        popup_html = _render_school_popup_html(
             row,
             status=status,
             include_failure_reason=include_failure_reason,
         )
-        folium.CircleMarker(
-            location=[row["latitude"], row["longitude"]],
-            radius=5,
-            color=color,
-            fill=True,
-            fillColor=color,
-            fillOpacity=0.7,
-            popup=folium.Popup(popup_html, max_width=380),
-        ).add_to(cluster)
+        _add_circle_marker(main_cluster, row, base_color, popup_html)
 
-    return len(records)
+        rurban = str(row.get("rurban_detected", "")).strip().lower()
+        if rurban == "urban":
+            _add_circle_marker(filter_clusters["urban"], row, "#0d6efd", popup_html)
+            counts["urban"] += 1
+        elif rurban == "rural":
+            _add_circle_marker(filter_clusters["rural"], row, "#fd7e14", popup_html)
+            counts["rural"] += 1
+        else:
+            _add_circle_marker(filter_clusters["unknown"], row, "#6c757d", popup_html)
+            counts["unknown"] += 1
+
+        try:
+            is_uninhabited = int(float(row.get(_UNINHABITED_COL, 0))) == 1
+        except (TypeError, ValueError):
+            is_uninhabited = False
+
+        if is_uninhabited:
+            _add_circle_marker(
+                filter_clusters["uninhabited"], row, "#6f42c1", popup_html
+            )
+            counts["uninhabited"] += 1
 
 
-def _add_filter_layer(
+def _add_non_empty_filter_clusters_to_map(
     m: folium.Map,
-    df: pd.DataFrame,
-    name: str,
-    color: str,
-    show: bool,
-) -> int:
-    """Add a hidden-by-default filter layer with its own cluster.
-
-    The layer name includes the row count automatically.
-    Markers inherit the real pass / fail colour and status from the
-    ``_dq_status`` and ``_dq_color`` columns that must be present in ``df``.
-    """
-    count = len(df)
-    if df.empty:
-        return 0
-    cluster = MarkerCluster(
-        name=f"{name} ({count})", overlay=True, control=True, show=show
-    )
-    records = df.to_dict("records")
-    for row in records:
-        row_color = row.get("_dq_color", color)
-        row_status = row.get("_dq_status", "—")
-        popup_html = _build_popup(
-            row,
-            status=row_status,
-            include_failure_reason="failure_reason" in row,
-        )
-        folium.CircleMarker(
-            location=[row["latitude"], row["longitude"]],
-            radius=5,
-            color=row_color,
-            fill=True,
-            fillColor=row_color,
-            fillOpacity=0.7,
-            popup=folium.Popup(popup_html, max_width=380),
-        ).add_to(cluster)
-    cluster.add_to(m)
-    return len(records)
-
-
-def _dq_int(series: pd.Series) -> pd.Series:
-    """Coerce a raw dq int column (possibly float / object) to int, NaN→0."""
-    return pd.to_numeric(series, errors="coerce").fillna(0).astype(int)
+    filter_clusters: dict[str, MarkerCluster],
+    counts: dict[str, int],
+) -> None:
+    """Attach populated filter clusters to the map with count labels."""
+    cluster_labels = {
+        "urban": "Urban",
+        "rural": "Rural",
+        "unknown": "Rurality Unknown",
+        "uninhabited": "In Uninhabited Area",
+    }
+    for key, label in cluster_labels.items():
+        if counts[key] > 0:
+            filter_clusters[key].name = f"{label} ({counts[key]})"
+            filter_clusters[key].add_to(m)
 
 
 def generate_school_map_html(
@@ -211,103 +205,63 @@ def generate_school_map_html(
     failed_df: pd.DataFrame,
     context: OpExecutionContext,
 ) -> str:
-    """Generate interactive HTML map with passed/failed schools."""
+    """Generate an optimized interactive HTML map with passed/failed schools and filter layers."""
     context.log.info(
         f"Map generation input: passed={len(passed_df)}, failed={len(failed_df)}"
     )
-    context.log.info(
-        f"Passed columns: {list(passed_df.columns) if not passed_df.empty else []}"
-    )
-    context.log.info(
-        f"Failed columns: {list(failed_df.columns) if not failed_df.empty else []}"
-    )
 
-    passed_df = _coerce_coords(passed_df)
-    failed_df = _coerce_coords(failed_df)
+    passed_filtered = _filter_rows_with_valid_coordinates(passed_df)
+    failed_filtered = _filter_rows_with_valid_coordinates(failed_df)
 
-    context.log.info(
-        f"After coordinate coercion: passed={len(passed_df)}, failed={len(failed_df)}"
-    )
-    center_lat, center_lon, bounds = _get_map_bounds(passed_df, failed_df, context)
+    if passed_filtered.empty and failed_filtered.empty:
+        message = "No valid latitude/longitude data available for map generation"
+        context.log.warning(message)
+        raise ValueError(message)
 
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=6,
-        control_scale=True,
-    )
+    bounds_df = pd.concat([passed_filtered, failed_filtered], ignore_index=True)[
+        ["latitude", "longitude"]
+    ]
+    center_lat, center_lon, bounds = _calculate_coordinate_bounds(bounds_df)
 
-    if bounds:
-        m.fit_bounds(bounds, padding=[50, 50])
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=6, control_scale=True)
+    m.fit_bounds(bounds, padding=[50, 50])
 
-    # --- Default layers: all passed / all failed --------------------------
     passed_cluster = MarkerCluster(
-        name=f"Schools Passed ({len(passed_df)})", overlay=True, control=True, show=True
+        name=f"Schools Passed ({len(passed_filtered)})", show=True
     )
     failed_cluster = MarkerCluster(
-        name=f"Schools Failed ({len(failed_df)})", overlay=True, control=True, show=True
+        name=f"Schools Failed ({len(failed_filtered)})", show=True
     )
 
-    passed_count = _add_school_markers(
-        passed_df,
-        passed_cluster,
-        color=PASSED_COLOR,
-        status="Passed",
-    )
-    failed_count = _add_school_markers(
-        failed_df,
-        failed_cluster,
-        color=FAILED_COLOR,
-        status="Failed",
-        include_failure_reason=True,
-    )
+    filter_clusters = {
+        "urban": MarkerCluster(name="Urban (0)", show=False),
+        "rural": MarkerCluster(name="Rural (0)", show=False),
+        "unknown": MarkerCluster(name="Rurality Unknown (0)", show=False),
+        "uninhabited": MarkerCluster(name="In Uninhabited Area (0)", show=False),
+    }
+
+    counts = {"urban": 0, "rural": 0, "unknown": 0, "uninhabited": 0}
+    datasets = [
+        (passed_filtered, PASSED_COLOR, "Passed", passed_cluster, False),
+        (failed_filtered, FAILED_COLOR, "Failed", failed_cluster, True),
+    ]
+
+    for df, base_color, status, main_cluster, include_fail in datasets:
+        _add_school_markers_to_clusters(
+            df,
+            base_color,
+            status,
+            main_cluster,
+            filter_clusters,
+            counts,
+            include_fail,
+        )
+
     passed_cluster.add_to(m)
     failed_cluster.add_to(m)
-
-    # --- Filter layers (default hidden) -----------------------------------
-    # Tag each row with its real status and colour so filter-layer popups
-    # show the same information as the main passed/failed layers.
-    passed_tagged = passed_df.copy()
-    passed_tagged["_dq_status"] = "Passed"
-    passed_tagged["_dq_color"] = PASSED_COLOR
-
-    failed_tagged = failed_df.copy()
-    failed_tagged["_dq_status"] = "Failed"
-    failed_tagged["_dq_color"] = FAILED_COLOR
-
-    combined_df = pd.concat([passed_tagged, failed_tagged], ignore_index=True)
-
-    if not combined_df.empty:
-        rurban = (
-            combined_df.get("rurban_detected", pd.Series(dtype=str))
-            .fillna("")
-            .astype(str)
-            .str.strip()
-        )
-        urban_df = combined_df[rurban.str.lower() == "urban"]
-        rural_df = combined_df[rurban.str.lower() == "rural"]
-        unknown_df = combined_df[~rurban.str.lower().isin(["urban", "rural"])]
-
-        _add_filter_layer(m, urban_df, name="Urban", color="#0d6efd", show=False)
-        _add_filter_layer(m, rural_df, name="Rural", color="#fd7e14", show=False)
-        _add_filter_layer(
-            m, unknown_df, name="Rurality Unknown", color="#6c757d", show=False
-        )
-
-        # Uninhabited filter: dq_is_in_uninhabited_area == 1 means IS uninhabited
-        if _UNINHABITED_COL in combined_df.columns:
-            uninhabited_df = combined_df[_dq_int(combined_df[_UNINHABITED_COL]) == 1]
-            _add_filter_layer(
-                m,
-                uninhabited_df,
-                name="In Uninhabited Area",
-                color="#6f42c1",
-                show=False,
-            )
+    _add_non_empty_filter_clusters_to_map(m, filter_clusters, counts)
 
     folium.LayerControl(collapsed=False).add_to(m)
-
-    context.log.info(
-        f"Map generation complete: {passed_count} passed schools and {failed_count} failed schools added."
-    )
+    context.log.info("Map generation complete successfully.")
 
     return m.get_root().render()
