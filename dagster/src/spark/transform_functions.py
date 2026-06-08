@@ -428,6 +428,19 @@ def create_bronze_layer_columns_updated(
     if mode == UploadMode.CREATE.value:
         df = create_school_id_giga(df)
 
+    if mode == UploadMode.CREATE.value or "school_id_govt_type" in df.columns:
+        df = df.withColumn(
+            "school_id_govt_type",
+            f.coalesce(
+                f.col("school_id_govt_type")
+                if "school_id_govt_type" in df.columns
+                else f.lit(None),
+                f.lit("Unknown")
+                if mode == UploadMode.CREATE.value
+                else f.lit(None).cast(StringType()),
+            ),
+        )
+
     # Admin columns: re-compute whenever lat/lon are part of the upload
     if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
         for admin_level in ("admin1", "admin2", "admin3", "admin4"):
