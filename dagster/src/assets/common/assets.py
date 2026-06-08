@@ -454,6 +454,10 @@ def silver(
         context.log.info("Silver is empty after merge.")
         new_silver = s.createDataFrame([], StructType(schema_columns))
 
+    string_column_actions = _handle_null_string_columns(schema_columns, primary_key)
+    if string_column_actions:
+        new_silver = new_silver.withColumns(string_column_actions)
+
     new_silver = compute_row_hash(new_silver)
 
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
@@ -660,6 +664,15 @@ def _handle_null_columns(schema_columns, primary_key):
                     f.col(col.name), f.current_timestamp()
                 )
     return column_actions
+
+
+def _handle_null_string_columns(schema_columns, primary_key):
+    """Fill nullable values for NOT NULL string columns before Delta writes."""
+    return {
+        col.name: f.coalesce(f.col(col.name), f.lit("Unknown"))
+        for col in schema_columns
+        if not col.nullable and col.name != primary_key and col.dataType == StringType()
+    }
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value, deps=["silver"])
