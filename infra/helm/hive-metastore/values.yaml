@@ -116,9 +116,9 @@ envSecrets:
 
 postgresql:
   image:
-    tag: 9.6.24-debian-10-r70
+    tag: 9.6.24
   global:
-    imageRegistry: "public.ecr.aws"
+    imageRegistry: "uniappsoigiga.azurecr.io"
   volumePermissions:
     enabled: true
     image:

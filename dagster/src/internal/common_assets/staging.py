@@ -8,11 +8,17 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import ArrayType, StringType, StructField, TimestampType
+from pyspark.sql.types import (
+    ArrayType,
+    LongType,
+    StringType,
+    StructField,
+    TimestampType,
+)
 from sqlalchemy import select, update
 
 from dagster import OpExecutionContext
-from src.constants import DataTier
+from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
@@ -50,21 +56,9 @@ def get_files_for_review(
     return files_for_review
 
 
-class StagingChangeTypeEnum(enum.Enum):
+class StagingMode(enum.Enum):
     UPDATE = "UPDATE"
     DELETE = "DELETE"
-
-
-# change_type values written to the pending_changes table
-_CHANGE_INSERT = "INSERT"
-_CHANGE_UPDATE = "UPDATE"
-_CHANGE_UNCHANGED = "UNCHANGED"
-_CHANGE_DELETE = "DELETE"
-
-# status values written alongside each pending_changes row
-_STATUS_PENDING = "PENDING"
-_STATUS_APPROVED = "APPROVED"
-_STATUS_REJECTED = "REJECTED"
 
 
 class StagingStep:
@@ -74,7 +68,7 @@ class StagingStep:
         config: FileConfig,
         adls_file_client: ADLSFileClient,
         spark: SparkSession,
-        change_type: StagingChangeTypeEnum,
+        change_type: StagingMode,
     ):
         self.context = context
         self.config = config
@@ -103,7 +97,7 @@ class StagingStep:
         )
 
     def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
-        if self.change_type == StagingChangeTypeEnum.DELETE:
+        if self.change_type == StagingMode.DELETE:
             pending = self._build_delete_records(upstream_df)
         else:
             pending = self._build_upsert_records(upstream_df)
@@ -118,7 +112,7 @@ class StagingStep:
         return pending
 
     def _build_upsert_records(self, df: sql.DataFrame) -> sql.DataFrame | None:
-        """Build pending_changes rows for an upsert (INSERT/UPDATE/UNCHANGED)."""
+        """Build staging rows for an upsert (INSERT/UPDATE/UNCHANGED)."""
         uploaded_columns = self._get_uploaded_columns()
         df = self._prepare_df(df)
         schema_col_names = [c.name for c in self.schema_columns]
@@ -129,13 +123,13 @@ class StagingStep:
             df = compute_row_hash(df)
             df = self._select_schema_cols(df)
             df = (
-                df.withColumn("change_type", f.lit(_CHANGE_INSERT))
+                df.withColumn("change_type", f.lit(StagingChangeType.INSERT))
                 .withColumn("upload_id", f.lit(upload_id))
                 .withColumn(
                     "uploaded_columns",
                     f.array(*[f.lit(c) for c in uploaded_columns]),
                 )
-                .withColumn("status", f.lit(_STATUS_PENDING))
+                .withColumn("status", f.lit(StagingStatus.PENDING))
                 .withColumn(
                     "change_id",
                     f.concat_ws(
@@ -164,39 +158,22 @@ class StagingStep:
             "left",
         )
 
-        # For columns not in the upload file: use silver's value for existing rows
+        # For every schema column: use the Bronze value when it is non-null;
+        # otherwise fall back to the Silver value for existing rows.
+        # This handles uploaded columns, columns derived from uploaded columns
+        # (e.g. education_level from education_level_govt, admin columns from
+        # lat/lon), and columns absent from the file — all with one rule.
         row_in_silver = f.col(f"_s_{self.primary_key}").isNotNull()
         for col_name in schema_col_names:
             s_col = f"_s_{col_name}"
-            if col_name not in uploaded_columns and s_col in joined.columns:
-                joined = joined.withColumn(
-                    col_name,
-                    f.when(row_in_silver, f.col(s_col)).otherwise(f.col(col_name)),
-                )
-
-        # Admin columns may be null per-row when lat/lon is absent for that row,
-        # even though lat/lon is present in the file (and admin columns therefore
-        # appear in uploaded_columns).  For existing rows, fall back to silver so
-        # we preserve a previously-computed admin value and avoid spurious UPDATEs.
-        _admin_cols = (
-            "admin1",
-            "admin2",
-            "admin3",
-            "admin4",
-            "admin1_id_giga",
-            "admin2_id_giga",
-            "admin3_id_giga",
-            "admin4_id_giga",
-        )
-        for col_name in _admin_cols:
-            s_col = f"_s_{col_name}"
-            if col_name in uploaded_columns and s_col in joined.columns:
-                joined = joined.withColumn(
-                    col_name,
-                    f.when(
-                        row_in_silver & f.col(col_name).isNull(), f.col(s_col)
-                    ).otherwise(f.col(col_name)),
-                )
+            if s_col not in joined.columns:
+                continue
+            joined = joined.withColumn(
+                col_name,
+                f.when(
+                    row_in_silver & f.col(col_name).isNull(), f.col(s_col)
+                ).otherwise(f.col(col_name)),
+            )
 
         # Drop all silver-prefixed columns (including _s_signature)
         s_cols_to_drop = [c for c in joined.columns if c.startswith("_s_")]
@@ -218,12 +195,12 @@ class StagingStep:
         )
         joined = joined.withColumn(
             "change_type",
-            f.when(f.col("_sig_pk").isNull(), f.lit(_CHANGE_INSERT))
+            f.when(f.col("_sig_pk").isNull(), f.lit(StagingChangeType.INSERT))
             .when(
                 f.col("signature") == f.col("_silver_sig"),
-                f.lit(_CHANGE_UNCHANGED),
+                f.lit(StagingChangeType.UNCHANGED),
             )
-            .otherwise(f.lit(_CHANGE_UPDATE)),
+            .otherwise(f.lit(StagingChangeType.UPDATE)),
         )
         joined = joined.drop("_sig_pk", "_silver_sig")
 
@@ -239,7 +216,7 @@ class StagingStep:
                 "uploaded_columns",
                 f.array(*[f.lit(c) for c in uploaded_columns]),
             )
-            .withColumn("status", f.lit(_STATUS_PENDING))
+            .withColumn("status", f.lit(StagingStatus.PENDING))
             .withColumn(
                 "change_id",
                 f.concat_ws(
@@ -252,7 +229,7 @@ class StagingStep:
         return joined
 
     def _build_delete_records(self, delete_ids: list[str]) -> sql.DataFrame | None:
-        """Build pending_changes rows for a DELETE operation."""
+        """Build staging rows for a DELETE operation."""
         if not self.silver_table_exists:
             self.context.log.warning(
                 "Silver table does not exist; cannot stage DELETE records."
@@ -270,10 +247,10 @@ class StagingStep:
 
         upload_id = self.config.filename_components.id
         rows = (
-            rows.withColumn("change_type", f.lit(_CHANGE_DELETE))
+            rows.withColumn("change_type", f.lit(StagingChangeType.DELETE))
             .withColumn("upload_id", f.lit(upload_id))
             .withColumn("uploaded_columns", f.array(f.lit(self.primary_key)))
-            .withColumn("status", f.lit(_STATUS_PENDING))
+            .withColumn("status", f.lit(StagingStatus.PENDING))
             .withColumn(
                 "change_id",
                 f.concat_ws(
@@ -286,7 +263,7 @@ class StagingStep:
         return rows
 
     def _write_pending_records(self, pending: sql.DataFrame) -> None:
-        """Append pending_changes rows to the staging Delta table."""
+        """Append rows to the staging Delta table."""
         create_schema(self.spark, self.staging_tier_schema_name)
 
         pending_extra_fields = [
@@ -298,6 +275,7 @@ class StagingStep:
             StructField("created_at", TimestampType(), nullable=True),
             StructField("processed_at", TimestampType(), nullable=True),
             StructField("approval_request_log_id", StringType(), nullable=True),
+            StructField("master_version", LongType(), nullable=True),
         ]
         pending_schema = list(self.schema_columns) + pending_extra_fields
 
@@ -317,7 +295,7 @@ class StagingStep:
                 f.col("upload_id") == upload_id
             )
             self.context.log.info(
-                f"Deleted existing pending_changes rows for upload_id={upload_id}"
+                f"Deleted existing staging rows for upload_id={upload_id}"
             )
 
         # Cast pending columns to the expected schema types before writing
@@ -343,14 +321,14 @@ class StagingStep:
             DeltaTable.forName(self.spark, self.staging_table_name)
             .toDF()
             .filter(
-                (f.col("status") == _STATUS_PENDING)
-                & (f.col("change_type") != _CHANGE_UNCHANGED)
+                (f.col("status") == StagingStatus.PENDING)
+                & (f.col("change_type") != StagingChangeType.UNCHANGED)
             )
             .count()
         )
         if actionable == 0:
             self.context.log.info(
-                "No actionable changes in pending_changes (only UNCHANGED). "
+                "No actionable changes in staging table (only UNCHANGED). "
                 "Skipping ApprovalRequest update."
             )
             return
@@ -414,13 +392,10 @@ class StagingStep:
         )
 
     def _get_uploaded_columns(self) -> list[str]:
-        """Return the list of schema column names present in the upload file.
+        """Return the schema column names explicitly present in the upload file.
 
-        Expands the raw upload columns to include columns that are derived
-        from uploaded columns and computed in bronze (admin, connectivity_type,
-        connectivity_govt_ingestion_timestamp).  Without this expansion the
-        staging step would copy the old silver value for these derived columns
-        instead of using the freshly-computed bronze values.
+        Used for audit purposes only (saved on each staging row).  Silver-preservation
+        is driven by the null-fallback loop in _build_upsert_records, not by this list.
 
         Falls back to all schema column names if no FileUpload record is found,
         which preserves backward-compatible behaviour for non-geolocation pipelines.
@@ -438,32 +413,6 @@ class StagingStep:
                     )
             file_upload = FileUploadConfig.from_orm(file_upload)
             columns = set(file_upload.column_to_schema_mapping.values())
-
-            # Admin columns are derived from lat/lon in geolocation_bronze.
-            # Treat them as uploaded so staging uses the freshly-computed values.
-            if {"latitude", "longitude"}.issubset(columns):
-                columns.update(
-                    {
-                        "admin1",
-                        "admin1_id_giga",
-                        "admin2",
-                        "admin2_id_giga",
-                        "admin3",
-                        "admin3_id_giga",
-                        "admin4",
-                        "admin4_id_giga",
-                        "disputed_region",
-                    }
-                )
-
-            # connectivity_type/root are derived from connectivity_type_govt.
-            if "connectivity_type_govt" in columns:
-                columns.update({"connectivity_type", "connectivity_type_root"})
-
-            # connectivity_govt_ingestion_timestamp is derived from connectivity_govt.
-            if "connectivity_govt" in columns:
-                columns.add("connectivity_govt_ingestion_timestamp")
-
             return list(columns)
         except Exception as e:
             self.context.log.warning(
@@ -523,12 +472,7 @@ class StagingStep:
         )
 
     @property
-    def pending_changes_table_exists(self) -> bool:
+    def staging_table_exists(self) -> bool:
         return check_table_exists(
             self.spark, self.schema_name, self.country_code, DataTier.STAGING
         )
-
-    # Keep old property name as alias for callers that used staging_table_exists
-    @property
-    def staging_table_exists(self) -> bool:
-        return self.pending_changes_table_exists
