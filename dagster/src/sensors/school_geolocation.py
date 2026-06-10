@@ -136,12 +136,9 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 country_code=country_code,
             )
 
-            last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
-            dq_triggered_at = metadata.get("dq_triggered_at", "")
-
             context.log.info(f"FILE: {path}")
             yield RunRequest(
-                run_key=f"{path}:{last_modified}:{dq_triggered_at}",
+                run_key=str(path),
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )

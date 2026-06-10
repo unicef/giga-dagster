@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Optional
 
 import pandas as pd
 from jinja2 import BaseLoader, Environment
@@ -707,13 +707,6 @@ def run_geolocation_checks(
             df = create_checks(bronze=df, silver=silver, context=context)
         elif dq_context.upload_mode == UploadMode.UPDATE.value:
             df = update_checks(bronze=df, silver=silver, context=context)
-    else:
-        # For assessment-only (uploaded mode), skip cross-checks against silver
-        # but ensure the columns exist to avoid downstream errors.
-        if dq_context.upload_mode == UploadMode.CREATE.value:
-            df = df.withColumn("dq_is_not_create", f.lit(0))
-        elif dq_context.upload_mode == UploadMode.UPDATE.value:
-            df = df.withColumn("dq_is_not_update", f.lit(0))
 
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
@@ -728,11 +721,14 @@ def run_geolocation_checks(
     df = precision_check(df, config.PRECISION, context)
     df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
     df = duplicate_name_level_110_check(df, context)
+    mode_for_critical_checks = (
+        dq_context.upload_mode if dq_context.dq_mode == DQMode.MASTER else None
+    )
     df = critical_error_checks(
         df,
         dq_context.dataset_type,
         CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
-        dq_context.upload_mode,
+        mode_for_critical_checks,
         context,
     )
     df = column_relation_checks(df, dq_context.dataset_type, context)
@@ -808,10 +804,12 @@ def run_qos_checks(
 
 def row_level_checks_internal(
     df: sql.DataFrame,
-    dq_context: DQContext,
+    dq_context: Optional[DQContext] = None,
     silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
+    if dq_context is None:
+        raise ValueError("dq_context is required for row_level_checks_internal")
     logger = get_context_with_fallback_logger(context)
     logger.info(
         "Starting row level checks",
@@ -841,24 +839,24 @@ def row_level_checks_internal(
 
 def row_level_checks(
     df: sql.DataFrame,
-    dq_context: Any = None,
+    dataset_type: str = None,
     _country_code_iso3: str = None,
+    context: OpExecutionContext = None,
     silver: sql.DataFrame = None,
     mode: str = None,
-    context: OpExecutionContext = None,
-    dataset_type: str = None,
+    dq_context: Any = None,
 ) -> sql.DataFrame:
     # Resolve which signature is being used
-    if isinstance(dq_context, DQContext):
+    if isinstance(dq_context, DQContext) or isinstance(dataset_type, DQContext):
+        actual_dq_context = (
+            dq_context if isinstance(dq_context, DQContext) else dataset_type
+        )
         # Modern signature: row_level_checks(df, dq_context=DQContext(...), ...)
-        return row_level_checks_internal(df, dq_context, silver, context)
+        return row_level_checks_internal(df, actual_dq_context, silver, context)
     else:
         # Legacy signature: row_level_checks(df, dataset_type, country_code, ...)
-        if dq_context is not None and dataset_type is None:
-            dataset_type = dq_context  # Positional dataset_type
 
         # Build a temporary DQContext for internal processing
-
         internal_context = DQContext(
             dq_mode=DQMode.MASTER,  # Legacy calls default to MASTER
             dataset_type=dataset_type,
