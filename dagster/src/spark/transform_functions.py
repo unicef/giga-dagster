@@ -430,15 +430,23 @@ def create_bronze_layer_columns_updated(
             ).otherwise(f.lit(None).cast(StringType())),
         )
 
-    # Generate school_id_giga for new schools only
-    df_with_giga = create_school_id_giga(df)
-    df = df.withColumn(
+    # Generate school_id_giga for new schools only; existing schools get null here
+    # and are enriched from silver later in enrich_with_silver_values.
+    df = create_school_id_giga(df).withColumn(
         "school_id_giga",
-        f.when(f.col("is_new_school"), df_with_giga["school_id_giga"]).otherwise(
-            f.col("school_id_giga")
-            if "school_id_giga" in df.columns
-            else f.lit(None).cast(StringType())
+        f.when(f.col("is_new_school"), f.col("school_id_giga")).otherwise(
+            f.lit(None).cast(StringType())
         ),
+    )
+
+    if "school_id_govt_type" not in df.columns:
+        df = df.withColumn("school_id_govt_type", f.lit(None).cast(StringType()))
+    df = df.withColumn(
+        "school_id_govt_type",
+        f.when(
+            f.col("is_new_school") & f.col("school_id_govt_type").isNull(),
+            f.lit("Unknown"),
+        ).otherwise(f.col("school_id_govt_type")),
     )
 
     # Admin columns: re-compute whenever lat/lon are part of the upload
@@ -461,11 +469,8 @@ def create_bronze_layer_columns_updated(
                 ).otherwise(f.col(column)),
             )
 
-    # Connectivity type — always run; handles is_new_school logic internally
-    df = standardize_connectivity_type(df, uploaded_columns)
-
     # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded.
-    if "connectivity_govt" in df.columns:
+    if "connectivity_govt" in uploaded_columns:
         df = df.withColumn(
             "connectivity_govt_ingestion_timestamp",
             f.when(

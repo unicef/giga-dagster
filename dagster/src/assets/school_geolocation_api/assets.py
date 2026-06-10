@@ -114,34 +114,22 @@ def _push_to_portal(
         if column in school_geolocation_columns or column == "school_id"
     ]
 
-    # schools to create
-    schools_to_create = pdf[pdf["operation"] == "Create"]
-    upload_data_and_create_db_entry(
-        schools_to_create[upload_cols],
-        mode="Create",
-        country_code="MNG",
-        adls_file_client=adls_file_client,
-        context=context,
-    )
-    _mark_pushed_to_pipeline(
-        s, full_table_name, schools_to_create["ingestion_id"].tolist()
-    )
+    is_deleted = pdf["deleted_at"].notna() & (pdf["deleted_at"] != "None")
 
-    # schools to update
-    schools_to_update = pdf[pdf["operation"] == "Update"]
+    # upload all non-deleted schools in a single batch; pipeline determines create vs update
+    schools_to_upload = pdf[~is_deleted]
     upload_data_and_create_db_entry(
-        schools_to_update[upload_cols],
-        mode="Update",
+        schools_to_upload[upload_cols],
         country_code="MNG",
         adls_file_client=adls_file_client,
         context=context,
     )
     _mark_pushed_to_pipeline(
-        s, full_table_name, schools_to_update["ingestion_id"].tolist()
+        s, full_table_name, schools_to_upload["ingestion_id"].tolist()
     )
 
     # schools to delete
-    schools_to_delete = pdf[pdf["deleted_at"].notna() & (pdf["deleted_at"] != "None")]
+    schools_to_delete = pdf[is_deleted]
     ids_to_delete = schools_to_delete["school_id"].astype(str).tolist()
     delete_schools_from_master(
         ids_to_delete=ids_to_delete,
@@ -213,21 +201,11 @@ def school_geolocation_emis_api_mng(
 
     schools_pdf["ingestion_timestamp"] = pd.Timestamp.now()
 
-    # operation is only meaningful for incremental runs where we know last_update_date
-    if table_exists and last_update_date is not None:
-        schools_pdf["operation"] = np.where(
-            pd.to_datetime(schools_pdf["created_at"], utc=True)
-            > pd.to_datetime(last_update_date, utc=True),
-            "Create",
-            "Update",
-        )
-        schools_pdf["operation"] = np.where(
-            schools_pdf["deleted_at"].notna() & (schools_pdf["deleted_at"] != "None"),
-            "Delete",
-            schools_pdf["operation"],
-        )
-    else:
-        schools_pdf["operation"] = "Create"
+    schools_pdf["operation"] = np.where(
+        schools_pdf["deleted_at"].notna() & (schools_pdf["deleted_at"] != "None"),
+        "Delete",
+        "Upsert",
+    )
 
     table_schema_columns = get_schema_columns(s, "mongolia_emis_api")
 
