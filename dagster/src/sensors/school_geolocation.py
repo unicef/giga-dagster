@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
@@ -26,8 +27,12 @@ def school_master_geolocation__raw_file_uploads_sensor(
     context: SensorEvaluationContext,
     adls_file_client: ADLSFileClient,
 ):
-    count = 0
     source_directory = f"{constants.UPLOAD_PATH_PREFIX}/{DOMAIN_DATASET_TYPE}"
+    cursor = json.loads(context.cursor or "{}")
+    is_bootstrap = len(cursor) == 0  # True on very first tick after deployment
+
+    count = 0
+    new_cursor = dict(cursor)  # start from existing cursor, update as we scan
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
@@ -38,6 +43,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
         stem = path.stem
+
         try:
             filename_components = deconstruct_school_master_filename_components(
                 adls_filepath
@@ -45,113 +51,126 @@ def school_master_geolocation__raw_file_uploads_sensor(
         except Exception as e:
             context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
             continue
-        else:
-            country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(
-                adls_filepath, ensure_exists=True
-            )
-            properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
-            size = properties.size
 
-            ops_destination_mapping = {
-                "geolocation_raw": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=str(path),
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.RAW,
-                ),
-                "geolocation_metadata": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/pipeline_tables.db/school_geolocation_metadata",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.BRONZE,
-                ),
-                "geolocation_bronze": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.BRONZE,
-                ),
-                "geolocation_data_quality_results": OpDestinationMapping(
-                    source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_data_quality_results_human_readable": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
-                    destination_filepath="",
-                    output_filepaths={
-                        "geolocation_dq_schools_passed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
-                        "geolocation_dq_schools_failed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
-                    },
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_data_quality_results_summary": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_data_quality_report": OpDestinationMapping(
-                    source_filepath=str(path),
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-report/{country_code}/{stem}.txt",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_dq_passed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_dq_failed_rows": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_error_table": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
-                    destination_filepath="",
-                    metastore_schema="school_geolocation_error_table",
-                    tier=DataTier.DATA_QUALITY_CHECKS,
-                ),
-                "geolocation_staging": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
-                    metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.STAGING,
-                ),
-            }
+        country_code = filename_components.country_code
+        metadata = adls_file_client.fetch_metadata_for_blob(
+            adls_filepath, ensure_exists=True
+        )
+        properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
+        size = properties.size
 
-            run_ops = generate_run_ops(
-                ops_destination_mapping,
-                dataset_type=DATASET_TYPE,
-                metadata=metadata,
-                file_size_bytes=size,
-                domain=DOMAIN,
-                dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
-                country_code=country_code,
-            )
+        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
+        dq_triggered_at = metadata.get("dq_triggered_at", "")
 
-            dq_triggered_at = metadata.get("dq_triggered_at")
-            if dq_triggered_at:
-                run_key = f"{path}:{dq_triggered_at}"
-            else:
-                run_key = str(path)
+        file_key = str(path)
+        current_sig = f"{last_modified}:{dq_triggered_at}"
+        new_cursor[file_key] = current_sig
 
-            context.log.info(f"FILE: {path}")
-            yield RunRequest(
-                run_key=run_key,
-                run_config=RunConfig(ops=run_ops),
-                tags={"country": country_code},
-            )
-            count += 1
+        if is_bootstrap:
+            continue
 
-    if count == 0:
-        yield SkipReason(f"No uploads detected in {source_directory}")
+        if cursor.get(file_key) == current_sig:
+            continue
+
+        ops_destination_mapping = {
+            "geolocation_raw": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=str(path),
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.RAW,
+            ),
+            "geolocation_metadata": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/pipeline_tables.db/school_geolocation_metadata",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.BRONZE,
+            ),
+            "geolocation_bronze": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.BRONZE,
+            ),
+            "geolocation_data_quality_results": OpDestinationMapping(
+                source_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.parquet",
+                destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_data_quality_results_human_readable": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                destination_filepath="",
+                output_filepaths={
+                    "geolocation_dq_schools_passed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                    "geolocation_dq_schools_failed_human_readable": f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
+                },
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_data_quality_results_summary": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.csv",
+                destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-summary/{country_code}/{stem}.json",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_data_quality_report": OpDestinationMapping(
+                source_filepath=str(path),
+                destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-report/{country_code}/{stem}.txt",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_dq_passed_rows": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_dq_failed_rows": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
+                destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_error_table": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
+                destination_filepath="",
+                metastore_schema="school_geolocation_error_table",
+                tier=DataTier.DATA_QUALITY_CHECKS,
+            ),
+            "geolocation_staging": OpDestinationMapping(
+                source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows/{country_code}/{stem}.parquet",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_staging.db/{country_code.lower()}",
+                metastore_schema=METASTORE_SCHEMA,
+                tier=DataTier.STAGING,
+            ),
+        }
+
+        run_ops = generate_run_ops(
+            ops_destination_mapping,
+            dataset_type=DATASET_TYPE,
+            metadata=metadata,
+            file_size_bytes=size,
+            domain=DOMAIN,
+            dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN_DATASET_TYPE}/{country_code}/{stem}.csv",
+            country_code=country_code,
+        )
+
+        context.log.info(f"FILE: {path}")
+        yield RunRequest(
+            run_key=None,  # cursor is the deduplication gate; run_key=None lets Dagster always honour the yield
+            run_config=RunConfig(ops=run_ops),
+            tags={"country": country_code},
+        )
+        count += 1
+
+    context.update_cursor(json.dumps(new_cursor))
+
+    if is_bootstrap:
+        yield SkipReason(
+            f"Bootstrap tick: cursor initialised with {len(new_cursor)} files. No runs triggered."
+        )
+    elif count == 0:
+        yield SkipReason(f"No new or changed uploads detected in {source_directory}")
 
 
 @sensor(
