@@ -1,5 +1,4 @@
 import io
-import re
 import uuid
 from itertools import chain
 
@@ -31,7 +30,7 @@ from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
-    get_nocodb_table_id_from_name,
+    get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
 
@@ -152,59 +151,46 @@ def create_health_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     return df.drop("identifier_concat")
 
 
-def create_education_level(
-    df: sql.DataFrame, mode: str, uploaded_columns: list[str]
+def map_govt_to_giga_columns(
+    df: sql.DataFrame, uploaded_columns: list[str]
 ) -> sql.DataFrame:
-    education_level_nocodb_table_id = get_nocodb_table_id_from_name(
-        table_name="EducationLevelMapping"
-    )
-    education_level_govt_mapping = get_nocodb_table_as_key_value_mapping(
-        table_id=education_level_nocodb_table_id
-    )
-
-    education_level_govt_mapping = {
-        key.lower(): value for key, value in education_level_govt_mapping.items()
-    }
-
-    mapped_column = f.create_map(
-        [f.lit(x) for x in chain(*education_level_govt_mapping.items())]
+    rows = get_nocodb_table_rows(
+        settings.NOCODB_NAME_MAPPINGS_TABLE_ID,
+        where="(column_name,notblank)",
+        fields="column_name,target_column,table_id",
     )
 
-    if "education_level" in uploaded_columns:
-        df = df.withColumn(
-            "mapped_column", mapped_column[f.lower(f.col("education_level_govt"))]
-        )
-        df = df.withColumn(
-            "education_level",
-            f.coalesce(f.col("education_level"), f.col("mapped_column")),
-        ).drop("mapped_column")
-    else:
-        df = df.withColumn(
-            "education_level", mapped_column[f.lower(f.col("education_level_govt"))]
-        )
+    for row in rows:
+        source_col = row.get("column_name", "")
+        target_col = row.get("target_column", "")
+        table_id = row.get("table_id", "")
 
-    if mode == UploadMode.CREATE.value:
-        df = df.withColumns(
-            {
-                "education_level_govt": f.when(
-                    f.col("education_level_govt").isNull()
-                    | (f.trim(f.col("education_level_govt")) == "")
-                    | (f.lower(f.trim(f.col("education_level_govt"))) == "nan")
-                    | (f.lower(f.trim(f.col("education_level_govt"))) == "none"),
-                    f.lit("Unknown"),
-                ).otherwise(f.col("education_level_govt")),
-                "education_level": f.coalesce(
-                    f.col("education_level"), f.lit("Unknown")
-                ),
-            }
-        )
+        if not (source_col and target_col and table_id):
+            continue
+        if source_col not in uploaded_columns:
+            continue
 
-    for column in ("education_level", "education_level_govt"):
+        mapping = get_nocodb_table_as_key_value_mapping(table_id=table_id)
+        if not mapping:
+            df = df.withColumn(target_col, f.lit("Unknown"))
+            continue
+
+        govt_casing_map = f.create_map(
+            [f.lit(x) for x in chain(*{k.lower(): k for k in mapping}.items())]
+        )
+        govt_to_giga_map = f.create_map(
+            [
+                f.lit(x)
+                for x in chain(*{k.lower(): v for k, v in mapping.items()}.items())
+            ]
+        )
         df = df.withColumn(
-            column,
-            f.when(f.isnan(f.col(column)), f.lit(None).cast(StringType())).otherwise(
-                f.col(column)
-            ),
+            source_col,
+            f.coalesce(govt_casing_map[f.lower(f.col(source_col))], f.col(source_col)),
+        )
+        df = df.withColumn(
+            target_col,
+            f.coalesce(govt_to_giga_map[f.lower(f.col(source_col))], f.lit("Unknown")),
         )
 
     return df
@@ -259,31 +245,6 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def clean_type_connectivity(value):
-    type_conn_regex_patterns = {
-        "fibre": "fiber|fibre|fibra|ftt|fttx|ftth|fttp|gpon|epon|fo|Фибер|optic|птички",
-        "copper": "adsl|dsl|copper|hdsl|vdsl",
-        "coaxial": "coax|coaxial",
-        "wired_other": "wired|ethernet|kablovski",
-        "unknown_wired": "unknown_wired",
-        "cellular": "cell|cellular|celular|2g|3g|4g|5g|lte|gsm|umts|cdma|mobile|mobie|p2a",
-        "p2p": "p2p|radio|microwave|ptmp|micro.wave|wimax|optical",
-        "satellite": "satellite|satelite|vsat|geo|leo|meo",
-        "haps": "haps",
-        "drones": "drones",
-        "unknown_wireless": "unknown_wireless",
-        "other": "TVWS|other|ethernet",
-        "unknown": "unknown|null|nan|n/a",
-    }
-
-    for cleaned, matches in type_conn_regex_patterns.items():
-        if pd.isna(value):
-            return "unknown"
-        elif re.search(matches, str(value).lower(), flags=re.I):
-            return cleaned
-    return "unknown"
-
-
 def get_connectivity_type_root(value):
     connectivity_root_mappings = {
         "wired": ["fibre", "copper", "coaxial", "wired_other", "unknown_wired"],
@@ -302,47 +263,6 @@ def get_connectivity_type_root(value):
     for key in connectivity_root_mappings:
         if value in connectivity_root_mappings[key]:
             return key
-
-
-def standardize_connectivity_type(
-    df: sql.DataFrame, mode: str, uploaded_columns: list[str]
-) -> sql.DataFrame:
-    clean_type_connectivity_udf = f.udf(clean_type_connectivity, StringType())
-
-    get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
-
-    if mode == UploadMode.UPDATE.value:
-        if "connectivity_type_govt" in uploaded_columns:
-            df = df.withColumn(
-                "connectivity_type",
-                f.when(
-                    f.col("connectivity_type_govt").isNotNull(),
-                    clean_type_connectivity_udf(df["connectivity_type_govt"]),
-                ).otherwise(f.lit(None).cast(StringType())),
-            )
-
-            df = df.withColumn(
-                "connectivity_type_root",
-                f.when(
-                    f.col("connectivity_type_govt").isNotNull(),
-                    get_connectivity_type_root_udf(df["connectivity_type"]),
-                ).otherwise(f.lit(None).cast(StringType())),
-            )
-
-    else:
-        if "connectivity_type_govt" not in uploaded_columns:
-            df = df.withColumn("connectivity_type_govt", f.lit(None).cast(StringType()))
-
-        df = df.withColumn(
-            "connectivity_type",
-            clean_type_connectivity_udf(df["connectivity_type_govt"]),
-        )
-        df = df.withColumn(
-            "connectivity_type_root",
-            get_connectivity_type_root_udf(df["connectivity_type"]),
-        )
-
-    return df
 
 
 def column_mapping_rename(
@@ -440,10 +360,6 @@ def create_bronze_layer_columns(
     # Select columns from joined DataFrame
     df = joined_df.select(*select_expr)
 
-    # standardize education level
-    if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
-        df = create_education_level(df, mode, uploaded_columns)
-
     # Generate school_id_giga for new schools using the dedicated function
     if mode == UploadMode.CREATE.value:
         df = create_school_id_giga(df)
@@ -487,7 +403,7 @@ def create_bronze_layer_columns(
             f.col("latitude").isNull()
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
-            | f.isnan(f.col("latitude"))
+            | f.isnan(f.col("longitude"))
         )
         for column in ("admin1", "admin1_id_giga", "admin2", "admin2_id_giga"):
             df = df.withColumn(
@@ -520,13 +436,35 @@ def create_bronze_layer_columns_updated(
     source: str = None,
     spark: SparkSession = None,
 ):
-    # standardize education level
-    if mode == UploadMode.CREATE.value or "education_level_govt" in uploaded_columns:
-        df = create_education_level(df, mode, uploaded_columns)
+    df = map_govt_to_giga_columns(df, uploaded_columns)
+
+    if "connectivity_type_govt" in uploaded_columns:
+        df = df.withColumn("connectivity_type", f.lower(f.col("connectivity_type")))
+        get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
+        df = df.withColumn(
+            "connectivity_type_root",
+            f.when(
+                f.col("connectivity_type_govt").isNotNull(),
+                get_connectivity_type_root_udf(f.col("connectivity_type")),
+            ).otherwise(f.lit(None).cast(StringType())),
+        )
 
     # Generate school_id_giga for new schools using the dedicated function
     if mode == UploadMode.CREATE.value:
         df = create_school_id_giga(df)
+
+    if mode == UploadMode.CREATE.value or "school_id_govt_type" in df.columns:
+        df = df.withColumn(
+            "school_id_govt_type",
+            f.coalesce(
+                f.col("school_id_govt_type")
+                if "school_id_govt_type" in df.columns
+                else f.lit(None),
+                f.lit("Unknown")
+                if mode == UploadMode.CREATE.value
+                else f.lit(None).cast(StringType()),
+            ),
+        )
 
     # Admin columns: re-compute whenever lat/lon are part of the upload
     if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
@@ -547,10 +485,6 @@ def create_bronze_layer_columns_updated(
                     missing_location_condition, f.lit(None).cast(StringType())
                 ).otherwise(f.col(column)),
             )
-
-    # Connectivity type: re-compute whenever connectivity_type_govt is part of the upload
-    if mode == UploadMode.CREATE.value or "connectivity_type_govt" in uploaded_columns:
-        df = standardize_connectivity_type(df, mode, uploaded_columns)
 
     # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded.
     if "connectivity_govt" in df.columns:
