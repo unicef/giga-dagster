@@ -17,7 +17,7 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from sqlalchemy import select, update
+from sqlalchemy import update
 from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
@@ -35,7 +35,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
-from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.delta import check_table_exists, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -520,86 +520,10 @@ def silver(
 @capture_op_exceptions
 def reset_staging_table(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: FileConfig,
 ) -> None:
-    """
-    No-op for pipelines that use the persistent staging table design
-    (geolocation, coverage). The staging table accumulates history partitioned by
-    upload_id and must not be dropped/re-cloned between merge cycles.
-    """
-    if config.dataset_type in ("geolocation", "coverage"):
-        context.log.info(
-            f"{config.dataset_type} uses a persistent staging table; skipping reset."
-        )
-        return
-
-    from src.utils.adls import ADLSFileClient
-
-    from azure.core.exceptions import ResourceNotFoundError
-
-    s: SparkSession = spark.spark_session
     country_code = config.country_code
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.STAGING
-    )
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
-    staging_table_path = config.destination_filepath
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.SILVER
-    )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    with get_db_context() as db:
-        current_request = db.scalar(
-            select(ApprovalRequest).where(
-                (ApprovalRequest.country == country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-            )
-        )
-
-        if current_request is None:
-            context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. "
-                "Proceeding with reset."
-            )
-        elif current_request.enabled:
-            context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-        elif current_request.is_merge_processing:
-            context.log.warning(
-                f"Reset blocked: merge still processing for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-
-    # Lazily import ADLSFileClient to avoid initialising it for the geolocation no-op path
-    adls_file_client = ADLSFileClient()
-    s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-    try:
-        adls_file_client.delete(staging_table_path, is_directory=True)
-    except ResourceNotFoundError as e:
-        context.log.warning(e)
-
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-    s.catalog.refreshTable(silver_table_name)
-    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    create_schema(s, staging_tier_schema_name)
-    create_delta_table(
-        s,
-        staging_tier_schema_name,
-        country_code,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    silver_df.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
     with get_db_context() as db:
         try:
