@@ -782,7 +782,7 @@ postgresql:
 
   # Used by init container to check that db is running. (Even if enabled:false)
   image:
-    registry: "public.ecr.aws"
+    registry: "uniappsoigiga.azurecr.io"
     repository: "bitnami/postgresql"
     tag: "14.6.0-debian-11-r33"
     pullPolicy: IfNotPresent
@@ -791,7 +791,7 @@ postgresql:
   volumePermissions:
     enabled: true
     image:
-      registry: "public.ecr.aws"
+      registry: "uniappsoigiga.azurecr.io"
       repository: "bitnami/minideb"
       tag: "stretch"
       pullPolicy: IfNotPresent
@@ -839,8 +839,8 @@ rabbitmq:
   enabled: false
 
   image:
-    repository: "public.ecr.aws/bitnami/rabbitmq"
-    tag: "3.8.12"
+    repository: "uniappsoigiga.azurecr.io/bitnami/rabbitmq"
+    tag: "3.13.7-debian-12-r5"
     pullPolicy: IfNotPresent
 
   rabbitmq:
@@ -854,7 +854,7 @@ rabbitmq:
   volumePermissions:
     enabled: true
     image:
-      repository: public.ecr.aws/bitnami/minideb
+      repository: uniappsoigiga.azurecr.io/bitnami/minideb
       tag: stretch
       pullPolicy: IfNotPresent
 
