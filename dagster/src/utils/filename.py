@@ -33,8 +33,10 @@ def deconstruct_school_master_filename_components(filepath: str):
             country_code=country_code,
             source=source,
         )
-    elif "coverage" in path.stem and len(splits) >= EXPECTED_COVERAGE_COMPONENTS:
-        id, country_code, dataset_type, source, timestamp = splits[-5:]
+    elif len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
+        id, country_code, dataset_type = splits[0:3]
+        timestamp = splits[-1]
+        source = splits[3] if "coverage" in path.stem else None
 
         return FilenameComponents(
             id=id,
@@ -66,7 +68,7 @@ def deconstruct_school_master_filename_components(filepath: str):
         )
     else:
         raise ValueError(
-            f"Expected at least {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
+            f"Expected {EXPECTED_UPLOAD_FILENAME_COMPONENTS} components for filename `{path.name}`; got {len(splits)}"
         )
 
 
