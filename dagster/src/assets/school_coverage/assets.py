@@ -51,7 +51,7 @@ from src.utils.schema import (
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -357,53 +357,5 @@ def coverage_staging(
             **get_output_metadata(config),
             "row_count": row_count,
             "preview": get_table_preview(staging),
-        },
-    )
-
-
-@asset
-@capture_op_exceptions
-def coverage_delete_staging(
-    context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
-    spark: PySparkResource,
-    config: FileConfig,
-) -> Output[None]:
-    delete_row_ids = adls_file_client.download_json(config.filepath)
-    if isinstance(delete_row_ids, list):
-        # dedupe change IDs
-        delete_row_ids = list(set(delete_row_ids))
-
-    staging_step = StagingStep(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        StagingMode.DELETE,
-    )
-    staging = staging_step(delete_row_ids)
-
-    if staging is not None:
-        datahub_emit_metadata_with_exception_catcher(
-            context=context,
-            config=config,
-            spark=spark,
-        )
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "row_count": staging.count(),
-                "preview": get_table_preview(staging),
-                "delete_row_ids": MetadataValue.json(delete_row_ids),
-            },
-        )
-
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": 0,
-            "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

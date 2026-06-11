@@ -236,14 +236,21 @@ class StagingStep:
             )
             return None
 
+        _DELETE_ALL = "__all__"
         silver_df = DeltaTable.forName(self.spark, self.silver_table_name).toDF()
-        rows = silver_df.filter(f.col(self.primary_key).isin(delete_ids))
+        if delete_ids == [_DELETE_ALL]:
+            rows = silver_df
+        else:
+            rows = silver_df.filter(f.col(self.primary_key).isin(delete_ids))
 
         if rows.isEmpty():
             self.context.log.warning(
                 f"None of {len(delete_ids)} delete IDs found in silver. Skipping."
             )
             return None
+
+        rows = add_missing_columns(rows, self.schema_columns)
+        rows = self._select_schema_cols(rows)
 
         upload_id = self.config.filename_components.id
         rows = (
