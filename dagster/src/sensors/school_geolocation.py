@@ -1,5 +1,6 @@
-import json
 from pathlib import Path
+
+from dateutil import parser
 
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
@@ -28,11 +29,8 @@ def school_master_geolocation__raw_file_uploads_sensor(
     adls_file_client: ADLSFileClient,
 ):
     source_directory = f"{constants.UPLOAD_PATH_PREFIX}/{DOMAIN_DATASET_TYPE}"
-    cursor = json.loads(context.cursor or "{}")
-    is_bootstrap = len(cursor) == 0  # True on very first tick after deployment
 
     count = 0
-    new_cursor = dict(cursor)  # start from existing cursor, update as we scan
 
     for file_data in adls_file_client.list_paths_generator(
         source_directory, recursive=True
@@ -58,19 +56,6 @@ def school_master_geolocation__raw_file_uploads_sensor(
         )
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         size = properties.size
-
-        last_modified = properties.last_modified.strftime("%Y%m%d-%H%M%S")
-        dq_triggered_at = metadata.get("dq_triggered_at", "")
-
-        file_key = str(path)
-        current_sig = f"{last_modified}:{dq_triggered_at}"
-        new_cursor[file_key] = current_sig
-
-        if is_bootstrap:
-            continue
-
-        if cursor.get(file_key) == current_sig:
-            continue
 
         ops_destination_mapping = {
             "geolocation_raw": OpDestinationMapping(
@@ -156,21 +141,26 @@ def school_master_geolocation__raw_file_uploads_sensor(
         )
 
         context.log.info(f"FILE: {path}")
+
+        dq_triggered_at = metadata.get("dq_triggered_at", "")
+        if dq_triggered_at:
+            try:
+                parsed_date = parser.parse(dq_triggered_at)
+                dq_triggered_at = parsed_date.strftime("%Y%m%d%H%M%S")
+            except Exception:
+                pass
+
+        run_key = f"{path}_{dq_triggered_at}" if dq_triggered_at else str(path)
+
         yield RunRequest(
-            run_key=None,  # cursor is the deduplication gate; run_key=None lets Dagster always honour the yield
+            run_key=run_key,
             run_config=RunConfig(ops=run_ops),
             tags={"country": country_code},
         )
         count += 1
 
-    context.update_cursor(json.dumps(new_cursor))
-
-    if is_bootstrap:
-        yield SkipReason(
-            f"Bootstrap tick: cursor initialised with {len(new_cursor)} files. No runs triggered."
-        )
-    elif count == 0:
-        yield SkipReason(f"No new or changed uploads detected in {source_directory}")
+    if count == 0:
+        yield SkipReason(f"No uploads detected in {source_directory}")
 
 
 @sensor(
