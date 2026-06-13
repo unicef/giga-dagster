@@ -410,13 +410,17 @@ class StagingStep:
                     )
 
                     file_upload.is_processed_in_staging = True
-                    if approval_request:
+                    # Do not overwrite a reviewer decision on pipeline re-runs
+                    if approval_request and file_upload.approval_status not in (
+                        "APPROVED",
+                        "REJECTED",
+                    ):
                         file_upload.approval_status = "PENDING"
 
                     self.context.log.info(
                         f"Stamped FileUpload {upload_id}: "
                         f"is_processed_in_staging=True, "
-                        f"approval_status={'PENDING' if approval_request else 'null'}"
+                        f"approval_status={file_upload.approval_status}"
                     )
         except Exception as e:
             self.context.log.error(
