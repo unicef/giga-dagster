@@ -414,6 +414,7 @@ def create_bronze_layer_columns_updated(
     df = map_govt_to_giga_columns(df, uploaded_columns)
 
     if "connectivity_type_govt" in uploaded_columns:
+        df = df.withColumn("connectivity_type", f.lower(f.col("connectivity_type")))
         get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
         df = df.withColumn(
             "connectivity_type_root",
@@ -426,6 +427,19 @@ def create_bronze_layer_columns_updated(
     # Generate school_id_giga for new schools using the dedicated function
     if mode == UploadMode.CREATE.value:
         df = create_school_id_giga(df)
+
+    if mode == UploadMode.CREATE.value or "school_id_govt_type" in df.columns:
+        df = df.withColumn(
+            "school_id_govt_type",
+            f.coalesce(
+                f.col("school_id_govt_type")
+                if "school_id_govt_type" in df.columns
+                else f.lit(None),
+                f.lit("Unknown")
+                if mode == UploadMode.CREATE.value
+                else f.lit(None).cast(StringType()),
+            ),
+        )
 
     # Admin columns: re-compute whenever lat/lon are part of the upload
     if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
@@ -746,7 +760,10 @@ def merge_connectivity_to_master(
 
     master = master.join(
         connectivity,
-        on=[master.school_id_govt == connectivity.school_id_govt_connectivity],
+        on=[
+            f.lower(master.school_id_govt)
+            == f.lower(connectivity.school_id_govt_connectivity)
+        ],
         how="left",
     )
 
