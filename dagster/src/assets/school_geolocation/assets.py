@@ -15,6 +15,7 @@ from pyspark.sql import (
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -301,9 +302,13 @@ def geolocation_data_quality_results(
     dq_results = row_level_checks(
         df=renamed_bronze,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
+        dq_context=DQContext(
+            dq_mode=DQMode(config.metadata.get("dq_mode", "master")),
+            dataset_type=dataset_type,
+            country_code_iso3=country_code,
+            upload_id=id,
+            upload_mode=config.metadata.get("mode"),
+        ),
         context=context,
     )
 
@@ -696,6 +701,10 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if config.metadata.get("dq_mode") == "uploaded":
+        context.log.info("Skipping staging as dq_mode is 'uploaded'")
+        return Output(None)
+
     if geolocation_dq_passed_rows.isEmpty():
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
