@@ -13,7 +13,7 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StringType, StructField, StructType
-from sqlalchemy import select
+from sqlalchemy import select, update
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -478,6 +478,27 @@ async def geolocation_data_quality_results_summary(
         df_bronze=geolocation_bronze,
         df_data_quality_checks=dq_results,
     )
+
+    # Persist the row counts to the Ingestion Portal DB. We already have the
+    # summary in memory here, so update directly instead of re-reading the DQ
+    # report blob from ADLS in a hook. Don't fail the asset if this write fails.
+    summary = (dq_summary_statistics or {}).get("summary", {})
+    try:
+        with get_db_context() as db:
+            db.execute(
+                update(FileUpload)
+                .where(FileUpload.id == config.filename_components.id)
+                .values(
+                    {
+                        FileUpload.rows: summary.get("rows"),
+                        FileUpload.rows_passed: summary.get("rows_passed"),
+                        FileUpload.rows_failed: summary.get("rows_failed"),
+                    }
+                ),
+            )
+            db.commit()
+    except Exception as e:
+        context.log.error(f"Failed to persist row counts to portal DB: {e}")
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,

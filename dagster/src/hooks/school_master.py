@@ -3,7 +3,6 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from dagster import HookContext, failure_hook, success_hook
-from src.utils.adls import ADLSFileClient
 from src.utils.db.primary import get_db_context
 from src.utils.op_config import FileConfig
 
@@ -17,35 +16,16 @@ def school_dq_checks_location_db_update_hook(context: HookContext):
     context.log.info("Running database update hook for DQ checks location...")
     config = FileConfig(**context.op_config)
 
-    values = {
-        FileUpload.dq_report_path: str(config.destination_filepath_object),
-        FileUpload.dq_status: DQStatusEnum.COMPLETED,
-    }
-
-    # Hooks do not receive op outputs, so read back the summary JSON from ADLS
-    # to feed the row counts into the portal DB. If this fails, fall back to the
-    # original UPDATE without the counts.
-    try:
-        report = ADLSFileClient().download_json(str(config.destination_filepath_object))
-        summary = (report or {}).get("summary", {})
-        values.update(
-            {
-                FileUpload.rows: summary.get("rows"),
-                FileUpload.rows_passed: summary.get("rows_passed"),
-                FileUpload.rows_failed: summary.get("rows_failed"),
-            }
-        )
-    except Exception as e:
-        context.log.error(
-            f"Failed to read DQ summary report from ADLS; "
-            f"skipping row counts update: {e}"
-        )
-
     with get_db_context() as db:
         db.execute(
             update(FileUpload)
             .where(FileUpload.id == config.filename_components.id)
-            .values(values),
+            .values(
+                {
+                    FileUpload.dq_report_path: str(config.destination_filepath_object),
+                    FileUpload.dq_status: DQStatusEnum.COMPLETED,
+                },
+            ),
         )
         db.commit()
 
