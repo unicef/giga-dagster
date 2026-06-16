@@ -1,21 +1,30 @@
 """
 Utility for generating interactive school maps using Folium.
+
+Each school gets exactly one marker (no per-filter duplication). Filtering is
+done client-side via a hand-written grouped-checkbox Leaflet control: four
+independent filter groups (status / rurality / habitability / boundary),
+AND across groups, OR within a group - a marker shows only if it matches at
+least one checked value in every group.
 """
+
+import json
 
 import folium
 import pandas as pd
-from folium.plugins import MarkerCluster
 from jinja2 import BaseLoader, Environment
 
 from dagster import OpExecutionContext
 
 PASSED_COLOR = "#28a745"
 FAILED_COLOR = "#dc3545"
+OUTSIDE_BOUNDARY_COLOR = "#343a40"
 
 _UNINHABITED_COL = "dq_is_in_uninhabited_area"
 _DUP_FLAG_COL = "dq_duplicate_group_flag_50m"
 _DUP_COUNT_COL = "dq_duplicate_group_count_50m"
 _DUP_GROUP_COL = "dq_duplicate_group_id_50m"
+_OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
 
 _POPUP_TEMPLATE = Environment(
     loader=BaseLoader(),
@@ -27,6 +36,24 @@ _POPUP_TEMPLATE = Environment(
 {%- endfor -%}
 """
 )
+
+# group key -> ordered list of (tag_value, checkbox_label)
+_FILTER_GROUPS = {
+    "status": [("passed", "Passed"), ("failed", "Failed")],
+    "rurality": [
+        ("rural", "Rural"),
+        ("urban", "Urban"),
+        ("unknown", "Rurality unknown"),
+    ],
+    "habitability": [("inhabited", "Inhabited"), ("uninhabited", "Uninhabited")],
+    "boundary": [("inside", "Inside boundary"), ("outside", "Outside boundary")],
+}
+_FILTER_GROUP_TITLES = {
+    "status": "Data Quality Status",
+    "rurality": "Rurality",
+    "habitability": "Habitability",
+    "boundary": "Country Boundary",
+}
 
 
 def _filter_rows_with_valid_coordinates(df: pd.DataFrame) -> pd.DataFrame:
@@ -112,6 +139,7 @@ def _render_school_popup_html(
         ("admin2", f"{admin2} ({admin2_id})"),
         ("rurban", _format_popup_value(row.get("rurban_detected"))),
         ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
+        ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
         ("duplicate_50_flag", _format_dq_flag(row.get(_DUP_FLAG_COL))),
         ("duplicate_50_group_id", _format_popup_value(row.get(_DUP_GROUP_COL))),
         ("duplicate_50_count", _format_popup_value(row.get(_DUP_COUNT_COL))),
@@ -123,25 +151,27 @@ def _render_school_popup_html(
 
 
 def _add_circle_marker(
-    cluster: MarkerCluster,
+    layer: folium.FeatureGroup,
     row: dict,
     color: str,
     popup_html: str,
+    tags: list[str],
 ) -> None:
-    """Add one school coordinate marker to a Folium marker cluster."""
+    """Add one school coordinate marker to the shared feature group."""
     folium.CircleMarker(
         location=[row["latitude"], row["longitude"]],
-        radius=5,
+        radius=1,
         color=color,
         fill=True,
         fillColor=color,
         fillOpacity=0.7,
         popup=folium.Popup(popup_html, max_width=380),
-    ).add_to(cluster)
+        tags=tags,
+    ).add_to(layer)
 
 
 def _get_rurality_filter_key(row: dict) -> str:
-    """Return the rurality layer key for a school row."""
+    """Return the rurality tag for a school row."""
     rurban = str(row.get("rurban_detected", "")).strip().lower()
     if rurban == "urban":
         return "urban"
@@ -158,69 +188,111 @@ def _is_uninhabited(row: dict) -> bool:
         return False
 
 
-def _calculate_filter_counts(*dfs: pd.DataFrame) -> dict[str, int]:
-    """Calculate filter layer counts using the same rules as marker placement."""
-    counts = {"urban": 0, "rural": 0, "unknown": 0, "uninhabited": 0}
-    for df in dfs:
-        for row in df.to_dict("records"):
-            counts[_get_rurality_filter_key(row)] += 1
-            if _is_uninhabited(row):
-                counts["uninhabited"] += 1
-    return counts
+def _is_outside_boundary(row: dict) -> bool:
+    """Return whether a school row is flagged as outside the country boundary."""
+    try:
+        return int(float(row.get(_OUTSIDE_BOUNDARY_COL, 0))) == 1
+    except (TypeError, ValueError):
+        return False
 
 
-def _add_school_markers_to_clusters(
+def _add_school_markers(
     df: pd.DataFrame,
     base_color: str,
-    status: str,
-    main_cluster: MarkerCluster,
-    filter_clusters: dict[str, MarkerCluster],
+    status_tag: str,
+    status_label: str,
+    main_layer: folium.FeatureGroup,
     include_failure_reason: bool,
 ) -> None:
-    """Add school markers to the main status cluster and matching filter clusters."""
+    """Add one tagged school marker per row to the shared layer."""
     for row in df.to_dict("records"):
         popup_html = _render_school_popup_html(
             row,
-            status=status,
+            status=status_label,
             include_failure_reason=include_failure_reason,
         )
-        _add_circle_marker(main_cluster, row, base_color, popup_html)
-
-        rurality_key = _get_rurality_filter_key(row)
-        rurality_colors = {
-            "urban": "#0d6efd",
-            "rural": "#fd7e14",
-            "unknown": "#6c757d",
-        }
-        _add_circle_marker(
-            filter_clusters[rurality_key],
-            row,
-            rurality_colors[rurality_key],
-            popup_html,
-        )
-
-        if _is_uninhabited(row):
-            _add_circle_marker(
-                filter_clusters["uninhabited"], row, "#6f42c1", popup_html
-            )
+        outside_boundary = _is_outside_boundary(row)
+        tags = [
+            status_tag,
+            _get_rurality_filter_key(row),
+            "uninhabited" if _is_uninhabited(row) else "inhabited",
+            "outside" if outside_boundary else "inside",
+        ]
+        color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else base_color
+        _add_circle_marker(main_layer, row, color, popup_html, tags)
 
 
-def _add_non_empty_filter_clusters_to_map(
-    m: folium.Map,
-    filter_clusters: dict[str, MarkerCluster],
-    counts: dict[str, int],
-) -> None:
-    """Attach populated filter clusters to the map with count labels."""
-    cluster_labels = {
-        "urban": "Urban",
-        "rural": "Rural",
-        "unknown": "Rurality Unknown",
-        "uninhabited": "In Uninhabited Area",
+def _calculate_filter_counts(
+    passed_df: pd.DataFrame, failed_df: pd.DataFrame
+) -> dict[str, int]:
+    """Calculate per-tag-value counts for the grouped filter control's checkbox labels."""
+    counts = {"passed": len(passed_df), "failed": len(failed_df)}
+    for df in (passed_df, failed_df):
+        for row in df.to_dict("records"):
+            rurality_key = _get_rurality_filter_key(row)
+            counts[rurality_key] = counts.get(rurality_key, 0) + 1
+            habit_key = "uninhabited" if _is_uninhabited(row) else "inhabited"
+            counts[habit_key] = counts.get(habit_key, 0) + 1
+            boundary_key = "outside" if _is_outside_boundary(row) else "inside"
+            counts[boundary_key] = counts.get(boundary_key, 0) + 1
+    return counts
+
+
+def _build_grouped_filter_control_js(layer_var: str, counts: dict[str, int]) -> str:
+    """Build the <script> body for the custom grouped-checkbox filter control."""
+    groups_values = {
+        group: [value for value, _label in options]
+        for group, options in _FILTER_GROUPS.items()
     }
-    for key, label in cluster_labels.items():
-        if counts[key] > 0:
-            filter_clusters[key].name = f"{label} ({counts[key]})"
-            filter_clusters[key].add_to(m)
+
+    sections_html = []
+    for group, options in _FILTER_GROUPS.items():
+        rows = "".join(
+            f'<label class="gfc-row"><input type="checkbox" class="gfc" '
+            f'data-group="{group}" value="{value}" checked> {label} '
+            f"({counts.get(value, 0):,})</label>"
+            for value, label in options
+        )
+        sections_html.append(
+            f'<div class="gfc-group"><div class="gfc-title">'
+            f"{_FILTER_GROUP_TITLES[group]}</div>{rows}</div>"
+        )
+    panel_html = "".join(sections_html).replace("`", "'")
+
+    return f"""
+    var GFC_GROUPS = {json.dumps(groups_values)};
+    var GFC_ALL_MARKERS = [];
+    {layer_var}.eachLayer(function(l) {{ GFC_ALL_MARKERS.push(l); }});
+
+    function gfcApplyFilters() {{
+        var active = {{}};
+        Object.keys(GFC_GROUPS).forEach(function(g) {{ active[g] = new Set(); }});
+        document.querySelectorAll("input.gfc:checked").forEach(function(cb) {{
+            active[cb.getAttribute("data-group")].add(cb.value);
+        }});
+        GFC_ALL_MARKERS.forEach(function(marker) {{
+            var visible = Object.keys(GFC_GROUPS).every(function(g) {{
+                return marker.options.tags.some(function(t) {{ return active[g].has(t); }});
+            }});
+            var has = {layer_var}.hasLayer(marker);
+            if (visible && !has) {{ {layer_var}.addLayer(marker); }}
+            if (!visible && has) {{ {layer_var}.removeLayer(marker); }}
+        }});
+    }}
+
+    var GroupedFilterControl = L.Control.extend({{
+        options: {{position: "topright"}},
+        onAdd: function(map) {{
+            var container = L.DomUtil.create("div", "gfc-panel leaflet-bar");
+            container.innerHTML = `{panel_html}`;
+            L.DomEvent.disableClickPropagation(container);
+            container.querySelectorAll("input.gfc").forEach(function(cb) {{
+                cb.addEventListener("change", gfcApplyFilters);
+            }});
+            return container;
+        }}
+    }});
+    """
 
 
 def generate_school_map_html(
@@ -229,7 +301,7 @@ def generate_school_map_html(
     failed_df: pd.DataFrame,
     context: OpExecutionContext,
 ) -> str:
-    """Generate an optimized interactive HTML map with passed/failed schools and filter layers."""
+    """Generate an optimized interactive HTML map with grouped checkbox filters."""
     context.log.info(
         f"Map generation input: passed={len(passed_df)}, failed={len(failed_df)}"
     )
@@ -247,48 +319,44 @@ def generate_school_map_html(
     ]
     center_lat, center_lon, bounds = _calculate_coordinate_bounds(bounds_df)
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=6, control_scale=True)
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=6,
+        control_scale=True,
+        prefer_canvas=True,
+    )
     m.fit_bounds(bounds, padding=[50, 50])
 
-    passed_cluster = MarkerCluster(
-        name=f"Schools Passed ({len(passed_filtered)})", show=True
+    main_layer = folium.FeatureGroup(name="Schools", show=True)
+
+    _add_school_markers(
+        passed_filtered, PASSED_COLOR, "passed", "Passed", main_layer, False
     )
-    failed_cluster = MarkerCluster(
-        name=f"Schools Failed ({len(failed_filtered)})", show=True
+    _add_school_markers(
+        failed_filtered, FAILED_COLOR, "failed", "Failed", main_layer, True
     )
+    main_layer.add_to(m)
 
     counts = _calculate_filter_counts(passed_filtered, failed_filtered)
-    filter_clusters = {
-        "urban": MarkerCluster(name=f"Urban ({counts['urban']})", show=False),
-        "rural": MarkerCluster(name=f"Rural ({counts['rural']})", show=False),
-        "unknown": MarkerCluster(
-            name=f"Rurality Unknown ({counts['unknown']})", show=False
-        ),
-        "uninhabited": MarkerCluster(
-            name=f"In Uninhabited Area ({counts['uninhabited']})", show=False
-        ),
-    }
+    js = _build_grouped_filter_control_js(main_layer.get_name(), counts)
+    extra_markup = (
+        "<style>.gfc-panel{background:white;padding:8px 10px;"
+        "border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.4);"
+        "font-size:13px;max-height:420px;overflow:auto;}"
+        ".gfc-title{font-weight:bold;margin-top:6px;}"
+        ".gfc-row{display:block;white-space:nowrap;margin:2px 0;}</style>"
+        f"<script>{js}\n"
+        f"new GroupedFilterControl().addTo({m.get_name()});</script>"
+    )
 
-    datasets = [
-        (passed_filtered, PASSED_COLOR, "Passed", passed_cluster, False),
-        (failed_filtered, FAILED_COLOR, "Failed", failed_cluster, True),
-    ]
-
-    for df, base_color, status, main_cluster, include_fail in datasets:
-        _add_school_markers_to_clusters(
-            df,
-            base_color,
-            status,
-            main_cluster,
-            filter_clusters,
-            include_fail,
-        )
-
-    passed_cluster.add_to(m)
-    failed_cluster.add_to(m)
-    _add_non_empty_filter_clusters_to_map(m, filter_clusters, counts)
-
-    folium.LayerControl(collapsed=False).add_to(m)
     context.log.info("Map generation complete successfully.")
 
-    return m.get_root().render()
+    # Render first, then append our control's markup/JS as plain text so it
+    # always executes after Folium's own marker-creation script tags, which
+    # define the layer variable our control depends on. Folium places its
+    # </body> tag *before* the <script> block that actually creates the
+    # markers, so replacing </body> still runs too early - appending at the
+    # absolute end (even after </html>) is the only ordering guarantee,
+    # and trailing <script> tags still execute fine in browsers.
+    html = m.get_root().render()
+    return html + extra_markup

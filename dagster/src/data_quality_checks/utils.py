@@ -636,6 +636,7 @@ def dq_geolocation_extract_relevant_columns(
     # Extract raw integer DQ values needed for map tooltip and filter layers.
     MAP_EXTRA_DQ_KEYS = [
         "is_in_uninhabited_area",
+        "is_not_within_country",
         "duplicate_group_flag_50m",
         "duplicate_group_count_50m",
         "duplicate_group_id_50m",
