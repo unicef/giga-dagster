@@ -6,14 +6,12 @@ import pandas as pd
 from dagster_pyspark import PySparkResource
 from datahub.specific.dataset import DatasetPatchBuilder
 from delta import DeltaTable
-from models.approval_requests import ApprovalRequest
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
 )
 from pyspark.sql.types import NullType, StructType
-from sqlalchemy import select, update
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -37,19 +35,14 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emit_lineage import emit_lineage_base
 from src.utils.datahub.emitter import get_rest_emitter
-from src.utils.db.primary import get_db_context
 from src.utils.delta import (
     check_table_exists,
-    create_delta_table,
-    create_schema,
     sync_schema,
 )
 from src.utils.logger import ContextLoggerWithLoguruFallback
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
-    construct_full_table_name,
-    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -740,232 +733,6 @@ def adhoc__publish_reference_to_gold(
             "row_count": gold.count(),
             "preview": get_table_preview(gold),
         },
-    )
-
-
-@asset(deps=["adhoc__publish_silver_geolocation"])
-@capture_op_exceptions
-async def adhoc__reset_geolocation_staging_table(
-    context: OpExecutionContext,
-    spark: PySparkResource,
-    config: FileConfig,
-    adls_file_client: ADLSFileClient,
-) -> None:
-    s: SparkSession = spark.spark_session
-    country_code = config.country_code
-    dataset_type = "geolocation"
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.STAGING
-    )
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.SILVER
-    )
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
-
-    # Check if staging table exists
-    staging_table_exists = check_table_exists(
-        spark=s,
-        schema_name=config.metastore_schema,
-        table_name=country_code.lower(),
-        data_tier=DataTier.STAGING,
-    )
-    context.log.info(f"{staging_table_exists=}")
-
-    if not staging_table_exists:
-        context.log.info(
-            f"Staging table {staging_table_name} does not exist. Skipping reset."
-        )
-        return None
-
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
-    # State check: verify merge is not processing before reset
-    formatted_dataset = f"School {dataset_type.capitalize()}"
-    with get_db_context() as db:
-        current_request = db.scalar(
-            select(ApprovalRequest).where(
-                (ApprovalRequest.country == country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-            )
-        )
-
-        if current_request is None:
-            context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
-            )
-        elif current_request.is_merge_processing:
-            context.log.warning(
-                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
-                f"Expected is_merge_processing=False before reset."
-            )
-            return
-
-    staging_table_path = config.destination_filepath
-    s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-
-    try:
-        adls_file_client.delete(staging_table_path, is_directory=True)
-    except ResourceNotFoundError as e:
-        context.log.warning(e)
-
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    create_schema(s, staging_tier_schema_name)
-    create_delta_table(
-        s,
-        staging_tier_schema_name,
-        country_code,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
-
-    formatted_dataset = f"School {dataset_type.capitalize()}"
-    with get_db_context() as db:
-        try:
-            with db.begin():
-                # Ensure enabled=False and is_merge_processing=False after reset
-                result = db.execute(
-                    update(ApprovalRequest)
-                    .where(
-                        (ApprovalRequest.country == country_code)
-                        & (ApprovalRequest.dataset == formatted_dataset)
-                    )
-                    .values(
-                        {
-                            ApprovalRequest.is_merge_processing: False,
-                            ApprovalRequest.enabled: False,
-                        }
-                    )
-                )
-                if result.rowcount == 0:
-                    context.log.warning(
-                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
-                    )
-        except Exception as e:
-            context.log.error(
-                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
-            )
-            raise
-
-    context.log.info(
-        f"Staging reset completed for {country_code} - {formatted_dataset}; previously staged changes were wiped."
-    )
-
-
-@asset(deps=["adhoc__publish_silver_coverage"])
-@capture_op_exceptions
-async def adhoc__reset_coverage_staging_table(
-    context: OpExecutionContext,
-    spark: PySparkResource,
-    config: FileConfig,
-    adls_file_client: ADLSFileClient,
-) -> None:
-    s: SparkSession = spark.spark_session
-    country_code = config.country_code
-    dataset_type = "coverage"
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.STAGING
-    )
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{dataset_type}", DataTier.SILVER
-    )
-
-    # Check if staging table exists
-    staging_table_exists = check_table_exists(
-        spark=s,
-        schema_name=config.metastore_schema,
-        table_name=country_code.lower(),
-        data_tier=DataTier.STAGING,
-    )
-    context.log.info(f"{staging_table_exists=}")
-
-    if not staging_table_exists:
-        context.log.info(
-            f"Staging table {staging_table_name} does not exist. Skipping reset."
-        )
-        return None
-
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
-    # State check: verify merge is not processing before reset
-    formatted_dataset = f"School {dataset_type.capitalize()}"
-    with get_db_context() as db:
-        current_request = db.scalar(
-            select(ApprovalRequest).where(
-                (ApprovalRequest.country == country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-            )
-        )
-
-        if current_request is None:
-            context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. Proceeding with reset."
-            )
-        elif current_request.is_merge_processing:
-            context.log.warning(
-                f"Reset blocked: Merge is still processing (is_merge_processing=True) for {country_code} - {formatted_dataset}. "
-                f"Expected is_merge_processing=False before reset."
-            )
-            return
-
-    staging_table_path = config.destination_filepath
-    s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-
-    try:
-        adls_file_client.delete(staging_table_path, is_directory=True)
-    except ResourceNotFoundError as e:
-        context.log.warning(e)
-
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-    silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    create_schema(s, staging_tier_schema_name)
-    create_delta_table(
-        s,
-        staging_tier_schema_name,
-        country_code,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    silver.write.format("delta").mode("append").saveAsTable(staging_table_name)
-
-    formatted_dataset = f"School {dataset_type.capitalize()}"
-    with get_db_context() as db:
-        try:
-            with db.begin():
-                # Ensure enabled=False and is_merge_processing=False after reset
-                result = db.execute(
-                    update(ApprovalRequest)
-                    .where(
-                        (ApprovalRequest.country == country_code)
-                        & (ApprovalRequest.dataset == formatted_dataset)
-                    )
-                    .values(
-                        {
-                            ApprovalRequest.is_merge_processing: False,
-                            ApprovalRequest.enabled: False,
-                        }
-                    )
-                )
-                if result.rowcount == 0:
-                    context.log.warning(
-                        f"No ApprovalRequest found for {country_code} - {formatted_dataset}."
-                    )
-        except Exception as e:
-            context.log.error(
-                f"Failed to update ApprovalRequest for {country_code} - {formatted_dataset}: {e}"
-            )
-            raise
-
-    context.log.info(
-        f"Staging reset completed for {country_code} - {formatted_dataset}; previously staged changes were wiped."
     )
 
 
