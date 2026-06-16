@@ -803,28 +803,20 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
+    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
+    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
     config: FileConfig,
-    adls_file_client: ADLSFileClient,
 ) -> Output[str]:
     """
     Generate an interactive HTML map showing passed and failed schools.
-    Reads CSV files directly from ADLS.
     """
-    from src.constants import constants
     from src.utils.map_generator import generate_school_map_html
 
     country_code = config.country_code
     upload_id = config.filename_components.id
-    stem = Path(config.filepath).stem
 
-    # Construct file paths
-    passed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-passed-rows-human-readable/{country_code}/{stem}.csv"
-    failed_filepath = f"{constants.dq_results_folder}/school-geolocation/dq-failed-rows-human-readable/{country_code}/{stem}.csv"
-
-    # Read CSV files directly from ADLS as pandas DataFrames
-    passed_pdf = adls_file_client.download_csv_as_pandas_dataframe(passed_filepath)
-    failed_pdf = adls_file_client.download_csv_as_pandas_dataframe(failed_filepath)
+    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
+    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
 
     map_html = generate_school_map_html(
         country_code=country_code,
