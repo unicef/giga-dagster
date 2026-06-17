@@ -22,7 +22,18 @@ def deconstruct_school_master_filename_components(filepath: str):
         else EXPECTED_COVERAGE_COMPONENTS
     )
 
-    if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
+    if "geolocation" in path.stem and len(splits) >= EXPECTED_GEOLOCATION_COMPONENTS:
+        id, country_code, dataset_type, timestamp = splits[-4:]
+        source = None
+
+        return FilenameComponents(
+            id=id,
+            dataset_type=dataset_type,
+            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
+            country_code=country_code,
+            source=source,
+        )
+    elif len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
         source = splits[3] if "coverage" in path.stem else None

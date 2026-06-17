@@ -12,6 +12,7 @@ from ..resources.superset import (
     run_query,
 )
 
+
 @op
 def post_incremental_query_durations_to_slack(context: OpExecutionContext, results):
     slack_webhook = os.getenv("SLACK_WORKFLOW_WEBHOOK")
