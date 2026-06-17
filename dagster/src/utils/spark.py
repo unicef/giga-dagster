@@ -196,7 +196,7 @@ def transform_school_types(
     ]
     columns_convert_to_string = [
         "school_id_giga",
-        "school_id_gov",
+        "school_id_govt",
         "school_name",
         "education_level",
         "education_level_govt",
@@ -212,7 +212,7 @@ def transform_school_types(
         "water_availability",
         "school_data_source",
         "school_data_collection_modality",
-        "school_id_gov_type",
+        "school_id_govt_type",
         "school_address",
         "is_school_open",
         "cellular_coverage_availability",

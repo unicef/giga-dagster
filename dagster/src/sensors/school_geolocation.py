@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from dateutil import parser
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.school_master import (
@@ -124,6 +126,18 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.STAGING,
                 ),
+                "geolocation_school_map": OpDestinationMapping(
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
+                "geolocation_dq_kit_zip": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-kit/{country_code}/DQ_Kit_{country_code}_{DATASET_TYPE}_{stem}.zip",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
+                ),
             }
 
             run_ops = generate_run_ops(
@@ -137,8 +151,21 @@ def school_master_geolocation__raw_file_uploads_sensor(
             )
 
             context.log.info(f"FILE: {path}")
+
+            dq_triggered_at = metadata.get("dq_triggered_at", "")
+            if dq_triggered_at:
+                try:
+                    parsed_date = parser.parse(dq_triggered_at)
+                    dq_triggered_at = parsed_date.strftime("%Y%m%d%H%M%S")
+                except Exception as e:
+                    context.log.error(
+                        f"Failed to parse dq_triggered_at: {dq_triggered_at}: {e}"
+                    )
+
+            run_key = f"{path}_{dq_triggered_at}" if dq_triggered_at else str(path)
+
             yield RunRequest(
-                run_key=str(path),
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )
@@ -222,6 +249,12 @@ def school_master_geolocation__post_manual_checks_sensor(
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
+                ),
+                "dq_kit_post_approval": OpDestinationMapping(
+                    source_filepath=str(path),
+                    destination_filepath="",
+                    metastore_schema=METASTORE_SCHEMA,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
             }
 
