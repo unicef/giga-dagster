@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from dateutil import parser
+
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.school_master import (
@@ -149,8 +151,21 @@ def school_master_geolocation__raw_file_uploads_sensor(
             )
 
             context.log.info(f"FILE: {path}")
+
+            dq_triggered_at = metadata.get("dq_triggered_at", "")
+            if dq_triggered_at:
+                try:
+                    parsed_date = parser.parse(dq_triggered_at)
+                    dq_triggered_at = parsed_date.strftime("%Y%m%d%H%M%S")
+                except Exception as e:
+                    context.log.error(
+                        f"Failed to parse dq_triggered_at: {dq_triggered_at}: {e}"
+                    )
+
+            run_key = f"{path}_{dq_triggered_at}" if dq_triggered_at else str(path)
+
             yield RunRequest(
-                run_key=str(path),
+                run_key=run_key,
                 run_config=RunConfig(ops=run_ops),
                 tags={"country": country_code},
             )

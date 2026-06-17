@@ -760,7 +760,10 @@ def merge_connectivity_to_master(
 
     master = master.join(
         connectivity,
-        on=[master.school_id_govt == connectivity.school_id_govt_connectivity],
+        on=[
+            f.lower(master.school_id_govt)
+            == f.lower(connectivity.school_id_govt_connectivity)
+        ],
         how="left",
     )
 
