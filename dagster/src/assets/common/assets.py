@@ -311,6 +311,29 @@ def _stamp_processed_and_reset_approval(
             )
 
 
+def _cascade_deletes_to_coverage_silver(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    country_code: str,
+    primary_key: str,
+    delete_ids: list[str],
+) -> None:
+    coverage_silver_tier_schema = construct_schema_name_for_tier(
+        "school_coverage", DataTier.SILVER
+    )
+    coverage_silver_table = construct_full_table_name(
+        coverage_silver_tier_schema, country_code
+    )
+    if check_table_exists(spark, "school_coverage", country_code, DataTier.SILVER):
+        spark.catalog.refreshTable(coverage_silver_table)
+        DeltaTable.forName(spark, coverage_silver_table).delete(
+            f.col(primary_key).isin(delete_ids)
+        )
+        context.log.info(
+            f"Cascaded {len(delete_ids)} deletes to coverage silver for {country_code}."
+        )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def silver(  # noqa: C901
@@ -446,6 +469,11 @@ def silver(  # noqa: C901
                 )
             context.log.info(
                 f"Delete verification passed: all {len(delete_ids)} deletes removed."
+            )
+
+        if config.dataset_type == "geolocation":
+            _cascade_deletes_to_coverage_silver(
+                s, context, country_code, primary_key, delete_ids
             )
     else:
         new_silver = inserts

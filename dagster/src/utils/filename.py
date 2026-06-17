@@ -7,7 +7,7 @@ from src.schemas.filename_components import FilenameComponents
 EXPECTED_GEOLOCATION_COMPONENTS = 4
 EXPECTED_COVERAGE_COMPONENTS = 5
 EXPECTED_APPROVED_IDS_COMPONENTS = 3
-EXPECTED_DELETE_IDS_COMPONENTS = 2
+EXPECTED_DELETE_IDS_COMPONENTS = 4
 
 
 def deconstruct_school_master_filename_components(filepath: str):
@@ -59,10 +59,10 @@ def deconstruct_school_master_filename_components(filepath: str):
     elif len(splits) == EXPECTED_DELETE_IDS_COMPONENTS and path.parts[-1].endswith(
         ".json"
     ):
-        country_code, timestamp = splits
+        upload_id, country_code, _, timestamp = splits
         timestamp = datetime.strptime(timestamp, expected_timestamp_format)
         return FilenameComponents(
-            id="",
+            id=upload_id,
             timestamp=timestamp,
             country_code=country_code,
         )
