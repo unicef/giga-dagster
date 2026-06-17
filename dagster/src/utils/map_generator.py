@@ -295,8 +295,7 @@ def _build_grouped_filter_control_js(layer_var: str, counts: dict[str, int]) -> 
     """
 
 
-def \
-        generate_school_map_html(
+def generate_school_map_html(
     country_code: str,
     passed_df: pd.DataFrame,
     failed_df: pd.DataFrame,
