@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
+from models.base_database import cuid_generator
 from models.deletion_requests import DeletionRequest
 from models.file_upload import FileUpload
 from pyspark.sql import SparkSession
@@ -137,8 +138,9 @@ def delete_schools_from_master(
             f"{len(giga_ids_to_delete)} schools will be deleted from school master for {country_code}"
         )
 
+    record_id = cuid_generator()
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{country_code}_{timestamp}.json"
+    filename = f"{record_id}_{country_code}_delete_{timestamp}.json"
 
     delete_filepath = (
         f"{constants.staging_folder}/delete-row-ids/{country_code}/{filename}"
@@ -146,13 +148,21 @@ def delete_schools_from_master(
     context.log.info(
         f"Uploading file with list of schools to delete to {delete_filepath}"
     )
-    adls_file_client.upload_json(data=giga_ids_to_delete, filepath=delete_filepath)
+    adls_file_client.upload_json(
+        data={"id_type": "school_id_giga", "ids": giga_ids_to_delete},
+        filepath=delete_filepath,
+    )
 
     context.log.info(f"Create DB entry for deletion request for {country_code}")
     deletion_request = DeletionRequest(
+        id=record_id,
         requested_by_email=settings.API_AUTOMATION_EMAIL,
         requested_by_id=settings.API_AUTOMATION_USER_ID,
         country=country_code,
+        id_type="school_id_giga",
+        school_count=len(giga_ids_to_delete),
+        file_path=delete_filepath,
+        is_delete_all=False,
     )
 
     with get_db_context() as db:

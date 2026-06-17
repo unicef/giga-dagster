@@ -19,6 +19,7 @@ from src.data_quality_checks.create_update import (
     add_is_new_school,
     enrich_with_silver_values,
 )
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -328,8 +329,13 @@ def geolocation_data_quality_results(
     dq_results = row_level_checks(
         df=enriched_bronze,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
+        dq_context=DQContext(
+            dq_mode=DQMode(config.metadata.get("dq_mode", "master")),
+            dataset_type=dataset_type,
+            country_code_iso3=country_code,
+            upload_id=id,
+            upload_mode=config.metadata.get("mode"),
+        ),
         context=context,
     )
 
@@ -429,9 +435,11 @@ def geolocation_data_quality_results_human_readable(
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     context.log.info("Create a new dataframe with only the relevant columns")
+
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
     )
+
     for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
             human_name,
@@ -448,6 +456,12 @@ def geolocation_data_quality_results_human_readable(
         "dq_has_critical_error", "failure_reason"
     )
     df_failed = df.filter(df.dq_has_critical_error == 1).drop("dq_has_critical_error")
+
+    # Check for overlap between passed and failed
+    passed_ids = df_passed.select("school_id_giga").distinct().count()
+    failed_ids = df_failed.select("school_id_giga").distinct().count()
+    context.log.info(f"Passed: {df_passed.count()} rows ({passed_ids} unique IDs)")
+    context.log.info(f"Failed: {df_failed.count()} rows ({failed_ids} unique IDs)")
 
     output_metadata = get_output_metadata(config)
 
@@ -723,6 +737,10 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if config.metadata.get("dq_mode") == "uploaded":
+        context.log.info("Skipping staging as dq_mode is 'uploaded'")
+        return Output(None)
+
     if geolocation_dq_passed_rows.isEmpty():
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
@@ -780,7 +798,9 @@ def geolocation_delete_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    delete_row_ids = adls_file_client.download_json(config.filepath)
+    payload = adls_file_client.download_json(config.filepath)
+    id_type = payload["id_type"]
+    delete_row_ids = payload.get("ids", [])
     if isinstance(delete_row_ids, list):
         # dedupe change IDs
         delete_row_ids = list(set(delete_row_ids))
@@ -792,7 +812,7 @@ def geolocation_delete_staging(
         spark.spark_session,
         StagingMode.DELETE,
     )
-    staging = staging_step(delete_row_ids)
+    staging = staging_step(delete_row_ids, id_type=id_type)
 
     if staging is not None:
         datahub_emit_metadata_with_exception_catcher(
@@ -814,5 +834,91 @@ def geolocation_delete_staging(
         metadata={
             **get_output_metadata(config),
             "delete_row_ids": MetadataValue.json(delete_row_ids),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_school_map(
+    context: OpExecutionContext,
+    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
+    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
+    config: FileConfig,
+) -> Output[str]:
+    """
+    Generate an interactive HTML map showing passed and failed schools.
+    """
+    from src.utils.map_generator import generate_school_map_html
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+
+    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
+    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
+
+    map_html = generate_school_map_html(
+        country_code=country_code,
+        passed_df=passed_pdf,
+        failed_df=failed_pdf,
+        context=context,
+    )
+
+    passed_count = len(passed_pdf)
+    failed_count = len(failed_pdf)
+
+    context.log.info(
+        f"Generated map for {country_code} (upload: {upload_id}): "
+        f"{passed_count} passed, {failed_count} failed schools"
+    )
+
+    return Output(
+        map_html,
+        metadata={
+            **get_output_metadata(config),
+            "passed_schools": passed_count,
+            "failed_schools": failed_count,
+            "total_schools": passed_count + failed_count,
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_dq_kit_zip(
+    context: OpExecutionContext,
+    geolocation_school_map: str,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+) -> Output[bytes]:
+    """
+    Generate a DQ Kit ZIP bundle containing all DQ artifacts.
+    """
+    from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+    dataset = config.dataset_type
+    original_filename = Path(config.filepath).name
+    stem = Path(config.filepath).stem
+
+    zip_bytes, filename = generate_dq_kit_zip_bytes(
+        country_code=country_code,
+        upload_id=upload_id,
+        dataset=dataset,
+        original_filename=original_filename,
+        stem=stem,
+        adls_client=adls_file_client,
+        context=context,
+    )
+
+    context.log.info(f"Generated DQ Kit ZIP: {filename} ({len(zip_bytes)} bytes)")
+
+    return Output(
+        zip_bytes,
+        metadata={
+            **get_output_metadata(config),
+            "zip_filename": filename,
+            "zip_size_bytes": len(zip_bytes),
         },
     )
