@@ -346,7 +346,7 @@ class StagingStep:
                         .where(DeletionRequest.id == upload_id)
                         .values(
                             school_count=count,
-                            status="pending_approval" if count > 0 else "no_matches",
+                            status="PENDING_APPROVAL" if count > 0 else "NO_MATCHES",
                         )
                     )
             except Exception as e:
