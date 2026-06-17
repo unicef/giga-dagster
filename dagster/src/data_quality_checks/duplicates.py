@@ -25,23 +25,34 @@ def duplicate_set_checks(
         ),
     )
 
+    null_coords = (
+        f.col("latitude").isNull()
+        | f.isnan(f.col("latitude"))
+        | f.col("longitude").isNull()
+        | f.isnan(f.col("longitude"))
+    )
+
     column_actions = {}
     for column_set in config_column_list:
-        set_name = "_".join(column_set)
-        column_actions[f"dq_duplicate_set-{set_name}"] = (
-            f.when(
-                f.col("latitude").isNull()
-                | f.isnan(f.col("latitude"))
-                | f.col("longitude").isNull()
-                | f.isnan(f.col("latitude")),
-                f.lit(None).cast("int"),
-            )
-            .when(
-                f.count("*").over(Window.partitionBy(column_set)) > 1,
-                1,
-            )
+        is_location_only = list(column_set) == ["location_id"]
+        flag_col = (
+            "dq_duplicate_location_rows_flag"
+            if is_location_only
+            else f"dq_duplicate_set-{'_'.join(column_set)}"
+        )
+        window_count = f.count("*").over(Window.partitionBy(column_set))
+        column_actions[flag_col] = (
+            f.when(null_coords, f.lit(None).cast("int"))
+            .when(window_count > 1, 1)
             .otherwise(0)
         )
+        if is_location_only:
+            column_actions["dq_duplicate_location_rows_count"] = f.when(
+                null_coords, f.lit(None).cast("int")
+            ).otherwise(window_count)
+            column_actions["dq_duplicate_location_rows_id"] = f.when(
+                null_coords, f.lit(None)
+            ).otherwise(f.substring(f.md5(f.col("location_id")), 1, 8))
 
     df = df.withColumns(column_actions)
     return df.drop("location_id")
@@ -57,12 +68,21 @@ def duplicate_all_except_checks(
 
     existing_columns = [col for col in config_column_list if col in df.columns]
 
-    df = df.withColumn(
-        "dq_duplicate_all_except_school_code",
-        f.when(
-            f.count("*").over(Window.partitionBy(existing_columns)) > 1,
-            1,
-        ).otherwise(0),
-    )
+    count_expr = f.count("*").over(Window.partitionBy(existing_columns)) > 1
+
+    if "latitude" in existing_columns and "longitude" in existing_columns:
+        null_guard = (
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude"))
+        )
+        result_expr = (
+            f.when(null_guard, f.lit(None).cast("int")).when(count_expr, 1).otherwise(0)
+        )
+    else:
+        result_expr = f.when(count_expr, 1).otherwise(0)
+
+    df = df.withColumn("dq_duplicate_all_except_school_code", result_expr)
 
     return df
