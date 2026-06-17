@@ -753,7 +753,9 @@ def geolocation_delete_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    delete_row_ids = adls_file_client.download_json(config.filepath)
+    payload = adls_file_client.download_json(config.filepath)
+    id_type = payload["id_type"]
+    delete_row_ids = payload.get("ids", [])
     if isinstance(delete_row_ids, list):
         # dedupe change IDs
         delete_row_ids = list(set(delete_row_ids))
@@ -765,7 +767,7 @@ def geolocation_delete_staging(
         spark.spark_session,
         StagingMode.DELETE,
     )
-    staging = staging_step(delete_row_ids)
+    staging = staging_step(delete_row_ids, id_type=id_type)
 
     if staging is not None:
         datahub_emit_metadata_with_exception_catcher(
