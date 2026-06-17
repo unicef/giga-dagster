@@ -541,7 +541,9 @@ def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str], mode: str
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    mode: str,
 ):
     df = _normalize_dq_results_map(df)
 
@@ -596,17 +598,57 @@ def dq_geolocation_extract_relevant_columns(
     # The dq_results map keys are the check names without the "dq_" prefix.
     relevant_map_keys = [col.replace("dq_", "", 1) for col in dq_columns_list]
 
-    columns_to_keep = [
-        col
-        for col in [
-            *uploaded_columns,
-            "dq_has_critical_error",
-            "failure_reason",
-            "dq_results",
-        ]
-        if col in df.columns
+    # Add required columns for Map Visualization
+    MAP_CONTEXT_COLUMNS = [
+        "school_id_giga",
+        "school_id_govt",
+        "latitude",
+        "longitude",
+        "school_name",
+        "education_level",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+        # Geospatial context columns
+        "pop_within_1km",
+        "pop_within_2km",
+        "pop_within_3km",
+        "rurban_detected",
     ]
+
+    # Always preserve MAP_CONTEXT_COLUMNS and DQ columns, plus uploaded columns
+    required_columns = [
+        *MAP_CONTEXT_COLUMNS,
+        "dq_has_critical_error",
+        "failure_reason",
+        "dq_results",
+    ]
+
+    columns_to_keep = [
+        col for col in required_columns + uploaded_columns if col in df.columns
+    ]
+
+    # Remove duplicates while preserving order
+    seen = set()
+    columns_to_keep = [x for x in columns_to_keep if not (x in seen or seen.add(x))]
+
     df = df.select(*columns_to_keep)
+
+    # Extract raw integer DQ values needed for map tooltip and filter layers.
+    MAP_EXTRA_DQ_KEYS = [
+        "is_in_uninhabited_area",
+        "is_not_within_country",
+        "duplicate_group_flag_50m",
+        "duplicate_group_count_50m",
+        "duplicate_group_id_50m",
+    ]
+    if "dq_results" in df.columns:
+        for map_key in MAP_EXTRA_DQ_KEYS:
+            df = df.withColumn(
+                f"dq_{map_key}",
+                f.element_at(f.col("dq_results"), map_key),
+            )
 
     # Narrow the dq_results map to only checks that are relevant for the uploaded
     # columns and mode. This avoids exposing checks that do not apply.
