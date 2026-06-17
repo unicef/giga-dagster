@@ -344,7 +344,10 @@ class StagingStep:
                     db.execute(
                         update(DeletionRequest)
                         .where(DeletionRequest.id == upload_id)
-                        .values(school_count=count)
+                        .values(
+                            school_count=count,
+                            status="pending_approval" if count > 0 else "no_matches",
+                        )
                     )
             except Exception as e:
                 self.context.log.error(

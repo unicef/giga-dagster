@@ -22,3 +22,4 @@ class DeletionRequest(BaseModel):
     file_path: Mapped[str] = mapped_column(String(), nullable=True)
     raw_file_path: Mapped[str] = mapped_column(String(), nullable=True)
     is_delete_all: Mapped[bool] = mapped_column(Boolean(), nullable=True, default=False)
+    status: Mapped[str] = mapped_column(VARCHAR(20), nullable=True)
