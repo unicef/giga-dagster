@@ -22,7 +22,6 @@ from pyspark.sql.types import (
 )
 
 from dagster import OpExecutionContext
-from src.constants import UploadMode
 from src.internal.connectivity_queries import get_qos_tables
 from src.settings import DeploymentEnvironment, settings
 from src.spark.udf_dependencies import get_point
@@ -302,7 +301,6 @@ def create_bronze_layer_columns(
     df: sql.DataFrame,
     silver: sql.DataFrame,
     country_code_iso3: str,
-    mode: str,
     uploaded_columns: list[str],
     is_qos: bool = False,
 ) -> sql.DataFrame:
@@ -349,19 +347,28 @@ def create_bronze_layer_columns(
     df = joined_df.select(*select_expr)
 
     # Generate school_id_giga for new schools using the dedicated function
-    if mode == UploadMode.CREATE.value:
-        df = create_school_id_giga(df)
+    df_with_giga = create_school_id_giga(df)
+    df = df.withColumn(
+        "school_id_giga",
+        f.when(f.col("is_new_school"), df_with_giga["school_id_giga"]).otherwise(
+            f.col("school_id_giga")
+            if "school_id_giga" in df.columns
+            else f.lit(None).cast(StringType())
+        ),
+    )
 
-    if mode == UploadMode.CREATE.value or "school_id_govt_type" in uploaded_columns:
+    if "school_id_govt_type" in uploaded_columns:
         df = df.withColumn(
             "school_id_govt_type",
-            f.coalesce(
-                f.col("school_id_govt_type"),
-                f.lit("Unknown")
-                if mode == UploadMode.CREATE.value
-                else f.lit(None).cast(StringType()),
-            ),
+            f.coalesce(f.col("school_id_govt_type"), f.lit(None).cast(StringType())),
         )
+    df = df.withColumn(
+        "school_id_govt_type",
+        f.when(
+            f.col("is_new_school") & f.col("school_id_govt_type").isNull(),
+            f.lit("Unknown"),
+        ).otherwise(f.col("school_id_govt_type")),
+    )
 
     # Admin mapbox columns
     if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
@@ -406,7 +413,6 @@ def create_bronze_layer_columns(
 
 def create_bronze_layer_columns_updated(
     df: sql.DataFrame,
-    mode: str,
     uploaded_columns: list[str],
     country_code_iso3: str,
     spark: SparkSession = None,
@@ -424,22 +430,24 @@ def create_bronze_layer_columns_updated(
             ).otherwise(f.lit(None).cast(StringType())),
         )
 
-    # Generate school_id_giga for new schools using the dedicated function
-    if mode == UploadMode.CREATE.value:
-        df = create_school_id_giga(df)
+    # Generate school_id_giga for new schools only; existing schools get null here
+    # and are enriched from silver later in enrich_with_silver_values.
+    df = create_school_id_giga(df).withColumn(
+        "school_id_giga",
+        f.when(f.col("is_new_school"), f.col("school_id_giga")).otherwise(
+            f.lit(None).cast(StringType())
+        ),
+    )
 
-    if mode == UploadMode.CREATE.value or "school_id_govt_type" in df.columns:
-        df = df.withColumn(
-            "school_id_govt_type",
-            f.coalesce(
-                f.col("school_id_govt_type")
-                if "school_id_govt_type" in df.columns
-                else f.lit(None),
-                f.lit("Unknown")
-                if mode == UploadMode.CREATE.value
-                else f.lit(None).cast(StringType()),
-            ),
-        )
+    if "school_id_govt_type" not in df.columns:
+        df = df.withColumn("school_id_govt_type", f.lit(None).cast(StringType()))
+    df = df.withColumn(
+        "school_id_govt_type",
+        f.when(
+            f.col("is_new_school") & f.col("school_id_govt_type").isNull(),
+            f.lit("Unknown"),
+        ).otherwise(f.col("school_id_govt_type")),
+    )
 
     # Admin columns: re-compute whenever lat/lon are part of the upload
     if "latitude" in uploaded_columns and "longitude" in uploaded_columns:
@@ -462,7 +470,7 @@ def create_bronze_layer_columns_updated(
             )
 
     # Connectivity govt ingestion timestamp: set when connectivity_govt is uploaded.
-    if "connectivity_govt" in df.columns:
+    if "connectivity_govt" in uploaded_columns:
         df = df.withColumn(
             "connectivity_govt_ingestion_timestamp",
             f.when(
@@ -473,7 +481,7 @@ def create_bronze_layer_columns_updated(
     # RT connectivity columns: merge from the realtime schools table
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         connectivity = get_country_rt_schools(spark, country_code_iso3)
-        df = merge_connectivity_to_master(df, connectivity, uploaded_columns, mode)
+        df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
 
     return df
 
@@ -741,7 +749,6 @@ def merge_connectivity_to_master(
     master: sql.DataFrame,
     connectivity: sql.DataFrame,
     uploaded_columns: list[str],
-    mode: str,
 ):
     connectivity_columns = [
         col
@@ -771,7 +778,7 @@ def merge_connectivity_to_master(
         "connectivity_RT", f.coalesce(f.col("connectivity_RT"), f.lit("No"))
     )
 
-    # standardize connectivity_govt only when it was uploaded; for CREATE mode ensure it exists
+    # standardize connectivity_govt only when it was uploaded; ensure column exists otherwise
     if "connectivity_govt" in uploaded_columns:
         master = master.withColumn(
             "connectivity_govt",
@@ -779,16 +786,13 @@ def merge_connectivity_to_master(
                 f.isnan(f.col("connectivity_govt")), f.lit(None).cast(StringType())
             ).otherwise(f.initcap(f.trim(f.col("connectivity_govt")))),
         )
-    elif mode == UploadMode.CREATE.value and "connectivity_govt" not in master.columns:
+    elif "connectivity_govt" not in master.columns:
         master = master.withColumn("connectivity_govt", f.lit(None).cast(StringType()))
 
     # determine the value of connectivity
-    if mode == UploadMode.CREATE.value or {
-        "download_speed_govt",
-        "connectivity_govt",
-    }.issubset(set(uploaded_columns)):
-        # this block will run when schools are first created and during school updates only if both the
-        # download_speed_govt and connectivity_govt columns are part of the upload
+    if {"download_speed_govt", "connectivity_govt"}.issubset(set(uploaded_columns)):
+        # this block runs only when both download_speed_govt and connectivity_govt are uploaded;
+        # for new schools without those columns, connectivity defaults to "Unknown"
 
         master = master.withColumn(
             "connectivity",
@@ -802,7 +806,7 @@ def merge_connectivity_to_master(
                 "No",
             )
             .otherwise(
-                f.lit(None) if mode == UploadMode.UPDATE.value else f.lit("Unknown"),
+                f.when(f.col("is_new_school"), f.lit("Unknown")).otherwise(f.lit(None))
             ),
         )
     elif "connectivity_govt" in uploaded_columns:
@@ -826,7 +830,7 @@ def merge_connectivity_to_master(
         )
 
     # add the time connectivity_govt was ingested (only when it was part of the upload)
-    if "connectivity_govt" in uploaded_columns or mode == UploadMode.CREATE.value:
+    if "connectivity_govt" in uploaded_columns:
         master = master.withColumn(
             "connectivity_govt_ingestion_timestamp",
             f.when(
@@ -1154,14 +1158,9 @@ if __name__ == "__main__":
         row_level_checks,
     )
 
-    # df = update_checks(bronze=df, silver=silver)
-    # df = create_checks(bronze=df, silver=silver)
-    # df.show()
-
     df = row_level_checks(
         df=df,
         silver=silver,
-        mode=UploadMode.UPDATE.value,
         dataset_type="geolocation",
         _country_code_iso3="BRA",
     )

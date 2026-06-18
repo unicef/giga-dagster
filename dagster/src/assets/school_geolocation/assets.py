@@ -15,6 +15,10 @@ from pyspark.sql import (
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select
 from src.constants import DataTier
+from src.data_quality_checks.create_update import (
+    add_is_new_school,
+    enrich_with_silver_values,
+)
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
@@ -178,7 +182,6 @@ def geolocation_bronze(
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
-    mode = config.metadata["mode"]
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -228,9 +231,30 @@ def geolocation_bronze(
 
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
-    df = create_bronze_layer_columns_updated(
-        df, mode, uploaded_columns, country_code, s
-    )
+    # Derive is_new_school by joining against silver (school_id_govt only)
+    schema_name = config.metastore_schema
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(
+            silver_tier_schema_name, country_code
+        )
+        s.catalog.refreshTable(silver_table_name)
+        silver_ids = (
+            DeltaTable.forName(s, silver_table_name)
+            .toDF()
+            .select("school_id_govt")
+            .withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
+        )
+    else:
+        silver_ids = s.createDataFrame(
+            [], StructType([StructField("school_id_govt", StringType(), True)])
+        )
+
+    df = add_is_new_school(df, silver_ids, context)
+
+    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
@@ -299,8 +323,11 @@ def geolocation_data_quality_results(
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
+    # Enrich bronze with silver values for existing schools (fills gaps via coalesce)
+    enriched_bronze = enrich_with_silver_values(renamed_bronze, casted_silver, context)
+
     dq_results = row_level_checks(
-        df=renamed_bronze,
+        df=enriched_bronze,
         silver=casted_silver,
         dq_context=DQContext(
             dq_mode=DQMode(config.metadata.get("dq_mode", "master")),
@@ -313,6 +340,9 @@ def geolocation_data_quality_results(
     )
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
+
+    # Drop is_new_school — it's a processing artifact, not part of the DQ output schema
+    dq_results = dq_results.drop("is_new_school")
 
     # Collapse all individual dq_ check columns into a single map<string, int> column.
     # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
@@ -403,12 +433,11 @@ def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
 
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode
+        geolocation_data_quality_results, uploaded_columns
     )
 
     for map_key, human_name in human_readable_mappings.items():
@@ -476,11 +505,10 @@ async def geolocation_data_quality_results_summary(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
-    mode = config.metadata["mode"]
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode=mode
+        geolocation_data_quality_results, uploaded_columns
     )
 
     dq_summary_statistics = aggregate_report_json(
