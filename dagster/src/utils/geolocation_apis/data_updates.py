@@ -15,7 +15,6 @@ from src.utils.db.primary import get_db_context
 
 def upload_data_and_create_db_entry(
     data: pd.DataFrame,
-    mode: str,
     country_code: str,
     adls_file_client: ADLSFileClient,
     context: OpExecutionContext,
@@ -26,7 +25,6 @@ def upload_data_and_create_db_entry(
 
     Parameters:
         data (pandas.DataFrame): The dataset to upload, provided as a Pandas DataFrame.
-        mode (str): The mode of operation for the upload, "Create" or "Update"
         country_code (str): The country code for the schools being uploaded.
         adls_file_client (ADLSFileClient): An instance of ADLSFileClient used to upload files
         context (Dagster context): The dagster run context for logging.
@@ -39,10 +37,10 @@ def upload_data_and_create_db_entry(
         None
     """
     if data.empty:
-        context.log.info(f"There are no schools to {mode.lower()}")
+        context.log.info("There are no schools to upload")
         return
     else:
-        context.log.info(f"Uploading {data.shape[0]} schools to be {mode.lower()}d")
+        context.log.info(f"Uploading {data.shape[0]} schools")
 
     file_upload = FileUpload(
         uploader_id=settings.API_AUTOMATION_USER_ID,
@@ -50,7 +48,7 @@ def upload_data_and_create_db_entry(
         country=country_code,
         dataset="geolocation",
         source="api",
-        original_filename=f"MNG_school_data_{mode.lower()}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+        original_filename=f"MNG_school_data_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
         column_to_schema_mapping={
             **{col: col for col in data.columns},
             "school_id": "school_id_govt",
@@ -77,7 +75,6 @@ def upload_data_and_create_db_entry(
             "focal_point_name": "Mongolia government",
             "frequency_of_school_data_collection": "",
             "modality_of_data_collection": "",
-            "mode": mode,
             "next_school_data_collection": "",
             "school_contacts": "",
             "school_ids_type": "",
