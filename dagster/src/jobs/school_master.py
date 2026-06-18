@@ -48,9 +48,3 @@ school_master_geolocation__admin_delete_rows_job = define_asset_job(
     selection="geolocation_delete_staging",
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
-
-school_master_coverage__admin_delete_rows_job = define_asset_job(
-    name="school_master_coverage__admin_delete_rows_job",
-    selection="coverage_delete_staging",
-    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
-)

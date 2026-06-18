@@ -12,8 +12,9 @@ from ..resources.superset import (
     run_query,
 )
 
+
 @op
-def post_query_durations_to_slack(context: OpExecutionContext, results):
+def post_incremental_query_durations_to_slack(context: OpExecutionContext, results):
     slack_webhook = os.getenv("SLACK_WORKFLOW_WEBHOOK")
     if not slack_webhook:
         context.log.warning("No SLACK_WORKFLOW_WEBHOOK configured")
@@ -35,7 +36,7 @@ def post_query_durations_to_slack(context: OpExecutionContext, results):
 
 
 @op
-def fetch_and_run_query(context: OpExecutionContext):
+def fetch_and_run_incremental_query(context: OpExecutionContext):
     results = []
     try:
         access_token = None
@@ -84,5 +85,5 @@ def fetch_and_run_query(context: OpExecutionContext):
 
 @job
 def refresh_incremental_table():
-    results = fetch_and_run_query()
-    post_query_durations_to_slack(results)
+    results = fetch_and_run_incremental_query()
+    post_incremental_query_durations_to_slack(results)

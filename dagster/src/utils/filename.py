@@ -7,7 +7,7 @@ from src.schemas.filename_components import FilenameComponents
 EXPECTED_GEOLOCATION_COMPONENTS = 4
 EXPECTED_COVERAGE_COMPONENTS = 5
 EXPECTED_APPROVED_IDS_COMPONENTS = 3
-EXPECTED_DELETE_IDS_COMPONENTS = 2
+EXPECTED_DELETE_IDS_COMPONENTS = 4
 
 
 def deconstruct_school_master_filename_components(filepath: str):
@@ -22,7 +22,18 @@ def deconstruct_school_master_filename_components(filepath: str):
         else EXPECTED_COVERAGE_COMPONENTS
     )
 
-    if len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
+    if "geolocation" in path.stem and len(splits) >= EXPECTED_GEOLOCATION_COMPONENTS:
+        id, country_code, dataset_type, timestamp = splits[-4:]
+        source = None
+
+        return FilenameComponents(
+            id=id,
+            dataset_type=dataset_type,
+            timestamp=datetime.strptime(timestamp, expected_timestamp_format),
+            country_code=country_code,
+            source=source,
+        )
+    elif len(splits) == EXPECTED_UPLOAD_FILENAME_COMPONENTS:
         id, country_code, dataset_type = splits[0:3]
         timestamp = splits[-1]
         source = splits[3] if "coverage" in path.stem else None
@@ -48,10 +59,10 @@ def deconstruct_school_master_filename_components(filepath: str):
     elif len(splits) == EXPECTED_DELETE_IDS_COMPONENTS and path.parts[-1].endswith(
         ".json"
     ):
-        country_code, timestamp = splits
+        upload_id, country_code, _, timestamp = splits
         timestamp = datetime.strptime(timestamp, expected_timestamp_format)
         return FilenameComponents(
-            id="",
+            id=upload_id,
             timestamp=timestamp,
             country_code=country_code,
         )

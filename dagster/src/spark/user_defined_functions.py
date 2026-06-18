@@ -129,7 +129,6 @@ def find_similar_names_in_group_udf(names: pd.Series) -> pd.Series:
     def check_group(name_list):
         if name_list is None or len(name_list) == 0:
             return []
-
         similar = set()
         # Compare each pair of names in the group
         for i, name1 in enumerate(name_list):
