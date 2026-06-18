@@ -450,7 +450,10 @@ class StagingStep:
                     )
 
                     file_upload.is_processed_in_staging = True
-                    # Do not overwrite a reviewer decision on pipeline re-runs
+                    # approval_status is the per-upload review state in the portal
+                    # DB (distinct from the per-row staging `status` in Delta); the
+                    # uploads list reads it directly. Stamp PENDING on landing, but
+                    # never overwrite a reviewer decision on pipeline re-runs.
                     if approval_request and file_upload.approval_status not in (
                         "APPROVED",
                         "REJECTED",
