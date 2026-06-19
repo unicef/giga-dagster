@@ -8,17 +8,15 @@ from typing import Any, Optional
 
 import meraki
 import pandas as pd
-from pyspark.sql import (
-    SparkSession,
-    functions as F,
-)
+from pyspark.sql import SparkSession
 from src.custom.qos.meraki_client import call, create_dashboard
 from src.custom.qos.vct.constants import NETWORK_DICT, ORG_NAMES
 from src.custom.qos.vct.events_daily import (
     EVENT_COLUMNS,
+    _add_five_min_window_from_timestamp,
+    _attach_school_ids,
     _day_window_iso,
-    _format_five_min_window,
-    _normalize_changes,
+    _normalize_changes as _normalize_event_changes,
     _parse_meraki_name_room,
 )
 from src.settings import settings
@@ -47,6 +45,15 @@ QOS_DAY_COLUMNS = [
 COMBINED_COLUMNS = EVENT_COLUMNS + QOS_DAY_COLUMNS
 
 
+def _mean_numeric(buckets: Optional[list], key: str) -> Any:
+    if not buckets:
+        return None
+    vals = [b[key] for b in buckets if b.get(key) is not None]
+    if not vals:
+        return None
+    return sum(float(v) for v in vals) / len(vals)
+
+
 def _build_ap_inventory(
     db: meraki.DashboardAPI, context: OpExecutionContext
 ) -> pd.DataFrame:
@@ -59,18 +66,19 @@ def _build_ap_inventory(
                 net_name = net_meta.get("name", net_id)
             except meraki.APIError as exc:
                 if exc.status == 404:
-                    context.log.warning(f"Network {net_id} not found, skipping")
+                    context.log.warning(f"Skip network {net_id}: 404")
                     continue
                 raise
             try:
                 devs = call(db.networks.getNetworkDevices, net_id)
             except meraki.APIError as exc:
                 if exc.status == 404:
-                    context.log.warning(f"Devices for {net_id} not found, skipping")
+                    context.log.warning(f"Skip network {net_id}: devices 404")
                     continue
                 raise
             for d in devs:
-                if not (d.get("model") or "").upper().startswith("MR"):
+                model = (d.get("model") or "").upper()
+                if not model.startswith("MR"):
                     continue
                 device_name = d.get("name") or ""
                 rows.append(
@@ -86,57 +94,149 @@ def _build_ap_inventory(
                     }
                 )
     df = pd.DataFrame(rows)
-    if df.empty:
+    if len(df) == 0:
         return df
     return df.drop_duplicates(subset=["serial"], keep="first").reset_index(drop=True)
 
 
-def _compute_uptime(changes_df: pd.DataFrame, t0: str, t1: str) -> pd.DataFrame:
+def _fetch_change_history_for_org(
+    db: meraki.DashboardAPI, org_id: str, network_ids: list[str], t0: str, t1: str
+) -> list:
+    return call(
+        db.organizations.getOrganizationDevicesAvailabilitiesChangeHistory,
+        org_id,
+        networkIds=network_ids,
+        productTypes=["wireless"],
+        t0=t0,
+        t1=t1,
+        total_pages="all",
+    )
+
+
+def _fetch_day_change_history(
+    db: meraki.DashboardAPI, day_t0: str, day_t1: str
+) -> pd.DataFrame:
+    day_start = pd.to_datetime(day_t0, utc=True)
+    day_end = pd.to_datetime(day_t1, utc=True)
+    frames: list[pd.DataFrame] = []
+    for org_id, network_ids in NETWORK_DICT.items():
+        org_label = ORG_NAMES.get(org_id, org_id)
+        raw = _fetch_change_history_for_org(db, org_id, network_ids, day_t0, day_t1)
+        df = _normalize_event_changes(raw)
+        if len(df) > 0:
+            day_mask = (df["occurredAt"] >= day_start) & (df["occurredAt"] < day_end)
+            df = df.loc[day_mask].copy()
+            if len(df) > 0:
+                df["organization"] = org_label
+                df["meraki_name_room"] = df["deviceName"].map(_parse_meraki_name_room)
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def _build_events_from_changes(
+    changes_df: pd.DataFrame,
+    report_day: dt.date,
+    spark_session: SparkSession,
+    context: OpExecutionContext,
+) -> pd.DataFrame:
+    events_df = changes_df.copy()
+    events_df["report_date"] = report_day.isoformat()
+    if len(events_df) > 0 and "occurredAt" in events_df.columns:
+        events_df["five_min_window"] = _add_five_min_window_from_timestamp(
+            events_df["occurredAt"]
+        )
+        events_df["changes_count_day"] = events_df.groupby("serial", sort=False)[
+            "serial"
+        ].transform("count")
+    events_df = _attach_school_ids(events_df, spark_session, context)
+    for col in EVENT_COLUMNS:
+        if col not in events_df.columns:
+            events_df[col] = None
+    return events_df[EVENT_COLUMNS]
+
+
+def _walk_serial_uptime(
+    grp: pd.DataFrame,
+    w0: pd.Timestamp,
+    w1: pd.Timestamp,
+    count_alerting_as_downtime: bool,
+    window_sec: float,
+) -> Optional[tuple[float, float]]:
+    cur_status: Optional[str] = None
+    cur_time = w0
+    down_sec = 0.0
+    alert_sec = 0.0
+    for _, row in grp.iterrows():
+        t = row["occurredAt"]
+        if t <= w0:
+            cur_status = row["newStatus"]
+            continue
+        if cur_status is None:
+            cur_status = row["previousStatus"]
+        if t >= w1:
+            break
+        seg = (t - cur_time).total_seconds()
+        if cur_status == "offline":
+            down_sec += max(0.0, seg)
+        elif cur_status == "alerting":
+            alert_sec += max(0.0, seg)
+        cur_time = t
+        cur_status = row["newStatus"]
+    if cur_status is None:
+        return None
+    seg = (w1 - cur_time).total_seconds()
+    if cur_status == "offline":
+        down_sec += max(0.0, seg)
+    elif cur_status == "alerting":
+        alert_sec += max(0.0, seg)
+    denom = (down_sec + alert_sec) if count_alerting_as_downtime else down_sec
+    return round(denom, 3), round(100.0 * (1.0 - denom / window_sec), 3)
+
+
+def _compute_uptime_metrics(
+    changes_df: pd.DataFrame,
+    t0: str,
+    t1: str,
+    count_alerting_as_downtime: bool = False,
+) -> pd.DataFrame:
     cols = ["serial", "downtime_s", "uptime_pct"]
-    if changes_df.empty:
+    if len(changes_df) == 0:
         return pd.DataFrame(columns=cols)
     w0 = pd.to_datetime(t0, utc=True)
     w1 = pd.to_datetime(t1, utc=True)
     window_sec = (w1 - w0).total_seconds()
     results: list[dict[str, Any]] = []
     for serial, grp in changes_df.groupby("serial", sort=False):
-        cur_status: Optional[str] = None
-        cur_time = w0
-        down_sec = 0.0
-        for _, row in grp.iterrows():
-            t = row["occurredAt"]
-            if t <= w0:
-                cur_status = row["newStatus"]
-                continue
-            if cur_status is None:
-                cur_status = row["previousStatus"]
-            if t >= w1:
-                break
-            seg = (t - cur_time).total_seconds()
-            if cur_status == "offline":
-                down_sec += max(0.0, seg)
-            cur_time = t
-            cur_status = row["newStatus"]
-        if cur_status is None:
+        result = _walk_serial_uptime(
+            grp, w0, w1, count_alerting_as_downtime, window_sec
+        )
+        if result is None:
             continue
-        seg = (w1 - cur_time).total_seconds()
-        if cur_status == "offline":
-            down_sec += max(0.0, seg)
+        down_s, uptime_pct = result
         results.append(
-            {
-                "serial": serial,
-                "downtime_s": round(down_sec, 3),
-                "uptime_pct": round(100.0 * (1.0 - down_sec / window_sec), 3),
-            }
+            {"serial": serial, "downtime_s": down_s, "uptime_pct": uptime_pct}
         )
     return pd.DataFrame(results)
 
 
-def _mean(buckets: Optional[list], key: str) -> Optional[float]:
-    if not buckets:
-        return None
-    vals = [b[key] for b in buckets if b.get(key) is not None]
-    return sum(float(v) for v in vals) / len(vals) if vals else None
+def _normalize_packet_loss(raw_rows: Optional[list]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for r in raw_rows or []:
+        dev = r.get("device") or {}
+        downstream = r.get("downstream") or {}
+        rows.append(
+            {
+                "serial": dev.get("serial"),
+                "downstream_total_packet": downstream.get("total"),
+                "downstream_packet_lost": downstream.get("lost"),
+                "loss_pct": downstream.get("lossPercentage"),
+            }
+        )
+    cols = ["serial", "downstream_total_packet", "downstream_packet_lost", "loss_pct"]
+    df = pd.DataFrame(rows)
+    if len(df) == 0:
+        return pd.DataFrame(columns=cols)
+    return df.drop_duplicates(subset=["serial"], keep="first")
 
 
 def _fetch_packet_loss(db: meraki.DashboardAPI, t0: str, t1: str) -> pd.DataFrame:
@@ -150,18 +250,7 @@ def _fetch_packet_loss(db: meraki.DashboardAPI, t0: str, t1: str) -> pd.DataFram
             t1=t1,
             total_pages="all",
         )
-        rows = []
-        for r in raw or []:
-            downstream = r.get("downstream") or {}
-            rows.append(
-                {
-                    "serial": (r.get("device") or {}).get("serial"),
-                    "downstream_total_packet": downstream.get("total"),
-                    "downstream_packet_lost": downstream.get("lost"),
-                    "loss_pct": downstream.get("lossPercentage"),
-                }
-            )
-        frames.append(pd.DataFrame(rows))
+        frames.append(_normalize_packet_loss(raw))
     if not frames:
         return pd.DataFrame(
             columns=[
@@ -176,33 +265,70 @@ def _fetch_packet_loss(db: meraki.DashboardAPI, t0: str, t1: str) -> pd.DataFram
     )
 
 
-def _fetch_latency_df(
+def _data_rate_network_unsupported(exc: meraki.APIError) -> bool:
+    if exc.status != 400:
+        return False
+    msg = str(getattr(exc, "message", "") or exc)
+    return "MR 27.0" in msg
+
+
+def _probe_data_rate_network(
+    db: meraki.DashboardAPI, network_id: str, sample_serial: str, t0: str, t1: str
+) -> bool:
+    try:
+        call(
+            db.wireless.getNetworkWirelessDataRateHistory,
+            network_id,
+            t0=t0,
+            t1=t1,
+            resolution=DAY_RESOLUTION_SECONDS,
+            deviceSerial=sample_serial,
+        )
+        return True
+    except meraki.APIError as exc:
+        if _data_rate_network_unsupported(exc):
+            return False
+        raise
+
+
+def _fetch_ap_data_rate_row(
     db: meraki.DashboardAPI,
-    inventory: pd.DataFrame,
+    ap: pd.Series,
+    unsupported_networks: set[str],
+    cols: list[str],
     t0: str,
     t1: str,
     context: OpExecutionContext,
-) -> pd.DataFrame:
-    rows: list[dict[str, Any]] = []
-    for _, ap in inventory.iterrows():
-        serial = str(ap["serial"])
-        try:
-            buckets = call(
-                db.wireless.getNetworkWirelessLatencyHistory,
-                str(ap["networkId"]),
-                t0=t0,
-                t1=t1,
-                resolution=DAY_RESOLUTION_SECONDS,
-                deviceSerial=serial,
-            )
-            avg_ms = _mean(buckets, "avgLatencyMs")
-        except meraki.APIError as exc:
-            context.log.warning(f"Latency fetch failed for {serial}: {exc.status}")
-            avg_ms = None
-        rows.append({"serial": serial, "avg_latency_ms": avg_ms})
-        if LATENCY_HISTORY_SLEEP_SECONDS:
-            time.sleep(LATENCY_HISTORY_SLEEP_SECONDS)
-    return pd.DataFrame(rows)
+) -> tuple[dict[str, Any], int, int]:
+    network_id = str(ap["networkId"])
+    serial = str(ap["serial"])
+    if network_id in unsupported_networks:
+        row: dict[str, Any] = {c: None for c in cols}
+        row["serial"] = serial
+        return row, 0, 1
+    try:
+        buckets = call(
+            db.wireless.getNetworkWirelessDataRateHistory,
+            network_id,
+            t0=t0,
+            t1=t1,
+            resolution=DAY_RESOLUTION_SECONDS,
+            deviceSerial=serial,
+        )
+        row = {
+            "serial": serial,
+            "download_kbps": _mean_numeric(buckets, "downloadKbps"),
+            "upload_kbps": _mean_numeric(buckets, "uploadKbps"),
+            "avg_kbps": _mean_numeric(buckets, "averageKbps"),
+        }
+        if DATA_RATE_SLEEP_SECONDS:
+            time.sleep(DATA_RATE_SLEEP_SECONDS)
+        return row, 0, 0
+    except meraki.APIError as exc:
+        row = {c: None for c in cols}
+        row["serial"] = serial
+        context.log.warning(f"Data rate fetch failed for {serial}: {exc.status}")
+        return row, 1, 0
 
 
 def _fetch_data_rate_df(
@@ -213,52 +339,62 @@ def _fetch_data_rate_df(
     context: OpExecutionContext,
 ) -> pd.DataFrame:
     cols = ["serial", "download_kbps", "upload_kbps", "avg_kbps"]
-    if inventory.empty:
+    if len(inventory) == 0:
         return pd.DataFrame(columns=cols)
 
-    unsupported: set[str] = set()
-    for net_id, grp in inventory.groupby("networkId", sort=False):
-        sample = str(grp.iloc[0]["serial"])
-        try:
-            call(
-                db.wireless.getNetworkWirelessDataRateHistory,
-                str(net_id),
-                t0=t0,
-                t1=t1,
-                resolution=DAY_RESOLUTION_SECONDS,
-                deviceSerial=sample,
+    unsupported_networks: set[str] = set()
+    for network_id, grp in inventory.groupby("networkId", sort=False):
+        sample_serial = str(grp.iloc[0]["serial"])
+        if not _probe_data_rate_network(db, str(network_id), sample_serial, t0, t1):
+            unsupported_networks.add(str(network_id))
+            net_name = grp.iloc[0].get("networkName", network_id)
+            context.log.warning(
+                f"Data rate unavailable for network {net_name} ({network_id}): requires MR 27.0+"
             )
-        except meraki.APIError as exc:
-            if exc.status == 400 and "MR 27.0" in str(
-                getattr(exc, "message", "") or exc
-            ):
-                unsupported.add(str(net_id))
-                context.log.warning(
-                    f"Data rate unavailable for network {net_id} (requires MR 27.0+)"
-                )
-            else:
-                raise
         if DATA_RATE_SLEEP_SECONDS:
             time.sleep(DATA_RATE_SLEEP_SECONDS)
 
     rows: list[dict[str, Any]] = []
+    failed = 0
+    skipped = 0
     for _, ap in inventory.iterrows():
-        net_id = str(ap["networkId"])
+        row, f, s = _fetch_ap_data_rate_row(
+            db, ap, unsupported_networks, cols, t0, t1, context
+        )
+        rows.append(row)
+        failed += f
+        skipped += s
+
+    if skipped:
+        context.log.info(
+            f"data rate: {skipped} AP(s) on unsupported networks (MR 27.0+)"
+        )
+    if failed:
+        context.log.warning(f"data rate: {failed} AP(s) failed")
+
+    return pd.DataFrame(rows)
+
+
+def _fetch_latency_history_df(
+    db: meraki.DashboardAPI,
+    inventory: pd.DataFrame,
+    t0: str,
+    t1: str,
+    context: OpExecutionContext,
+) -> pd.DataFrame:
+    cols = ["serial", "avg_latency_ms"]
+    if len(inventory) == 0:
+        return pd.DataFrame(columns=cols)
+
+    rows: list[dict[str, Any]] = []
+    failed = 0
+    for _, ap in inventory.iterrows():
+        network_id = str(ap["networkId"])
         serial = str(ap["serial"])
-        if net_id in unsupported:
-            rows.append(
-                {
-                    "serial": serial,
-                    "download_kbps": None,
-                    "upload_kbps": None,
-                    "avg_kbps": None,
-                }
-            )
-            continue
         try:
             buckets = call(
-                db.wireless.getNetworkWirelessDataRateHistory,
-                net_id,
+                db.wireless.getNetworkWirelessLatencyHistory,
+                network_id,
                 t0=t0,
                 t1=t1,
                 resolution=DAY_RESOLUTION_SECONDS,
@@ -267,109 +403,22 @@ def _fetch_data_rate_df(
             rows.append(
                 {
                     "serial": serial,
-                    "download_kbps": _mean(buckets, "downloadKbps"),
-                    "upload_kbps": _mean(buckets, "uploadKbps"),
-                    "avg_kbps": _mean(buckets, "averageKbps"),
+                    "avg_latency_ms": _mean_numeric(buckets, "avgLatencyMs"),
                 }
             )
+            if LATENCY_HISTORY_SLEEP_SECONDS:
+                time.sleep(LATENCY_HISTORY_SLEEP_SECONDS)
         except meraki.APIError as exc:
-            context.log.warning(f"Data rate fetch failed for {serial}: {exc.status}")
-            rows.append(
-                {
-                    "serial": serial,
-                    "download_kbps": None,
-                    "upload_kbps": None,
-                    "avg_kbps": None,
-                }
+            failed += 1
+            rows.append({"serial": serial, "avg_latency_ms": None})
+            context.log.warning(
+                f"Latency history fetch failed for {serial}: {exc.status}"
             )
-        if DATA_RATE_SLEEP_SECONDS:
-            time.sleep(DATA_RATE_SLEEP_SECONDS)
+
+    if failed:
+        context.log.warning(f"latency history: {failed} AP(s) failed")
 
     return pd.DataFrame(rows)
-
-
-def _load_school_lookup(
-    spark_session: SparkSession, context: OpExecutionContext
-) -> pd.DataFrame:
-    try:
-        device_meta = (
-            spark_session.read.table("custom_dataset.device_matched")
-            .select(
-                F.col("serial"),
-                F.col("school_id_govt").cast("string").alias("school_id_govt"),
-            )
-            .toPandas()
-        )
-        school_master = (
-            spark_session.read.table("school_master.vct")
-            .select(
-                F.col("school_id_govt").cast("string").alias("school_id_govt"),
-                F.col("school_id_giga").cast("string").alias("school_id_giga"),
-            )
-            .toPandas()
-        )
-        lookup = device_meta.merge(school_master, on="school_id_govt", how="left")
-        return lookup[["serial", "school_id_govt", "school_id_giga"]].drop_duplicates(
-            subset=["serial"], keep="first"
-        )
-    except Exception as exc:
-        context.log.warning(
-            f"School lookup unavailable, school IDs will be null: {exc}"
-        )
-        return pd.DataFrame(columns=["serial", "school_id_govt", "school_id_giga"])
-
-
-def _fetch_day_changes(
-    db: meraki.DashboardAPI, day_t0: str, day_t1: str
-) -> pd.DataFrame:
-    """Fetch and normalize change history for all orgs for one UTC day."""
-    day_start = pd.to_datetime(day_t0, utc=True)
-    day_end = pd.to_datetime(day_t1, utc=True)
-    frames: list[pd.DataFrame] = []
-    for org_id, network_ids in NETWORK_DICT.items():
-        org_label = ORG_NAMES.get(org_id, org_id)
-        raw = call(
-            db.organizations.getOrganizationDevicesAvailabilitiesChangeHistory,
-            org_id,
-            networkIds=network_ids,
-            productTypes=["wireless"],
-            t0=day_t0,
-            t1=day_t1,
-            total_pages="all",
-        )
-        df = _normalize_changes(raw)
-        if not df.empty:
-            mask = (df["occurredAt"] >= day_start) & (df["occurredAt"] < day_end)
-            df = df.loc[mask].copy()
-            if not df.empty:
-                df["organization"] = org_label
-                df["meraki_name_room"] = df["deviceName"].map(_parse_meraki_name_room)
-        frames.append(df)
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-
-
-def _build_events_df(
-    changes_df: pd.DataFrame,
-    report_day: dt.date,
-    lookup: pd.DataFrame,
-) -> pd.DataFrame:
-    events_df = changes_df.copy()
-    events_df["report_date"] = report_day.isoformat()
-    if not events_df.empty and "occurredAt" in events_df.columns:
-        ts = pd.to_datetime(events_df["occurredAt"], utc=True)
-        events_df["five_min_window"] = ts.map(_format_five_min_window)
-        events_df["changes_count_day"] = events_df.groupby("serial", sort=False)[
-            "serial"
-        ].transform("count")
-    if not lookup.empty:
-        events_df = events_df.merge(lookup, on="serial", how="left")
-    else:
-        events_df["school_id_govt"] = None
-        events_df["school_id_giga"] = None
-    for col in EVENT_COLUMNS:
-        if col not in events_df.columns:
-            events_df[col] = None
-    return events_df[EVENT_COLUMNS]
 
 
 def build_combined_dataframe(
@@ -380,40 +429,45 @@ def build_combined_dataframe(
     db = create_dashboard(settings.VCT_MERAKI_API_KEY)
     day_t0, day_t1 = _day_window_iso(report_day)
 
-    changes_df = _fetch_day_changes(db, day_t0, day_t1)
-    lookup = _load_school_lookup(spark_session, context)
-    events_df = _build_events_df(changes_df, report_day, lookup)
+    changes_df = _fetch_day_change_history(db, day_t0, day_t1)
+    events_df = _build_events_from_changes(
+        changes_df, report_day, spark_session, context
+    )
 
-    if events_df.empty:
+    if len(events_df) == 0:
         return pd.DataFrame(columns=COMBINED_COLUMNS)
 
     inventory = _build_ap_inventory(db, context)
-    uptime_df = _compute_uptime(
+
+    uptime_source = (
         changes_df[["serial", "occurredAt", "previousStatus", "newStatus"]].copy()
-        if not changes_df.empty
-        else pd.DataFrame(),
-        day_t0,
-        day_t1,
+        if len(changes_df) > 0
+        else pd.DataFrame()
     )
+    uptime_df = _compute_uptime_metrics(uptime_source, day_t0, day_t1)
     packet_loss_df = _fetch_packet_loss(db, day_t0, day_t1)
+
     context.log.info("Fetching latency history per AP...")
-    latency_df = _fetch_latency_df(db, inventory, day_t0, day_t1, context)
+    latency_df = _fetch_latency_history_df(db, inventory, day_t0, day_t1, context)
+
     context.log.info("Fetching data rate per AP...")
     data_rate_df = _fetch_data_rate_df(db, inventory, day_t0, day_t1, context)
 
     collected_at = dt.datetime.now(dt.UTC).isoformat().replace("+00:00", "Z")
-    qos_df = inventory.merge(uptime_df, on="serial", how="left")
-    qos_df = qos_df.merge(packet_loss_df, on="serial", how="left")
-    qos_df = qos_df.merge(latency_df, on="serial", how="left")
-    qos_df = qos_df.merge(data_rate_df, on="serial", how="left")
+
+    qos_df = inventory.merge(uptime_df, on="serial", how="left", validate="1:1")
+    qos_df = qos_df.merge(packet_loss_df, on="serial", how="left", validate="1:1")
+    qos_df = qos_df.merge(latency_df, on="serial", how="left", validate="1:1")
+    qos_df = qos_df.merge(data_rate_df, on="serial", how="left", validate="1:1")
     qos_df["window_start"] = day_t0
     qos_df["window_end"] = day_t1
     qos_df["collected_at"] = collected_at
 
     qos_cols = ["serial"] + QOS_DAY_COLUMNS
-    qos_subset = qos_df[[c for c in qos_cols if c in qos_df.columns]]
+    qos_subset = qos_df[[c for c in qos_cols if c in qos_df.columns]].copy()
 
     combined = events_df.merge(qos_subset, on="serial", how="left", validate="m:1")
+
     for col in COMBINED_COLUMNS:
         if col not in combined.columns:
             combined[col] = None

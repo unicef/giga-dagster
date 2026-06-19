@@ -1,5 +1,3 @@
-import datetime as dt
-
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
 from src.custom.qos.vct.constants import COUNTRY_CODE
@@ -11,14 +9,9 @@ from dagster import OpExecutionContext, Output, asset
 
 @asset
 def vct_qos_raw(context: OpExecutionContext, spark: PySparkResource) -> Output:
-    now = dt.datetime.now(dt.UTC).replace(second=0, microsecond=0)
-    window_end = now.replace(minute=0)
-    window_start = window_end - dt.timedelta(hours=1)
-
     s: SparkSession = spark.spark_session
-    context.log.info(f"Fetching VCT 60-min QoS for {window_start} → {window_end}")
 
-    snapshot_df = build_snapshot_dataframe(s, context, window_start, window_end)
+    snapshot_df, _, window_end = build_snapshot_dataframe(s, context)
     snapshot_df = snapshot_df.rename(
         columns={"serial": "device_id", "window_start": "timestamp"}
     )

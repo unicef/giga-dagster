@@ -44,28 +44,50 @@ def _day_window_iso(day: dt.date) -> tuple[str, str]:
     return t0.isoformat().replace("+00:00", "Z"), t1.isoformat().replace("+00:00", "Z")
 
 
+def _format_five_min_window(
+    bucket_start: dt.datetime, bucket_minutes: int = FIVE_MIN_BUCKET_MINUTES
+) -> str:
+    if bucket_start.tzinfo is None:
+        bucket_start = bucket_start.replace(tzinfo=dt.UTC)
+    else:
+        bucket_start = bucket_start.astimezone(dt.UTC)
+    bucket_start = bucket_start.replace(second=0, microsecond=0)
+    minute = (bucket_start.minute // bucket_minutes) * bucket_minutes
+    bucket_start = bucket_start.replace(minute=minute)
+    bucket_end = bucket_start + dt.timedelta(minutes=bucket_minutes)
+    return f"{bucket_start.hour:02d}.{bucket_start.minute:02d} - {bucket_end.hour:02d}.{bucket_end.minute:02d}"
+
+
+def _add_five_min_window_from_timestamp(
+    series: pd.Series, bucket_minutes: int = FIVE_MIN_BUCKET_MINUTES
+) -> pd.Series:
+    ts = pd.to_datetime(series, utc=True)
+
+    def label(t: pd.Timestamp) -> Optional[str]:
+        if pd.isna(t):
+            return None
+        return _format_five_min_window(t.to_pydatetime(), bucket_minutes=bucket_minutes)
+
+    return ts.map(label)
+
+
 def _parse_meraki_name_room(device_name: Optional[str]) -> str:
-    if not isinstance(device_name, str) or not device_name:
+    if not isinstance(device_name, str) or device_name == "":
         return ""
     parts = device_name.split(" - ", 1)
-    return parts[1].strip() if len(parts) > 1 else device_name.strip()
+    if len(parts) > 1:
+        return parts[1].strip()
+    return device_name.strip()
 
 
 def _pick_detail(details: Optional[dict], which: str, key: str) -> Optional[str]:
-    for item in (details or {}).get(which) or []:
+    if details is None:
+        details = {}
+    side_list = details.get(which) or []
+    for item in side_list:
         if item.get("name") == key:
             return item.get("value")
     return None
-
-
-def _format_five_min_window(ts: pd.Timestamp) -> Optional[str]:
-    if pd.isna(ts):
-        return None
-    ts = ts.astimezone(dt.UTC).replace(second=0, microsecond=0)
-    minute = (ts.minute // FIVE_MIN_BUCKET_MINUTES) * FIVE_MIN_BUCKET_MINUTES
-    start = ts.replace(minute=minute)
-    end = start + dt.timedelta(minutes=FIVE_MIN_BUCKET_MINUTES)
-    return f"{start.hour:02d}.{start.minute:02d} - {end.hour:02d}.{end.minute:02d}"
 
 
 def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
@@ -89,7 +111,7 @@ def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
             }
         )
     df = pd.DataFrame(rows)
-    if df.empty:
+    if len(df) == 0:
         return df
     df["occurredAt"] = pd.to_datetime(df["occurredAt"], utc=True, errors="coerce")
     df = df.dropna(subset=["serial", "occurredAt"])
@@ -100,7 +122,6 @@ def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
 def _load_school_lookup(
     spark_session: SparkSession, context: OpExecutionContext
 ) -> pd.DataFrame:
-    """Read serial → school_id_govt + school_id_giga from Hive metastore."""
     try:
         device_meta = (
             spark_session.read.table("custom_dataset.device_matched")
@@ -129,6 +150,18 @@ def _load_school_lookup(
         return pd.DataFrame(columns=["serial", "school_id_govt", "school_id_giga"])
 
 
+def _attach_school_ids(
+    df: pd.DataFrame, spark_session: SparkSession, context: OpExecutionContext
+) -> pd.DataFrame:
+    lookup = _load_school_lookup(spark_session, context)
+    if len(lookup) == 0:
+        out = df.copy()
+        out["school_id_govt"] = None
+        out["school_id_giga"] = None
+        return out
+    return df.merge(lookup, on="serial", how="left", validate="m:1")
+
+
 def build_events_dataframe(
     report_day: dt.date,
     spark_session: SparkSession,
@@ -152,10 +185,10 @@ def build_events_dataframe(
             total_pages="all",
         )
         df = _normalize_changes(raw)
-        if not df.empty:
-            mask = (df["occurredAt"] >= day_start) & (df["occurredAt"] < day_end)
-            df = df.loc[mask].copy()
-            if not df.empty:
+        if len(df) > 0:
+            day_mask = (df["occurredAt"] >= day_start) & (df["occurredAt"] < day_end)
+            df = df.loc[day_mask].copy()
+            if len(df) > 0:
                 df["organization"] = org_label
                 df["meraki_name_room"] = df["deviceName"].map(_parse_meraki_name_room)
         frames.append(df)
@@ -163,19 +196,15 @@ def build_events_dataframe(
     events_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     events_df["report_date"] = report_day.isoformat()
 
-    if not events_df.empty and "occurredAt" in events_df.columns:
-        ts = pd.to_datetime(events_df["occurredAt"], utc=True)
-        events_df["five_min_window"] = ts.map(_format_five_min_window)
+    if len(events_df) > 0 and "occurredAt" in events_df.columns:
+        events_df["five_min_window"] = _add_five_min_window_from_timestamp(
+            events_df["occurredAt"]
+        )
         events_df["changes_count_day"] = events_df.groupby("serial", sort=False)[
             "serial"
         ].transform("count")
 
-    lookup = _load_school_lookup(spark_session, context)
-    if not lookup.empty:
-        events_df = events_df.merge(lookup, on="serial", how="left")
-    else:
-        events_df["school_id_govt"] = None
-        events_df["school_id_giga"] = None
+    events_df = _attach_school_ids(events_df, spark_session, context)
 
     for col in EVENT_COLUMNS:
         if col not in events_df.columns:
