@@ -20,6 +20,7 @@ trino = {extras = ["sqlalchemy"], version = "^0.335.0"}
 tenacity = "^9.1.4"
 folium = "^0.20.0"
 numpy = ">=1.26,<2"
+meraki = "3.1.0"
 
 [tool.poetry.group.dagster.dependencies]
 dagster-webserver = "^1.6.0"
