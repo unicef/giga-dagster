@@ -86,6 +86,7 @@ jobs:
                     CATALOG_BASE: "$(catalogBase)"
                     DATABASE_ID: "$(databaseId)"
                     SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
+                    VCT_MERAKI_API_KEY: "$(vctMerakiApiKey)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

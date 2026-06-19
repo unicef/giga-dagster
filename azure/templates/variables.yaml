@@ -52,4 +52,5 @@ variables:
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
   slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
+  vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
   system.debug: true
