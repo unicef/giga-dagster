@@ -159,7 +159,11 @@ def _attach_school_ids(
         out["school_id_govt"] = None
         out["school_id_giga"] = None
         return out
-    return df.merge(lookup, on="serial", how="left", validate="m:1")
+    result = df.merge(lookup, on="serial", how="left", validate="m:1")
+    result["school_id_govt"] = (
+        result["school_id_govt"].astype(str).where(result["school_id_govt"].notna())
+    )
+    return result
 
 
 def build_events_dataframe(
