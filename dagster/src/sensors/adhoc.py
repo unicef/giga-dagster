@@ -504,12 +504,12 @@ def school_qos__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__qos_transforms": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.parquet",
                 metastore_schema=metastore_schema,
                 tier=DataTier.TRANSFORMS,
             ),
             "adhoc__publish_qos_to_gold": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.csv",
+                source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.parquet",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,

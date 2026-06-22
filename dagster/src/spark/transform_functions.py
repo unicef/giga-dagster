@@ -165,21 +165,30 @@ def map_govt_to_giga_columns(
             continue
 
         govt_casing_map = f.create_map(
-            [f.lit(x) for x in chain(*{k.lower(): k for k in mapping}.items())]
+            [
+                f.lit(x)
+                for x in chain(*{k.lower().strip(): k.strip() for k in mapping}.items())
+            ]
         )
         govt_to_giga_map = f.create_map(
             [
                 f.lit(x)
-                for x in chain(*{k.lower(): v for k, v in mapping.items()}.items())
+                for x in chain(
+                    *{k.lower().strip(): v.strip() for k, v in mapping.items()}.items()
+                )
             ]
         )
         df = df.withColumn(
             source_col,
-            f.coalesce(govt_casing_map[f.lower(f.col(source_col))], f.col(source_col)),
+            f.coalesce(
+                govt_casing_map[f.lower(f.trim(f.col(source_col)))], f.col(source_col)
+            ),
         )
         df = df.withColumn(
             target_col,
-            f.coalesce(govt_to_giga_map[f.lower(f.col(source_col))], f.lit("Unknown")),
+            f.coalesce(
+                govt_to_giga_map[f.lower(f.trim(f.col(source_col)))], f.lit("Unknown")
+            ),
         )
 
     return df
