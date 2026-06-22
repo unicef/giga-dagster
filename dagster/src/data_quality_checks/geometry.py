@@ -47,7 +47,7 @@ def duplicate_name_level_110_check(
             f.col("latitude").isNull()
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
-            | f.isnan(f.col("latitude")),
+            | f.isnan(f.col("longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_name_level_within_110m_radius")),
     )
@@ -140,7 +140,7 @@ def similar_name_level_within_110_check(
             f.col("latitude").isNull()
             | f.isnan(f.col("latitude"))
             | f.col("longitude").isNull()
-            | f.isnan(f.col("latitude")),
+            | f.isnan(f.col("longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_similar_name_same_level_within_110m_radius")),
     )
@@ -173,6 +173,13 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
         f.count("school_id_giga").over(Window.partitionBy("hex8")),
     )
 
+    null_coords = (
+        f.col("latitude").isNull()
+        | f.isnan(f.col("latitude"))
+        | f.col("longitude").isNull()
+        | f.isnan(f.col("longitude"))
+    )
+
     df = df.withColumn(
         "dq_is_school_density_greater_than_5",
         f.when(
@@ -184,13 +191,21 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
 
     df = df.withColumn(
         "dq_is_school_density_greater_than_5",
-        f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("latitude")),
-            f.lit(None).cast("int"),
-        ).otherwise(f.col("dq_is_school_density_greater_than_5")),
+        f.when(null_coords, f.lit(None).cast("int")).otherwise(
+            f.col("dq_is_school_density_greater_than_5")
+        ),
+    )
+
+    df = df.withColumn(
+        "dq_school_density_count",
+        f.when(null_coords, f.lit(None).cast("int")).otherwise(f.col("school_density")),
+    )
+
+    df = df.withColumn(
+        "dq_school_density_group_id",
+        f.when(null_coords, f.lit(None)).otherwise(
+            f.substring(f.md5(f.col("hex8")), 1, 8)
+        ),
     )
 
     return df.drop("hex8", "school_density")

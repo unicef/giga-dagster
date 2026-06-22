@@ -7,4 +7,4 @@ spec:
     spec:
       initContainers:
         - name: check-db-ready
-          image: public.ecr.aws/bitnami/postgresql:14.6.0-debian-11-r33
+          image: uniappsoigiga.azurecr.io/bitnami/postgresql:14.6.0-debian-11-r33
