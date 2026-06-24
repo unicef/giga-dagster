@@ -91,12 +91,7 @@ def _section_map_rows(
     giga_col: str,
     total: int,
 ) -> list[dict[str, str]]:
-    rows = (
-        passed.groupBy(govt_col, giga_col)
-        .count()
-        .orderBy(f.desc("count"))
-        .collect()
-    )
+    rows = passed.groupBy(govt_col, giga_col).count().orderBy(f.desc("count")).collect()
     if not rows:
         return []
     return [
