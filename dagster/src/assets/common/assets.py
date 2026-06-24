@@ -35,7 +35,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
-from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.delta import check_table_exists, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -311,9 +311,32 @@ def _stamp_processed_and_reset_approval(
             )
 
 
+def _cascade_deletes_to_coverage_silver(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    country_code: str,
+    primary_key: str,
+    delete_ids: list[str],
+) -> None:
+    coverage_silver_tier_schema = construct_schema_name_for_tier(
+        "school_coverage", DataTier.SILVER
+    )
+    coverage_silver_table = construct_full_table_name(
+        coverage_silver_tier_schema, country_code
+    )
+    if check_table_exists(spark, "school_coverage", country_code, DataTier.SILVER):
+        spark.catalog.refreshTable(coverage_silver_table)
+        DeltaTable.forName(spark, coverage_silver_table).delete(
+            f.col(primary_key).isin(delete_ids)
+        )
+        context.log.info(
+            f"Cascaded {len(delete_ids)} deletes to coverage silver for {country_code}."
+        )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
-def silver(
+def silver(  # noqa: C901
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
@@ -447,6 +470,11 @@ def silver(
             context.log.info(
                 f"Delete verification passed: all {len(delete_ids)} deletes removed."
             )
+
+        if config.dataset_type == "geolocation":
+            _cascade_deletes_to_coverage_silver(
+                s, context, country_code, primary_key, delete_ids
+            )
     else:
         new_silver = inserts
 
@@ -520,86 +548,10 @@ def silver(
 @capture_op_exceptions
 def reset_staging_table(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: FileConfig,
 ) -> None:
-    """
-    No-op for pipelines that use the persistent staging table design
-    (geolocation, coverage). The staging table accumulates history partitioned by
-    upload_id and must not be dropped/re-cloned between merge cycles.
-    """
-    if config.dataset_type in ("geolocation", "coverage"):
-        context.log.info(
-            f"{config.dataset_type} uses a persistent staging table; skipping reset."
-        )
-        return
-
-    from src.utils.adls import ADLSFileClient
-
-    from azure.core.exceptions import ResourceNotFoundError
-
-    s: SparkSession = spark.spark_session
     country_code = config.country_code
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.STAGING
-    )
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
-    staging_table_path = config.destination_filepath
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.SILVER
-    )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    with get_db_context() as db:
-        current_request = db.scalar(
-            select(ApprovalRequest).where(
-                (ApprovalRequest.country == country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-            )
-        )
-
-        if current_request is None:
-            context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. "
-                "Proceeding with reset."
-            )
-        elif current_request.enabled:
-            context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-        elif current_request.is_merge_processing:
-            context.log.warning(
-                f"Reset blocked: merge still processing for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-
-    # Lazily import ADLSFileClient to avoid initialising it for the geolocation no-op path
-    adls_file_client = ADLSFileClient()
-    s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-    try:
-        adls_file_client.delete(staging_table_path, is_directory=True)
-    except ResourceNotFoundError as e:
-        context.log.warning(e)
-
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-    s.catalog.refreshTable(silver_table_name)
-    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    create_schema(s, staging_tier_schema_name)
-    create_delta_table(
-        s,
-        staging_tier_schema_name,
-        country_code,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    silver_df.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
     with get_db_context() as db:
         try:
@@ -926,6 +878,106 @@ def _stamp_master_version(
     )
     context.log.info(
         f"Stamped master_version={master_version} on PROCESSED staging rows."
+    )
+
+
+@asset(deps=["master"])
+@capture_op_exceptions
+def dq_kit_post_approval(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    adls_file_client: ADLSFileClient,
+) -> Output[None]:
+    """Regenerate the DQ Kit ZIP after approval, including a school_master CSV only for geolocation.
+
+    Writes two artefacts directly via ``ADLSFileClient``
+    1. ``…/school-geolocation/master-export/<country>/<stem>.csv`` — full
+       ``school_master.<country>`` snapshot, taken right after the merge.
+    2. ``…/school-geolocation/<country>/dq-kit/DQ_Kit_<country>_geolocation_<stem>.zip``
+        - Overriting the pre-approval kit that was generated by the portal when the file was uploaded.
+    """
+    import io as _io
+    from pathlib import Path
+
+    from models.file_upload import FileUpload
+    from src.constants import constants
+    from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
+
+    if config.dataset_type != "geolocation":
+        context.log.info(
+            f"dq_kit_post_approval is a no-op for dataset_type="
+            f"{config.dataset_type!r}"
+        )
+        return Output(None, metadata={**get_output_metadata(config), "skipped": True})
+
+    s: SparkSession = spark.spark_session
+    country_code = config.country_code
+
+    # Recover upload_id from the approval JSON (filename has no id).
+    approval_data = adls_file_client.download_json(config.filepath)
+    upload_id, _, _, _ = _parse_approval_file(approval_data)
+    if not upload_id:
+        raise ValueError(
+            f"Approval file {config.filepath!r} has no upload_id; cannot regenerate kit"
+        )
+
+    with get_db_context() as db:
+        file_upload = db.scalar(select(FileUpload).where(FileUpload.id == upload_id))
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"FileUpload with id `{upload_id}` not found; cannot regenerate DQ kit"
+            )
+        original_filename = file_upload.original_filename
+        raw_filename = file_upload.filename
+
+    stem = Path(raw_filename).stem
+    dataset_prefix = f"school-{config.dataset_type}"
+    dq_root = f"{constants.dq_results_folder}/{dataset_prefix}"
+    master_csv_path = f"{dq_root}/master-export/{country_code}/{stem}.csv"
+    kit_zip_path = (
+        f"{dq_root}/dq-kit/{country_code}/"
+        f"DQ_Kit_{country_code}_{config.dataset_type}_{stem}.zip"
+    )
+
+    # 1. Export school_master snapshot as a single CSV.
+    master_table_name = construct_full_table_name("school_master", country_code)
+    s.catalog.refreshTable(master_table_name)
+    master_pdf = DeltaTable.forName(s, master_table_name).toDF().toPandas()
+
+    csv_buffer = _io.StringIO()
+    master_pdf.to_csv(csv_buffer, index=False)
+    ADLSFileClient.upload_raw(
+        None, csv_buffer.getvalue().encode("utf-8"), master_csv_path
+    )
+    context.log.info(
+        f"Wrote master export ({len(master_pdf)} rows) to {master_csv_path}"
+    )
+
+    # 2. Regenerate the kit zip — generator picks up the new master CSV via the
+    #    convention-based path and overwrites the pre-approval kit in place.
+    zip_bytes, kit_filename = generate_dq_kit_zip_bytes(
+        country_code=country_code,
+        upload_id=upload_id,
+        dataset=config.dataset_type,
+        original_filename=original_filename,
+        stem=stem,
+        adls_client=adls_file_client,
+        context=context,
+    )
+    ADLSFileClient.upload_raw(None, zip_bytes, kit_zip_path)
+    context.log.info(f"Overwrote DQ Kit at {kit_zip_path} ({len(zip_bytes)} bytes)")
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "master_csv_path": master_csv_path,
+            "kit_zip_path": kit_zip_path,
+            "kit_filename": kit_filename,
+            "kit_size_bytes": len(zip_bytes),
+            "master_row_count": len(master_pdf),
+        },
     )
 
 

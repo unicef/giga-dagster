@@ -74,11 +74,6 @@ def human_readable_standard_checks(columns: list[str]) -> dict[str, str]:
 def human_readable_geolocation_checks() -> dict[str, str]:
     config_expectations_instance = Config()
 
-    create_update_desc = {
-        "dq_is_not_create": "Did the user correctly use CREATE to add a non existing record",
-        "dq_is_not_update": "Did the user correctly use UPDATE to update an existing record",
-    }
-
     is_not_within_country_desc = {
         "dq_is_not_within_country": "Are the coordinates within the country",
     }
@@ -132,7 +127,6 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     }
 
     geolocation_checks = {
-        **create_update_desc,
         **is_not_within_country_desc,
         **similar_name_level_within_110_desc,
         **school_density_desc,
@@ -286,15 +280,9 @@ def handle_rename_dq_has_critical_error_column(
         "dq_is_null_optional-longitude": "longitude is missing",
         "dq_is_not_within_country": "location is not within the country",
     }
-    human_readeable_create_update_checks_mapping = {
-        "dq_is_not_create": "Tried creating a new school_id_giga that already exists - must use UPDATE instead",
-        "dq_is_not_update": "Tried updating a school_id_giga that does not exist - must use CREATE instead",
-    }
-
     full_human_readable_mapping = {
         **human_readeable_non_empty_columns,
         **human_readeable_extended_master_geolocation_columns_mapping,
-        **human_readeable_create_update_checks_mapping,
     }
 
     return full_human_readable_mapping

@@ -2,6 +2,7 @@ import enum
 
 from delta import DeltaTable
 from models.approval_requests import ApprovalRequest
+from models.deletion_requests import DeletionRequest
 from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import (
@@ -96,9 +97,13 @@ class StagingStep:
             self.country_code,
         )
 
-    def __call__(self, upstream_df: sql.DataFrame | list[str]) -> sql.DataFrame | None:
+    def __call__(
+        self,
+        upstream_df: sql.DataFrame | list[str],
+        id_type: str | None = None,
+    ) -> sql.DataFrame | None:
         if self.change_type == StagingMode.DELETE:
-            pending = self._build_delete_records(upstream_df)
+            pending = self._build_delete_records(upstream_df, id_type)
         else:
             pending = self._build_upsert_records(upstream_df)
 
@@ -107,6 +112,7 @@ class StagingStep:
 
         self._write_pending_records(pending)
         self._update_approval_request_status()
+        self._stamp_file_upload_staging_complete()
         self._emit_lineage()
 
         return pending
@@ -228,7 +234,9 @@ class StagingStep:
         )
         return joined
 
-    def _build_delete_records(self, delete_ids: list[str]) -> sql.DataFrame | None:
+    def _build_delete_records(
+        self, delete_ids: list[str], id_type: str | None
+    ) -> sql.DataFrame | None:
         """Build staging rows for a DELETE operation."""
         if not self.silver_table_exists:
             self.context.log.warning(
@@ -236,14 +244,24 @@ class StagingStep:
             )
             return None
 
+        _DELETE_ALL = "__all__"
         silver_df = DeltaTable.forName(self.spark, self.silver_table_name).toDF()
-        rows = silver_df.filter(f.col(self.primary_key).isin(delete_ids))
+        if delete_ids == [_DELETE_ALL]:
+            rows = silver_df
+        else:
+            rows = silver_df.filter(f.col(id_type).isin(delete_ids))
 
-        if rows.isEmpty():
+        matched_count = rows.count()
+        self._update_deletion_request_school_count(matched_count)
+
+        if matched_count == 0:
             self.context.log.warning(
                 f"None of {len(delete_ids)} delete IDs found in silver. Skipping."
             )
             return None
+
+        rows = add_missing_columns(rows, self.schema_columns)
+        rows = self._select_schema_cols(rows)
 
         upload_id = self.config.filename_components.id
         rows = (
@@ -315,6 +333,29 @@ class StagingStep:
             .saveAsTable(self.staging_table_name)
         )
 
+    def _update_deletion_request_school_count(self, count: int) -> None:
+        """Write the actual matched-row count back to the originating DeletionRequest."""
+        upload_id = self.config.filename_components.id
+        if not upload_id:
+            return
+
+        with get_db_context() as db:
+            try:
+                with db.begin():
+                    db.execute(
+                        update(DeletionRequest)
+                        .where(DeletionRequest.id == upload_id)
+                        .values(
+                            school_count=count,
+                            status="PENDING_APPROVAL" if count > 0 else "NO_MATCHES",
+                        )
+                    )
+            except Exception as e:
+                self.context.log.error(
+                    f"Failed to update DeletionRequest school_count for "
+                    f"id={upload_id}: {e}"
+                )
+
     def _update_approval_request_status(self) -> None:
         """Enable the ApprovalRequest if any actionable (non-UNCHANGED) rows exist."""
         actionable = (
@@ -382,6 +423,52 @@ class StagingStep:
                     f"Failed to update ApprovalRequest for "
                     f"{self.country_code} - {formatted_dataset}: {e}"
                 )
+
+    def _stamp_file_upload_staging_complete(self) -> None:
+        """Set is_processed_in_staging=True and approval_status='PENDING' when enabled."""
+        upload_id = self.config.filename_components.id
+        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        try:
+            with get_db_context() as db:
+                with db.begin():
+                    file_upload = db.scalar(
+                        select(FileUpload).where(FileUpload.id == upload_id)
+                    )
+                    if file_upload is None:
+                        self.context.log.warning(
+                            f"FileUpload with id `{upload_id}` not found; "
+                            "cannot stamp is_processed_in_staging."
+                        )
+                        return
+
+                    approval_request = db.scalar(
+                        select(ApprovalRequest).where(
+                            (ApprovalRequest.country == self.country_code)
+                            & (ApprovalRequest.dataset == formatted_dataset)
+                            & (ApprovalRequest.enabled == True)  # noqa: E712
+                        )
+                    )
+
+                    file_upload.is_processed_in_staging = True
+                    # approval_status is the per-upload review state in the portal
+                    # DB (distinct from the per-row staging `status` in Delta); the
+                    # uploads list reads it directly. Stamp PENDING on landing, but
+                    # never overwrite a reviewer decision on pipeline re-runs.
+                    if approval_request and file_upload.approval_status not in (
+                        "APPROVED",
+                        "REJECTED",
+                    ):
+                        file_upload.approval_status = "PENDING"
+
+                    self.context.log.info(
+                        f"Stamped FileUpload {upload_id}: "
+                        f"is_processed_in_staging=True, "
+                        f"approval_status={file_upload.approval_status}"
+                    )
+        except Exception as e:
+            self.context.log.error(
+                f"Failed to stamp FileUpload {upload_id} after staging: {e}"
+            )
 
     def _get_current_approval_request(self, db, formatted_dataset: str):
         return db.scalar(
