@@ -49,6 +49,7 @@ from src.utils.schema import (
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
@@ -174,6 +175,17 @@ async def coverage_data_quality_results_summary(
 ) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    uploaded_columns = list(file_upload.column_to_schema_mapping.values())
+
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath, context=context)
@@ -185,6 +197,17 @@ async def coverage_data_quality_results_summary(
         df_data_quality_checks=coverage_data_quality_results,
     )
 
+    value_maps = aggregate_value_maps_for_pdf(
+        coverage_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -194,6 +217,7 @@ async def coverage_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
 

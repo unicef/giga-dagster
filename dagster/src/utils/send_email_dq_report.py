@@ -36,11 +36,6 @@ def _entity_for_dataset(dataset: str) -> dict[str, str]:
     }
 
 
-def _field_mapping_from_upload(file_upload: FileUploadConfig) -> list[dict[str, str]]:
-    mapping = file_upload.column_to_schema_mapping or {}
-    return [{"from": k, "to": v} for k, v in mapping.items() if v]
-
-
 def _make_json_safe(obj: Any) -> Any:
     """Replace float nan/inf with None so payload is JSON-serializable."""
     if isinstance(obj, dict):
@@ -69,12 +64,11 @@ def _generate_pdf_attachment_and_store_in_adls(
     )
     adls = ADLSFileClient()
 
-    # Regenerate when field mapping is present so cached PDFs from before mapping
-    # support do not omit the Original field / Will be mapped to section.
-    has_field_mapping = bool(metadata.get("fieldMapping"))
+    # Regenerate when value maps are present so cached PDFs do not omit those sections.
+    has_value_maps = bool(metadata.get("valueMaps"))
 
-    # Safety: try using an existing PDF from ADLS first (only when no column mapping)
-    if not has_field_mapping:
+    # Safety: try using an existing PDF from ADLS first (only when no enrichment)
+    if not has_value_maps:
         try:
             adls.get_file_metadata(pdf_path)
             pdf_bytes_existing = ADLSFileClient.download_raw(pdf_path)
@@ -95,7 +89,7 @@ def _generate_pdf_attachment_and_store_in_adls(
             )
     else:
         logger.info(
-            "Regenerating DQ report PDF (field mapping present) instead of ADLS cache"
+            "Regenerating DQ report PDF (value maps present) instead of ADLS cache"
         )
 
     # Call renderer to generate a fresh PDF (sanitize nan/inf so JSON is valid)
@@ -172,6 +166,7 @@ async def send_email_dq_report(
     uploader_email: str,
     country_code: str = None,
     file_upload: FileUploadConfig | None = None,
+    value_maps: dict[str, Any] | None = None,
     context: OpExecutionContext = None,
 ) -> None:
     # Prepare metadata for email renderer
@@ -195,12 +190,22 @@ async def send_email_dq_report(
         # Already a string, keep it as is
         pass
 
+    # valueMaps may be stored on the dq-summary blob; prefer explicit arg when given.
+    pdf_value_maps = value_maps if value_maps is not None else dq_results.get("valueMaps")
+
+    dq_check_payload = {
+        k: v for k, v in dq_results_formatted.items() if k != "valueMaps"
+    }
+
     metadata = {
         "dataset": dataset_type,
         "uploadDate": upload_date_str,
         "uploadId": upload_id,
-        "dataQualityCheck": dq_results_formatted,
+        "dataQualityCheck": dq_check_payload,
     }
+
+    if pdf_value_maps:
+        metadata["valueMaps"] = pdf_value_maps
 
     # Add country if provided (required for PDF generation)
     if country_code:
@@ -209,10 +214,17 @@ async def send_email_dq_report(
     if file_upload is not None:
         if file_upload.original_filename:
             metadata["uploadedFileName"] = file_upload.original_filename
-        field_mapping = _field_mapping_from_upload(file_upload)
-        if field_mapping:
-            metadata["fieldMapping"] = field_mapping
         metadata["entity"] = _entity_for_dataset(file_upload.dataset)
+        try:
+            upload_meta = ADLSFileClient().fetch_metadata_for_blob(
+                file_upload.upload_path
+            )
+            if upload_meta:
+                metadata["uploadMetadata"] = {
+                    str(k): v for k, v in upload_meta.items()
+                }
+        except Exception:
+            pass
 
     # Ensure payload is JSON-serializable (replace float nan/inf with None)
     metadata = _make_json_safe(metadata)
@@ -248,6 +260,7 @@ async def send_email_dq_report(
 async def send_email_dq_report_with_config(
     dq_results: dict[str, Any],
     config: FileConfig,
+    value_maps: dict[str, Any] | None = None,
     context: OpExecutionContext = None,
 ) -> None:
     try:
@@ -286,6 +299,7 @@ async def send_email_dq_report_with_config(
             uploader_email=uploader_email,
             country_code=country_code,
             file_upload=file_upload,
+            value_maps=value_maps,
             context=context,
         )
     except Exception as error:
