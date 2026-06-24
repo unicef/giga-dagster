@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from pyspark.sql import DataFrame as SqlDataFrame
-from pyspark.sql import functions as f
+from pyspark.sql import (
+    DataFrame as SqlDataFrame,
+    functions as f,
+)
 
 from src.settings import settings
 from src.utils.nocodb.get_nocodb_data import get_nocodb_table_rows
@@ -68,6 +70,59 @@ def _nocodb_column_pairs(uploaded_columns: set[str]) -> list[tuple[str, str, str
     return pairs
 
 
+def _order_section_pairs(
+    section_pairs: list[tuple[str, str]],
+    preferred_cols: list[str],
+) -> list[tuple[str, str]]:
+    ordered: list[tuple[str, str]] = []
+    for col in preferred_cols:
+        for govt, giga in section_pairs:
+            if govt == col and (govt, giga) not in ordered:
+                ordered.append((govt, giga))
+    for govt, giga in section_pairs:
+        if (govt, giga) not in ordered:
+            ordered.append((govt, giga))
+    return ordered
+
+
+def _section_map_rows(
+    passed: SqlDataFrame,
+    govt_col: str,
+    giga_col: str,
+    total: int,
+) -> list[dict[str, str]]:
+    rows = (
+        passed.groupBy(govt_col, giga_col)
+        .count()
+        .orderBy(f.desc("count"))
+        .collect()
+    )
+    if not rows:
+        return []
+    return [
+        {
+            "src": _display_val(row[govt_col]),
+            "dst": _display_val(row[giga_col]),
+            "count": _fmt_count(int(row["count"])),
+            "pct": _fmt_pct(int(row["count"]), total),
+        }
+        for row in rows
+    ]
+
+
+def _first_section_result(
+    passed: SqlDataFrame,
+    section_pairs: list[tuple[str, str]],
+    preferred_cols: list[str],
+    total: int,
+) -> list[dict[str, str]] | None:
+    for govt_col, giga_col in _order_section_pairs(section_pairs, preferred_cols):
+        rows = _section_map_rows(passed, govt_col, giga_col, total)
+        if rows:
+            return rows
+    return None
+
+
 def aggregate_value_maps_for_pdf(
     df: SqlDataFrame,
     uploaded_columns: list[str],
@@ -92,47 +147,16 @@ def aggregate_value_maps_for_pdf(
         return {}
 
     result: dict[str, list[dict[str, str]]] = {}
-    filled_sections: set[str] = set()
-
     for section, preferred_cols in _SECTION_COLUMN_PRIORITY.items():
         section_pairs = [
             (govt, giga)
             for govt, giga, sec in pairs
             if sec == section and govt in df.columns and giga in df.columns
         ]
-        if not section_pairs:
-            continue
-
-        ordered: list[tuple[str, str]] = []
-        for col in preferred_cols:
-            for govt, giga in section_pairs:
-                if govt == col and (govt, giga) not in ordered:
-                    ordered.append((govt, giga))
-        for govt, giga in section_pairs:
-            if (govt, giga) not in ordered:
-                ordered.append((govt, giga))
-
-        for govt_col, giga_col in ordered:
-            if section in filled_sections:
-                break
-            rows = (
-                passed.groupBy(govt_col, giga_col)
-                .count()
-                .orderBy(f.desc("count"))
-                .collect()
-            )
-            if not rows:
-                continue
-
-            result[section] = [
-                {
-                    "src": _display_val(row[govt_col]),
-                    "dst": _display_val(row[giga_col]),
-                    "count": _fmt_count(int(row["count"])),
-                    "pct": _fmt_pct(int(row["count"]), total),
-                }
-                for row in rows
-            ]
-            filled_sections.add(section)
+        section_rows = _first_section_result(
+            passed, section_pairs, preferred_cols, total
+        )
+        if section_rows:
+            result[section] = section_rows
 
     return result

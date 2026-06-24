@@ -47,6 +47,115 @@ def _make_json_safe(obj: Any) -> Any:
     return obj
 
 
+def _pdf_attachment_dict(pdf_bytes: bytes, filename: str) -> list[dict]:
+    return [
+        {
+            "Content-type": "application/pdf",
+            "Filename": filename,
+            "content": b64encode(pdf_bytes).decode("ascii"),
+        }
+    ]
+
+
+def _try_cached_pdf_attachment(
+    adls: ADLSFileClient,
+    pdf_path: str,
+    country_code: str,
+    upload_id: str,
+    logger,
+) -> list[dict] | None:
+    try:
+        adls.get_file_metadata(pdf_path)
+        pdf_bytes = ADLSFileClient.download_raw(pdf_path)
+        logger.info(f"Using existing DQ report PDF from ADLS at {pdf_path}")
+        return _pdf_attachment_dict(
+            pdf_bytes,
+            f"data-quality-report-{country_code}-{upload_id}.pdf",
+        )
+    except Exception:
+        logger.info(
+            "No existing DQ report PDF found at %s; falling back to renderer",
+            pdf_path,
+        )
+        return None
+
+
+def _fetch_pdf_from_renderer(
+    metadata: dict[str, Any],
+    logger,
+) -> requests.Response | None:
+    try:
+        return requests.post(
+            f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
+            headers={
+                "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json=metadata,
+            timeout=int(datetime.timedelta(minutes=2).total_seconds()),
+        )
+    except Exception as pdf_error:
+        logger.error(f"Error calling email renderer for PDF: {pdf_error}")
+        return None
+
+
+def _log_pdf_error_response(pdf_res: requests.Response, logger) -> None:
+    logger.warning(f"Failed to generate PDF: {pdf_res.status_code}")
+    try:
+        logger.warning(f"PDF error response: {pdf_res.json()}")
+    except JSONDecodeError:
+        logger.warning(f"PDF error response: {pdf_res.text[:500]}")
+
+
+def _is_valid_pdf_response(pdf_res: requests.Response, logger) -> bool:
+    if not pdf_res.ok:
+        _log_pdf_error_response(pdf_res, logger)
+        return False
+
+    pdf_bytes = pdf_res.content
+    content_type = (pdf_res.headers.get("Content-Type") or "").split(";")[0].strip()
+    if content_type != "application/pdf" or not pdf_bytes or len(pdf_bytes) < 1000:
+        logger.warning(
+            "Invalid PDF response: Content-Type=%s, len=%s",
+            content_type,
+            len(pdf_bytes) if pdf_bytes else 0,
+        )
+        return False
+    return True
+
+
+def _pdf_filename_from_response(
+    pdf_res: requests.Response,
+    country_code: str,
+    upload_id: str,
+) -> str:
+    disp = pdf_res.headers.get("Content-Disposition") or ""
+    pdf_filename = f"data-quality-report-{country_code}-{upload_id}.pdf"
+    if "filename=" in disp:
+        part = disp.split("filename=", 1)[1].strip().strip('"')
+        if part:
+            pdf_filename = part
+    return pdf_filename
+
+
+def _store_pdf_in_adls(
+    adls: ADLSFileClient,
+    pdf_bytes: bytes,
+    pdf_path: str,
+    logger,
+) -> None:
+    try:
+        adls.upload_raw(
+            context=None,
+            data=pdf_bytes,
+            filepath=pdf_path,
+            metadata=None,
+        )
+        logger.info(f"Stored DQ report PDF in ADLS at {pdf_path}")
+    except Exception as adls_error:
+        logger.error(f"Failed to store DQ report PDF in ADLS: {adls_error}")
+
+
 def _generate_pdf_attachment_and_store_in_adls(
     metadata: dict[str, Any],
     dataset: str,
@@ -64,97 +173,26 @@ def _generate_pdf_attachment_and_store_in_adls(
     )
     adls = ADLSFileClient()
 
-    # Regenerate when value maps are present so cached PDFs do not omit those sections.
-    has_value_maps = bool(metadata.get("valueMaps"))
-
-    # Safety: try using an existing PDF from ADLS first (only when no enrichment)
-    if not has_value_maps:
-        try:
-            adls.get_file_metadata(pdf_path)
-            pdf_bytes_existing = ADLSFileClient.download_raw(pdf_path)
-            pdf_base64_existing = b64encode(pdf_bytes_existing).decode("ascii")
-            logger.info(f"Using existing DQ report PDF from ADLS at {pdf_path}")
-            return [
-                {
-                    "Content-type": "application/pdf",
-                    "Filename": f"data-quality-report-{country_code}-{upload_id}.pdf",
-                    "content": pdf_base64_existing,
-                }
-            ]
-        except Exception:
-            # If file doesn't exist or can't be read, fall back to renderer
-            logger.info(
-                "No existing DQ report PDF found at %s; falling back to renderer",
-                pdf_path,
-            )
+    if not metadata.get("valueMaps"):
+        cached = _try_cached_pdf_attachment(
+            adls, pdf_path, country_code, upload_id, logger
+        )
+        if cached is not None:
+            return cached
     else:
         logger.info(
             "Regenerating DQ report PDF (value maps present) instead of ADLS cache"
         )
 
-    # Call renderer to generate a fresh PDF (sanitize nan/inf so JSON is valid)
-    try:
-        pdf_res = requests.post(
-            f"{settings.EMAIL_RENDERER_SERVICE_URL}/email/dq-report-pdf",
-            headers={
-                "Authorization": f"Bearer {settings.EMAIL_RENDERER_BEARER_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json=metadata,
-            timeout=int(datetime.timedelta(minutes=2).total_seconds()),
-        )
-    except Exception as pdf_error:
-        logger.error(f"Error calling email renderer for PDF: {pdf_error}")
+    pdf_res = _fetch_pdf_from_renderer(metadata, logger)
+    if pdf_res is None or not _is_valid_pdf_response(pdf_res, logger):
         return None
 
-    if not pdf_res.ok:
-        logger.warning(f"Failed to generate PDF: {pdf_res.status_code}")
-        try:
-            logger.warning(f"PDF error response: {pdf_res.json()}")
-        except JSONDecodeError:
-            logger.warning(f"PDF error response: {pdf_res.text[:500]}")
-        return None
-
-    # Renderer returns binary PDF (avoids huge JSON/base64 truncation)
     pdf_bytes = pdf_res.content
-    content_type = (pdf_res.headers.get("Content-Type") or "").split(";")[0].strip()
-    if content_type != "application/pdf" or not pdf_bytes or len(pdf_bytes) < 1000:
-        logger.warning(
-            "Invalid PDF response: Content-Type=%s, len=%s",
-            content_type,
-            len(pdf_bytes) if pdf_bytes else 0,
-        )
-        return None
-
-    # Filename from Content-Disposition or default
-    disp = pdf_res.headers.get("Content-Disposition") or ""
-    pdf_filename = f"data-quality-report-{country_code}-{upload_id}.pdf"
-    if "filename=" in disp:
-        part = disp.split("filename=", 1)[1].strip().strip('"')
-        if part:
-            pdf_filename = part
-
-    # Store PDF in ADLS alongside DQ summary (dq-report path)
-    try:
-        adls.upload_raw(
-            context=None,
-            data=pdf_bytes,
-            filepath=pdf_path,
-            metadata=None,
-        )
-        logger.info(f"Stored DQ report PDF in ADLS at {pdf_path}")
-    except Exception as adls_error:
-        logger.error(f"Failed to store DQ report PDF in ADLS: {adls_error}")
-
+    pdf_filename = _pdf_filename_from_response(pdf_res, country_code, upload_id)
+    _store_pdf_in_adls(adls, pdf_bytes, pdf_path, logger)
     logger.info(f"PDF generated successfully: {pdf_filename}")
-    pdf_base64 = b64encode(pdf_bytes).decode("ascii")
-    return [
-        {
-            "Content-type": "application/pdf",
-            "Filename": pdf_filename,
-            "content": pdf_base64,
-        }
-    ]
+    return _pdf_attachment_dict(pdf_bytes, pdf_filename)
 
 
 async def send_email_dq_report(
@@ -191,7 +229,9 @@ async def send_email_dq_report(
         pass
 
     # valueMaps may be stored on the dq-summary blob; prefer explicit arg when given.
-    pdf_value_maps = value_maps if value_maps is not None else dq_results.get("valueMaps")
+    pdf_value_maps = (
+        value_maps if value_maps is not None else dq_results.get("valueMaps")
+    )
 
     dq_check_payload = {
         k: v for k, v in dq_results_formatted.items() if k != "valueMaps"
@@ -220,9 +260,7 @@ async def send_email_dq_report(
                 file_upload.upload_path
             )
             if upload_meta:
-                metadata["uploadMetadata"] = {
-                    str(k): v for k, v in upload_meta.items()
-                }
+                metadata["uploadMetadata"] = {str(k): v for k, v in upload_meta.items()}
         except Exception:
             pass
 

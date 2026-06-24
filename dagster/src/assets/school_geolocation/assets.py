@@ -40,6 +40,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -56,7 +57,6 @@ from src.utils.schema import (
     get_schema_table,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
-from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import (
