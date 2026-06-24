@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from math import isnan
 
 import pandas as pd
-from h3 import geo_to_h3
+from h3 import latlng_to_cell
 from pyspark.sql.functions import pandas_udf, udf
 from pyspark.sql.types import ArrayType, StringType
 from rapidfuzz.fuzz import ratio as fuzzy_string_similarity_ratio
@@ -51,7 +51,7 @@ def h3_geo_to_h3_udf(latitude: pd.Series, longitude: pd.Series) -> pd.Series:
     valid_coordinate_mask = latitude.notna() & longitude.notna()
     h3_cell_index = pd.Series("0", index=latitude.index, dtype=str)
     h3_cell_index[valid_coordinate_mask] = [
-        geo_to_h3(lat, lon, resolution=8)
+        latlng_to_cell(lat, lon, res=8)
         for lat, lon in zip(
             latitude[valid_coordinate_mask],
             longitude[valid_coordinate_mask],

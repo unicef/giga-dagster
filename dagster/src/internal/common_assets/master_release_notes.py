@@ -120,7 +120,7 @@ async def send_master_release_notes(
     await send_slack_master_release_notification(props=slack_props)
 
     return {
-        **props.dict(),
+        **props.model_dump(),
         "recipients": recipients,
     }
 
