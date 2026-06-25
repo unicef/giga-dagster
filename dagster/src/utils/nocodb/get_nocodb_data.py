@@ -44,12 +44,13 @@ def get_nocodb_table_rows(table_id, offset=0, limit=100, where=None, fields=None
 
         # fetch the data from the api
         response = requests.get(table_url, params=params, headers=headers)
+        response.raise_for_status()
         response_json = response.json()
         rows = response_json.get("list", [])
         all_rows.extend(rows)
 
         # get the page info to determine how to continue
-        page_info = response_json.get("pageInfo")
+        page_info = response_json.get("pageInfo", {})
         page_size = page_info.get("pageSize", 0)
         offset += page_size
         is_last_page = page_info.get("isLastPage", False)
@@ -125,7 +126,7 @@ def get_nocodb_table_as_key_value_mapping(
     mapping_dict = {
         item[key_column]: item[value_column]
         for item in rows_list
-        if (item[key_column] or item[value_column])
+        if item[key_column] and item[value_column]
     }
 
     return mapping_dict

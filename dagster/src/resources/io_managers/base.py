@@ -17,23 +17,21 @@ class BaseConfigurableIOManager(ConfigurableIOManager, ABC):
     @staticmethod
     def _get_filepath(context: InputContext | OutputContext) -> Path:
         if isinstance(context, InputContext):
-            # Trick to get the correct upstream step context
-            #
-            # context.upstream_output.step_context returns the op_config
-            # of the current step when it has more than 1 upstream assets
-            asset_identifier, *_ = (
-                context.get_asset_identifier()
-            )  # this already points to the correct upstream
+            # asset_identifier matches an op_config key directly only when
+            # the upstream op has a single output (op name == asset name).
+            # For a @multi_asset producer, fall back to the upstream op's
+            # own step_key instead of the deprecated, unreliable
+            # context.upstream_output.step_context.
+            asset_identifier, *_ = context.get_asset_identifier()
             run_config = context.step_context.run_config
             op_config = run_config["ops"].get(asset_identifier)
-
             if op_config is None:
-                op_config = context.upstream_output.step_context.op_config
-                config = FileConfig(**op_config)
-                return config.filepath_object
+                op_config = run_config["ops"].get(context.upstream_output.step_key)
 
             op_config = op_config["config"]
             config = FileConfig(**op_config)
+            if config.output_filepaths and context.name in config.output_filepaths:
+                return Path(config.output_filepaths[context.name])
             return config.destination_filepath_object
 
         config = FileConfig(**context.step_context.op_config)

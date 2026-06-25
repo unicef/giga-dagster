@@ -18,7 +18,7 @@ from pyspark.sql.types import (
     TimestampType,
 )
 from sqlalchemy import select, update
-from src.constants import DataTier
+from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
     core_merge_logic,
@@ -35,7 +35,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.datahub.emitter import get_rest_emitter
 from src.utils.db.primary import get_db_context
-from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.delta import check_table_exists, create_schema
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.schema import (
@@ -49,18 +49,6 @@ from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
 from dagster import OpExecutionContext, Output, asset
-
-# Pending-changes status constants (mirror staging.py)
-_STATUS_PENDING = "PENDING"
-_STATUS_APPROVED = "APPROVED"
-_STATUS_REJECTED = "REJECTED"
-_STATUS_PROCESSED = "PROCESSED"
-
-# Pending-changes change_type constants (mirror staging.py)
-_CHANGE_INSERT = "INSERT"
-_CHANGE_UPDATE = "UPDATE"
-_CHANGE_DELETE = "DELETE"
-_CHANGE_UNCHANGED = "UNCHANGED"
 
 # Approval file shorthands
 _APPROVE_ALL = "__all__"
@@ -152,25 +140,25 @@ def manual_review_failed_rows(
         f"rejected_change_ids={rejected_change_ids!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     rejected_rows = _resolve_change_ids(
         upload_rows, rejected_change_ids, s.sparkContext
     ).select(*column_names)
 
-    # Mark rejected rows as REJECTED in pending_changes
+    # Mark rejected rows as REJECTED in the staging table
     if rejected_change_ids == [_APPROVE_ALL]:
         reject_condition = (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     elif not rejected_change_ids:
         reject_condition = f.lit(False)
@@ -178,11 +166,11 @@ def manual_review_failed_rows(
         reject_condition = (
             (f.col("upload_id") == upload_id)
             & f.col("change_id").isin(rejected_change_ids)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     DeltaTable.forName(s, staging_table_name).update(
         condition=reject_condition,
-        set={"status": f.lit(_STATUS_REJECTED)},
+        set={"status": f.lit(StagingStatus.REJECTED)},
     )
     context.log.info("Marked rejected staging rows as REJECTED.")
 
@@ -223,12 +211,13 @@ def _log_staging_diagnostics(
     total_staging = staging_df.count()
     matched_upload = staging_df.filter(f.col("upload_id") == upload_id).count()
     matched_non_unchanged = staging_df.filter(
-        (f.col("upload_id") == upload_id) & (f.col("change_type") != _CHANGE_UNCHANGED)
+        (f.col("upload_id") == upload_id)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
     ).count()
     matched_pending = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     ).count()
     context.log.info(
         f"[silver] staging table: total={total_staging}, "
@@ -242,15 +231,15 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     if approved_change_ids == [_APPROVE_ALL]:
         return (
             (f.col("upload_id") == upload_id)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
-            & (f.col("status") == _STATUS_PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING)
         )
     if not approved_change_ids:
         return f.lit(False)
     return (
         (f.col("upload_id") == upload_id)
         & f.col("change_id").isin(approved_change_ids)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
 
@@ -274,19 +263,29 @@ def _stamp_processed_and_reset_approval(
     DeltaTable.forName(spark, staging_table_name).update(
         condition=processed_condition,
         set={
-            "status": f.lit(_STATUS_PROCESSED),
+            "status": f.lit(StagingStatus.PROCESSED),
             "processed_at": f.current_timestamp(),
             "approval_request_log_id": f.lit(approval_request_log_id),
         },
     )
-    context.log.info("Marked approved staging rows as PROCESSED.")
+    DeltaTable.forName(spark, staging_table_name).update(
+        condition=(f.col("upload_id") == upload_id)
+        & (f.col("change_type") == StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING),
+        set={
+            "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+            "processed_at": f.current_timestamp(),
+            "approval_request_log_id": f.lit(approval_request_log_id),
+        },
+    )
+    context.log.info("Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED.")
 
     remaining_pending = (
         DeltaTable.forName(spark, staging_table_name)
         .toDF()
         .filter(
-            (f.col("status") == _STATUS_PENDING)
-            & (f.col("change_type") != _CHANGE_UNCHANGED)
+            (f.col("status") == StagingStatus.PENDING)
+            & (f.col("change_type") != StagingChangeType.UNCHANGED)
         )
         .count()
     )
@@ -312,9 +311,32 @@ def _stamp_processed_and_reset_approval(
             )
 
 
+def _cascade_deletes_to_coverage_silver(
+    spark: SparkSession,
+    context: OpExecutionContext,
+    country_code: str,
+    primary_key: str,
+    delete_ids: list[str],
+) -> None:
+    coverage_silver_tier_schema = construct_schema_name_for_tier(
+        "school_coverage", DataTier.SILVER
+    )
+    coverage_silver_table = construct_full_table_name(
+        coverage_silver_tier_schema, country_code
+    )
+    if check_table_exists(spark, "school_coverage", country_code, DataTier.SILVER):
+        spark.catalog.refreshTable(coverage_silver_table)
+        DeltaTable.forName(spark, coverage_silver_table).delete(
+            f.col(primary_key).isin(delete_ids)
+        )
+        context.log.info(
+            f"Cascaded {len(delete_ids)} deletes to coverage silver for {country_code}."
+        )
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
-def silver(
+def silver(  # noqa: C901
     context: OpExecutionContext,
     spark: PySparkResource,
     config: FileConfig,
@@ -350,7 +372,7 @@ def silver(
         f"approval_request_log_id={approval_request_log_id!r}"
     )
 
-    # Read PENDING non-UNCHANGED rows for this upload from pending_changes
+    # Read PENDING non-UNCHANGED rows for this upload from the staging table
     s.catalog.refreshTable(staging_table_name)
     staging_df = DeltaTable.forName(s, staging_table_name).toDF()
 
@@ -358,8 +380,8 @@ def silver(
 
     upload_rows = staging_df.filter(
         (f.col("upload_id") == upload_id)
-        & (f.col("change_type") != _CHANGE_UNCHANGED)
-        & (f.col("status") == _STATUS_PENDING)
+        & (f.col("change_type") != StagingChangeType.UNCHANGED)
+        & (f.col("status") == StagingStatus.PENDING)
     )
 
     approved = _resolve_change_ids(upload_rows, approved_change_ids, s.sparkContext)
@@ -397,13 +419,13 @@ def silver(
             },
         )
 
-    inserts = approved.filter(f.col("change_type") == _CHANGE_INSERT).select(
+    inserts = approved.filter(f.col("change_type") == StagingChangeType.INSERT).select(
         *column_names
     )
-    updates = approved.filter(f.col("change_type") == _CHANGE_UPDATE).select(
+    updates = approved.filter(f.col("change_type") == StagingChangeType.UPDATE).select(
         *column_names
     )
-    deletes = approved.filter(f.col("change_type") == _CHANGE_DELETE).select(
+    deletes = approved.filter(f.col("change_type") == StagingChangeType.DELETE).select(
         *column_names
     )
 
@@ -447,6 +469,11 @@ def silver(
                 )
             context.log.info(
                 f"Delete verification passed: all {len(delete_ids)} deletes removed."
+            )
+
+        if config.dataset_type == "geolocation":
+            _cascade_deletes_to_coverage_silver(
+                s, context, country_code, primary_key, delete_ids
             )
     else:
         new_silver = inserts
@@ -521,87 +548,10 @@ def silver(
 @capture_op_exceptions
 def reset_staging_table(
     context: OpExecutionContext,
-    spark: PySparkResource,
     config: FileConfig,
 ) -> None:
-    """
-    No-op for the geolocation pipeline: the pending_changes staging table is a
-    persistent history log and does not need to be reset between merge cycles.
-
-    For other pipelines (coverage) this asset still performs the silver-clone reset.
-    """
-    if config.dataset_type == "geolocation":
-        context.log.info(
-            "Geolocation uses the pending_changes staging design; skipping reset."
-        )
-        return
-
-    from src.utils.adls import ADLSFileClient
-
-    from azure.core.exceptions import ResourceNotFoundError
-
-    s: SparkSession = spark.spark_session
     country_code = config.country_code
-    staging_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.STAGING
-    )
-    staging_table_name = construct_full_table_name(
-        staging_tier_schema_name, country_code
-    )
-    staging_table_path = config.destination_filepath
-    silver_tier_schema_name = construct_schema_name_for_tier(
-        f"school_{config.dataset_type}", DataTier.SILVER
-    )
-    silver_table_name = construct_full_table_name(silver_tier_schema_name, country_code)
-
     formatted_dataset = f"School {config.dataset_type.capitalize()}"
-    with get_db_context() as db:
-        current_request = db.scalar(
-            select(ApprovalRequest).where(
-                (ApprovalRequest.country == country_code)
-                & (ApprovalRequest.dataset == formatted_dataset)
-            )
-        )
-
-        if current_request is None:
-            context.log.warning(
-                f"No ApprovalRequest found for {country_code} - {formatted_dataset}. "
-                "Proceeding with reset."
-            )
-        elif current_request.enabled:
-            context.log.warning(
-                f"Reset blocked: ApprovalRequest is enabled for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-        elif current_request.is_merge_processing:
-            context.log.warning(
-                f"Reset blocked: merge still processing for {country_code} - "
-                f"{formatted_dataset}."
-            )
-            return
-
-    # Lazily import ADLSFileClient to avoid initialising it for the geolocation no-op path
-    adls_file_client = ADLSFileClient()
-    s.sql(f"DROP TABLE IF EXISTS {staging_table_name}")
-    try:
-        adls_file_client.delete(staging_table_path, is_directory=True)
-    except ResourceNotFoundError as e:
-        context.log.warning(e)
-
-    schema_columns = get_schema_columns(s, config.metastore_schema)
-    s.catalog.refreshTable(silver_table_name)
-    silver_df = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    create_schema(s, staging_tier_schema_name)
-    create_delta_table(
-        s,
-        staging_tier_schema_name,
-        country_code,
-        schema_columns,
-        context,
-        if_not_exists=True,
-    )
-    silver_df.write.format("delta").mode("append").saveAsTable(staging_table_name)
 
     with get_db_context() as db:
         try:
@@ -681,39 +631,48 @@ def master(
     # a failed silver write cannot leave staging rows permanently marked PROCESSED
     # with no corresponding silver data.
     if config.dataset_type == "geolocation" and check_table_exists(
-        s, schema_name, country_code, DataTier.STAGING
+        s, f"school_{config.dataset_type}", country_code, DataTier.STAGING
     ):
         staging_tier_schema_name = construct_schema_name_for_tier(
-            schema_name, DataTier.STAGING
+            f"school_{config.dataset_type}", DataTier.STAGING
         )
         staging_table_name = construct_full_table_name(
             staging_tier_schema_name, country_code
         )
         approval_data = adls_file_client.download_json(config.filepath)
-        upload_id_geo, approved_ids_geo, _, approval_log_id_geo = _parse_approval_file(
+        upload_id, approved_ids, _, approval_log_id = _parse_approval_file(
             approval_data
         )
-        processed_condition = _build_processed_condition(
-            approved_ids_geo, upload_id_geo
-        )
+        processed_condition = _build_processed_condition(approved_ids, upload_id)
         DeltaTable.forName(s, staging_table_name).update(
             condition=processed_condition,
             set={
-                "status": f.lit(_STATUS_PROCESSED),
+                "status": f.lit(StagingStatus.PROCESSED),
                 "processed_at": f.current_timestamp(),
-                "approval_request_log_id": f.lit(approval_log_id_geo),
+                "approval_request_log_id": f.lit(approval_log_id),
+            },
+        )
+        DeltaTable.forName(s, staging_table_name).update(
+            condition=(f.col("upload_id") == upload_id)
+            & (f.col("change_type") == StagingChangeType.UNCHANGED)
+            & (f.col("status") == StagingStatus.PENDING),
+            set={
+                "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
+                "processed_at": f.current_timestamp(),
+                "approval_request_log_id": f.lit(approval_log_id),
             },
         )
         context.log.info(
-            "Marked approved staging rows as PROCESSED (silver confirmed written)."
+            "Marked approved staging rows as PROCESSED / PROCESSED_UNCHANGED "
+            "(silver confirmed written)."
         )
 
         remaining_pending = (
             DeltaTable.forName(s, staging_table_name)
             .toDF()
             .filter(
-                (f.col("status") == _STATUS_PENDING)
-                & (f.col("change_type") != _CHANGE_UNCHANGED)
+                (f.col("status") == StagingStatus.PENDING)
+                & (f.col("change_type") != StagingChangeType.UNCHANGED)
             )
             .count()
         )
@@ -759,9 +718,27 @@ def master(
         s.catalog.refreshTable(master_table_name)
         current_master = DeltaTable.forName(s, master_table_name).toDF()
         current_master = add_missing_columns(current_master, schema_columns)
-        new_master = full_in_cluster_merge(
-            current_master, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            # Coverage is not authoritative for which schools exist — geolocation is.
+            # Keep every row already in master; only update coverage columns for schools
+            # present in school_coverage_silver (coalesce preserves existing master values
+            # for schools absent from coverage silver). Never insert or delete.
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_master = (
+                current_master.alias("master")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"master.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_master = full_in_cluster_merge(
+                current_master, silver, primary_key, column_names
+            )
     else:
         new_master = silver
 
@@ -817,9 +794,23 @@ def reference(
         s.catalog.refreshTable(reference_table_name)
         current_reference = DeltaTable.forName(s, reference_table_name).toDF()
         current_reference = add_missing_columns(current_reference, schema_columns)
-        new_reference = full_in_cluster_merge(
-            current_reference, silver, primary_key, column_names
-        )
+        if config.dataset_type == "coverage":
+            column_names_no_pk = [c for c in column_names if c != primary_key]
+            new_reference = (
+                current_reference.alias("reference")
+                .join(silver.alias("silver"), primary_key, "left")
+                .withColumns(
+                    {
+                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"reference.{c}"))
+                        for c in column_names_no_pk
+                    }
+                )
+                .select(*column_names)
+            )
+        else:
+            new_reference = full_in_cluster_merge(
+                current_reference, silver, primary_key, column_names
+            )
     else:
         new_reference = silver
 
@@ -850,17 +841,17 @@ def _stamp_master_version(
     spark: SparkSession,
     config: FileConfig,
 ) -> None:
-    """Backfill master_version on PROCESSED pending_changes rows that don't have one yet.
+    """Backfill master_version on PROCESSED rows in the staging table that don't have one yet.
 
     Called from broadcast_master_release_notes after the master Delta table has been
     written, so the version read from history is the one that includes the current run.
-    Only runs for the geolocation pipeline (the only pipeline using pending_changes).
+    Only runs for the geolocation pipeline (the only pipeline using the staging table).
     """
     if config.dataset_type != "geolocation":
         return
 
     staging_tier_schema_name = construct_schema_name_for_tier(
-        config.metastore_schema, DataTier.STAGING
+        f"school_{config.dataset_type}", DataTier.STAGING
     )
     staging_table_name = construct_full_table_name(
         staging_tier_schema_name, config.country_code
@@ -879,12 +870,114 @@ def _stamp_master_version(
         return
 
     DeltaTable.forName(spark, staging_table_name).update(
-        condition=(f.col("status") == _STATUS_PROCESSED)
+        condition=f.col("status").isin(
+            StagingStatus.PROCESSED, StagingStatus.PROCESSED_UNCHANGED
+        )
         & f.col("master_version").isNull(),
         set={"master_version": f.lit(master_version)},
     )
     context.log.info(
         f"Stamped master_version={master_version} on PROCESSED staging rows."
+    )
+
+
+@asset(deps=["master"])
+@capture_op_exceptions
+def dq_kit_post_approval(
+    context: OpExecutionContext,
+    config: FileConfig,
+    spark: PySparkResource,
+    adls_file_client: ADLSFileClient,
+) -> Output[None]:
+    """Regenerate the DQ Kit ZIP after approval, including a school_master CSV only for geolocation.
+
+    Writes two artefacts directly via ``ADLSFileClient``
+    1. ``…/school-geolocation/master-export/<country>/<stem>.csv`` — full
+       ``school_master.<country>`` snapshot, taken right after the merge.
+    2. ``…/school-geolocation/<country>/dq-kit/DQ_Kit_<country>_geolocation_<stem>.zip``
+        - Overriting the pre-approval kit that was generated by the portal when the file was uploaded.
+    """
+    import io as _io
+    from pathlib import Path
+
+    from models.file_upload import FileUpload
+    from src.constants import constants
+    from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
+
+    if config.dataset_type != "geolocation":
+        context.log.info(
+            f"dq_kit_post_approval is a no-op for dataset_type="
+            f"{config.dataset_type!r}"
+        )
+        return Output(None, metadata={**get_output_metadata(config), "skipped": True})
+
+    s: SparkSession = spark.spark_session
+    country_code = config.country_code
+
+    # Recover upload_id from the approval JSON (filename has no id).
+    approval_data = adls_file_client.download_json(config.filepath)
+    upload_id, _, _, _ = _parse_approval_file(approval_data)
+    if not upload_id:
+        raise ValueError(
+            f"Approval file {config.filepath!r} has no upload_id; cannot regenerate kit"
+        )
+
+    with get_db_context() as db:
+        file_upload = db.scalar(select(FileUpload).where(FileUpload.id == upload_id))
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"FileUpload with id `{upload_id}` not found; cannot regenerate DQ kit"
+            )
+        original_filename = file_upload.original_filename
+        raw_filename = file_upload.filename
+
+    stem = Path(raw_filename).stem
+    dataset_prefix = f"school-{config.dataset_type}"
+    dq_root = f"{constants.dq_results_folder}/{dataset_prefix}"
+    master_csv_path = f"{dq_root}/master-export/{country_code}/{stem}.csv"
+    kit_zip_path = (
+        f"{dq_root}/dq-kit/{country_code}/"
+        f"DQ_Kit_{country_code}_{config.dataset_type}_{stem}.zip"
+    )
+
+    # 1. Export school_master snapshot as a single CSV.
+    master_table_name = construct_full_table_name("school_master", country_code)
+    s.catalog.refreshTable(master_table_name)
+    master_pdf = DeltaTable.forName(s, master_table_name).toDF().toPandas()
+
+    csv_buffer = _io.StringIO()
+    master_pdf.to_csv(csv_buffer, index=False)
+    ADLSFileClient.upload_raw(
+        None, csv_buffer.getvalue().encode("utf-8"), master_csv_path
+    )
+    context.log.info(
+        f"Wrote master export ({len(master_pdf)} rows) to {master_csv_path}"
+    )
+
+    # 2. Regenerate the kit zip — generator picks up the new master CSV via the
+    #    convention-based path and overwrites the pre-approval kit in place.
+    zip_bytes, kit_filename = generate_dq_kit_zip_bytes(
+        country_code=country_code,
+        upload_id=upload_id,
+        dataset=config.dataset_type,
+        original_filename=original_filename,
+        stem=stem,
+        adls_client=adls_file_client,
+        context=context,
+    )
+    ADLSFileClient.upload_raw(None, zip_bytes, kit_zip_path)
+    context.log.info(f"Overwrote DQ Kit at {kit_zip_path} ({len(zip_bytes)} bytes)")
+
+    return Output(
+        None,
+        metadata={
+            **get_output_metadata(config),
+            "master_csv_path": master_csv_path,
+            "kit_zip_path": kit_zip_path,
+            "kit_filename": kit_filename,
+            "kit_size_bytes": len(zip_bytes),
+            "master_row_count": len(master_pdf),
+        },
     )
 
 

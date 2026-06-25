@@ -13,8 +13,13 @@ from pyspark.sql import (
     functions as f,
 )
 from pyspark.sql.types import StringType, StructField, StructType
-from sqlalchemy import select
+from sqlalchemy import select, update
 from src.constants import DataTier
+from src.data_quality_checks.create_update import (
+    add_is_new_school,
+    enrich_with_silver_values,
+)
+from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -24,7 +29,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.config_expectations import config as config_expectations
@@ -35,6 +40,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -177,7 +183,6 @@ def geolocation_bronze(
 ) -> Output[sql.DataFrame]:
     s: SparkSession = spark.spark_session
     country_code = config.country_code
-    mode = config.metadata["mode"]
 
     with get_db_context() as db:
         file_upload = db.scalar(
@@ -227,9 +232,30 @@ def geolocation_bronze(
 
     df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
 
-    df = create_bronze_layer_columns_updated(
-        df, mode, uploaded_columns, country_code, file_upload.source, s
-    )
+    # Derive is_new_school by joining against silver (school_id_govt only)
+    schema_name = config.metastore_schema
+    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
+        silver_tier_schema_name = construct_schema_name_for_tier(
+            "school_geolocation", DataTier.SILVER
+        )
+        silver_table_name = construct_full_table_name(
+            silver_tier_schema_name, country_code
+        )
+        s.catalog.refreshTable(silver_table_name)
+        silver_ids = (
+            DeltaTable.forName(s, silver_table_name)
+            .toDF()
+            .select("school_id_govt")
+            .withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
+        )
+    else:
+        silver_ids = s.createDataFrame(
+            [], StructType([StructField("school_id_govt", StringType(), True)])
+        )
+
+    df = add_is_new_school(df, silver_ids, context)
+
+    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
@@ -298,16 +324,26 @@ def geolocation_data_quality_results(
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
+    # Enrich bronze with silver values for existing schools (fills gaps via coalesce)
+    enriched_bronze = enrich_with_silver_values(renamed_bronze, casted_silver, context)
+
     dq_results = row_level_checks(
-        df=renamed_bronze,
+        df=enriched_bronze,
         silver=casted_silver,
-        dataset_type=dataset_type,
-        _country_code_iso3=country_code,
-        mode=config.metadata["mode"],
+        dq_context=DQContext(
+            dq_mode=DQMode(config.metadata.get("dq_mode", "master")),
+            dataset_type=dataset_type,
+            country_code_iso3=country_code,
+            upload_id=id,
+            upload_mode=config.metadata.get("mode"),
+        ),
         context=context,
     )
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
+
+    # Drop is_new_school — it's a processing artifact, not part of the DQ output schema
+    dq_results = dq_results.drop("is_new_school")
 
     # Collapse all individual dq_ check columns into a single map<string, int> column.
     # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
@@ -398,12 +434,13 @@ def geolocation_data_quality_results_human_readable(
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
-    mode = config.metadata["mode"]
 
     context.log.info("Create a new dataframe with only the relevant columns")
+
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode
+        geolocation_data_quality_results, uploaded_columns
     )
+
     for map_key, human_name in human_readable_mappings.items():
         df = df.withColumn(
             human_name,
@@ -420,6 +457,12 @@ def geolocation_data_quality_results_human_readable(
         "dq_has_critical_error", "failure_reason"
     )
     df_failed = df.filter(df.dq_has_critical_error == 1).drop("dq_has_critical_error")
+
+    # Check for overlap between passed and failed
+    passed_ids = df_passed.select("school_id_giga").distinct().count()
+    failed_ids = df_failed.select("school_id_giga").distinct().count()
+    context.log.info(f"Passed: {df_passed.count()} rows ({passed_ids} unique IDs)")
+    context.log.info(f"Failed: {df_failed.count()} rows ({failed_ids} unique IDs)")
 
     output_metadata = get_output_metadata(config)
 
@@ -463,11 +506,10 @@ async def geolocation_data_quality_results_summary(
     file_upload = FileUploadConfig.from_orm(file_upload)
     column_mapping = file_upload.column_to_schema_mapping
     uploaded_columns = list(column_mapping.values())
-    mode = config.metadata["mode"]
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, mode=mode
+        geolocation_data_quality_results, uploaded_columns
     )
 
     dq_summary_statistics = aggregate_report_json(
@@ -479,6 +521,38 @@ async def geolocation_data_quality_results_summary(
         df_data_quality_checks=dq_results,
     )
 
+    value_maps = aggregate_value_maps_for_pdf(
+        geolocation_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
+
+    # Persist the row counts to the Ingestion Portal DB. We already have the
+    # summary in memory here, so update directly instead of re-reading the DQ
+    # report blob from ADLS in a hook. Don't fail the asset if this write fails.
+    summary = (dq_summary_statistics or {}).get("summary", {})
+    try:
+        with get_db_context() as db:
+            db.execute(
+                update(FileUpload)
+                .where(FileUpload.id == config.filename_components.id)
+                .values(
+                    {
+                        FileUpload.rows: summary.get("rows"),
+                        FileUpload.rows_passed: summary.get("rows_passed"),
+                        FileUpload.rows_failed: summary.get("rows_failed"),
+                    }
+                ),
+            )
+            db.commit()
+    except Exception as e:
+        context.log.error(f"Failed to persist row counts to portal DB: {e}")
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -488,6 +562,7 @@ async def geolocation_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
@@ -696,6 +771,10 @@ def geolocation_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
+    if config.metadata.get("dq_mode") == "uploaded":
+        context.log.info("Skipping staging as dq_mode is 'uploaded'")
+        return Output(None)
+
     if geolocation_dq_passed_rows.isEmpty():
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
@@ -715,7 +794,7 @@ def geolocation_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+        StagingMode.UPDATE,
     )
     pending = staging_step(geolocation_dq_passed_rows)
 
@@ -753,7 +832,9 @@ def geolocation_delete_staging(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[None]:
-    delete_row_ids = adls_file_client.download_json(config.filepath)
+    payload = adls_file_client.download_json(config.filepath)
+    id_type = payload["id_type"]
+    delete_row_ids = payload.get("ids", [])
     if isinstance(delete_row_ids, list):
         # dedupe change IDs
         delete_row_ids = list(set(delete_row_ids))
@@ -763,9 +844,9 @@ def geolocation_delete_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.DELETE,
+        StagingMode.DELETE,
     )
-    staging = staging_step(delete_row_ids)
+    staging = staging_step(delete_row_ids, id_type=id_type)
 
     if staging is not None:
         datahub_emit_metadata_with_exception_catcher(
@@ -787,5 +868,91 @@ def geolocation_delete_staging(
         metadata={
             **get_output_metadata(config),
             "delete_row_ids": MetadataValue.json(delete_row_ids),
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_school_map(
+    context: OpExecutionContext,
+    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
+    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
+    config: FileConfig,
+) -> Output[str]:
+    """
+    Generate an interactive HTML map showing passed and failed schools.
+    """
+    from src.utils.map_generator import generate_school_map_html
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+
+    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
+    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
+
+    map_html = generate_school_map_html(
+        country_code=country_code,
+        passed_df=passed_pdf,
+        failed_df=failed_pdf,
+        context=context,
+    )
+
+    passed_count = len(passed_pdf)
+    failed_count = len(failed_pdf)
+
+    context.log.info(
+        f"Generated map for {country_code} (upload: {upload_id}): "
+        f"{passed_count} passed, {failed_count} failed schools"
+    )
+
+    return Output(
+        map_html,
+        metadata={
+            **get_output_metadata(config),
+            "passed_schools": passed_count,
+            "failed_schools": failed_count,
+            "total_schools": passed_count + failed_count,
+        },
+    )
+
+
+@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@capture_op_exceptions
+def geolocation_dq_kit_zip(
+    context: OpExecutionContext,
+    geolocation_school_map: str,
+    config: FileConfig,
+    adls_file_client: ADLSFileClient,
+) -> Output[bytes]:
+    """
+    Generate a DQ Kit ZIP bundle containing all DQ artifacts.
+    """
+    from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
+
+    country_code = config.country_code
+    upload_id = config.filename_components.id
+    dataset = config.dataset_type
+    original_filename = Path(config.filepath).name
+    stem = Path(config.filepath).stem
+
+    zip_bytes, filename = generate_dq_kit_zip_bytes(
+        country_code=country_code,
+        upload_id=upload_id,
+        dataset=dataset,
+        original_filename=original_filename,
+        stem=stem,
+        adls_client=adls_file_client,
+        context=context,
+    )
+
+    context.log.info(f"Generated DQ Kit ZIP: {filename} ({len(zip_bytes)} bytes)")
+
+    return Output(
+        zip_bytes,
+        metadata={
+            **get_output_metadata(config),
+            "zip_filename": filename,
+            "zip_size_bytes": len(zip_bytes),
         },
     )

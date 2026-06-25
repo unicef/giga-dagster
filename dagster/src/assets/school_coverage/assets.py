@@ -9,6 +9,7 @@ from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import SparkSession
 from sqlalchemy import select
+from src.constants import DataTier
 from src.data_quality_checks.utils import (
     aggregate_report_json,
     aggregate_report_spark_df,
@@ -16,7 +17,7 @@ from src.data_quality_checks.utils import (
     dq_split_passed_rows,
     row_level_checks,
 )
-from src.internal.common_assets.staging import StagingChangeTypeEnum, StagingStep
+from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.coverage_transform_functions import (
@@ -30,6 +31,7 @@ from src.spark.transform_functions import (
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.data_quality_descriptions import (
     convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
@@ -43,13 +45,14 @@ from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
+    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
-from dagster import MetadataValue, OpExecutionContext, Output, asset
+from dagster import OpExecutionContext, Output, asset
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
@@ -172,6 +175,17 @@ async def coverage_data_quality_results_summary(
 ) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    uploaded_columns = list(file_upload.column_to_schema_mapping.values())
+
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath, context=context)
@@ -183,6 +197,17 @@ async def coverage_data_quality_results_summary(
         df_data_quality_checks=coverage_data_quality_results,
     )
 
+    value_maps = aggregate_value_maps_for_pdf(
+        coverage_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
@@ -192,6 +217,7 @@ async def coverage_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
 
@@ -273,8 +299,9 @@ def coverage_bronze(
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
     source = ic(config.filename_components.source)
-    silver_table_name = config.country_code.lower()
-    full_silver_table_name = f"{config.metastore_schema}.{silver_table_name}"
+    country_code = config.country_code
+    silver_schema = construct_schema_name_for_tier("school_coverage", DataTier.SILVER)
+    full_silver_table_name = construct_full_table_name(silver_schema, country_code)
 
     if source == "fb":
         df = fb_transforms(coverage_dq_passed_rows)
@@ -343,7 +370,7 @@ def coverage_staging(
         config,
         adls_file_client,
         spark.spark_session,
-        StagingChangeTypeEnum.UPDATE,
+        StagingMode.UPDATE,
     )
     staging = staging_step(coverage_bronze)
     row_count = 0 if staging is None else staging.count()
@@ -354,53 +381,5 @@ def coverage_staging(
             **get_output_metadata(config),
             "row_count": row_count,
             "preview": get_table_preview(staging),
-        },
-    )
-
-
-@asset
-@capture_op_exceptions
-def coverage_delete_staging(
-    context: OpExecutionContext,
-    adls_file_client: ADLSFileClient,
-    spark: PySparkResource,
-    config: FileConfig,
-) -> Output[None]:
-    delete_row_ids = adls_file_client.download_json(config.filepath)
-    if isinstance(delete_row_ids, list):
-        # dedupe change IDs
-        delete_row_ids = list(set(delete_row_ids))
-
-    staging_step = StagingStep(
-        context,
-        config,
-        adls_file_client,
-        spark.spark_session,
-        StagingChangeTypeEnum.DELETE,
-    )
-    staging = staging_step(delete_row_ids)
-
-    if staging is not None:
-        datahub_emit_metadata_with_exception_catcher(
-            context=context,
-            config=config,
-            spark=spark,
-        )
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "row_count": staging.count(),
-                "preview": get_table_preview(staging),
-                "delete_row_ids": MetadataValue.json(delete_row_ids),
-            },
-        )
-
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": 0,
-            "delete_row_ids": MetadataValue.json(delete_row_ids),
         },
     )

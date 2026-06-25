@@ -16,7 +16,7 @@ data:
   oauth2_proxy.cfg: |
     http_address = ":3001"
     upstreams = ["http://dagster-dagster-webserver:3002", "http://spark-master-svc:8080/spark"]
-    email_domains = ["thinkingmachin.es", "unicef.org"]
+    email_domains = ["unicef.org", "nagarro.com"]
     api_routes = ["^/graphql", "^/favicon.ico"]
     cookie_name = "_oauth2_proxy"
     cookie_expire = "168h"

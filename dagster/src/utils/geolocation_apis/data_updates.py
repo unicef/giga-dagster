@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import pandas as pd
+from models.base_database import cuid_generator
 from models.deletion_requests import DeletionRequest
 from models.file_upload import FileUpload
 from pyspark.sql import SparkSession
@@ -14,7 +15,6 @@ from src.utils.db.primary import get_db_context
 
 def upload_data_and_create_db_entry(
     data: pd.DataFrame,
-    mode: str,
     country_code: str,
     adls_file_client: ADLSFileClient,
     context: OpExecutionContext,
@@ -25,7 +25,6 @@ def upload_data_and_create_db_entry(
 
     Parameters:
         data (pandas.DataFrame): The dataset to upload, provided as a Pandas DataFrame.
-        mode (str): The mode of operation for the upload, "Create" or "Update"
         country_code (str): The country code for the schools being uploaded.
         adls_file_client (ADLSFileClient): An instance of ADLSFileClient used to upload files
         context (Dagster context): The dagster run context for logging.
@@ -38,10 +37,10 @@ def upload_data_and_create_db_entry(
         None
     """
     if data.empty:
-        context.log.info(f"There are no schools to {mode.lower()}")
+        context.log.info("There are no schools to upload")
         return
     else:
-        context.log.info(f"Uploading {data.shape[0]} schools to be {mode.lower()}d")
+        context.log.info(f"Uploading {data.shape[0]} schools")
 
     file_upload = FileUpload(
         uploader_id=settings.API_AUTOMATION_USER_ID,
@@ -49,7 +48,7 @@ def upload_data_and_create_db_entry(
         country=country_code,
         dataset="geolocation",
         source="api",
-        original_filename=f"MNG_school_data_{mode.lower()}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
+        original_filename=f"MNG_school_data_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv",
         column_to_schema_mapping={
             **{col: col for col in data.columns},
             "school_id": "school_id_govt",
@@ -76,7 +75,6 @@ def upload_data_and_create_db_entry(
             "focal_point_name": "Mongolia government",
             "frequency_of_school_data_collection": "",
             "modality_of_data_collection": "",
-            "mode": mode,
             "next_school_data_collection": "",
             "school_contacts": "",
             "school_ids_type": "",
@@ -140,8 +138,9 @@ def delete_schools_from_master(
             f"{len(giga_ids_to_delete)} schools will be deleted from school master for {country_code}"
         )
 
+    record_id = cuid_generator()
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{country_code}_{timestamp}.json"
+    filename = f"{record_id}_{country_code}_delete_{timestamp}.json"
 
     delete_filepath = (
         f"{constants.staging_folder}/delete-row-ids/{country_code}/{filename}"
@@ -149,13 +148,21 @@ def delete_schools_from_master(
     context.log.info(
         f"Uploading file with list of schools to delete to {delete_filepath}"
     )
-    adls_file_client.upload_json(data=giga_ids_to_delete, filepath=delete_filepath)
+    adls_file_client.upload_json(
+        data={"id_type": "school_id_giga", "ids": giga_ids_to_delete},
+        filepath=delete_filepath,
+    )
 
     context.log.info(f"Create DB entry for deletion request for {country_code}")
     deletion_request = DeletionRequest(
+        id=record_id,
         requested_by_email=settings.API_AUTOMATION_EMAIL,
         requested_by_id=settings.API_AUTOMATION_USER_ID,
         country=country_code,
+        id_type="school_id_giga",
+        school_count=len(giga_ids_to_delete),
+        file_path=delete_filepath,
+        is_delete_all=False,
     )
 
     with get_db_context() as db:

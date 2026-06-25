@@ -3,7 +3,6 @@ from pathlib import Path
 from dagster import RunConfig, RunRequest, SensorEvaluationContext, SkipReason, sensor
 from src.constants import DataTier, constants
 from src.jobs.school_master import (
-    school_master_coverage__admin_delete_rows_job,
     school_master_coverage__automated_data_checks_job,
     school_master_coverage__post_manual_checks_job,
 )
@@ -195,64 +194,12 @@ def school_master_coverage__post_manual_checks_sensor(
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,
                 ),
-            }
-
-            run_ops = generate_run_ops(
-                ops_destination_mapping,
-                dataset_type=DATASET_TYPE,
-                metadata=metadata,
-                file_size_bytes=0,
-                domain=DOMAIN,
-                country_code=country_code,
-            )
-
-            context.log.info(f"FILE: {path}")
-            yield RunRequest(
-                run_key=str(path),
-                run_config=RunConfig(ops=run_ops),
-                tags={"country": country_code},
-            )
-            count += 1
-
-    if count == 0:
-        yield SkipReason(f"No files detected in {source_directory}")
-
-
-@sensor(
-    job=school_master_coverage__admin_delete_rows_job,
-    minimum_interval_seconds=settings.DEFAULT_SENSOR_INTERVAL_SECONDS,
-)
-def school_master_coverage__admin_delete_rows_sensor(
-    context: SensorEvaluationContext,
-    adls_file_client: ADLSFileClient,
-):
-    count = 0
-    source_directory = f"{constants.staging_folder}/delete-row-ids"
-
-    for file_data in adls_file_client.list_paths_generator(
-        source_directory, recursive=True
-    ):
-        if file_data.is_directory:
-            continue
-
-        adls_filepath = file_data.name
-        path = Path(adls_filepath)
-        try:
-            filename_components = deconstruct_school_master_filename_components(
-                adls_filepath
-            )
-        except Exception as e:
-            context.log.error(f"Failed to deconstruct filename: {adls_filepath}: {e}")
-            continue
-        else:
-            country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
-            ops_destination_mapping = {
-                "coverage_delete_staging": OpDestinationMapping(
+                # geolocation-only - still providing FileConfig because the asset is in the COMMON group selected by the post-approval job.
+                "dq_kit_post_approval": OpDestinationMapping(
                     source_filepath=str(path),
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
+                    destination_filepath="",
                     metastore_schema=METASTORE_SCHEMA,
-                    tier=DataTier.RAW,
+                    tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
             }
 

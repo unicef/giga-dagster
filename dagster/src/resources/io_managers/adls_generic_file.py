@@ -16,9 +16,13 @@ class ADLSGenericFileIOManager(BaseConfigurableIOManager):
 
         context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")
 
-    def load_input(self, context: InputContext) -> dict | list[dict]:
+    def load_input(self, context: InputContext) -> bytes | str:
         path = self._get_filepath(context)
         data = adls_client.download_raw(str(path))
+        expected_type = getattr(context.dagster_type, "typing_type", None)
 
         context.log.info(f"Downloaded {path.name} from {path.parent} in ADLS.")
+
+        if expected_type is str:
+            return data.decode("utf-8")
         return data
