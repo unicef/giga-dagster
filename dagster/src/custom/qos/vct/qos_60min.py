@@ -26,6 +26,11 @@ LATENCY_HISTORY_TIMESPAN_SECONDS = 3600
 LATENCY_HISTORY_RESOLUTION_SECONDS = 3600
 LATENCY_HISTORY_SLEEP_SECONDS = 0.05
 
+
+def _kbps_to_mbps(value: Optional[float]) -> Optional[float]:
+    return value / 1000.0 if value is not None else None
+
+
 SNAPSHOT_COLUMNS = [
     "serial",
     "deviceName",
@@ -37,13 +42,13 @@ SNAPSHOT_COLUMNS = [
     "meraki_name_room",
     "downstream_total_packet",
     "downstream_packet_lost",
-    "loss_pct",
+    "downstream_loss_pct",
     "avg_latency_ms",
-    "download_kbps",
-    "upload_kbps",
-    "avg_kbps",
+    "download_mbps",
+    "upload_mbps",
+    "avg_mbps",
     "downtime_s",
-    "uptime_pct",
+    "uptime_percentage",
     "time_window",
     "window_start",
     "window_end",
@@ -167,7 +172,7 @@ def _compute_uptime_metrics(
     t1: str,
     count_alerting_as_downtime: bool = False,
 ) -> pd.DataFrame:
-    cols = ["serial", "downtime_s", "uptime_pct"]
+    cols = ["serial", "downtime_s", "uptime_percentage"]
     if len(changes_df) == 0:
         return pd.DataFrame(columns=cols)
     w0 = pd.to_datetime(t0, utc=True)
@@ -180,9 +185,13 @@ def _compute_uptime_metrics(
         )
         if result is None:
             continue
-        down_s, uptime_pct = result
+        down_s, uptime_percentage = result
         results.append(
-            {"serial": serial, "downtime_s": down_s, "uptime_pct": uptime_pct}
+            {
+                "serial": serial,
+                "downtime_s": down_s,
+                "uptime_percentage": uptime_percentage,
+            }
         )
     return pd.DataFrame(results)
 
@@ -255,10 +264,15 @@ def _normalize_packet_loss(raw_rows: Optional[list]) -> pd.DataFrame:
                 "serial": dev.get("serial"),
                 "downstream_total_packet": downstream.get("total"),
                 "downstream_packet_lost": downstream.get("lost"),
-                "loss_pct": downstream.get("lossPercentage"),
+                "downstream_loss_pct": downstream.get("lossPercentage"),
             }
         )
-    cols = ["serial", "downstream_total_packet", "downstream_packet_lost", "loss_pct"]
+    cols = [
+        "serial",
+        "downstream_total_packet",
+        "downstream_packet_lost",
+        "downstream_loss_pct",
+    ]
     df = pd.DataFrame(rows)
     if len(df) == 0:
         return pd.DataFrame(columns=cols)
@@ -285,16 +299,16 @@ def _normalize_data_rate_history(
 ) -> dict[str, Any]:
     out: dict[str, Any] = {
         "serial": serial,
-        "download_kbps": None,
-        "upload_kbps": None,
-        "avg_kbps": None,
+        "download_mbps": None,
+        "upload_mbps": None,
+        "avg_mbps": None,
     }
     if not buckets:
         return out
     row = buckets[0]
-    out["download_kbps"] = row.get("downloadKbps")
-    out["upload_kbps"] = row.get("uploadKbps")
-    out["avg_kbps"] = row.get("averageKbps")
+    out["download_mbps"] = _kbps_to_mbps(row.get("downloadKbps"))
+    out["upload_mbps"] = _kbps_to_mbps(row.get("uploadKbps"))
+    out["avg_mbps"] = _kbps_to_mbps(row.get("averageKbps"))
     return out
 
 
@@ -366,7 +380,7 @@ def _fetch_data_rate_df(
     inventory: pd.DataFrame,
     context: OpExecutionContext,
 ) -> pd.DataFrame:
-    cols = ["serial", "download_kbps", "upload_kbps", "avg_kbps"]
+    cols = ["serial", "download_mbps", "upload_mbps", "avg_mbps"]
     if len(inventory) == 0:
         return pd.DataFrame(columns=cols)
 

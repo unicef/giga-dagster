@@ -13,6 +13,7 @@ from src.custom.qos.meraki_client import call, create_dashboard
 from src.custom.qos.vct.constants import NETWORK_DICT, ORG_NAMES
 from src.custom.qos.vct.events_daily import (
     EVENT_COLUMNS,
+    EVENT_RENAME,
     _add_five_min_window_from_timestamp,
     _attach_school_ids,
     _day_window_iso,
@@ -27,17 +28,21 @@ DAY_RESOLUTION_SECONDS = 3600
 DATA_RATE_SLEEP_SECONDS = 0.05
 LATENCY_HISTORY_SLEEP_SECONDS = 0.05
 
+
+def _kbps_to_mbps(value: Optional[float]) -> Optional[float]:
+    return value / 1000.0 if value is not None else None
+
+
 QOS_DAY_COLUMNS = [
     "downstream_total_packet",
     "downstream_packet_lost",
-    "loss_pct",
+    "downstream_loss_pct",
     "avg_latency_ms",
-    "download_kbps",
-    "upload_kbps",
-    "avg_kbps",
+    "download_mbps",
+    "upload_mbps",
+    "avg_mbps",
     "downtime_s",
-    "uptime_pct",
-    "window_start",
+    "uptime_percentage",
     "window_end",
     "collected_at",
 ]
@@ -149,6 +154,7 @@ def _build_events_from_changes(
             "serial"
         ].transform("count")
     events_df = _attach_school_ids(events_df, spark_session, context)
+    events_df = events_df.rename(columns=EVENT_RENAME)
     for col in EVENT_COLUMNS:
         if col not in events_df.columns:
             events_df[col] = None
@@ -199,7 +205,7 @@ def _compute_uptime_metrics(
     t1: str,
     count_alerting_as_downtime: bool = False,
 ) -> pd.DataFrame:
-    cols = ["serial", "downtime_s", "uptime_pct"]
+    cols = ["serial", "downtime_s", "uptime_percentage"]
     if len(changes_df) == 0:
         return pd.DataFrame(columns=cols)
     w0 = pd.to_datetime(t0, utc=True)
@@ -212,9 +218,13 @@ def _compute_uptime_metrics(
         )
         if result is None:
             continue
-        down_s, uptime_pct = result
+        down_s, uptime_percentage = result
         results.append(
-            {"serial": serial, "downtime_s": down_s, "uptime_pct": uptime_pct}
+            {
+                "serial": serial,
+                "downtime_s": down_s,
+                "uptime_percentage": uptime_percentage,
+            }
         )
     return pd.DataFrame(results)
 
@@ -229,10 +239,15 @@ def _normalize_packet_loss(raw_rows: Optional[list]) -> pd.DataFrame:
                 "serial": dev.get("serial"),
                 "downstream_total_packet": downstream.get("total"),
                 "downstream_packet_lost": downstream.get("lost"),
-                "loss_pct": downstream.get("lossPercentage"),
+                "downstream_loss_pct": downstream.get("lossPercentage"),
             }
         )
-    cols = ["serial", "downstream_total_packet", "downstream_packet_lost", "loss_pct"]
+    cols = [
+        "serial",
+        "downstream_total_packet",
+        "downstream_packet_lost",
+        "downstream_loss_pct",
+    ]
     df = pd.DataFrame(rows)
     if len(df) == 0:
         return pd.DataFrame(columns=cols)
@@ -317,9 +332,9 @@ def _fetch_ap_data_rate_row(
         )
         row = {
             "serial": serial,
-            "download_kbps": _mean_numeric(buckets, "downloadKbps"),
-            "upload_kbps": _mean_numeric(buckets, "uploadKbps"),
-            "avg_kbps": _mean_numeric(buckets, "averageKbps"),
+            "download_mbps": _kbps_to_mbps(_mean_numeric(buckets, "downloadKbps")),
+            "upload_mbps": _kbps_to_mbps(_mean_numeric(buckets, "uploadKbps")),
+            "avg_mbps": _kbps_to_mbps(_mean_numeric(buckets, "averageKbps")),
         }
         if DATA_RATE_SLEEP_SECONDS:
             time.sleep(DATA_RATE_SLEEP_SECONDS)
@@ -338,7 +353,7 @@ def _fetch_data_rate_df(
     t1: str,
     context: OpExecutionContext,
 ) -> pd.DataFrame:
-    cols = ["serial", "download_kbps", "upload_kbps", "avg_kbps"]
+    cols = ["serial", "download_mbps", "upload_mbps", "avg_mbps"]
     if len(inventory) == 0:
         return pd.DataFrame(columns=cols)
 
@@ -459,14 +474,15 @@ def build_combined_dataframe(
     qos_df = qos_df.merge(packet_loss_df, on="serial", how="left", validate="1:1")
     qos_df = qos_df.merge(latency_df, on="serial", how="left", validate="1:1")
     qos_df = qos_df.merge(data_rate_df, on="serial", how="left", validate="1:1")
-    qos_df["window_start"] = day_t0
     qos_df["window_end"] = day_t1
     qos_df["collected_at"] = collected_at
 
     qos_cols = ["serial"] + QOS_DAY_COLUMNS
-    qos_subset = qos_df[[c for c in qos_cols if c in qos_df.columns]].copy()
+    qos_subset = qos_df[[c for c in qos_cols if c in qos_df.columns]].rename(
+        columns={"serial": "device_id"}
+    )
 
-    combined = events_df.merge(qos_subset, on="serial", how="left", validate="m:1")
+    combined = events_df.merge(qos_subset, on="device_id", how="left", validate="m:1")
 
     for col in COMBINED_COLUMNS:
         if col not in combined.columns:

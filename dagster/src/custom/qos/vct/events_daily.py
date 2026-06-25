@@ -18,8 +18,15 @@ from dagster import OpExecutionContext
 
 FIVE_MIN_BUCKET_MINUTES = 5
 
+EVENT_RENAME = {
+    "serial": "device_id",
+    "occurredAt": "timestamp",
+    "changes_count_day": "count",
+    "report_date": "date",
+}
+
 EVENT_COLUMNS = [
-    "serial",
+    "device_id",
     "deviceName",
     "model",
     "productType",
@@ -27,12 +34,12 @@ EVENT_COLUMNS = [
     "networkName",
     "organization",
     "meraki_name_room",
-    "occurredAt",
+    "timestamp",
     "five_min_window",
     "previousStatus",
     "newStatus",
-    "changes_count_day",
-    "report_date",
+    "count",
+    "date",
     "school_id_govt",
     "school_id_giga",
 ]
@@ -209,6 +216,7 @@ def build_events_dataframe(
         ].transform("count")
 
     events_df = _attach_school_ids(events_df, spark_session, context)
+    events_df = events_df.rename(columns=EVENT_RENAME)
 
     for col in EVENT_COLUMNS:
         if col not in events_df.columns:
