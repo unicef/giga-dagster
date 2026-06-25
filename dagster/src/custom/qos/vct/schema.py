@@ -15,9 +15,9 @@ def _cast_column(series: pd.Series, dtype: str) -> pd.Series:
     if dtype == "date":
         return pd.to_datetime(series, errors="coerce").dt.date
     if dtype == "integer":
-        return pd.to_numeric(series, errors="coerce").astype("integer")
+        return pd.to_numeric(series, errors="coerce").astype("Int64")
     if dtype == "float":
-        return pd.to_numeric(series, errors="coerce").astype("float")
+        return pd.to_numeric(series, errors="coerce").astype("float64")
     return series
 
 
