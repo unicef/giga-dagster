@@ -48,12 +48,12 @@ def qos_availability__raw_file_uploads_sensor(
             ),
             "qos_availability_transforms": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.parquet",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.TRANSFORMS,
             ),
             "publish_qos_availability_to_gold": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.csv",
+                source_filepath=f"{constants.gold_folder}/{METASTORE_SCHEMA}/{country_code}/{stem}.parquet",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{METASTORE_SCHEMA}.db/{country_code}",
                 metastore_schema=METASTORE_SCHEMA,
                 tier=DataTier.GOLD,
