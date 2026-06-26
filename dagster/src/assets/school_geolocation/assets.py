@@ -255,7 +255,9 @@ def geolocation_bronze(
 
     df = add_is_new_school(df, silver_ids, context)
 
-    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
+    df = create_bronze_layer_columns_updated(
+        df, uploaded_columns, country_code, file_upload.source, s
+    )
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
