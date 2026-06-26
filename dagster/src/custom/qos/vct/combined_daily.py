@@ -10,15 +10,22 @@ import meraki
 import pandas as pd
 from pyspark.sql import SparkSession
 from src.custom.qos.meraki_client import call, create_dashboard
+from src.custom.qos.vct.common import (
+    _attach_school_ids,
+    _build_ap_inventory,
+    _compute_uptime_metrics,
+    _data_rate_network_unsupported,
+    _kbps_to_mbps,
+    _normalize_packet_loss,
+    _parse_meraki_name_room,
+)
 from src.custom.qos.vct.constants import NETWORK_DICT, ORG_NAMES
 from src.custom.qos.vct.events_daily import (
     EVENT_COLUMNS,
     EVENT_RENAME,
     _add_five_min_window_from_timestamp,
-    _attach_school_ids,
     _day_window_iso,
     _normalize_changes as _normalize_event_changes,
-    _parse_meraki_name_room,
 )
 from src.settings import settings
 
@@ -27,10 +34,6 @@ from dagster import OpExecutionContext
 DAY_RESOLUTION_SECONDS = 3600
 DATA_RATE_SLEEP_SECONDS = 0.05
 LATENCY_HISTORY_SLEEP_SECONDS = 0.05
-
-
-def _kbps_to_mbps(value: Optional[float]) -> Optional[float]:
-    return value / 1000.0 if value is not None else None
 
 
 QOS_DAY_COLUMNS = [
@@ -57,51 +60,6 @@ def _mean_numeric(buckets: Optional[list], key: str) -> Any:
     if not vals:
         return None
     return sum(float(v) for v in vals) / len(vals)
-
-
-def _build_ap_inventory(
-    db: meraki.DashboardAPI, context: OpExecutionContext
-) -> pd.DataFrame:
-    rows: list[dict[str, Any]] = []
-    for org_id, net_ids in NETWORK_DICT.items():
-        org_label = ORG_NAMES.get(org_id, org_id)
-        for net_id in net_ids:
-            try:
-                net_meta = call(db.networks.getNetwork, net_id)
-                net_name = net_meta.get("name", net_id)
-            except meraki.APIError as exc:
-                if exc.status == 404:
-                    context.log.warning(f"Skip network {net_id}: 404")
-                    continue
-                raise
-            try:
-                devs = call(db.networks.getNetworkDevices, net_id)
-            except meraki.APIError as exc:
-                if exc.status == 404:
-                    context.log.warning(f"Skip network {net_id}: devices 404")
-                    continue
-                raise
-            for d in devs:
-                model = (d.get("model") or "").upper()
-                if not model.startswith("MR"):
-                    continue
-                device_name = d.get("name") or ""
-                rows.append(
-                    {
-                        "serial": d.get("serial"),
-                        "deviceName": device_name,
-                        "model": d.get("model"),
-                        "productType": "wireless",
-                        "networkId": net_id,
-                        "networkName": net_name,
-                        "organization": org_label,
-                        "meraki_name_room": _parse_meraki_name_room(device_name),
-                    }
-                )
-    df = pd.DataFrame(rows)
-    if len(df) == 0:
-        return df
-    return df.drop_duplicates(subset=["serial"], keep="first").reset_index(drop=True)
 
 
 def _fetch_change_history_for_org(
@@ -159,132 +117,6 @@ def _build_events_from_changes(
         if col not in events_df.columns:
             events_df[col] = None
     return events_df[EVENT_COLUMNS]
-
-
-def _walk_serial_uptime(
-    grp: pd.DataFrame,
-    w0: pd.Timestamp,
-    w1: pd.Timestamp,
-    count_alerting_as_downtime: bool,
-    window_sec: float,
-) -> Optional[tuple[float, float]]:
-    cur_status: Optional[str] = None
-    cur_time = w0
-    down_sec = 0.0
-    alert_sec = 0.0
-    for _, row in grp.iterrows():
-        t = row["occurredAt"]
-        if t <= w0:
-            cur_status = row["newStatus"]
-            continue
-        if cur_status is None:
-            cur_status = row["previousStatus"]
-        if t >= w1:
-            break
-        seg = (t - cur_time).total_seconds()
-        if cur_status == "offline":
-            down_sec += max(0.0, seg)
-        elif cur_status == "alerting":
-            alert_sec += max(0.0, seg)
-        cur_time = t
-        cur_status = row["newStatus"]
-    if cur_status is None:
-        return None
-    seg = (w1 - cur_time).total_seconds()
-    if cur_status == "offline":
-        down_sec += max(0.0, seg)
-    elif cur_status == "alerting":
-        alert_sec += max(0.0, seg)
-    denom = (down_sec + alert_sec) if count_alerting_as_downtime else down_sec
-    return round(denom, 3), round(100.0 * (1.0 - denom / window_sec), 3)
-
-
-def _compute_uptime_metrics(
-    changes_df: pd.DataFrame,
-    t0: str,
-    t1: str,
-    count_alerting_as_downtime: bool = False,
-) -> pd.DataFrame:
-    cols = ["serial", "downtime_s", "uptime_percentage"]
-    if len(changes_df) == 0:
-        return pd.DataFrame(columns=cols)
-    w0 = pd.to_datetime(t0, utc=True)
-    w1 = pd.to_datetime(t1, utc=True)
-    window_sec = (w1 - w0).total_seconds()
-    results: list[dict[str, Any]] = []
-    for serial, grp in changes_df.groupby("serial", sort=False):
-        result = _walk_serial_uptime(
-            grp, w0, w1, count_alerting_as_downtime, window_sec
-        )
-        if result is None:
-            continue
-        down_s, uptime_percentage = result
-        results.append(
-            {
-                "serial": serial,
-                "downtime_s": down_s,
-                "uptime_percentage": uptime_percentage,
-            }
-        )
-    return pd.DataFrame(results)
-
-
-def _normalize_packet_loss(raw_rows: Optional[list]) -> pd.DataFrame:
-    rows: list[dict[str, Any]] = []
-    for r in raw_rows or []:
-        dev = r.get("device") or {}
-        downstream = r.get("downstream") or {}
-        rows.append(
-            {
-                "serial": dev.get("serial"),
-                "downstream_total_packet": downstream.get("total"),
-                "downstream_packet_lost": downstream.get("lost"),
-                "downstream_loss_pct": downstream.get("lossPercentage"),
-            }
-        )
-    cols = [
-        "serial",
-        "downstream_total_packet",
-        "downstream_packet_lost",
-        "downstream_loss_pct",
-    ]
-    df = pd.DataFrame(rows)
-    if len(df) == 0:
-        return pd.DataFrame(columns=cols)
-    return df.drop_duplicates(subset=["serial"], keep="first")
-
-
-def _fetch_packet_loss(db: meraki.DashboardAPI, t0: str, t1: str) -> pd.DataFrame:
-    frames: list[pd.DataFrame] = []
-    for org_id, network_ids in NETWORK_DICT.items():
-        raw = call(
-            db.wireless.getOrganizationWirelessDevicesPacketLossByDevice,
-            org_id,
-            networkIds=network_ids,
-            t0=t0,
-            t1=t1,
-            total_pages="all",
-        )
-        frames.append(_normalize_packet_loss(raw))
-    if not frames:
-        return pd.DataFrame(
-            columns=[
-                "serial",
-                "downstream_total_packet",
-                "downstream_packet_lost",
-                "loss_pct",
-            ]
-        )
-    return pd.concat(frames, ignore_index=True).drop_duplicates(
-        subset=["serial"], keep="first"
-    )
-
-
-def _data_rate_network_unsupported(exc: meraki.APIError) -> bool:
-    if exc.status != 400:
-        return False
-    msg = str(getattr(exc, "message", "") or exc)
-    return "MR 27.0" in msg
 
 
 def _probe_data_rate_network(
@@ -434,6 +266,32 @@ def _fetch_latency_history_df(
         context.log.warning(f"latency history: {failed} AP(s) failed")
 
     return pd.DataFrame(rows)
+
+
+def _fetch_packet_loss(db: meraki.DashboardAPI, t0: str, t1: str) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for org_id, network_ids in NETWORK_DICT.items():
+        raw = call(
+            db.wireless.getOrganizationWirelessDevicesPacketLossByDevice,
+            org_id,
+            networkIds=network_ids,
+            t0=t0,
+            t1=t1,
+            total_pages="all",
+        )
+        frames.append(_normalize_packet_loss(raw))
+    if not frames:
+        return pd.DataFrame(
+            columns=[
+                "serial",
+                "downstream_total_packet",
+                "downstream_packet_lost",
+                "loss_pct",
+            ]
+        )
+    return pd.concat(frames, ignore_index=True).drop_duplicates(
+        subset=["serial"], keep="first"
+    )
 
 
 def build_combined_dataframe(

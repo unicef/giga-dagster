@@ -6,11 +6,13 @@ import datetime as dt
 from typing import Any, Optional
 
 import pandas as pd
-from pyspark.sql import (
-    SparkSession,
-    functions as F,
-)
+from pyspark.sql import SparkSession
 from src.custom.qos.meraki_client import call, create_dashboard
+from src.custom.qos.vct.common import (
+    _attach_school_ids,
+    _parse_meraki_name_room,
+    _pick_detail,
+)
 from src.custom.qos.vct.constants import NETWORK_DICT, ORG_NAMES
 from src.settings import settings
 
@@ -78,25 +80,6 @@ def _add_five_min_window_from_timestamp(
     return ts.map(label)
 
 
-def _parse_meraki_name_room(device_name: Optional[str]) -> str:
-    if not isinstance(device_name, str) or device_name == "":
-        return ""
-    parts = device_name.split(" - ", 1)
-    if len(parts) > 1:
-        return parts[1].strip()
-    return device_name.strip()
-
-
-def _pick_detail(details: Optional[dict], which: str, key: str) -> Optional[str]:
-    if details is None:
-        details = {}
-    side_list = details.get(which) or []
-    for item in side_list:
-        if item.get("name") == key:
-            return item.get("value")
-    return None
-
-
 def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for r in raw_rows or []:
@@ -124,53 +107,6 @@ def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
     df = df.dropna(subset=["serial", "occurredAt"])
     df = df[df["previousStatus"] != df["newStatus"]].copy()
     return df.sort_values(["serial", "occurredAt"]).reset_index(drop=True)
-
-
-def _load_school_lookup(
-    spark_session: SparkSession, context: OpExecutionContext
-) -> pd.DataFrame:
-    try:
-        device_meta = (
-            spark_session.read.table("custom_dataset.device_matched")
-            .select(
-                F.col("serial"),
-                F.col("school_id_govt").cast("string").alias("school_id_govt"),
-            )
-            .toPandas()
-        )
-        school_master = (
-            spark_session.read.table("school_master.vct")
-            .select(
-                F.col("school_id_govt").cast("string").alias("school_id_govt"),
-                F.col("school_id_giga").cast("string").alias("school_id_giga"),
-            )
-            .toPandas()
-        )
-        lookup = device_meta.merge(school_master, on="school_id_govt", how="left")
-        return lookup[["serial", "school_id_govt", "school_id_giga"]].drop_duplicates(
-            subset=["serial"], keep="first"
-        )
-    except Exception as exc:
-        context.log.warning(
-            f"School lookup unavailable, school IDs will be null: {exc}"
-        )
-        return pd.DataFrame(columns=["serial", "school_id_govt", "school_id_giga"])
-
-
-def _attach_school_ids(
-    df: pd.DataFrame, spark_session: SparkSession, context: OpExecutionContext
-) -> pd.DataFrame:
-    lookup = _load_school_lookup(spark_session, context)
-    if len(lookup) == 0:
-        out = df.copy()
-        out["school_id_govt"] = None
-        out["school_id_giga"] = None
-        return out
-    result = df.merge(lookup, on="serial", how="left", validate="m:1")
-    result["school_id_govt"] = (
-        result["school_id_govt"].astype(str).where(result["school_id_govt"].notna())
-    )
-    return result
 
 
 def build_events_dataframe(
