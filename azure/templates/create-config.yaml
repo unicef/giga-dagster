@@ -86,6 +86,8 @@ jobs:
                     CATALOG_BASE: "$(catalogBase)"
                     DATABASE_ID: "$(databaseId)"
                     SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
+                    GIGAMETER_API_BASE_URL: "$(gigameterApiBaseUrl)"
+                    GIGAMETER_API_TOKEN: "$(gigameterApiToken)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets
