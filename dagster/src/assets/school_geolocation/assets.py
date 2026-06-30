@@ -40,6 +40,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
@@ -520,6 +521,17 @@ async def geolocation_data_quality_results_summary(
         df_data_quality_checks=dq_results,
     )
 
+    value_maps = aggregate_value_maps_for_pdf(
+        geolocation_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
+
     # Persist the row counts to the Ingestion Portal DB. We already have the
     # summary in memory here, so update directly instead of re-reading the DQ
     # report blob from ADLS in a hook. Don't fail the asset if this write fails.
@@ -550,6 +562,7 @@ async def geolocation_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
