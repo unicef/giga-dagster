@@ -42,3 +42,15 @@ def pandas_loader(
         return pd.read_parquet(data, dtype=dtype_mapping)
 
     raise UnsupportedFiletypeException(f"Unsupported file type `{ext}`")
+
+
+def read_df_from_bytes(data: bytes, filepath: str) -> pd.DataFrame:
+    """Read a DataFrame from raw bytes; handles both parquet and CSV formats."""
+    from io import BytesIO
+
+    from numpy import nan
+
+    buf = BytesIO(data)
+    if Path(filepath).suffix == ".parquet":
+        return pd.read_parquet(buf)
+    return pd.read_csv(buf).fillna(nan).replace([nan], [None])
