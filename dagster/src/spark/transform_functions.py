@@ -32,6 +32,9 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
+from src.utils.school_registrations.common import (
+    set_school_registration_verification_status,
+)
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -495,17 +498,7 @@ def create_bronze_layer_columns_updated(
         connectivity = get_country_rt_schools(spark, country_code_iso3)
         df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
 
-    if "verification_status" in uploaded_columns:
-        # Preserve the value from CSV, fallback to default if null
-        default_value = "unverified" if source == "gigameter" else "verified"
-        df = df.withColumn(
-            "verification_status",
-            f.coalesce(f.col("verification_status"), f.lit(default_value)),
-        )
-    else:
-        # Column not in CSV, set default based on source
-        default_value = "unverified" if source == "gigameter" else "verified"
-        df = df.withColumn("verification_status", f.lit(default_value))
+    df = set_school_registration_verification_status(df, uploaded_columns, source)
 
     return df
 

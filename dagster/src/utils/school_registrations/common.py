@@ -2,6 +2,8 @@ from typing import Any
 
 import requests
 from models.file_upload import FileUpload
+from pyspark import sql
+from pyspark.sql import functions as f
 from sqlalchemy import select
 
 from src.settings import settings
@@ -16,7 +18,21 @@ def _spark_row_to_dict(row: Any, columns: list[str]) -> dict[str, Any]:
     return {column: row[column] for column in columns}
 
 
-def handle_gigameter_school_registration_dq_result(
+def set_school_registration_verification_status(
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    source: str = None,
+) -> sql.DataFrame:
+    default_value = "unverified" if source == "gigameter" else "verified"
+    if "verification_status" in uploaded_columns:
+        return df.withColumn(
+            "verification_status",
+            f.coalesce(f.col("verification_status"), f.lit(default_value)),
+        )
+    return df.withColumn("verification_status", f.lit(default_value))
+
+
+def process_school_registration_dq_result(
     context: Any,
     upload_id: str,
     country_iso3_code: str,

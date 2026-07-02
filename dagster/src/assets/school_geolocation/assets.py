@@ -57,7 +57,7 @@ from src.utils.schema import (
     get_schema_table,
 )
 from src.utils.school_registrations.common import (
-    handle_gigameter_school_registration_dq_result,
+    process_school_registration_dq_result,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -654,7 +654,7 @@ def geolocation_dq_passed_rows(
     df_passed.cache()
     row_count = df_passed.count()
 
-    handle_gigameter_school_registration_dq_result(
+    process_school_registration_dq_result(
         context=context,
         upload_id=config.filename_components.id,
         country_iso3_code=config.country_code,
