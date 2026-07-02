@@ -56,6 +56,10 @@ from src.utils.schema import (
     get_schema_columns_datahub,
     get_schema_table,
 )
+from src.utils.school_registrations.common import (
+    call_gigameter_soft_delete,
+    write_to_nocodb,
+)
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
@@ -650,6 +654,31 @@ def geolocation_dq_passed_rows(
 
     df_passed.cache()
     row_count = df_passed.count()
+
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+
+    if file_upload and file_upload.source == "gigameter":
+        if row_count > 0:
+            school_row = df_passed.first()
+            school_data = {column: school_row[column] for column in df_passed.columns}
+            write_to_nocodb(context, config.country_code, school_data)
+        else:
+            school_row = geolocation_data_quality_results.first()
+            if school_row:
+                school_data = {
+                    column: school_row[column]
+                    for column in geolocation_data_quality_results.columns
+                }
+                school_id_giga = school_data.get("giga_id_school")
+                if school_id_giga:
+                    call_gigameter_soft_delete(
+                        context,
+                        school_id_giga,
+                        school_data.get("failure_reason"),
+                    )
 
     return Output(
         df_passed,

@@ -419,18 +419,6 @@ def create_bronze_layer_columns(
                 ).otherwise(f.col(column)),
             )
 
-    if "verification_status" in uploaded_columns:
-        # Preserve the value from CSV, fallback to default if null
-        default_value = "unverified" if source == "gigameter" else "verified"
-        df = df.withColumn(
-            "verification_status",
-            f.coalesce(f.col("verification_status"), f.lit(default_value)),
-        )
-    else:
-        # Column not in CSV, set default based on source
-        default_value = "unverified" if source == "gigameter" else "verified"
-        df = df.withColumn("verification_status", f.lit(default_value))
-
     return df
 
 
