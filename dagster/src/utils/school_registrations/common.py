@@ -15,6 +15,7 @@ from src.utils.nocodb.get_nocodb_data import (
 
 
 def _spark_row_to_dict(row: Any, columns: list[str]) -> dict[str, Any]:
+    """Convert a Spark Row into a plain dict using the DataFrame column order."""
     return {column: row[column] for column in columns}
 
 
@@ -23,6 +24,7 @@ def set_school_registration_verification_status(
     uploaded_columns: list[str],
     source: str = None,
 ) -> sql.DataFrame:
+    """Set or fill verification_status based on the registration source."""
     default_value = "unverified" if source == "gigameter" else "verified"
     if "verification_status" in uploaded_columns:
         return df.withColumn(
@@ -40,6 +42,7 @@ def process_school_registration_dq_result(
     df_passed: Any,
     dq_results: Any,
 ) -> None:
+    """Notify downstream registration systems after GigaMeter geolocation DQ."""
     with get_db_context() as db:
         file_upload = db.scalar(
             select(FileUpload).where(FileUpload.id == upload_id),
@@ -75,7 +78,7 @@ def write_to_nocodb(
     country_iso3_code: str,
     school_data: dict[str, Any],
 ) -> None:
-    """Write school registration to NoCoDB."""
+    """Create an unverified school registration record in NoCoDB."""
     if not settings.NOCODB_BASE_URL or not settings.NOCODB_TOKEN:
         context.log.warning(
             "NOCODB_BASE_URL or NOCODB_TOKEN not configured. Skipping NoCoDB write."
@@ -110,7 +113,7 @@ def write_to_nocodb(
 def call_gigameter_soft_delete(
     context: Any, school_id_giga: str, failure_reason: str = None
 ) -> None:
-    """Call GigaMeter soft-delete API for a failed school registration."""
+    """Mark a GigaMeter school registration as rejected after failed DQ."""
     if not settings.GIGAMETER_API_BASE_URL or not settings.GIGAMETER_API_TOKEN:
         context.log.warning(
             "GIGAMETER_API_BASE_URL or GIGAMETER_API_TOKEN not configured. "
