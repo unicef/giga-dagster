@@ -1,12 +1,57 @@
 from typing import Any
 
 import requests
+from models.file_upload import FileUpload
+from sqlalchemy import select
 
 from src.settings import settings
+from src.utils.db.primary import get_db_context
 from src.utils.nocodb.get_nocodb_data import (
     create_nocodb_table_record,
     get_nocodb_table_id_from_name,
 )
+
+
+def _spark_row_to_dict(row: Any, columns: list[str]) -> dict[str, Any]:
+    return {column: row[column] for column in columns}
+
+
+def handle_gigameter_school_registration_dq_result(
+    context: Any,
+    upload_id: str,
+    country_iso3_code: str,
+    row_count: int,
+    df_passed: Any,
+    dq_results: Any,
+) -> None:
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == upload_id),
+        )
+
+    if not file_upload or file_upload.source != "gigameter":
+        return
+
+    if row_count > 0:
+        school_row = df_passed.first()
+        school_data = _spark_row_to_dict(school_row, df_passed.columns)
+        write_to_nocodb(context, country_iso3_code, school_data)
+        return
+
+    school_row = dq_results.first()
+    if not school_row:
+        return
+
+    school_data = _spark_row_to_dict(school_row, dq_results.columns)
+    school_id_giga = school_data.get("school_id_giga") or school_data.get(
+        "giga_id_school"
+    )
+    if school_id_giga:
+        call_gigameter_soft_delete(
+            context,
+            school_id_giga,
+            school_data.get("failure_reason"),
+        )
 
 
 def write_to_nocodb(
@@ -22,7 +67,9 @@ def write_to_nocodb(
         return
 
     try:
-        giga_id_school = school_data.get("giga_id_school")
+        giga_id_school = school_data.get("school_id_giga") or school_data.get(
+            "giga_id_school"
+        )
         table_id = get_nocodb_table_id_from_name("SchoolRegistrations")
 
         record_data = {
