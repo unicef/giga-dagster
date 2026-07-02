@@ -66,11 +66,7 @@ def process_school_registration_dq_result(
         "giga_id_school"
     )
     if school_id_giga:
-        call_gigameter_soft_delete(
-            context,
-            school_id_giga,
-            school_data.get("failure_reason"),
-        )
+        call_gigameter_soft_delete(context, school_id_giga)
 
 
 def write_to_nocodb(
@@ -110,9 +106,7 @@ def write_to_nocodb(
         context.log.error(f"NoCoDB write failed: {exc}")
 
 
-def call_gigameter_soft_delete(
-    context: Any, school_id_giga: str, failure_reason: str = None
-) -> None:
+def call_gigameter_soft_delete(context: Any, school_id_giga: str) -> None:
     """Mark a GigaMeter school registration as rejected after failed DQ."""
     if not settings.GIGAMETER_API_BASE_URL or not settings.GIGAMETER_API_TOKEN:
         context.log.warning(
