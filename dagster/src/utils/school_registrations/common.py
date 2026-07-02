@@ -126,11 +126,7 @@ def call_gigameter_soft_delete(
         "Authorization": f"Bearer {settings.GIGAMETER_API_TOKEN}",
         "Content-Type": "application/json",
     }
-    payload = {
-        "giga_id_school": school_id_giga,
-        "is_deleted": True,
-        "rejection_reason": failure_reason or "DQ validation failed",
-    }
+    payload = {"giga_id_school": school_id_giga, "is_deleted": True}
 
     try:
         response = requests.put(url, headers=headers, json=payload, timeout=10)
