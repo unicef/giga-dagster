@@ -61,20 +61,21 @@ def is_not_within_country(
     logger.info("Checking if not within country...")
 
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
-        # boundary constants
-        geometry = get_country_geometry(country_code_iso3)
+        country_boundary_geodataframe = get_country_geometry(country_code_iso3)
+        broadcast_country_boundary = df.sparkSession.sparkContext.broadcast(
+            country_boundary_geodataframe
+        )
 
-        # geopy constants
         country_code_iso2 = coco.convert(names=[country_code_iso3], to="ISO2")
 
         is_not_within_country_boundaries = is_not_within_country_boundaries_udf_factory(
             country_code_iso3,
-            geometry,
+            broadcast_country_boundary,
         )
 
         is_not_within_country_check = is_not_within_country_check_udf_factory(
             country_code_iso2,
-            geometry,
+            broadcast_country_boundary,
         )
 
         df = df.withColumn(
