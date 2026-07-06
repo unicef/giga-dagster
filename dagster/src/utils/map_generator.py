@@ -42,7 +42,7 @@ _POPUP_TEMPLATE = Environment(
 
 # group key -> ordered list of (tag_value, checkbox_label)
 _FILTER_GROUPS = {
-    "status": [("passed", "Passed"), ("failed", "Failed")],
+    "status": [("passed", "Approved"), ("failed", "Rejected")],
     "rurality": [
         ("rural", "Rural"),
         ("urban", "Urban"),
@@ -395,10 +395,10 @@ def generate_school_map_html(
     main_layer = folium.FeatureGroup(name="Schools", show=True)
 
     _add_school_markers(
-        passed_filtered, PASSED_COLOR, "passed", "Passed", main_layer, False
+        passed_filtered, PASSED_COLOR, "passed", "Approved", main_layer, False
     )
     _add_school_markers(
-        failed_filtered, FAILED_COLOR, "failed", "Failed", main_layer, True
+        failed_filtered, FAILED_COLOR, "failed", "Rejected", main_layer, True
     )
     main_layer.add_to(m)
 
