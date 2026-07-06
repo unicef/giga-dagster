@@ -32,7 +32,6 @@ def set_school_registration_verification_status(
 
 def process_school_registration_dq_result(
     context: Any,
-    upload_id: str,
     country_iso3_code: str,
     row_count: int,
     df_passed: Any,
@@ -50,9 +49,7 @@ def process_school_registration_dq_result(
         return
 
     school_data = _spark_row_to_dict(school_row, dq_results.columns)
-    school_id_giga = school_data.get("school_id_giga") or school_data.get(
-        "giga_id_school"
-    )
+    school_id_giga = school_data.get("school_id_giga")
     if school_id_giga:
         call_gigameter_soft_delete(context, school_id_giga)
 
@@ -70,9 +67,7 @@ def write_to_nocodb(
         return
 
     try:
-        giga_id_school = school_data.get("school_id_giga") or school_data.get(
-            "giga_id_school"
-        )
+        giga_id_school = school_data.get("school_id_giga")
         table_id = get_nocodb_table_id_from_name("SchoolRegistrations")
 
         record_data = {

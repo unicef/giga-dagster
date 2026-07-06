@@ -323,7 +323,6 @@ def create_bronze_layer_columns(
         silver: Reference silver DataFrame
         country_code_iso3: Country code in ISO3 format
         is_qos: Whether to apply QoS-specific transformations
-        source: Source of the upload (e.g., "gigameter", "nocodb")
 
     Returns:
         DataFrame with bronze layer columns added

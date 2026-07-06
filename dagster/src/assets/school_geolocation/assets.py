@@ -657,7 +657,6 @@ def geolocation_dq_passed_rows(
     if config.metadata.get("source") == "gigameter":
         process_school_registration_dq_result(
             context=context,
-            upload_id=config.filename_components.id,
             country_iso3_code=config.country_code,
             row_count=row_count,
             df_passed=df_passed,
