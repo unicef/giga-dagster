@@ -147,6 +147,6 @@ def create_nocodb_table_record(table_id, data):
     """Create a new record in a NoCoDB table."""
     table_url = f"{settings.NOCODB_BASE_URL}/api/v2/tables/{table_id}/records"
     headers = {"xc-token": settings.NOCODB_TOKEN, "Content-Type": "application/json"}
-    response = requests.post(table_url, json=data, headers=headers)
+    response = requests.post(table_url, json=data, headers=headers, timeout=30)
     response.raise_for_status()
     return response.json()

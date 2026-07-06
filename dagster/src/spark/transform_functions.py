@@ -315,7 +315,6 @@ def create_bronze_layer_columns(
     country_code_iso3: str,
     uploaded_columns: list[str],
     is_qos: bool = False,
-    source: str = None,
 ) -> sql.DataFrame:
     """Create bronze layer columns with optional QoS-specific handling.
 
@@ -498,7 +497,8 @@ def create_bronze_layer_columns_updated(
         connectivity = get_country_rt_schools(spark, country_code_iso3)
         df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
 
-    df = set_school_registration_verification_status(df, uploaded_columns, source)
+    if source == "gigameter":
+        df = set_school_registration_verification_status(df, uploaded_columns)
 
     return df
 

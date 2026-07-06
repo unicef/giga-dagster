@@ -654,14 +654,15 @@ def geolocation_dq_passed_rows(
     df_passed.cache()
     row_count = df_passed.count()
 
-    process_school_registration_dq_result(
-        context=context,
-        upload_id=config.filename_components.id,
-        country_iso3_code=config.country_code,
-        row_count=row_count,
-        df_passed=df_passed,
-        dq_results=geolocation_data_quality_results,
-    )
+    if config.metadata.get("source") == "gigameter":
+        process_school_registration_dq_result(
+            context=context,
+            upload_id=config.filename_components.id,
+            country_iso3_code=config.country_code,
+            row_count=row_count,
+            df_passed=df_passed,
+            dq_results=geolocation_data_quality_results,
+        )
 
     return Output(
         df_passed,

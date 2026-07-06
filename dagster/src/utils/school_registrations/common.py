@@ -1,13 +1,10 @@
 from typing import Any
 
 import requests
-from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import functions as f
-from sqlalchemy import select
 
 from src.settings import settings
-from src.utils.db.primary import get_db_context
 from src.utils.nocodb.get_nocodb_data import (
     create_nocodb_table_record,
     get_nocodb_table_id_from_name,
@@ -22,10 +19,9 @@ def _spark_row_to_dict(row: Any, columns: list[str]) -> dict[str, Any]:
 def set_school_registration_verification_status(
     df: sql.DataFrame,
     uploaded_columns: list[str],
-    source: str = None,
 ) -> sql.DataFrame:
     """Set or fill verification_status based on the registration source."""
-    default_value = "unverified" if source == "gigameter" else "verified"
+    default_value = "unverified"
     if "verification_status" in uploaded_columns:
         return df.withColumn(
             "verification_status",
@@ -43,14 +39,6 @@ def process_school_registration_dq_result(
     dq_results: Any,
 ) -> None:
     """Notify downstream registration systems after GigaMeter geolocation DQ."""
-    with get_db_context() as db:
-        file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == upload_id),
-        )
-
-    if not file_upload or file_upload.source != "gigameter":
-        return
-
     if row_count > 0:
         school_row = df_passed.first()
         school_data = _spark_row_to_dict(school_row, df_passed.columns)
