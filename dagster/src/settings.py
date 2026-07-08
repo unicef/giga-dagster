@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     MONGOLIA_API_URL: str = ""
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
+    VCT_MERAKI_API_KEY: str = ""
 
     # Derived settings
     @property

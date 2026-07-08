@@ -16,9 +16,12 @@ from jinja2 import BaseLoader, Environment
 
 from dagster import OpExecutionContext
 
-PASSED_COLOR = "#28a745"
+PASSED_COLOR = "#1e7e34"
 FAILED_COLOR = "#dc3545"
 OUTSIDE_BOUNDARY_COLOR = "#343a40"
+
+# Light, low-saturation basemap so status colors stand out (no green terrain).
+BASEMAP_TILES = "CartoDB Positron"
 
 _UNINHABITED_COL = "dq_is_in_uninhabited_area"
 _DUP_FLAG_COL = "dq_duplicate_group_flag_50m"
@@ -39,7 +42,7 @@ _POPUP_TEMPLATE = Environment(
 
 # group key -> ordered list of (tag_value, checkbox_label)
 _FILTER_GROUPS = {
-    "status": [("passed", "Passed"), ("failed", "Failed")],
+    "status": [("passed", "Approved"), ("failed", "Rejected")],
     "rurality": [
         ("rural", "Rural"),
         ("urban", "Urban"),
@@ -150,6 +153,13 @@ def _render_school_popup_html(
     return _POPUP_TEMPLATE.render(fields=fields)
 
 
+def _darken_hex_color(hex_color: str, factor: float = 0.65) -> str:
+    """Return a darker shade of a #rrggbb color for marker outlines."""
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"#{int(r * factor):02x}{int(g * factor):02x}{int(b * factor):02x}"
+
+
 def _add_circle_marker(
     layer: folium.FeatureGroup,
     row: dict,
@@ -160,11 +170,13 @@ def _add_circle_marker(
     """Add one school coordinate marker to the shared feature group."""
     folium.CircleMarker(
         location=[row["latitude"], row["longitude"]],
-        radius=1,
-        color=color,
+        radius=2,
+        color=_darken_hex_color(color),
+        weight=1,
+        opacity=1,
         fill=True,
         fillColor=color,
-        fillOpacity=0.7,
+        fillOpacity=0.85,
         popup=folium.Popup(popup_html, max_width=380),
         tags=tags,
     ).add_to(layer)
@@ -295,6 +307,58 @@ def _build_grouped_filter_control_js(layer_var: str, counts: dict[str, int]) -> 
     """
 
 
+def _build_marker_interaction_js(map_var: str) -> str:
+    """Build JS for zoom-scaled marker radii, hover highlighting, and a
+    wider canvas hit area. Relies on GFC_ALL_MARKERS from the filter JS."""
+    return f"""
+    var GFC_MAP = {map_var};
+
+    // Widen the canvas hit-test area so small dots are easier to click.
+    (function() {{
+        var renderer = GFC_ALL_MARKERS.length
+            ? GFC_ALL_MARKERS[0]._renderer
+            : GFC_MAP._renderer;
+        if (renderer && renderer.options) {{ renderer.options.tolerance = 6; }}
+    }})();
+
+    function gfcRadiusForZoom(zoom) {{
+        if (zoom <= 5) return 2;
+        if (zoom <= 7) return 3;
+        if (zoom <= 9) return 4.5;
+        if (zoom <= 11) return 6;
+        return 8;
+    }}
+
+    function gfcUpdateRadii() {{
+        var base = gfcRadiusForZoom(GFC_MAP.getZoom());
+        GFC_ALL_MARKERS.forEach(function(marker) {{
+            marker._gfcBaseRadius = base;
+            marker.setRadius(marker._gfcHovered ? base + 3 : base);
+        }});
+    }}
+    GFC_MAP.on("zoomend", gfcUpdateRadii);
+    gfcUpdateRadii();
+
+    GFC_ALL_MARKERS.forEach(function(marker) {{
+        marker._gfcBaseStyle = {{
+            color: marker.options.color,
+            weight: marker.options.weight,
+        }};
+        marker.on("mouseover", function() {{
+            marker._gfcHovered = true;
+            marker.setStyle({{color: "#ffffff", weight: 2}});
+            marker.setRadius((marker._gfcBaseRadius || 3) + 3);
+            if (marker.bringToFront) {{ marker.bringToFront(); }}
+        }});
+        marker.on("mouseout", function() {{
+            marker._gfcHovered = false;
+            marker.setStyle(marker._gfcBaseStyle);
+            marker.setRadius(marker._gfcBaseRadius || 3);
+        }});
+    }});
+    """
+
+
 def generate_school_map_html(
     country_code: str,
     passed_df: pd.DataFrame,
@@ -322,6 +386,7 @@ def generate_school_map_html(
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=6,
+        tiles=BASEMAP_TILES,
         control_scale=True,
         prefer_canvas=True,
     )
@@ -330,15 +395,16 @@ def generate_school_map_html(
     main_layer = folium.FeatureGroup(name="Schools", show=True)
 
     _add_school_markers(
-        passed_filtered, PASSED_COLOR, "passed", "Passed", main_layer, False
+        passed_filtered, PASSED_COLOR, "passed", "Approved", main_layer, False
     )
     _add_school_markers(
-        failed_filtered, FAILED_COLOR, "failed", "Failed", main_layer, True
+        failed_filtered, FAILED_COLOR, "failed", "Rejected", main_layer, True
     )
     main_layer.add_to(m)
 
     counts = _calculate_filter_counts(passed_filtered, failed_filtered)
     js = _build_grouped_filter_control_js(main_layer.get_name(), counts)
+    interaction_js = _build_marker_interaction_js(m.get_name())
     extra_markup = (
         "<style>.gfc-panel{background:white;padding:8px 10px;"
         "border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.4);"
@@ -346,7 +412,8 @@ def generate_school_map_html(
         ".gfc-title{font-weight:bold;margin-top:6px;}"
         ".gfc-row{display:block;white-space:nowrap;margin:2px 0;}</style>"
         f"<script>{js}\n"
-        f"new GroupedFilterControl().addTo({m.get_name()});</script>"
+        f"new GroupedFilterControl().addTo({m.get_name()});\n"
+        f"{interaction_js}</script>"
     )
 
     context.log.info("Map generation complete successfully.")

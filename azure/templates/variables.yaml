@@ -54,4 +54,5 @@ variables:
   slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
   gigameterApiBaseUrl: $(GIGAMETER_API_BASE_URL)
   gigameterApiToken: $(GIGAMETER_API_TOKEN)
+  vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
   system.debug: true

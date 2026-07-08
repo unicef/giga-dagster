@@ -88,6 +88,7 @@ jobs:
                     SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
                     GIGAMETER_API_BASE_URL: "$(gigameterApiBaseUrl)"
                     GIGAMETER_API_TOKEN: "$(gigameterApiToken)"
+                    VCT_MERAKI_API_KEY: "$(vctMerakiApiKey)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

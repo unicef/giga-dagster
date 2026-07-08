@@ -18,8 +18,6 @@ sed -e "s|{ENV:METASTORE_WAREHOUSE_DIR}|$METASTORE_WAREHOUSE_DIR|" \
     /opt/hive/tpl/metastore-site.template.xml > /opt/hive/conf/metastore-site.xml
 
 
-SKIP_SCHEMA_INIT="${IS_RESUME:-false}"
-
 export HIVE_CONF_DIR=$HIVE_HOME/conf
 
 if [ -d "${HIVE_CUSTOM_CONF_DIR:-}" ]; then
@@ -36,8 +34,7 @@ export METASTORE_PORT=${METASTORE_PORT:-9083}
 if $HIVE_HOME/bin/schematool --verbose -dbType postgres -validate | grep 'Done with metastore validation' | grep '[SUCCESS]'; then
   echo 'Database OK'
 else
-  # $HIVE_HOME/bin/schematool --verbose -dbType postgres -initSchema
-  $HIVE_HOME/bin/schematool --verbose -dbType postgres -upgradeSchema || true
+  $HIVE_HOME/bin/schematool --verbose -dbType postgres -initOrUpgradeSchema
   $HIVE_HOME/bin/schematool --verbose -dbType postgres -validate
 fi
 
