@@ -9,6 +9,7 @@ import zipfile
 from dagster import OpExecutionContext
 from src.constants import constants
 from src.utils.adls import ADLSFileClient
+from src.utils.filename import deconstruct_school_master_filename_components
 
 
 def _safe_download(
@@ -29,6 +30,25 @@ def _count_csv_data_rows(data: bytes) -> int:
     text = data.decode("utf-8-sig", errors="replace")
     rows = sum(1 for _ in csv.reader(io.StringIO(text)))
     return max(rows - 1, 0)
+
+
+def _display_stem(country_code: str, upload_id: str, dataset: str, stem: str) -> str:
+    """User-facing stem for the approved/rejected CSVs inside the kit:
+    <ISO>_<timestamp>_<upload_id>_<dataset>[_<source>].
+
+    Falls back to the original stem if it doesn't follow the upload naming
+    convention (blob paths are unaffected either way).
+    """
+    try:
+        components = deconstruct_school_master_filename_components(f"{stem}.csv")
+        timestamp = components.timestamp.strftime("%Y%m%d-%H%M%S")
+    except Exception:
+        return stem
+
+    elements = [country_code, timestamp, upload_id, dataset]
+    if components.source:
+        elements.append(components.source)
+    return "_".join(elements)
 
 
 def _collect_row_csv_entry(
@@ -122,12 +142,13 @@ def generate_dq_kit_zip_bytes(
         sections.append(("2_dq_summary/", summary_lines))
 
     # Approved/rejected rows (skipped entirely when there are zero data rows)
+    row_csv_stem = _display_stem(country_code, upload_id, dataset, stem)
     _collect_row_csv_entry(
         adls_client,
         paths["passed_rows"],
         "approved",
         "3_approved_data",
-        stem,
+        row_csv_stem,
         "Schools APPROVED by all data quality checks",
         entries,
         sections,
@@ -138,7 +159,7 @@ def generate_dq_kit_zip_bytes(
         paths["failed_rows"],
         "rejected",
         "4_rejected_data",
-        stem,
+        row_csv_stem,
         "Schools REJECTED by data quality checks, with reasons",
         entries,
         sections,
