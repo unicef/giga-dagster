@@ -32,6 +32,9 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
+from src.utils.school_registrations.common import (
+    set_school_registration_verification_status,
+)
 
 ACCOUNT_URL = "https://saunigiga.blob.core.windows.net/"
 azure_sas_token = settings.AZURE_SAS_TOKEN
@@ -424,6 +427,7 @@ def create_bronze_layer_columns_updated(
     df: sql.DataFrame,
     uploaded_columns: list[str],
     country_code_iso3: str,
+    source: str = None,
     spark: SparkSession = None,
 ):
     df = map_govt_to_giga_columns(df, uploaded_columns)
@@ -491,6 +495,9 @@ def create_bronze_layer_columns_updated(
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         connectivity = get_country_rt_schools(spark, country_code_iso3)
         df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
+
+    if source == "gigameter":
+        df = set_school_registration_verification_status(df, uploaded_columns)
 
     return df
 

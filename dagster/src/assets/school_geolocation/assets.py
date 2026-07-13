@@ -56,6 +56,9 @@ from src.utils.schema import (
     get_schema_columns_datahub,
     get_schema_table,
 )
+from src.utils.school_registrations.common import (
+    process_school_registration_dq_result,
+)
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
 
@@ -255,7 +258,9 @@ def geolocation_bronze(
 
     df = add_is_new_school(df, silver_ids, context)
 
-    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
+    df = create_bronze_layer_columns_updated(
+        df, uploaded_columns, country_code, file_upload.source, s
+    )
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
@@ -648,6 +653,15 @@ def geolocation_dq_passed_rows(
 
     df_passed.cache()
     row_count = df_passed.count()
+
+    if config.metadata.get("source") == "gigameter":
+        process_school_registration_dq_result(
+            context=context,
+            country_iso3_code=config.country_code,
+            row_count=row_count,
+            df_passed=df_passed,
+            dq_results=geolocation_data_quality_results,
+        )
 
     return Output(
         df_passed,
