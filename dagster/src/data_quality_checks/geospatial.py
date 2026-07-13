@@ -184,12 +184,11 @@ def uninhabited_area_check(  # noqa
             poi_id_column="school_id_giga",
             data_store=data_store,
         )
-        # To be added later once tile Size issue is fixed
-        # logger.info("Mapping Google Open Buildings...")
-        # view.map_google_buildings()
-        # logger.info("Mapping Microsoft Open Buildings...")
-        # view.map_ms_buildings()
-        # logger.info("Mapping built surface area (GHSL GHS_BUILT_S)...")
+        logger.info("Mapping Google Open Buildings...")
+        view.map_google_buildings()
+        logger.info("Mapping Microsoft Open Buildings...")
+        view.map_ms_buildings()
+        logger.info("Mapping built surface area (GHSL GHS_BUILT_S)...")
         view.map_built_s(map_radius_meters=BUILT_SURFACE_BUFFER_M)
 
         view_df = view.view
