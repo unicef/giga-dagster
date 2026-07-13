@@ -34,19 +34,14 @@ def duplicate_set_checks(
 
     column_actions = {}
     for column_set in config_column_list:
-        is_location_only = list(column_set) == ["location_id"]
-        flag_col = (
-            "dq_duplicate_location_rows_flag"
-            if is_location_only
-            else f"dq_duplicate_set-{'_'.join(column_set)}"
-        )
+        set_name = "_".join(column_set)
         window_count = f.count("*").over(Window.partitionBy(column_set))
-        column_actions[flag_col] = (
+        column_actions[f"dq_duplicate_set-{set_name}"] = (
             f.when(null_coords, f.lit(None).cast("int"))
             .when(window_count > 1, 1)
             .otherwise(0)
         )
-        if is_location_only:
+        if list(column_set) == ["location_id"]:
             column_actions["dq_duplicate_location_rows_count"] = f.when(
                 null_coords, f.lit(None).cast("int")
             ).otherwise(window_count)
