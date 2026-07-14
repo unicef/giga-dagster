@@ -121,40 +121,25 @@ def _migrate_locations(
     return results
 
 
-@asset
-@capture_op_exceptions
-def adhoc__migrate_hms_table_locations_to_abfss(
-    context: OpExecutionContext,
-    spark: PySparkResource,
-) -> Output[None]:
-    """
-    One-shot migration asset that updates all Hive Metastore location URIs
-    from wasbs:// (Azure Blob Storage) to abfss:// (Azure Data Lake Storage Gen2).
-
-    Covers all four HMS tables that store paths:
-      - DBS.DB_LOCATION_URI        via ALTER DATABASE SET LOCATION
-      - SDS.LOCATION               via ALTER TABLE SET LOCATION
-      - SERDE_PARAMS (path key)    via ALTER TABLE SET SERDEPROPERTIES
-
-    CTLGS.LOCATION_URI has no Spark SQL equivalent and must be updated manually:
-      UPDATE "CTLGS"
-      SET "LOCATION_URI" = replace("LOCATION_URI", '<old_prefix>', '<new_prefix>')
-      WHERE "LOCATION_URI" LIKE '<old_prefix>%';
-
-    Run this once after deploying the abfss:// storage migration. Once all
-    locations are migrated and CTLGS is updated, the WASBS SAS credential
-    in spark.py and metastore-site.template.xml can be removed.
-    """
-    s: SparkSession = spark.spark_session
-
-    old_prefix = (
+def _wasbs_prefix() -> str:
+    return (
         f"wasbs://{settings.AZURE_BLOB_CONTAINER_NAME}@{settings.AZURE_BLOB_SAS_HOST}"
     )
-    new_prefix = (
-        f"abfss://{settings.AZURE_BLOB_CONTAINER_NAME}@{settings.AZURE_DFS_SAS_HOST}"
-    )
 
-    context.log.info(f"Migrating HMS locations: {old_prefix} -> {new_prefix}")
+
+def _abfss_prefix() -> str:
+    return f"abfss://{settings.AZURE_BLOB_CONTAINER_NAME}@{settings.AZURE_DFS_SAS_HOST}"
+
+
+def _rewrite_locations(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+    old_prefix: str,
+    new_prefix: str,
+) -> Output[None]:
+    s: SparkSession = spark.spark_session
+
+    context.log.info(f"Rewriting HMS locations: {old_prefix} -> {new_prefix}")
 
     results = _migrate_locations(context, s, old_prefix, new_prefix)
 
@@ -162,10 +147,10 @@ def adhoc__migrate_hms_table_locations_to_abfss(
     tbl_errors = results["tables"]["errors"]
 
     context.log.info(
-        f"Migration complete:\n"
-        f"  Databases: {len(results['databases']['migrated'])} migrated, "
+        f"Complete:\n"
+        f"  Databases: {len(results['databases']['migrated'])} rewritten, "
         f"{len(results['databases']['skipped'])} skipped, {len(db_errors)} errors\n"
-        f"  Tables: {len(results['tables']['migrated'])} migrated, "
+        f"  Tables: {len(results['tables']['migrated'])} rewritten, "
         f"{len(results['tables']['skipped'])} skipped, {len(tbl_errors)} errors"
     )
 
@@ -174,8 +159,8 @@ def adhoc__migrate_hms_table_locations_to_abfss(
         context.log.error(f"Table errors: {[e['table'] for e in tbl_errors]}")
 
     context.log.info(
-        "CTLGS.LOCATION_URI must be updated manually via direct SQL on the HMS "
-        "PostgreSQL database. See the asset docstring for the SQL statement."
+        "CTLGS.LOCATION_URI is not handled here — it is updated by the k8s jobs in "
+        "infra/k8s (migrate-hms-ctlgs-job.yaml / rollback-hms-ctlgs-job.yaml)."
     )
 
     return Output(
@@ -191,3 +176,49 @@ def adhoc__migrate_hms_table_locations_to_abfss(
             "error_tables": [e["table"] for e in tbl_errors],
         },
     )
+
+
+@asset
+@capture_op_exceptions
+def adhoc__migrate_hms_table_locations_to_abfss(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+) -> Output[None]:
+    """
+    One-shot migration asset that updates all Hive Metastore location URIs
+    from wasbs:// (Azure Blob Storage) to abfss:// (Azure Data Lake Storage Gen2).
+
+    Covers the HMS path tables reachable from Spark SQL:
+      - DBS.DB_LOCATION_URI        via ALTER DATABASE SET LOCATION
+      - SDS.LOCATION               via ALTER TABLE SET LOCATION
+      - SERDE_PARAMS (path key)    via ALTER TABLE SET SERDEPROPERTIES
+
+    CTLGS.LOCATION_URI has no Spark SQL equivalent; it is updated by the k8s job
+    infra/k8s/migrate-hms-ctlgs-job.yaml, which runs during helm deploy.
+
+    Run this once after deploying the abfss:// storage migration. Once all
+    locations are migrated and CTLGS is updated, the WASBS SAS credential
+    in spark.py and metastore-site.template.xml can be removed.
+
+    To undo, run adhoc__rollback_hms_table_locations_to_wasbs.
+    """
+    return _rewrite_locations(context, spark, _wasbs_prefix(), _abfss_prefix())
+
+
+@asset
+@capture_op_exceptions
+def adhoc__rollback_hms_table_locations_to_wasbs(
+    context: OpExecutionContext,
+    spark: PySparkResource,
+) -> Output[None]:
+    """
+    Reverse of adhoc__migrate_hms_table_locations_to_abfss: rewrites Hive
+    Metastore location URIs from abfss:// back to wasbs://.
+
+    CTLGS.LOCATION_URI is rolled back separately by the k8s job
+    infra/k8s/rollback-hms-ctlgs-job.yaml, which must be applied manually.
+
+    Safe to run against a partially migrated metastore — entries that do not
+    start with the abfss:// prefix are skipped.
+    """
+    return _rewrite_locations(context, spark, _abfss_prefix(), _wasbs_prefix())
