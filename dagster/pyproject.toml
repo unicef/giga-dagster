@@ -69,6 +69,7 @@ pandas = "^2.1"
 networkx = "^3.2"
 earthengine-api = ">=0.1.400"
 giga-spatial = "0.9.7"
+plotly = ">=5.24"
 
 [tool.poetry.group.spark.dependencies]
 pyspark = "3.5.0"
