@@ -86,7 +86,6 @@ jobs:
                     CATALOG_BASE: "$(catalogBase)"
                     DATABASE_ID: "$(databaseId)"
                     SLACK_WORKFLOW_WEBHOOK: "$(slackWorkflowWebhook)"
-                    GIGASPATIAL_ADLS_ACCOUNT_URL: "$(gigaspatialAdlsAccountUrl)"
                     GIGASPATIAL_ADLS_SAS_TOKEN: "$(gigaspatialAdlsSasToken)"
                     GIGASPATIAL_ROOT_DATA_DIR: "$(gigaspatialRootDataDir)"
 

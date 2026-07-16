@@ -52,7 +52,6 @@ variables:
   catalogBase: $(CATALOG_BASE)
   databaseId: $(DATABASE_ID)
   slackWorkflowWebhook: $(SLACK_WORKFLOW_WEBHOOK)
-  gigaspatialAdlsAccountUrl: $(GIGASPATIAL_ADLS_ACCOUNT_URL)
   gigaspatialAdlsSasToken: $(GIGASPATIAL_ADLS_SAS_TOKEN)
   gigaspatialRootDataDir: $(GIGASPATIAL_ROOT_DATA_DIR)
   system.debug: true

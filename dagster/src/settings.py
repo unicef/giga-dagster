@@ -76,7 +76,6 @@ class Settings(BaseSettings):
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
 
     # giga-spatial ADLSDataStore settings (scoped to giga-spatial usage only)
-    GIGASPATIAL_ADLS_ACCOUNT_URL: str = ""
     GIGASPATIAL_ADLS_SAS_TOKEN: str = ""
     GIGASPATIAL_ROOT_DATA_DIR: str = ""
 
