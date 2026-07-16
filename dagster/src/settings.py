@@ -75,8 +75,10 @@ class Settings(BaseSettings):
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
 
-    # GeoSpatial data directory for storing (Google/MS buildings, GHSL, WorldPop)
-    GEOSPATIAL_DATA_DIR: str = "/app"
+    # giga-spatial ADLSDataStore settings (scoped to giga-spatial usage only)
+    GIGASPATIAL_ADLS_ACCOUNT_URL: str = ""
+    GIGASPATIAL_ADLS_SAS_TOKEN: str = ""
+    GIGASPATIAL_ROOT_DATA_DIR: str = ""
 
     # Derived settings
     @property

@@ -1,7 +1,8 @@
 import geopandas as gpd
 import networkx as nx
 import pandas as pd
-from gigaspatial.core.io import LocalDataStore
+from gigaspatial.config import config as gigaspatial_config
+from gigaspatial.core.io import ADLSDataStore
 from gigaspatial.generators.poi import PoiViewGenerator
 from gigaspatial.processing.algorithms import build_distance_graph
 from networkx.algorithms.clique import find_cliques as maximal_cliques
@@ -54,11 +55,14 @@ POPULATION_RADII_M = {
 SURROUNDING_SCHOOLS_RADII_M = [1000, 2000, 3000, 5000, 10000]
 
 
-def _get_data_store():
-    """Return a giga-spatial LocalDataStore"""
-    if settings.GEOSPATIAL_DATA_DIR:
-        return LocalDataStore(settings.GEOSPATIAL_DATA_DIR)
-    return LocalDataStore()
+def _get_data_store() -> ADLSDataStore:
+    """Return a giga-spatial ADLSDataStore scoped to giga-spatial usage."""
+    if settings.GIGASPATIAL_ROOT_DATA_DIR:
+        gigaspatial_config.set_path("root", settings.GIGASPATIAL_ROOT_DATA_DIR)
+    return ADLSDataStore(
+        account_url=settings.GIGASPATIAL_ADLS_ACCOUNT_URL,
+        sas_token=settings.GIGASPATIAL_ADLS_SAS_TOKEN,
+    )
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
@@ -646,7 +650,7 @@ def run_geospatial_checks(
     """
     logger = get_context_with_fallback_logger(context)
     logger.info(f"Starting geospatial checks for country={country_code_iso3}...")
-    logger.info(f"GEOSPATIAL_DATA_DIR={settings.GEOSPATIAL_DATA_DIR}")
+    logger.info(f"GIGASPATIAL_ROOT_DATA_DIR={settings.GIGASPATIAL_ROOT_DATA_DIR}")
 
     initial_count = df.count()
     logger.info(f"Input rows: {initial_count}")
