@@ -60,6 +60,7 @@ def _get_data_store() -> ADLSDataStore:
     if settings.GIGASPATIAL_ROOT_DATA_DIR:
         gigaspatial_config.set_path("root", settings.GIGASPATIAL_ROOT_DATA_DIR)
     return ADLSDataStore(
+        container=settings.GIGASPATIAL_ADLS_CONTAINER,
         account_url=f"https://{settings.AZURE_BLOB_SAS_HOST}/",
         sas_token=settings.GIGASPATIAL_ADLS_SAS_TOKEN,
     )
