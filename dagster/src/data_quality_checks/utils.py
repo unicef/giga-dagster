@@ -205,7 +205,7 @@ def aggregate_report_json(
 
 
 def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):  # noqa: C901
-    df = _normalize_dq_results_map(df)
+    df = normalize_dq_results_map(df)
 
     # dq_results is now a map<string, int>; access specific keys via element_at().
     def _check(key):
@@ -254,9 +254,20 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):  # noq
         "precision-longitude",
     ]
 
+    # Geospatial flags live in the dq_results map; pull them through element_at like
+    # the static checks so their counts reach the report.
+    geospatial_check_keys = [
+        "is_in_uninhabited_area",
+        "is_suspect_location",
+        "duplicate_group_flag_50m",
+    ]
+
     # Flatten only the needed map keys into individual columns for the stack/agg step
     df_report = df.select(
-        *[_check(key).cast("int").alias(f"dq_{key}") for key in static_check_keys],
+        *[
+            _check(key).cast("int").alias(f"dq_{key}")
+            for key in static_check_keys + geospatial_check_keys
+        ],
         f.col("dq_has_critical_error").cast("int"),
         f.col("dq_missing_location").cast("int"),
         f.col("dq_is_null_connectivity_type_when_connectivity_govt").cast("int"),
@@ -268,19 +279,13 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):  # noq
         "dq_is_null_connectivity_type_when_connectivity_govt",
     ]
 
-    # Add geospatial columns if they exist in the DataFrame
-    geospatial_dq_columns = [
-        "dq_is_in_uninhabited_area",
-        "dq_is_suspect_location",
-        "dq_duplicate_group_flag_50m",
-    ]
-    for col_name in geospatial_dq_columns:
-        if col_name in df.columns:
-            dq_report_columns.append(col_name)
-
     dq_duplicate_columns = [
         col for col in dq_report_columns if col.startswith("dq_duplicate")
     ]
+
+    # Append geospatial columns after dq_duplicate_columns is built, so
+    # dq_duplicate_group_flag_50m is not folded into dq_suspected_duplicate.
+    dq_report_columns += [f"dq_{key}" for key in geospatial_check_keys]
     check_duplicate_columns = [
         f.col(duplicate_col) == 1 for duplicate_col in dq_duplicate_columns
     ]
@@ -549,7 +554,7 @@ def dq_split_failed_rows(df: sql.DataFrame, dataset_type: str):
     return df
 
 
-def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
+def normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
     """Ensure dq_results is MapType(string, int).
 
     ADLSPandasIOManager round-trips through Pandas/PyArrow, which writes the map as a
@@ -574,7 +579,7 @@ def _normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
 def dq_geolocation_extract_relevant_columns(
     df: sql.DataFrame, uploaded_columns: list[str]
 ):
-    df = _normalize_dq_results_map(df)
+    df = normalize_dq_results_map(df)
 
     dq_column_name_table_id = get_nocodb_table_id_from_name(
         table_name="SchoolGeolocationMasterDQChecks"
@@ -629,57 +634,17 @@ def dq_geolocation_extract_relevant_columns(
     # The dq_results map keys are the check names without the "dq_" prefix.
     relevant_map_keys = [col.replace("dq_", "", 1) for col in dq_columns_list]
 
-    # Add required columns for Map Visualization
-    MAP_CONTEXT_COLUMNS = [
-        "school_id_giga",
-        "school_id_govt",
-        "latitude",
-        "longitude",
-        "school_name",
-        "education_level",
-        "admin1",
-        "admin1_id_giga",
-        "admin2",
-        "admin2_id_giga",
-        # Geospatial context columns
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-        "rurban_detected",
-    ]
-
-    # Always preserve MAP_CONTEXT_COLUMNS and DQ columns, plus uploaded columns
-    required_columns = [
-        *MAP_CONTEXT_COLUMNS,
-        "dq_has_critical_error",
-        "failure_reason",
-        "dq_results",
-    ]
-
     columns_to_keep = [
-        col for col in required_columns + uploaded_columns if col in df.columns
+        col
+        for col in [
+            *uploaded_columns,
+            "dq_has_critical_error",
+            "failure_reason",
+            "dq_results",
+        ]
+        if col in df.columns
     ]
-
-    # Remove duplicates while preserving order
-    seen = set()
-    columns_to_keep = [x for x in columns_to_keep if not (x in seen or seen.add(x))]
-
     df = df.select(*columns_to_keep)
-
-    # Extract raw integer DQ values needed for map tooltip and filter layers.
-    MAP_EXTRA_DQ_KEYS = [
-        "is_in_uninhabited_area",
-        "is_not_within_country",
-        "duplicate_group_flag_50m",
-        "duplicate_group_count_50m",
-        "duplicate_group_id_50m",
-    ]
-    if "dq_results" in df.columns:
-        for map_key in MAP_EXTRA_DQ_KEYS:
-            df = df.withColumn(
-                f"dq_{map_key}",
-                f.element_at(f.col("dq_results"), map_key),
-            )
 
     # Narrow the dq_results map to only checks that are relevant for the uploaded
     # columns and mode. This avoids exposing checks that do not apply.
