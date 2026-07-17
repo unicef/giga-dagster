@@ -468,12 +468,6 @@ def geolocation_data_quality_results_human_readable(
     )
     df_failed = df.filter(df.dq_has_critical_error == 1).drop("dq_has_critical_error")
 
-    # Check for overlap between passed and failed
-    passed_ids = df_passed.select("school_id_giga").distinct().count()
-    failed_ids = df_failed.select("school_id_giga").distinct().count()
-    context.log.info(f"Passed: {df_passed.count()} rows ({passed_ids} unique IDs)")
-    context.log.info(f"Failed: {df_failed.count()} rows ({failed_ids} unique IDs)")
-
     output_metadata = get_output_metadata(config)
 
     yield Output(
@@ -891,21 +885,6 @@ def geolocation_delete_staging(
     )
 
 
-# Columns shown in the map popups, on top of the DQ status columns
-MAP_COLUMNS = [
-    "school_id_giga",
-    "school_id_govt",
-    "latitude",
-    "longitude",
-    "school_name",
-    "education_level",
-    "admin1",
-    "admin1_id_giga",
-    "admin2",
-    "admin2_id_giga",
-]
-
-
 @asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
 @capture_op_exceptions
 def geolocation_school_map(
@@ -921,6 +900,20 @@ def geolocation_school_map(
     are what decide whether a map is meaningful.
     """
     from src.utils.map_generator import generate_school_map_html
+
+    # Columns shown in the map popups, on top of the DQ status columns
+    map_columns = [
+        "school_id_giga",
+        "school_id_govt",
+        "latitude",
+        "longitude",
+        "school_name",
+        "education_level",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+    ]
 
     country_code = config.country_code
     upload_id = config.filename_components.id
@@ -950,7 +943,7 @@ def geolocation_school_map(
 
     # Casting for the map lives here, not in the shared DQ extraction helpers.
     df = df.select(
-        *[col for col in MAP_COLUMNS if col in df.columns],
+        *[col for col in map_columns if col in df.columns],
         "dq_has_critical_error",
         "failure_reason",
         f.element_at(f.col("dq_results"), "is_not_within_country")

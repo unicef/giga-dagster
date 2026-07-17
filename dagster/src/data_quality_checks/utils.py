@@ -607,39 +607,16 @@ def dq_geolocation_extract_relevant_columns(
     # The dq_results map keys are the check names without the "dq_" prefix.
     relevant_map_keys = [col.replace("dq_", "", 1) for col in dq_columns_list]
 
-    # School identity and geospatial context columns, always kept regardless of
-    # which columns were uploaded
-    CONTEXT_COLUMNS = [
-        "school_id_giga",
-        "school_id_govt",
-        "latitude",
-        "longitude",
-        "school_name",
-        "education_level",
-        "admin1",
-        "admin1_id_giga",
-        "admin2",
-        "admin2_id_giga",
-        "pop_within_1km",
-        "pop_within_2km",
-        "pop_within_3km",
-    ]
-
-    required_columns = [
-        *CONTEXT_COLUMNS,
-        "dq_has_critical_error",
-        "failure_reason",
-        "dq_results",
-    ]
-
     columns_to_keep = [
-        col for col in required_columns + uploaded_columns if col in df.columns
+        col
+        for col in [
+            *uploaded_columns,
+            "dq_has_critical_error",
+            "failure_reason",
+            "dq_results",
+        ]
+        if col in df.columns
     ]
-
-    # Remove duplicates while preserving order
-    seen = set()
-    columns_to_keep = [x for x in columns_to_keep if not (x in seen or seen.add(x))]
-
     df = df.select(*columns_to_keep)
 
     # Narrow the dq_results map to only checks that are relevant for the uploaded
