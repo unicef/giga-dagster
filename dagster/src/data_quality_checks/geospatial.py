@@ -1,5 +1,6 @@
 import geopandas as gpd
 import networkx as nx
+import numpy as np
 import pandas as pd
 from gigaspatial.config import config as gigaspatial_config
 from gigaspatial.core.io import ADLSDataStore
@@ -104,6 +105,59 @@ def _log_non_null_counts(
     logger.info(f"{check_name}: non-null output counts={counts}")
 
 
+def _log_coord_finiteness(
+    logger, check_name: str, pdf: pd.DataFrame, dump_offending: bool = False
+) -> None:
+    """Log coordinate finiteness diagnostics to pin down 'data must be finite' errors.
+
+    ``pdf`` is expected to already be coordinate-masked, so any non-finite/pole value
+    or duplicate/null id logged here is what reaches the distance-graph builder.
+    """
+    lat = pd.to_numeric(pdf["latitude"], errors="coerce")
+    lon = pd.to_numeric(pdf["longitude"], errors="coerce")
+    lat_nonfinite = ~np.isfinite(lat)
+    lon_nonfinite = ~np.isfinite(lon)
+    at_pole = lat.abs() >= 90
+    logger.info(
+        f"{check_name}: coord finiteness rows={len(pdf)} "
+        f"lat[min={lat.min()}, max={lat.max()}] lon[min={lon.min()}, max={lon.max()}] "
+        f"nonfinite_lat={int(lat_nonfinite.sum())} nonfinite_lon={int(lon_nonfinite.sum())} "
+        f"at_pole={int(at_pole.sum())} "
+        f"null_id={int(pdf['school_id_giga'].isna().sum())} "
+        f"dup_id={int(pdf['school_id_giga'].duplicated().sum())}"
+    )
+    if dump_offending:
+        offending = pdf[lat_nonfinite | lon_nonfinite | at_pole]
+        logger.error(
+            f"{check_name}: offending coordinate rows ({len(offending)}): "
+            f"{offending[['school_id_giga', 'latitude', 'longitude']].head(20).to_dict('records')}"
+        )
+
+
+def _prepare_poi_points(
+    pdf_valid: pd.DataFrame, logger, check_name: str
+) -> pd.DataFrame:
+    """Drop null and duplicate ``school_id_giga`` rows so it can be used as a unique
+    ``poi_id_column``.
+
+    Deduping is safe: ``school_id_giga`` is a deterministic hash of the coordinates
+    (among other fields), so rows sharing an id share coordinates and therefore the
+    same mapped result. Results are joined back onto the full DataFrame by
+    ``school_id_giga``, which fans the single computed value out to every row that
+    shares the id; rows with a null id can never be mapped and stay null.
+    """
+    before = len(pdf_valid)
+    prepared = pdf_valid[pdf_valid["school_id_giga"].notna()].drop_duplicates(
+        subset="school_id_giga", keep="first"
+    )
+    null_ids = before - int(pdf_valid["school_id_giga"].notna().sum())
+    logger.info(
+        f"{check_name}: poi points {before} -> {len(prepared)} "
+        f"(dropped {null_ids} null-id, {before - null_ids - len(prepared)} duplicate-id rows)"
+    )
+    return prepared
+
+
 def _join_pandas_result_to_spark(
     df: sql.DataFrame,
     result_pdf: pd.DataFrame,
@@ -113,7 +167,10 @@ def _join_pandas_result_to_spark(
     using school_id_giga as the join key.
     """
     spark = df.sparkSession
-    result_sdf = spark.createDataFrame(result_pdf[["school_id_giga"] + result_columns])
+    result_keyed = result_pdf[["school_id_giga"] + result_columns].drop_duplicates(
+        subset="school_id_giga", keep="first"
+    )
+    result_sdf = spark.createDataFrame(result_keyed)
     df = df.join(result_sdf, on="school_id_giga", how="left")
     return df
 
@@ -177,7 +234,8 @@ def uninhabited_area_check(  # noqa
             logger, "Uninhabited area check", len(pdf), len(pdf_valid)
         )
 
-        if pdf_valid.empty:
+        poi_points = _prepare_poi_points(pdf_valid, logger, "Uninhabited area check")
+        if poi_points.empty:
             logger.warning("No valid coordinates found for uninhabited area check")
             for c in null_cols:
                 df = df.withColumn(c, f.lit(None).cast("int"))
@@ -185,7 +243,7 @@ def uninhabited_area_check(  # noqa
 
         data_store = _get_data_store()
         view = PoiViewGenerator(
-            points=pdf_valid,
+            points=poi_points,
             poi_id_column="school_id_giga",
             data_store=data_store,
         )
@@ -329,6 +387,8 @@ def proximity_duplicate_check(  # noqa
             crs="EPSG:4326",
         )
 
+        _log_coord_finiteness(logger, "Proximity duplicate check", pdf_valid)
+
         # Build distance graph using giga-spatial (geodesic distance)
         G = build_distance_graph(gdf, gdf, PROXIMITY_DUPLICATE_THRESHOLD_M)
         logger.info(
@@ -387,6 +447,9 @@ def proximity_duplicate_check(  # noqa
 
     except Exception as e:
         logger.error(f"Proximity duplicate check failed: {e}")
+        _log_coord_finiteness(
+            logger, "Proximity duplicate check", pdf_valid, dump_offending=True
+        )
         for c in dup_cols:
             df = df.withColumn(c, f.lit(None).cast("int"))
 
@@ -418,7 +481,8 @@ def smod_classification(
         pdf_valid = pdf[valid_mask].copy()
         _log_coordinate_summary(logger, "SMOD classification", len(pdf), len(pdf_valid))
 
-        if pdf_valid.empty:
+        poi_points = _prepare_poi_points(pdf_valid, logger, "SMOD classification")
+        if poi_points.empty:
             logger.warning("No valid coordinates found for SMOD classification")
             for c in smod_cols_str:
                 df = df.withColumn(c, f.lit(None).cast("string"))
@@ -426,7 +490,7 @@ def smod_classification(
 
         data_store = _get_data_store()
         view = PoiViewGenerator(
-            points=pdf_valid,
+            points=poi_points,
             poi_id_column="school_id_giga",
             data_store=data_store,
         )
@@ -485,7 +549,8 @@ def population_context_check(  # noqa
             logger, "Population context check", len(pdf), len(pdf_valid)
         )
 
-        if pdf_valid.empty:
+        poi_points = _prepare_poi_points(pdf_valid, logger, "Population context check")
+        if poi_points.empty:
             logger.warning("No valid coordinates found for population check")
             for col_name in POPULATION_RADII_M:
                 if col_name not in df.columns:
@@ -494,7 +559,7 @@ def population_context_check(  # noqa
 
         data_store = _get_data_store()
         view = PoiViewGenerator(
-            points=pdf_valid,
+            points=poi_points,
             poi_id_column="school_id_giga",
             data_store=data_store,
         )
