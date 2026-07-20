@@ -1,4 +1,3 @@
-import geopandas as gpd
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -9,51 +8,25 @@ from gigaspatial.processing.algorithms import build_distance_graph
 from networkx.algorithms.clique import find_cliques as maximal_cliques
 from pyspark import sql
 from pyspark.sql import functions as f
+from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from dagster import OpExecutionContext
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
-# Uninhabited area threshold: if the nearest building is farther than this distance (in meters),
-# the school is considered to be in an uninhabited area.
 UNINHABITED_DISTANCE_THRESHOLD_M = 150
 
-# Built surface threshold: if the total built surface area (m²) within the buffer radius
-# is below this value, the location has insufficient built infrastructure.
 BUILT_SURFACE_THRESHOLD_M2 = 10.0
 
-# Buffer radius for built surface area check (in meters)
 BUILT_SURFACE_BUFFER_M = 150
 
-# Proximity duplicate threshold: schools within this distance (in meters) are considered
-# potential duplicates.
 PROXIMITY_DUPLICATE_THRESHOLD_M = 50
 
-# SMOD class labels mapping
+# GHSL SMOD classes 21-30 (suburban through urban centre); everything below is rural.
 # Ref: https://ghsl.jrc.ec.europa.eu/ghs_smod2023.php
-SMOD_CLASS_LABELS = {
-    30: "Urban Centre",
-    23: "Dense Urban Cluster",
-    22: "Semi-Dense Urban Cluster",
-    21: "Suburban or Peri-Urban",
-    13: "Rural Cluster",
-    12: "Low Density Rural",
-    11: "Very Low Density Rural",
-    10: "Water",
-}
+SMOD_URBAN_CLASSES = {21, 22, 23, 30}
 
-SMOD_URBAN_CLASSES = {20, 21, 22, 23, 30}
-
-# Population radii to compute (in meters)
-POPULATION_RADII_M = {
-    "pop_within_1km": 1000,
-    "pop_within_2km": 2000,
-    "pop_within_3km": 3000,
-    "pop_within_5km": 5000,
-    "pop_within_10km": 10000,
-}
-
-SURROUNDING_SCHOOLS_RADII_M = [1000, 2000, 3000, 5000, 10000]
+CONTEXT_RADII_M = [1000, 2000, 3000, 5000, 10000]
 
 
 def _get_data_store() -> ADLSDataStore:
@@ -68,9 +41,7 @@ def _get_data_store() -> ADLSDataStore:
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
-    """Extract school_id_giga, latitude, longitude from Spark DF to Pandas,
-    filtering out rows with NULL/NaN coordinates.
-    """
+    """Extract school_id_giga, latitude, longitude from Spark DF to Pandas."""
     pdf = df.select("school_id_giga", "latitude", "longitude").toPandas()
     pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
     pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
@@ -162,6 +133,7 @@ def _join_pandas_result_to_spark(
     df: sql.DataFrame,
     result_pdf: pd.DataFrame,
     result_columns: list[str],
+    schema: StructType = None,
 ) -> sql.DataFrame:
     """Join a Pandas result DataFrame back to the original Spark DataFrame
     using school_id_giga as the join key.
@@ -170,9 +142,8 @@ def _join_pandas_result_to_spark(
     result_keyed = result_pdf[["school_id_giga"] + result_columns].drop_duplicates(
         subset="school_id_giga", keep="first"
     )
-    result_sdf = spark.createDataFrame(result_keyed)
-    df = df.join(result_sdf, on="school_id_giga", how="left")
-    return df
+    result_sdf = spark.createDataFrame(result_keyed, schema=schema)
+    return df.join(result_sdf, on="school_id_giga", how="left")
 
 
 def _null_guard_int(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
@@ -190,6 +161,21 @@ def _null_guard_int(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     return df.withColumn(col_name, f.col(col_name).cast("int"))
 
 
+def _null_guard_long(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
+    """Set column to NULL for rows with invalid coordinates, then cast to long."""
+    df = df.withColumn(
+        col_name,
+        f.when(
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude")),
+            f.lit(None).cast("long"),
+        ).otherwise(f.col(col_name)),
+    )
+    return df.withColumn(col_name, f.col(col_name).cast("long"))
+
+
 def _null_guard_string(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     """Set column to NULL for rows with invalid coordinates (string type)."""
     return df.withColumn(
@@ -202,115 +188,6 @@ def _null_guard_string(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
             f.lit(None).cast("string"),
         ).otherwise(f.col(col_name)),
     )
-
-
-def uninhabited_area_check(  # noqa
-    df: sql.DataFrame,
-    country_code_iso3: str,
-    context: OpExecutionContext = None,
-) -> sql.DataFrame:
-    """Check if schools are in uninhabited areas using multiple signals
-        1. Nearest Google building distance > threshold
-        2. Nearest MS building distance > threshold
-        3. Built surface area (GHSL GHS_BUILT_S) within buffer < threshold
-
-    Adds columns:
-        - dq_is_in_uninhabited_area: 1 = ALL signals indicate uninhabited
-        - dq_is_suspect_location: 1 = ANY signal indicates uninhabited
-    """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Running uninhabited area check...")
-
-    null_cols = [
-        "dq_is_in_uninhabited_area",
-        "dq_is_suspect_location",
-    ]
-
-    try:
-        pdf = _spark_to_pandas_coords(df)
-        valid_mask = _get_valid_coords_mask(pdf)
-        pdf_valid = pdf[valid_mask].copy()
-        _log_coordinate_summary(
-            logger, "Uninhabited area check", len(pdf), len(pdf_valid)
-        )
-
-        poi_points = _prepare_poi_points(pdf_valid, logger, "Uninhabited area check")
-        if poi_points.empty:
-            logger.warning("No valid coordinates found for uninhabited area check")
-            for c in null_cols:
-                df = df.withColumn(c, f.lit(None).cast("int"))
-            return df
-
-        data_store = _get_data_store()
-        view = PoiViewGenerator(
-            points=poi_points,
-            poi_id_column="school_id_giga",
-            data_store=data_store,
-        )
-        logger.info("Mapping Google Open Buildings...")
-        view.map_google_buildings()
-        logger.info("Mapping Microsoft Open Buildings...")
-        view.map_ms_buildings()
-        logger.info("Mapping built surface area (GHSL GHS_BUILT_S)...")
-        view.map_built_s(map_radius_meters=BUILT_SURFACE_BUFFER_M)
-
-        view_df = view.view
-        logger.info(
-            f"Uninhabited area check: Giga Spatial columns={list(view_df.columns)}"
-        )
-        view_indexed = view_df.set_index("poi_id")
-
-        result_pdf = pdf.copy()
-        for c in null_cols:
-            result_pdf[c] = None
-
-        for idx in result_pdf.index:
-            sid = result_pdf.at[idx, "school_id_giga"]
-            if sid not in view_indexed.index:
-                continue
-
-            row = view_indexed.loc[sid]
-            conditions = []
-
-            if "nearest_google_building_distance" in view_indexed.columns and pd.notna(
-                row.get("nearest_google_building_distance")
-            ):
-                conditions.append(
-                    row["nearest_google_building_distance"]
-                    > UNINHABITED_DISTANCE_THRESHOLD_M
-                )
-            if "nearest_ms_building_distance" in view_indexed.columns and pd.notna(
-                row.get("nearest_ms_building_distance")
-            ):
-                conditions.append(
-                    row["nearest_ms_building_distance"]
-                    > UNINHABITED_DISTANCE_THRESHOLD_M
-                )
-            if "built_surface_m2" in view_indexed.columns and pd.notna(
-                row.get("built_surface_m2")
-            ):
-                conditions.append(row["built_surface_m2"] < BUILT_SURFACE_THRESHOLD_M2)
-
-            if conditions:
-                result_pdf.at[idx, "dq_is_in_uninhabited_area"] = (
-                    1 if all(conditions) else 0
-                )
-                result_pdf.at[idx, "dq_is_suspect_location"] = (
-                    1 if any(conditions) else 0
-                )
-
-        _log_non_null_counts(logger, "Uninhabited area check", result_pdf, null_cols)
-        df = _join_pandas_result_to_spark(df, result_pdf, null_cols)
-
-    except Exception as e:
-        logger.error(f"Uninhabited area check failed: {e}")
-        for c in null_cols:
-            df = df.withColumn(c, f.lit(None).cast("int"))
-
-    for c in null_cols:
-        df = _null_guard_int(df, c)
-
-    return df
 
 
 def _is_complete_graph(G: nx.Graph) -> bool:
@@ -344,359 +221,291 @@ def _partition_graph_by_max_cliques(G: nx.Graph) -> list:
     return cliques
 
 
-def proximity_duplicate_check(  # noqa
-    df: sql.DataFrame,
-    context: OpExecutionContext = None,
-) -> sql.DataFrame:
-    """Check if schools have potential duplicates within a proximity threshold
+class POIContextEnricher(PoiViewGenerator):
+    """Enriches POIs with contextual geospatial features from giga-spatial.
 
-    Adds columns:
-        - dq_duplicate_group_flag_50m: 1 = has nearby duplicate, 0 = no nearby duplicate
-        - dq_duplicate_group_id_50m: integer cluster ID (schools in the same cluster share an ID)
-        - dq_duplicate_group_count_50m: number of direct neighbors within threshold
+    Adds:
+        - uninhabited, suspect
+        - duplicate_{threshold}_flag / _group_id / _count
+        - settlement_type
+        - pop_within_{n}km
+        - poi_count_{n}km
     """
-    logger = get_context_with_fallback_logger(context)
-    logger.info(
-        "Running proximity duplicate check (50m, build_distance_graph + clique partitioning)..."
-    )
 
-    dup_cols = [
-        "dq_duplicate_group_flag_50m",
-        "dq_duplicate_group_id_50m",
-        "dq_duplicate_group_count_50m",
-    ]
-
-    pdf = _spark_to_pandas_coords(df)
-    valid_mask = _get_valid_coords_mask(pdf)
-    pdf_valid = pdf[valid_mask].copy()
-    _log_coordinate_summary(
-        logger, "Proximity duplicate check", len(pdf), len(pdf_valid)
-    )
-
-    if pdf_valid.empty or len(pdf_valid) < 2:
-        logger.warning("Not enough valid coordinates for proximity duplicate check")
-        for c in dup_cols:
-            df = df.withColumn(c, f.lit(None).cast("int"))
-        return df
-
-    try:
-        # Convert to GeoDataFrame indexed by school_id_giga
-        gdf = gpd.GeoDataFrame(
-            pdf_valid.set_index("school_id_giga"),
-            geometry=gpd.points_from_xy(pdf_valid["longitude"], pdf_valid["latitude"]),
-            crs="EPSG:4326",
+    def __init__(
+        self,
+        points: pd.DataFrame,
+        country_code_iso3: str,
+        poi_id_column: str = "poi_id",
+        data_store: ADLSDataStore = None,
+        logger=None,
+        radii_meters: list[int] = None,
+        duplicate_threshold_m: int = PROXIMITY_DUPLICATE_THRESHOLD_M,
+    ):
+        super().__init__(
+            points=points,
+            poi_id_column=poi_id_column,
+            data_store=data_store,
         )
+        self.country_code_iso3 = country_code_iso3
+        self.radii_meters = radii_meters or CONTEXT_RADII_M
+        self.duplicate_threshold_m = duplicate_threshold_m
+        self.log = logger or self.logger
 
-        _log_coord_finiteness(logger, "Proximity duplicate check", pdf_valid)
+    @property
+    def uninhabited_columns(self) -> list[str]:
+        return ["uninhabited", "suspect"]
 
-        # Build distance graph using giga-spatial (geodesic distance)
-        G = build_distance_graph(gdf, gdf, PROXIMITY_DUPLICATE_THRESHOLD_M)
-        logger.info(
-            f"Proximity duplicate check: distance graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
-        )
-
-        # Find connected components and partition with cliques
-        connected_components = [
-            G.subgraph(comp).copy() for comp in nx.connected_components(G)
+    @property
+    def duplicate_columns(self) -> list[str]:
+        t = self.duplicate_threshold_m
+        return [
+            f"duplicate_{t}_flag",
+            f"duplicate_{t}_group_id",
+            f"duplicate_{t}_count",
         ]
+
+    @property
+    def settlement_columns(self) -> list[str]:
+        return ["settlement_type"]
+
+    @property
+    def population_columns(self) -> list[str]:
+        return [f"pop_within_{r // 1000}km" for r in self.radii_meters]
+
+    @property
+    def density_columns(self) -> list[str]:
+        return [f"poi_count_{r // 1000}km" for r in self.radii_meters]
+
+    def add_uninhabited_flags(self) -> None:
+        """Flag POIs with no built environment nearby.
+
+        ``uninhabited`` requires every available signal to agree, ``suspect`` requires
+        any. A POI with no signal at all stays NULL rather than False: in a DQ context
+        "not evaluated" must stay distinguishable from "evaluated, clean".
+        """
+        search_radius = UNINHABITED_DISTANCE_THRESHOLD_M
+        self.log.info(f"Mapping nearest buildings within {search_radius}m...")
+        self.find_nearest_buildings(
+            country=self.country_code_iso3,
+            search_radius=search_radius,
+        )
+        self.log.info("Mapping built surface area (GHSL GHS_BUILT_S)...")
+        self.map_built_s(map_radius_meters=BUILT_SURFACE_BUFFER_M)
+
+        view = self.view.copy()
+        self.log.info(f"Uninhabited flags: giga-spatial columns={list(view.columns)}")
+
+        # Each signal contributes a (condition, availability) pair so that a missing
+        # value is excluded from the all/any reduction instead of counting as False.
+        # nearest_building_distance_m is deliberately unused: the search is capped at
+        # search_radius, so "distance > search_radius" can never be true.
+        signals = []
+        within_column = f"building_within_{search_radius}m"
+        if within_column in view.columns:
+            available = view[within_column].notna()
+            signals.append((~view[within_column].fillna(False).astype(bool), available))
+        if "built_surface_m2" in view.columns:
+            available = view["built_surface_m2"].notna()
+            signals.append(
+                (view["built_surface_m2"] < BUILT_SURFACE_THRESHOLD_M2, available)
+            )
+
+        if not signals:
+            self.log.warning("No built environment signals available")
+            for column in self.uninhabited_columns:
+                view[column] = pd.NA
+            self._update_view(view[["poi_id"] + self.uninhabited_columns])
+            return
+
+        available_count = sum(avail.astype(int) for _, avail in signals)
+        agreeing_count = sum((cond & avail).astype(int) for cond, avail in signals)
+        evaluated = available_count > 0
+
+        view["uninhabited"] = (
+            pd.Series(
+                np.where(agreeing_count == available_count, 1, 0), index=view.index
+            )
+            .where(evaluated)
+            .astype("Int64")
+        )
+        view["suspect"] = (
+            pd.Series(np.where(agreeing_count > 0, 1, 0), index=view.index)
+            .where(evaluated)
+            .astype("Int64")
+        )
+
+        self._update_view(view[["poi_id"] + self.uninhabited_columns])
+
+    def add_duplicate_groups(self) -> None:
+        """Cluster POIs that sit within ``duplicate_threshold_m`` of each other.
+
+        Connected components are partitioned into maximal cliques so that a chain of
+        near-neighbours is not collapsed into one oversized group.
+        """
+        threshold = self.duplicate_threshold_m
+        self.log.info(f"Detecting duplicate locations within {threshold}m...")
+
+        flag_column, group_column, count_column = self.duplicate_columns
+
+        gdf = self.to_geodataframe().set_index("poi_id")
+        G = build_distance_graph(gdf, gdf, threshold)
+        self.log.info(
+            f"Duplicate groups: graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
+        )
 
         group_id = 0
         duplicate_map = {}
+        for component in nx.connected_components(G):
+            cc = G.subgraph(component).copy()
+            if len(cc) <= 1:
+                continue
+            if _is_complete_graph(cc):
+                for node in cc.nodes():
+                    duplicate_map[node] = group_id
+                group_id += 1
+            else:
+                for clique in _partition_graph_by_max_cliques(cc):
+                    if len(clique) > 1:
+                        for node in clique:
+                            duplicate_map[node] = group_id
+                        group_id += 1
 
-        for cc in connected_components:
-            if len(cc) > 1:
-                if _is_complete_graph(cc):
-                    for node in cc.nodes():
-                        duplicate_map[node] = group_id
-                    group_id += 1
-                else:
-                    cliques = _partition_graph_by_max_cliques(cc)
-                    for clique in cliques:
-                        if len(clique) > 1:
-                            for node in clique:
-                                duplicate_map[node] = group_id
-                            group_id += 1
-
-        # Graph degree = count of direct neighbors within threshold
         degree_dict = dict(G.degree())
 
-        # Build result
-        result_pdf = pdf.copy()
-        for c in dup_cols:
-            result_pdf[c] = None
+        view = self.view.copy()
+        poi_ids = view["poi_id"]
+        in_graph = poi_ids.isin(degree_dict)
 
-        for idx in result_pdf.index:
-            sid = result_pdf.at[idx, "school_id_giga"]
-            if sid in duplicate_map:
-                result_pdf.at[idx, "dq_duplicate_group_flag_50m"] = 1
-                result_pdf.at[idx, "dq_duplicate_group_id_50m"] = duplicate_map[sid]
-            elif sid in degree_dict:
-                result_pdf.at[idx, "dq_duplicate_group_flag_50m"] = 0
+        view[flag_column] = poi_ids.isin(duplicate_map).astype("Int64").where(in_graph)
+        view[group_column] = poi_ids.map(duplicate_map).astype("Int64")
+        view[count_column] = poi_ids.map(degree_dict).astype("Int64")
 
-            if sid in degree_dict:
-                result_pdf.at[idx, "dq_duplicate_group_count_50m"] = degree_dict[sid]
-
-        _log_non_null_counts(logger, "Proximity duplicate check", result_pdf, dup_cols)
-        df = _join_pandas_result_to_spark(df, result_pdf, dup_cols)
-
-        num_flagged = len(duplicate_map)
-        num_groups = len(set(duplicate_map.values()))
-        logger.info(
-            f"Duplicate check complete: {num_flagged} schools in {num_groups} groups"
+        self.log.info(
+            f"Duplicate groups: {len(duplicate_map)} POIs in {group_id} groups"
         )
+        self._update_view(view[["poi_id"] + self.duplicate_columns])
 
-    except Exception as e:
-        logger.error(f"Proximity duplicate check failed: {e}")
-        _log_coord_finiteness(
-            logger, "Proximity duplicate check", pdf_valid, dump_offending=True
-        )
-        for c in dup_cols:
-            df = df.withColumn(c, f.lit(None).cast("int"))
+    def add_settlement_classification(self) -> None:
+        """Classify POIs as Urban/Rural from the GHSL Settlement Model."""
+        self.log.info("Mapping GHSL Settlement Model (SMOD)...")
+        self.map_smod(output_column="smod_class")
 
-    for c in dup_cols:
-        df = _null_guard_int(df, c)
+        view = self.view.copy()
+        if "smod_class" not in view.columns:
+            self.log.warning("No SMOD data available")
+            view["settlement_type"] = pd.NA
+            self._update_view(view[["poi_id"] + self.settlement_columns])
+            return
 
-    return df
+        smod = view["smod_class"].astype("Int64")
+        view["settlement_type"] = pd.Series(
+            np.where(smod.isin(SMOD_URBAN_CLASSES), "Urban", "Rural"), index=view.index
+        ).where(smod.notna())
 
+        self._update_view(view[["poi_id"] + self.settlement_columns])
 
-def smod_classification(
-    df: sql.DataFrame,
-    country_code_iso3: str,
-    context: OpExecutionContext = None,
-) -> sql.DataFrame:
-    """Classify schools as urban/rural using GHSL Settlement Model (SMOD) data
-        via giga-spatial.
+    def add_population_context(self) -> None:
+        """Add WorldPop population counts at each radius.
 
-    Adds columns:
-        - rurban_detected: ("Urban" or "Rural")
-    """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Running SMOD urban/rural classification...")
-
-    smod_cols_str = ["rurban_detected"]
-
-    try:
-        pdf = _spark_to_pandas_coords(df)
-        valid_mask = _get_valid_coords_mask(pdf)
-        pdf_valid = pdf[valid_mask].copy()
-        _log_coordinate_summary(logger, "SMOD classification", len(pdf), len(pdf_valid))
-
-        poi_points = _prepare_poi_points(pdf_valid, logger, "SMOD classification")
-        if poi_points.empty:
-            logger.warning("No valid coordinates found for SMOD classification")
-            for c in smod_cols_str:
-                df = df.withColumn(c, f.lit(None).cast("string"))
-            return df
-
-        data_store = _get_data_store()
-        view = PoiViewGenerator(
-            points=poi_points,
-            poi_id_column="school_id_giga",
-            data_store=data_store,
-        )
-        result = view.map_smod(output_column="smod_class")
-        logger.info(f"SMOD classification: Giga Spatial columns={list(result.columns)}")
-
-        if "smod_class" not in result.columns:
-            logger.warning("No SMOD data available")
-            for c in smod_cols_str:
-                df = df.withColumn(c, f.lit(None).cast("string"))
-            return df
-
-        # Map SMOD numeric classes to human-readable labels and urban/rural
-        result_pdf = pdf.copy()
-        result_pdf["rurban_detected"] = None
-
-        smod_map = result.set_index("poi_id")["smod_class"].to_dict()
-        for idx in result_pdf.index:
-            sid = result_pdf.at[idx, "school_id_giga"]
-            if sid in smod_map and pd.notna(smod_map[sid]):
-                smod_val = int(smod_map[sid])
-                result_pdf.at[idx, "rurban_detected"] = (
-                    "Urban" if smod_val in SMOD_URBAN_CLASSES else "Rural"
-                )
-
-        _log_non_null_counts(logger, "SMOD classification", result_pdf, smod_cols_str)
-        df = _join_pandas_result_to_spark(df, result_pdf, smod_cols_str)
-
-    except Exception as e:
-        logger.error(f"SMOD classification failed: {e}")
-        for c in smod_cols_str:
-            df = df.withColumn(c, f.lit(None).cast("string"))
-
-    for c in smod_cols_str:
-        df = _null_guard_string(df, c)
-
-    return df
-
-
-def population_context_check(  # noqa
-    df: sql.DataFrame,
-    country_code_iso3: str,
-    context: OpExecutionContext = None,
-) -> sql.DataFrame:
-    """Check and add population counts at multiple radii using WorldPop data
-    Updates/adds columns: pop_within_1km, pop_within_2km, pop_within_3km, pop_within_5km, pop_within_10km
-    """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Running population context check...")
-
-    try:
-        pdf = _spark_to_pandas_coords(df)
-        valid_mask = _get_valid_coords_mask(pdf)
-        pdf_valid = pdf[valid_mask].copy()
-        _log_coordinate_summary(
-            logger, "Population context check", len(pdf), len(pdf_valid)
-        )
-
-        poi_points = _prepare_poi_points(pdf_valid, logger, "Population context check")
-        if poi_points.empty:
-            logger.warning("No valid coordinates found for population check")
-            for col_name in POPULATION_RADII_M:
-                if col_name not in df.columns:
-                    df = df.withColumn(col_name, f.lit(None).cast("long"))
-            return df
-
-        data_store = _get_data_store()
-        view = PoiViewGenerator(
-            points=poi_points,
-            poi_id_column="school_id_giga",
-            data_store=data_store,
-        )
-
-        for col_name, radius_m in POPULATION_RADII_M.items():
-            logger.info(f"Computing {col_name} (radius={radius_m}m)...")
-            try:
-                view.map_wp_pop(
-                    country=country_code_iso3,
-                    map_radius_meters=radius_m,
-                    predicate="centroid_within",
-                    output_column=col_name,
-                )
-                view_df = view.view
-                non_null_count = (
-                    int(view_df[col_name].notna().sum())
-                    if col_name in view_df.columns
-                    else 0
-                )
-                logger.info(
-                    f"Population context check: {col_name} returned, non_null={non_null_count}, columns={list(view_df.columns)}"
-                )
-            except Exception as e:
-                logger.error(f"Population check failed for {col_name}: {e}")
-
-        # Extract results from view
-        view_df = view.view
-        view_indexed = view_df.set_index("poi_id")
-        pop_columns = list(POPULATION_RADII_M.keys())
-
-        result_pdf = pdf.copy()
-        for col_name in pop_columns:
-            result_pdf[col_name] = None
-            if col_name in view_indexed.columns:
-                pop_map = view_indexed[col_name].to_dict()
-                for idx in result_pdf.index:
-                    sid = result_pdf.at[idx, "school_id_giga"]
-                    if sid in pop_map and pd.notna(pop_map[sid]):
-                        result_pdf.at[idx, col_name] = int(pop_map[sid])
-
-        _log_non_null_counts(
-            logger, "Population context check", result_pdf, pop_columns
-        )
-
-        # Drop existing population columns from Spark DF before joining
-        existing_pop_cols = [c for c in pop_columns if c in df.columns]
-        if existing_pop_cols:
-            df = df.drop(*existing_pop_cols)
-
-        df = _join_pandas_result_to_spark(df, result_pdf, pop_columns)
-
-        for col_name in pop_columns:
-            df = df.withColumn(col_name, f.col(col_name).cast("long"))
-
-    except Exception as e:
-        logger.error(f"Population context check failed: {e}")
-        for col_name in POPULATION_RADII_M:
-            if col_name not in df.columns:
-                df = df.withColumn(col_name, f.lit(None).cast("long"))
-
-    # Ensure NULL for invalid coordinates
-    for col_name in POPULATION_RADII_M:
-        if col_name in df.columns:
-            df = df.withColumn(
-                col_name,
-                f.when(
-                    f.col("latitude").isNull()
-                    | f.isnan(f.col("latitude"))
-                    | f.col("longitude").isNull()
-                    | f.isnan(f.col("longitude")),
-                    f.lit(None).cast("long"),
-                ).otherwise(f.col(col_name)),
+        Only ``resolution`` is passed explicitly; ``map_wp_pop`` fans its **kwargs into
+        map_zonal_stats/TifProcessor as well as the handler, so the remaining WorldPop
+        selectors are left on their handler defaults (GR2 / pop / 2025 / constrained).
+        """
+        for radius in self.radii_meters:
+            column = f"pop_within_{radius // 1000}km"
+            self.log.info(f"Computing {column} (radius={radius}m)...")
+            self.map_wp_pop(
+                country=self.country_code_iso3,
+                map_radius_meters=radius,
+                resolution=1000,
+                predicate="centroid_within",
+                output_column=column,
             )
 
-    return df
+    def add_poi_density(self) -> None:
+        """Count neighbouring POIs within each radius."""
+        for radius in self.radii_meters:
+            column = f"poi_count_{radius // 1000}km"
+            self.log.info(f"Computing {column} (radius={radius}m)...")
+
+            # poi_id is dropped because map_zonal_stats uses it as the zone id column.
+            result = self.map_zonal_stats(
+                data=self.to_geodataframe().drop(columns="poi_id"),
+                stat="count",
+                map_radius_meters=radius,
+                output_column=column,
+            )
+            # Each buffer contains its own POI.
+            result[column] = result[column] - 1
+
+            # map_zonal_stats returns a frame rather than updating the view itself.
+            self._update_view(result)
 
 
-def surrounding_schools_check(
-    df: sql.DataFrame,
-    context: OpExecutionContext = None,
-) -> sql.DataFrame:
-    """Count schools within various radii using giga-spatial's build_distance_graph.
-    Adds columns:
-        - schools_within_1km, schools_within_2km, schools_within_3km, schools_within_5km, schools_within_10km
-    """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Running surrounding schools count...")
+GEOSPATIAL_COLUMN_MAPPING = {
+    "uninhabited": "dq_is_in_uninhabited_area",
+    "suspect": "dq_is_suspect_location",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_flag": "dq_duplicate_group_flag_50m",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_group_id": "dq_duplicate_group_id_50m",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_count": "dq_duplicate_group_count_50m",
+    "settlement_type": "rurban_detected",
+    **{
+        f"pop_within_{r // 1000}km": f"pop_within_{r // 1000}km"
+        for r in CONTEXT_RADII_M
+    },
+    **{
+        f"poi_count_{r // 1000}km": f"schools_within_{r // 1000}km"
+        for r in CONTEXT_RADII_M
+    },
+}
 
-    col_names = [
-        f"schools_within_{int(r / 1000)}km" for r in SURROUNDING_SCHOOLS_RADII_M
+GEOSPATIAL_INT_COLUMNS = [
+    "dq_is_in_uninhabited_area",
+    "dq_is_suspect_location",
+    "dq_duplicate_group_flag_50m",
+    "dq_duplicate_group_id_50m",
+    "dq_duplicate_group_count_50m",
+    *[f"schools_within_{r // 1000}km" for r in CONTEXT_RADII_M],
+]
+
+GEOSPATIAL_LONG_COLUMNS = [f"pop_within_{r // 1000}km" for r in CONTEXT_RADII_M]
+
+GEOSPATIAL_STRING_COLUMNS = ["rurban_detected"]
+
+GEOSPATIAL_COLUMNS = (
+    GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS + GEOSPATIAL_STRING_COLUMNS
+)
+
+
+def _geospatial_result_schema() -> StructType:
+    """Explicit schema so all-null result columns still get a usable Spark type."""
+    fields = [StructField("school_id_giga", StringType(), True)]
+    fields += [
+        StructField(c, LongType(), True)
+        for c in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS
     ]
+    fields += [StructField(c, StringType(), True) for c in GEOSPATIAL_STRING_COLUMNS]
+    return StructType(fields)
 
-    pdf = _spark_to_pandas_coords(df)
-    valid_mask = _get_valid_coords_mask(pdf)
-    pdf_valid = pdf[valid_mask].copy()
-    _log_coordinate_summary(
-        logger, "Surrounding schools check", len(pdf), len(pdf_valid)
-    )
 
-    if pdf_valid.empty or len(pdf_valid) < 2:
-        logger.warning("Not enough valid coordinates for surrounding schools check")
-        for c in col_names:
-            df = df.withColumn(c, f.lit(None).cast("int"))
-        return df
-
-    try:
-        gdf = gpd.GeoDataFrame(
-            pdf_valid.set_index("school_id_giga"),
-            geometry=gpd.points_from_xy(pdf_valid["longitude"], pdf_valid["latitude"]),
-            crs="EPSG:4326",
-        )
-
-        result_pdf = pdf.copy()
-
-        for col_name, radius in zip(
-            col_names, SURROUNDING_SCHOOLS_RADII_M, strict=False
-        ):
-            logger.info(f"Computing {col_name} (radius={radius}m)...")
-            G = build_distance_graph(gdf, gdf, radius)
-            logger.info(
-                f"Surrounding schools check: {col_name} graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
-            )
-            neighbor_counts = {node: len(list(G.neighbors(node))) for node in G.nodes}
-            result_pdf[col_name] = result_pdf["school_id_giga"].map(neighbor_counts)
-
-        _log_non_null_counts(logger, "Surrounding schools check", result_pdf, col_names)
-        df = _join_pandas_result_to_spark(df, result_pdf, col_names)
-
-    except Exception as e:
-        logger.error(f"Surrounding schools check failed: {e}")
-        for c in col_names:
-            df = df.withColumn(c, f.lit(None).cast("int"))
-
-    for c in col_names:
-        df = _null_guard_int(df, c)
-
+def _null_geospatial_columns(df: sql.DataFrame) -> sql.DataFrame:
+    for column in GEOSPATIAL_INT_COLUMNS:
+        df = df.withColumn(column, f.lit(None).cast("int"))
+    for column in GEOSPATIAL_LONG_COLUMNS:
+        df = df.withColumn(column, f.lit(None).cast("long"))
+    for column in GEOSPATIAL_STRING_COLUMNS:
+        df = df.withColumn(column, f.lit(None).cast("string"))
     return df
+
+
+def _to_spark_safe(pdf: pd.DataFrame) -> pd.DataFrame:
+    """Convert nullable pandas dtypes to object columns Spark can infer from."""
+    for column in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS:
+        pdf[column] = [None if pd.isna(v) else int(v) for v in pdf[column]]
+    for column in GEOSPATIAL_STRING_COLUMNS:
+        pdf[column] = [None if pd.isna(v) else str(v) for v in pdf[column]]
+    return pdf
 
 
 def run_geospatial_checks(
@@ -704,15 +513,11 @@ def run_geospatial_checks(
     country_code_iso3: str,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
-    """Orchestrate all geospatial checks in the correct order.
-    Single entry point that runs all geospatial DQ checks:
-        1. Uninhabited area + suspect flag (buildings + built surface)
-        2. Proximity duplicate detection (50m graph clustering + clique partitioning)
-        3. SMOD urban/rural classification
-        4. Population context (multi-radius WorldPop)
-        5. Surrounding schools count (multi-radius)
-    Returns:
-        Spark DataFrame enriched with all geospatial DQ columns.
+    """Orchestrate all geospatial checks against a single shared POI view.
+
+    Builds one POIContextEnricher, runs each enrichment step in isolation so that a
+    giga-spatial failure nulls only its own columns, then joins the whole result back
+    to Spark once.
     """
     logger = get_context_with_fallback_logger(context)
     logger.info(f"Starting geospatial checks for country={country_code_iso3}...")
@@ -721,20 +526,68 @@ def run_geospatial_checks(
     initial_count = df.count()
     logger.info(f"Input rows: {initial_count}")
 
-    # 1. Uninhabited area + suspect flag
-    df = uninhabited_area_check(df, country_code_iso3, context)
+    pdf = _spark_to_pandas_coords(df)
+    valid_mask = _get_valid_coords_mask(pdf)
+    pdf_valid = pdf[valid_mask].copy()
+    _log_coordinate_summary(logger, "Geospatial checks", len(pdf), len(pdf_valid))
 
-    # 2. Proximity duplicate detection
-    df = proximity_duplicate_check(df, context)
+    poi_points = _prepare_poi_points(pdf_valid, logger, "Geospatial checks")
+    if poi_points.empty:
+        logger.warning("No valid coordinates found for geospatial checks")
+        return _null_geospatial_columns(df)
 
-    # 3. SMOD classification
-    df = smod_classification(df, country_code_iso3, context)
+    _log_coord_finiteness(logger, "Geospatial checks", poi_points)
 
-    # 4. Population context
-    df = population_context_check(df, country_code_iso3, context)
+    try:
+        enricher = POIContextEnricher(
+            points=poi_points,
+            country_code_iso3=country_code_iso3,
+            poi_id_column="school_id_giga",
+            data_store=_get_data_store(),
+            logger=logger,
+        )
+    except Exception as e:
+        logger.error(f"Could not build POI view: {e}")
+        return _null_geospatial_columns(df)
 
-    # 5. Surrounding schools count
-    df = surrounding_schools_check(df, context)
+    steps = [
+        ("Uninhabited area check", enricher.add_uninhabited_flags),
+        ("Proximity duplicate check", enricher.add_duplicate_groups),
+        ("SMOD classification", enricher.add_settlement_classification),
+        ("Population context check", enricher.add_population_context),
+        ("Surrounding schools check", enricher.add_poi_density),
+    ]
+    for name, step in steps:
+        try:
+            step()
+        except Exception as e:
+            logger.error(f"{name} failed: {e}")
+
+    view = enricher.view
+    result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})
+    for source, target in GEOSPATIAL_COLUMN_MAPPING.items():
+        result_pdf[target] = view[source] if source in view.columns else pd.NA
+
+    _log_non_null_counts(logger, "Geospatial checks", result_pdf, GEOSPATIAL_COLUMNS)
+
+    existing = [c for c in GEOSPATIAL_COLUMNS if c in df.columns]
+    if existing:
+        logger.info(f"Dropping pre-existing geospatial columns: {existing}")
+        df = df.drop(*existing)
+
+    df = _join_pandas_result_to_spark(
+        df,
+        _to_spark_safe(result_pdf),
+        GEOSPATIAL_COLUMNS,
+        schema=_geospatial_result_schema(),
+    )
+
+    for column in GEOSPATIAL_INT_COLUMNS:
+        df = _null_guard_int(df, column)
+    for column in GEOSPATIAL_LONG_COLUMNS:
+        df = _null_guard_long(df, column)
+    for column in GEOSPATIAL_STRING_COLUMNS:
+        df = _null_guard_string(df, column)
 
     final_count = df.count()
     logger.info(f"Geospatial checks complete. Rows: {initial_count} -> {final_count}")
