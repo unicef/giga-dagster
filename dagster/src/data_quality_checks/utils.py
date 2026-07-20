@@ -158,54 +158,6 @@ def aggregate_report_spark_df(
     return report
 
 
-def _non_critical_dq_check_keys() -> list[str]:
-    try:
-        table_id = get_nocodb_table_id_from_name(
-            table_name="SchoolGeolocationMasterDQChecks",
-        )
-        noco = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
-        keys: list[str] = []
-        for _, row in noco.iterrows():
-            if row.get("DQ Check Category") == "critical checks":
-                continue
-            col_name = (row.get("DQ Table Column Name") or "").replace("dq_", "")
-            if col_name and col_name != "has_critical_error":
-                keys.append(col_name)
-        return keys
-    except Exception:
-        return []
-
-
-def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
-    """Rows that passed critical checks but failed at least one warning-tier check."""
-    if "dq_has_critical_error" not in df.columns:
-        return 0
-
-    approved = df.filter(f.col("dq_has_critical_error") == 0)
-    if approved.limit(1).count() == 0:
-        return 0
-
-    keys = _non_critical_dq_check_keys()
-    if not keys:
-        return 0
-
-    if "dq_results" in df.columns:
-        warning_exprs = [
-            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
-            for key in keys
-        ]
-        has_warning = f.greatest(*warning_exprs)
-        return approved.filter(has_warning == 1).count()
-
-    dq_cols = [f"dq_{key}" for key in keys if f"dq_{key}" in approved.columns]
-    if not dq_cols:
-        return 0
-    has_warning = f.greatest(
-        *[f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols],
-    )
-    return approved.filter(has_warning == 1).count()
-
-
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -260,12 +212,42 @@ def aggregate_report_json(
         "rows": rows_count,
         "rows_passed": rows_passed,
         "rows_failed": rows_failed,
-        "rows_passed_with_warnings": _count_approved_rows_with_warnings(
-            df_data_quality_checks,
-        ),
         "columns": columns_count,
         "timestamp": timestamp,
     }
+
+    # Count created/updated schools among rows that passed the critical checks.
+    # is_new_school is carried through dq_results so we can count on it directly.
+    if "is_new_school" in df_data_quality_checks.columns:
+        school_counts = (
+            df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
+            .select(
+                f.count(f.when(f.col("is_new_school"), 1)).alias("schools_created"),
+                f.count(f.when(~f.col("is_new_school"), 1)).alias("schools_updated"),
+            )
+            .first()
+        )
+        summary["schools_created"] = school_counts.schools_created
+        summary["schools_updated"] = school_counts.schools_updated
+
+    # Count passed schools with at least one non-critical warning.
+    passed_df = df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
+    if "dq_results" in df_data_quality_checks.columns:
+        has_warning = f.array_contains(f.map_values(f.col("dq_results")), 1)
+        summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
+    else:
+        warning_columns = [
+            col
+            for col in df_data_quality_checks.columns
+            if col.startswith("dq_") and col != "dq_has_critical_error"
+        ]
+        if warning_columns:
+            has_warning = (
+                f.greatest(*[f.col(col).cast("int") for col in warning_columns]) == 1
+            )
+            summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
+        else:
+            summary["schools_with_warnings"] = 0
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
@@ -701,6 +683,7 @@ def dq_geolocation_extract_relevant_columns(
             "dq_has_critical_error",
             "failure_reason",
             "dq_results",
+            "is_new_school",
         ]
         if col in df.columns
     ]
