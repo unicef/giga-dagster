@@ -348,8 +348,8 @@ def geolocation_data_quality_results(
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
-    # Drop is_new_school — it's a processing artifact, not part of the DQ output schema
-    dq_results = dq_results.drop("is_new_school")
+    # Keep is_new_school as a top-level column so the DQ summary can count
+    # created vs updated schools directly off dq_results (see aggregate_report_json).
 
     # Collapse all individual dq_ check columns into a single map<string, int> column.
     # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
@@ -458,7 +458,9 @@ def geolocation_data_quality_results_human_readable(
                 f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
             ),
         )
-    df = df.drop("dq_results")
+    # is_new_school is kept in dq_results for the summary counts, but it is an
+    # internal flag and should not appear in the user-facing human-readable report.
+    df = df.drop("dq_results", "is_new_school")
 
     # Cache once — both filters read from the same plan
     df.cache()

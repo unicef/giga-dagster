@@ -186,22 +186,16 @@ def aggregate_report_json(
     }
 
     # Count created/updated schools among rows that passed the critical checks.
-    # Only datasets with is_new_school (e.g. geolocation) get these counts.
-    if (
-        "is_new_school" in df_bronze.columns
-        and "school_id_govt" in df_data_quality_checks.columns
-    ):
-        # distinct() keeps one row per id, so the join cannot fan out.
-        new_school_map = df_bronze.select("school_id_govt", "is_new_school").distinct()
-        passed_with_flag = (
+    # is_new_school is carried through dq_results so we can count on it directly.
+    if "is_new_school" in df_data_quality_checks.columns:
+        school_counts = (
             df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
-            .select("school_id_govt")
-            .join(new_school_map, on="school_id_govt", how="left")
+            .select(
+                f.count(f.when(f.col("is_new_school"), 1)).alias("schools_created"),
+                f.count(f.when(~f.col("is_new_school"), 1)).alias("schools_updated"),
+            )
+            .first()
         )
-        school_counts = passed_with_flag.select(
-            f.count(f.when(f.col("is_new_school"), 1)).alias("schools_created"),
-            f.count(f.when(~f.col("is_new_school"), 1)).alias("schools_updated"),
-        ).first()
         summary["schools_created"] = school_counts.schools_created
         summary["schools_updated"] = school_counts.schools_updated
 
@@ -653,6 +647,7 @@ def dq_geolocation_extract_relevant_columns(
             "dq_has_critical_error",
             "failure_reason",
             "dq_results",
+            "is_new_school",
         ]
         if col in df.columns
     ]
