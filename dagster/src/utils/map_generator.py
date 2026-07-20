@@ -2,10 +2,10 @@
 Utility for generating interactive school maps using Folium.
 
 Each school gets exactly one marker (no per-filter duplication). Filtering is
-done client-side via a hand-written grouped-checkbox Leaflet control: four
-independent filter groups (status / rurality / habitability / boundary),
-AND across groups, OR within a group - a marker shows only if it matches at
-least one checked value in every group.
+done client-side via a hand-written grouped-checkbox Leaflet control: two
+independent filter groups (status / boundary), AND across groups, OR within a
+group - a marker shows only if it matches at least one checked value in every
+group.
 """
 
 import json
@@ -23,10 +23,6 @@ OUTSIDE_BOUNDARY_COLOR = "#343a40"
 # Light, low-saturation basemap so status colors stand out (no green terrain).
 BASEMAP_TILES = "CartoDB Positron"
 
-_UNINHABITED_COL = "dq_is_in_uninhabited_area"
-_DUP_FLAG_COL = "dq_duplicate_group_flag_50m"
-_DUP_COUNT_COL = "dq_duplicate_group_count_50m"
-_DUP_GROUP_COL = "dq_duplicate_group_id_50m"
 _OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
 
 _POPUP_TEMPLATE = Environment(
@@ -43,18 +39,10 @@ _POPUP_TEMPLATE = Environment(
 # group key -> ordered list of (tag_value, checkbox_label)
 _FILTER_GROUPS = {
     "status": [("passed", "Approved"), ("failed", "Rejected")],
-    "rurality": [
-        ("rural", "Rural"),
-        ("urban", "Urban"),
-        ("unknown", "Rurality unknown"),
-    ],
-    "habitability": [("inhabited", "Inhabited"), ("uninhabited", "Uninhabited")],
     "boundary": [("inside", "Inside boundary"), ("outside", "Outside boundary")],
 }
 _FILTER_GROUP_TITLES = {
     "status": "Data Quality Status",
-    "rurality": "Rurality",
-    "habitability": "Habitability",
     "boundary": "Country Boundary",
 }
 
@@ -140,12 +128,7 @@ def _render_school_popup_html(
         ("education_level", _format_popup_value(row.get("education_level"))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
-        ("rurban", _format_popup_value(row.get("rurban_detected"))),
-        ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
         ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
-        ("duplicate_50_flag", _format_dq_flag(row.get(_DUP_FLAG_COL))),
-        ("duplicate_50_group_id", _format_popup_value(row.get(_DUP_GROUP_COL))),
-        ("duplicate_50_count", _format_popup_value(row.get(_DUP_COUNT_COL))),
         ("Status", status),
     ]
     if include_failure_reason:
@@ -182,24 +165,6 @@ def _add_circle_marker(
     ).add_to(layer)
 
 
-def _get_rurality_filter_key(row: dict) -> str:
-    """Return the rurality tag for a school row."""
-    rurban = str(row.get("rurban_detected", "")).strip().lower()
-    if rurban == "urban":
-        return "urban"
-    if rurban == "rural":
-        return "rural"
-    return "unknown"
-
-
-def _is_uninhabited(row: dict) -> bool:
-    """Return whether a school row is flagged as in an uninhabited area."""
-    try:
-        return int(float(row.get(_UNINHABITED_COL, 0))) == 1
-    except (TypeError, ValueError):
-        return False
-
-
 def _is_outside_boundary(row: dict) -> bool:
     """Return whether a school row is flagged as outside the country boundary."""
     try:
@@ -226,8 +191,6 @@ def _add_school_markers(
         outside_boundary = _is_outside_boundary(row)
         tags = [
             status_tag,
-            _get_rurality_filter_key(row),
-            "uninhabited" if _is_uninhabited(row) else "inhabited",
             "outside" if outside_boundary else "inside",
         ]
         color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else base_color
@@ -241,10 +204,6 @@ def _calculate_filter_counts(
     counts = {"passed": len(passed_df), "failed": len(failed_df)}
     for df in (passed_df, failed_df):
         for row in df.to_dict("records"):
-            rurality_key = _get_rurality_filter_key(row)
-            counts[rurality_key] = counts.get(rurality_key, 0) + 1
-            habit_key = "uninhabited" if _is_uninhabited(row) else "inhabited"
-            counts[habit_key] = counts.get(habit_key, 0) + 1
             boundary_key = "outside" if _is_outside_boundary(row) else "inside"
             counts[boundary_key] = counts.get(boundary_key, 0) + 1
     return counts
