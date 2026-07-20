@@ -6,8 +6,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
+    build_dq_summary_statistics,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -173,13 +172,10 @@ def qos_school_list_data_quality_results_summary(
     spark: PySparkResource,
     config: FileConfig,
 ) -> Output[dict]:
-    dq_summary_statistics = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
-            spark.spark_session,
-            qos_school_list_data_quality_results,
-        ),
-        df_bronze=qos_school_list_bronze,
-        df_data_quality_checks=qos_school_list_data_quality_results,
+    dq_summary_statistics = build_dq_summary_statistics(
+        spark.spark_session,
+        qos_school_list_data_quality_results,
+        qos_school_list_bronze,
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))

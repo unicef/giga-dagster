@@ -46,7 +46,13 @@ from src.utils.schema import get_schema_columns
 def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
+    *,
+    approved_only: bool = False,
 ):  # input df == row level checks results
+    work_df = df
+    if approved_only and "dq_has_critical_error" in df.columns:
+        work_df = df.filter(f.col("dq_has_critical_error") == 0)
+
     # Geolocation DQ results store individual checks in a single dq_results map column.
     # Other pipelines (master, coverage, connectivity) still use flat dq_* columns.
     # Detect which format is present and unify into (check_key, value) rows.
@@ -59,11 +65,13 @@ def aggregate_report_spark_df(
                 f.col("dq_has_critical_error").cast("int"),
             ),
         )
-        unpivoted_df = df.select(f.explode(all_checks_map).alias("check_key", "value"))
+        unpivoted_df = work_df.select(
+            f.explode(all_checks_map).alias("check_key", "value")
+        )
     else:
         # Flat path: stack all dq_* columns into (check_key, value) rows
-        dq_columns = [col for col in df.columns if col.startswith("dq_")]
-        df_flat = df.select(*dq_columns)
+        dq_columns = [col for col in work_df.columns if col.startswith("dq_")]
+        df_flat = work_df.select(*dq_columns)
         for col_name in dq_columns:
             df_flat = df_flat.withColumn(col_name, f.col(col_name).cast("int"))
         stack_expr = ", ".join(
@@ -136,10 +144,81 @@ def aggregate_report_spark_df(
     return report
 
 
+def _non_critical_dq_check_keys() -> list[str]:
+    try:
+        table_id = get_nocodb_table_id_from_name(
+            table_name="SchoolGeolocationMasterDQChecks",
+        )
+        noco = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+        keys: list[str] = []
+        for _, row in noco.iterrows():
+            if row.get("DQ Check Category") == "critical checks":
+                continue
+            col_name = (row.get("DQ Table Column Name") or "").replace("dq_", "")
+            if col_name and col_name != "has_critical_error":
+                keys.append(col_name)
+        return keys
+    except Exception:
+        return []
+
+
+def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
+    """Rows that passed critical checks but failed at least one warning-tier check."""
+    if "dq_has_critical_error" not in df.columns:
+        return 0
+
+    approved = df.filter(f.col("dq_has_critical_error") == 0)
+    if approved.limit(1).count() == 0:
+        return 0
+
+    keys = _non_critical_dq_check_keys()
+    if not keys:
+        return 0
+
+    if "dq_results" in df.columns:
+        warning_exprs = [
+            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+            for key in keys
+        ]
+        has_warning = f.greatest(*warning_exprs)
+        return approved.filter(has_warning == 1).count()
+
+    dq_cols = [f"dq_{key}" for key in keys if f"dq_{key}" in approved.columns]
+    if not dq_cols:
+        return 0
+    has_warning = f.greatest(
+        *[f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols],
+    )
+    return approved.filter(has_warning == 1).count()
+
+
+def build_dq_summary_statistics(
+    spark: SparkSession,
+    df_data_quality_checks: sql.DataFrame,
+    df_bronze: sql.DataFrame,
+) -> dict:
+    """DQ summary with warning counts limited to approved (non-critical) rows."""
+    return aggregate_report_json(
+        df_aggregated=aggregate_report_spark_df(
+            spark,
+            df_data_quality_checks,
+            approved_only=False,
+        ),
+        df_bronze=df_bronze,
+        df_data_quality_checks=df_data_quality_checks,
+        df_aggregated_approved_only=aggregate_report_spark_df(
+            spark,
+            df_data_quality_checks,
+            approved_only=True,
+        ),
+    )
+
+
 def aggregate_report_json(
     df_aggregated: sql.DataFrame,
     df_bronze: sql.DataFrame,
     df_data_quality_checks: sql.DataFrame,
+    df_aggregated_approved_only: sql.DataFrame | None = None,
 ):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
     # Summary Report
     counts = df_data_quality_checks.select(
@@ -167,6 +246,9 @@ def aggregate_report_json(
         "rows": rows_count,
         "rows_passed": rows_passed,
         "rows_failed": rows_failed,
+        "rows_passed_with_warnings": _count_approved_rows_with_warnings(
+            df_data_quality_checks,
+        ),
         "columns": columns_count,
         "timestamp": timestamp,
     }
@@ -180,7 +262,12 @@ def aggregate_report_json(
     critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
     critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
 
-    df_aggregated = df_aggregated[df_aggregated.is_critical_dq_check != 1]
+    warn_source = df_aggregated_approved_only or df_aggregated
+    warn_source = warn_source.withColumn(
+        "is_critical_dq_check",
+        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+    )
+    df_aggregated = warn_source[warn_source.is_critical_dq_check != 1]
     df_aggregated = df_aggregated.drop("is_critical_dq_check")
 
     # Initialize an empty dictionary for the transformed data

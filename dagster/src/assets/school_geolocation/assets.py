@@ -21,9 +21,8 @@ from src.data_quality_checks.create_update import (
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
     aggregate_report_statistics,
+    build_dq_summary_statistics,
     dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
@@ -512,13 +511,10 @@ async def geolocation_data_quality_results_summary(
         geolocation_data_quality_results, uploaded_columns
     )
 
-    dq_summary_statistics = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
-            spark.spark_session,
-            dq_results,
-        ),
-        df_bronze=geolocation_bronze,
-        df_data_quality_checks=dq_results,
+    dq_summary_statistics = build_dq_summary_statistics(
+        spark.spark_session,
+        dq_results,
+        geolocation_bronze,
     )
 
     value_maps = aggregate_value_maps_for_pdf(

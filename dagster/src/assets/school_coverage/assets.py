@@ -11,8 +11,7 @@ from pyspark.sql import SparkSession
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
+    build_dq_summary_statistics,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -191,10 +190,10 @@ async def coverage_data_quality_results_summary(
         pdf = pandas_loader(buffer, config.filepath, context=context)
 
     df_raw = s.createDataFrame(pdf)
-    dq_summary_statistics = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(s, coverage_data_quality_results),
-        df_bronze=df_raw,
-        df_data_quality_checks=coverage_data_quality_results,
+    dq_summary_statistics = build_dq_summary_statistics(
+        s,
+        coverage_data_quality_results,
+        df_raw,
     )
 
     value_maps = aggregate_value_maps_for_pdf(
