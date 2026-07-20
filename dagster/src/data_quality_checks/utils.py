@@ -205,6 +205,25 @@ def aggregate_report_json(
         summary["schools_created"] = school_counts.schools_created
         summary["schools_updated"] = school_counts.schools_updated
 
+    # Count passed schools with at least one non-critical warning.
+    passed_df = df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
+    if "dq_results" in df_data_quality_checks.columns:
+        has_warning = f.array_contains(f.map_values(f.col("dq_results")), 1)
+        summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
+    else:
+        warning_columns = [
+            col
+            for col in df_data_quality_checks.columns
+            if col.startswith("dq_") and col != "dq_has_critical_error"
+        ]
+        if warning_columns:
+            has_warning = (
+                f.greatest(*[f.col(col).cast("int") for col in warning_columns]) == 1
+            )
+            summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
+        else:
+            summary["schools_with_warnings"] = 0
+
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
         f.when(f.col("type") == "critical checks", 1).otherwise(0),
