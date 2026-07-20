@@ -5,7 +5,7 @@ from ..jobs.superset import refresh_table
 
 superset_schedule = ScheduleDefinition(
     job=refresh_table,
-    cron_schedule="15 3 * * *",
+    cron_schedule="45 3 * * *",
 )
 
 superset_incremental_schedule = ScheduleDefinition(

@@ -26,6 +26,7 @@ from src.data_quality_checks.utils import (
     dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
+    normalize_dq_results_map,
     row_level_checks,
 )
 from src.internal.common_assets.staging import StagingMode, StagingStep
@@ -54,6 +55,9 @@ from src.utils.schema import (
     get_schema_columns,
     get_schema_columns_datahub,
     get_schema_table,
+)
+from src.utils.school_registrations.common import (
+    process_school_registration_dq_result,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -254,7 +258,9 @@ def geolocation_bronze(
 
     df = add_is_new_school(df, silver_ids, context)
 
-    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
+    df = create_bronze_layer_columns_updated(
+        df, uploaded_columns, country_code, file_upload.source, s
+    )
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
@@ -349,10 +355,14 @@ def geolocation_data_quality_results(
     # dq_has_critical_error and failure_reason remain as top-level columns because
     # they are used for row-level filtering throughout the pipeline.
     # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
+    # String-valued dq_ columns (e.g. dq_duplicate_location_rows_id, an md5 hash) cannot
+    # live in a map<string, int> and stay top-level.
     dq_flag_cols = [
-        c
-        for c in dq_results.columns
-        if c.startswith("dq_") and c != "dq_has_critical_error"
+        field.name
+        for field in dq_results.schema.fields
+        if field.name.startswith("dq_")
+        and field.name != "dq_has_critical_error"
+        and not isinstance(field.dataType, StringType)
     ]
     map_args = []
     for col_name in dq_flag_cols:
@@ -456,12 +466,6 @@ def geolocation_data_quality_results_human_readable(
         "dq_has_critical_error", "failure_reason"
     )
     df_failed = df.filter(df.dq_has_critical_error == 1).drop("dq_has_critical_error")
-
-    # Check for overlap between passed and failed
-    passed_ids = df_passed.select("school_id_giga").distinct().count()
-    failed_ids = df_failed.select("school_id_giga").distinct().count()
-    context.log.info(f"Passed: {df_passed.count()} rows ({passed_ids} unique IDs)")
-    context.log.info(f"Failed: {df_failed.count()} rows ({failed_ids} unique IDs)")
 
     output_metadata = get_output_metadata(config)
 
@@ -644,6 +648,15 @@ def geolocation_dq_passed_rows(
 
     df_passed.cache()
     row_count = df_passed.count()
+
+    if config.metadata.get("source") == "gigameter":
+        process_school_registration_dq_result(
+            context=context,
+            country_iso3_code=config.country_code,
+            row_count=row_count,
+            df_passed=df_passed,
+            dq_results=geolocation_data_quality_results,
+        )
 
     return Output(
         df_passed,
@@ -872,20 +885,72 @@ def geolocation_delete_staging(
 @capture_op_exceptions
 def geolocation_school_map(
     context: OpExecutionContext,
-    geolocation_dq_schools_passed_human_readable: sql.DataFrame,
-    geolocation_dq_schools_failed_human_readable: sql.DataFrame,
+    geolocation_data_quality_results: sql.DataFrame,
     config: FileConfig,
 ) -> Output[str]:
     """
     Generate an interactive HTML map showing passed and failed schools.
+
+    Emits an empty output when the upload has no coordinates: latitude/longitude
+    always exist on the DataFrame after the silver merge, so the uploaded columns
+    are what decide whether a map is meaningful.
     """
     from src.utils.map_generator import generate_school_map_html
+
+    # Columns shown in the map popups, on top of the DQ status columns
+    map_columns = [
+        "school_id_giga",
+        "school_id_govt",
+        "latitude",
+        "longitude",
+        "school_name",
+        "education_level",
+        "admin1",
+        "admin1_id_giga",
+        "admin2",
+        "admin2_id_giga",
+    ]
 
     country_code = config.country_code
     upload_id = config.filename_components.id
 
-    passed_pdf = geolocation_dq_schools_passed_human_readable.toPandas()
-    failed_pdf = geolocation_dq_schools_failed_human_readable.toPandas()
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == upload_id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{upload_id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    uploaded_columns = list(file_upload.column_to_schema_mapping.values())
+
+    if not {"latitude", "longitude"}.issubset(uploaded_columns):
+        context.log.warning(
+            f"Skipping map for {country_code} (upload: {upload_id}): "
+            "latitude and longitude were not both uploaded"
+        )
+        return Output(
+            "",
+            metadata={**get_output_metadata(config), "skipped": "no coordinates"},
+        )
+
+    df = normalize_dq_results_map(geolocation_data_quality_results)
+
+    # Casting for the map lives here, not in the shared DQ extraction helpers.
+    df = df.select(
+        *[col for col in map_columns if col in df.columns],
+        "dq_has_critical_error",
+        "failure_reason",
+        f.element_at(f.col("dq_results"), "is_not_within_country")
+        .cast("int")
+        .alias("dq_is_not_within_country"),
+    )
+    df.cache()
+
+    passed_pdf = df.filter(f.col("dq_has_critical_error") == 0).toPandas()
+    failed_pdf = df.filter(f.col("dq_has_critical_error") == 1).toPandas()
+    df.unpersist()
 
     map_html = generate_school_map_html(
         country_code=country_code,
@@ -913,16 +978,22 @@ def geolocation_school_map(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
+@asset(
+    io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value,
+    deps=["geolocation_school_map"],
+)
 @capture_op_exceptions
 def geolocation_dq_kit_zip(
     context: OpExecutionContext,
-    geolocation_school_map: str,
     config: FileConfig,
     adls_file_client: ADLSFileClient,
 ) -> Output[bytes]:
     """
     Generate a DQ Kit ZIP bundle containing all DQ artifacts.
+
+    The map is an ordering dep, not an input: it writes no blob when the upload has
+    no coordinates, so loading it would fail on the missing file. The ZIP collects
+    artifacts from ADLS by convention path and omits any that are absent.
     """
     from src.utils.dq_kit_generator import generate_dq_kit_zip_bytes
 

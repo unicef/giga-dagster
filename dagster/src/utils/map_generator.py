@@ -2,10 +2,10 @@
 Utility for generating interactive school maps using Folium.
 
 Each school gets exactly one marker (no per-filter duplication). Filtering is
-done client-side via a hand-written grouped-checkbox Leaflet control: four
-independent filter groups (status / rurality / habitability / boundary),
-AND across groups, OR within a group - a marker shows only if it matches at
-least one checked value in every group.
+done client-side via a hand-written grouped-checkbox Leaflet control: two
+independent filter groups (status / boundary), AND across groups, OR within a
+group - a marker shows only if it matches at least one checked value in every
+group.
 """
 
 import json
@@ -16,14 +16,13 @@ from jinja2 import BaseLoader, Environment
 
 from dagster import OpExecutionContext
 
-PASSED_COLOR = "#28a745"
+PASSED_COLOR = "#1e7e34"
 FAILED_COLOR = "#dc3545"
 OUTSIDE_BOUNDARY_COLOR = "#343a40"
 
-_UNINHABITED_COL = "dq_is_in_uninhabited_area"
-_DUP_FLAG_COL = "dq_duplicate_group_flag_50m"
-_DUP_COUNT_COL = "dq_duplicate_group_count_50m"
-_DUP_GROUP_COL = "dq_duplicate_group_id_50m"
+# Light, low-saturation basemap so status colors stand out (no green terrain).
+BASEMAP_TILES = "CartoDB Positron"
+
 _OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
 
 _POPUP_TEMPLATE = Environment(
@@ -39,19 +38,11 @@ _POPUP_TEMPLATE = Environment(
 
 # group key -> ordered list of (tag_value, checkbox_label)
 _FILTER_GROUPS = {
-    "status": [("passed", "Passed"), ("failed", "Failed")],
-    "rurality": [
-        ("rural", "Rural"),
-        ("urban", "Urban"),
-        ("unknown", "Rurality unknown"),
-    ],
-    "habitability": [("inhabited", "Inhabited"), ("uninhabited", "Uninhabited")],
+    "status": [("passed", "Approved"), ("failed", "Rejected")],
     "boundary": [("inside", "Inside boundary"), ("outside", "Outside boundary")],
 }
 _FILTER_GROUP_TITLES = {
     "status": "Data Quality Status",
-    "rurality": "Rurality",
-    "habitability": "Habitability",
     "boundary": "Country Boundary",
 }
 
@@ -137,17 +128,19 @@ def _render_school_popup_html(
         ("education_level", _format_popup_value(row.get("education_level"))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
-        ("rurban", _format_popup_value(row.get("rurban_detected"))),
-        ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
         ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
-        ("duplicate_50_flag", _format_dq_flag(row.get(_DUP_FLAG_COL))),
-        ("duplicate_50_group_id", _format_popup_value(row.get(_DUP_GROUP_COL))),
-        ("duplicate_50_count", _format_popup_value(row.get(_DUP_COUNT_COL))),
         ("Status", status),
     ]
     if include_failure_reason:
         fields.append(("Reason", _format_popup_value(row.get("failure_reason"))))
     return _POPUP_TEMPLATE.render(fields=fields)
+
+
+def _darken_hex_color(hex_color: str, factor: float = 0.65) -> str:
+    """Return a darker shade of a #rrggbb color for marker outlines."""
+    value = hex_color.lstrip("#")
+    r, g, b = (int(value[i : i + 2], 16) for i in (0, 2, 4))
+    return f"#{int(r * factor):02x}{int(g * factor):02x}{int(b * factor):02x}"
 
 
 def _add_circle_marker(
@@ -160,32 +153,16 @@ def _add_circle_marker(
     """Add one school coordinate marker to the shared feature group."""
     folium.CircleMarker(
         location=[row["latitude"], row["longitude"]],
-        radius=1,
-        color=color,
+        radius=2,
+        color=_darken_hex_color(color),
+        weight=1,
+        opacity=1,
         fill=True,
         fillColor=color,
-        fillOpacity=0.7,
+        fillOpacity=0.85,
         popup=folium.Popup(popup_html, max_width=380),
         tags=tags,
     ).add_to(layer)
-
-
-def _get_rurality_filter_key(row: dict) -> str:
-    """Return the rurality tag for a school row."""
-    rurban = str(row.get("rurban_detected", "")).strip().lower()
-    if rurban == "urban":
-        return "urban"
-    if rurban == "rural":
-        return "rural"
-    return "unknown"
-
-
-def _is_uninhabited(row: dict) -> bool:
-    """Return whether a school row is flagged as in an uninhabited area."""
-    try:
-        return int(float(row.get(_UNINHABITED_COL, 0))) == 1
-    except (TypeError, ValueError):
-        return False
 
 
 def _is_outside_boundary(row: dict) -> bool:
@@ -214,8 +191,6 @@ def _add_school_markers(
         outside_boundary = _is_outside_boundary(row)
         tags = [
             status_tag,
-            _get_rurality_filter_key(row),
-            "uninhabited" if _is_uninhabited(row) else "inhabited",
             "outside" if outside_boundary else "inside",
         ]
         color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else base_color
@@ -229,10 +204,6 @@ def _calculate_filter_counts(
     counts = {"passed": len(passed_df), "failed": len(failed_df)}
     for df in (passed_df, failed_df):
         for row in df.to_dict("records"):
-            rurality_key = _get_rurality_filter_key(row)
-            counts[rurality_key] = counts.get(rurality_key, 0) + 1
-            habit_key = "uninhabited" if _is_uninhabited(row) else "inhabited"
-            counts[habit_key] = counts.get(habit_key, 0) + 1
             boundary_key = "outside" if _is_outside_boundary(row) else "inside"
             counts[boundary_key] = counts.get(boundary_key, 0) + 1
     return counts
@@ -295,6 +266,58 @@ def _build_grouped_filter_control_js(layer_var: str, counts: dict[str, int]) -> 
     """
 
 
+def _build_marker_interaction_js(map_var: str) -> str:
+    """Build JS for zoom-scaled marker radii, hover highlighting, and a
+    wider canvas hit area. Relies on GFC_ALL_MARKERS from the filter JS."""
+    return f"""
+    var GFC_MAP = {map_var};
+
+    // Widen the canvas hit-test area so small dots are easier to click.
+    (function() {{
+        var renderer = GFC_ALL_MARKERS.length
+            ? GFC_ALL_MARKERS[0]._renderer
+            : GFC_MAP._renderer;
+        if (renderer && renderer.options) {{ renderer.options.tolerance = 6; }}
+    }})();
+
+    function gfcRadiusForZoom(zoom) {{
+        if (zoom <= 5) return 2;
+        if (zoom <= 7) return 3;
+        if (zoom <= 9) return 4.5;
+        if (zoom <= 11) return 6;
+        return 8;
+    }}
+
+    function gfcUpdateRadii() {{
+        var base = gfcRadiusForZoom(GFC_MAP.getZoom());
+        GFC_ALL_MARKERS.forEach(function(marker) {{
+            marker._gfcBaseRadius = base;
+            marker.setRadius(marker._gfcHovered ? base + 3 : base);
+        }});
+    }}
+    GFC_MAP.on("zoomend", gfcUpdateRadii);
+    gfcUpdateRadii();
+
+    GFC_ALL_MARKERS.forEach(function(marker) {{
+        marker._gfcBaseStyle = {{
+            color: marker.options.color,
+            weight: marker.options.weight,
+        }};
+        marker.on("mouseover", function() {{
+            marker._gfcHovered = true;
+            marker.setStyle({{color: "#ffffff", weight: 2}});
+            marker.setRadius((marker._gfcBaseRadius || 3) + 3);
+            if (marker.bringToFront) {{ marker.bringToFront(); }}
+        }});
+        marker.on("mouseout", function() {{
+            marker._gfcHovered = false;
+            marker.setStyle(marker._gfcBaseStyle);
+            marker.setRadius(marker._gfcBaseRadius || 3);
+        }});
+    }});
+    """
+
+
 def generate_school_map_html(
     country_code: str,
     passed_df: pd.DataFrame,
@@ -322,6 +345,7 @@ def generate_school_map_html(
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=6,
+        tiles=BASEMAP_TILES,
         control_scale=True,
         prefer_canvas=True,
     )
@@ -330,15 +354,16 @@ def generate_school_map_html(
     main_layer = folium.FeatureGroup(name="Schools", show=True)
 
     _add_school_markers(
-        passed_filtered, PASSED_COLOR, "passed", "Passed", main_layer, False
+        passed_filtered, PASSED_COLOR, "passed", "Approved", main_layer, False
     )
     _add_school_markers(
-        failed_filtered, FAILED_COLOR, "failed", "Failed", main_layer, True
+        failed_filtered, FAILED_COLOR, "failed", "Rejected", main_layer, True
     )
     main_layer.add_to(m)
 
     counts = _calculate_filter_counts(passed_filtered, failed_filtered)
     js = _build_grouped_filter_control_js(main_layer.get_name(), counts)
+    interaction_js = _build_marker_interaction_js(m.get_name())
     extra_markup = (
         "<style>.gfc-panel{background:white;padding:8px 10px;"
         "border-radius:4px;box-shadow:0 1px 5px rgba(0,0,0,0.4);"
@@ -346,7 +371,8 @@ def generate_school_map_html(
         ".gfc-title{font-weight:bold;margin-top:6px;}"
         ".gfc-row{display:block;white-space:nowrap;margin:2px 0;}</style>"
         f"<script>{js}\n"
-        f"new GroupedFilterControl().addTo({m.get_name()});</script>"
+        f"new GroupedFilterControl().addTo({m.get_name()});\n"
+        f"{interaction_js}</script>"
     )
 
     context.log.info("Map generation complete successfully.")

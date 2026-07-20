@@ -2,12 +2,14 @@
 Utility for generating DQ Kit ZIP bundles using convention-based paths.
 """
 
+import csv
 import io
 import zipfile
 
 from dagster import OpExecutionContext
 from src.constants import constants
 from src.utils.adls import ADLSFileClient
+from src.utils.filename import deconstruct_school_master_filename_components
 
 
 def _safe_download(
@@ -23,6 +25,62 @@ def _safe_download(
         return None
 
 
+def _count_csv_data_rows(data: bytes) -> int:
+    """Count data rows in a CSV (excluding the header), handling quoted newlines."""
+    text = data.decode("utf-8-sig", errors="replace")
+    rows = sum(1 for _ in csv.reader(io.StringIO(text)))
+    return max(rows - 1, 0)
+
+
+def _display_stem(country_code: str, upload_id: str, dataset: str, stem: str) -> str:
+    """User-facing stem for the approved/rejected CSVs inside the kit:
+    <ISO>_<timestamp>_<upload_id>_<dataset>[_<source>].
+
+    Falls back to the original stem if it doesn't follow the upload naming
+    convention (blob paths are unaffected either way).
+    """
+    try:
+        components = deconstruct_school_master_filename_components(f"{stem}.csv")
+        timestamp = components.timestamp.strftime("%Y%m%d-%H%M%S")
+    except Exception:
+        return stem
+
+    elements = [country_code, timestamp, upload_id, dataset]
+    if components.source:
+        elements.append(components.source)
+    return "_".join(elements)
+
+
+def _collect_row_csv_entry(
+    adls_client: ADLSFileClient,
+    blob_path: str,
+    label: str,
+    folder: str,
+    stem: str,
+    description: str,
+    entries: list[tuple[str, bytes]],
+    sections: list[tuple[str, list[str]]],
+    context: OpExecutionContext,
+) -> None:
+    """Add an approved/rejected rows CSV entry, skipping files with 0 data rows.
+
+    The filename embeds the label and row count so approved/rejected files
+    never share an identical name.
+    """
+    data = _safe_download(adls_client, blob_path, context)
+    if data is None:
+        return
+
+    count = _count_csv_data_rows(data)
+    if count == 0:
+        context.log.info(f"Skipped {label} rows: file has 0 data rows")
+        return
+
+    entries.append((f"{folder}/{label}_{stem}_{count}_rows.csv", data))
+    sections.append((f"{folder}/", [f"*.csv   - {description} ({count:,} rows)"]))
+    context.log.info(f"Added {label} rows ({count} rows)")
+
+
 def generate_dq_kit_zip_bytes(
     country_code: str,
     upload_id: str,
@@ -35,14 +93,13 @@ def generate_dq_kit_zip_bytes(
     """
     Generate ZIP bundle containing all DQ artifacts using convention-based paths.
 
-    Includes:
+    Includes (each section only when the artifact exists and is non-empty):
     - Raw data
     - DQ reports (TXT, JSON)
-    - Passed/failed rows (human-readable CSV)
+    - Approved/rejected rows (human-readable CSV, row count in filename)
     - Map HTML
-    - README
+    - README describing the actual ZIP contents
     """
-    zip_buffer = io.BytesIO()
     dataset_prefix = f"school-{dataset}"
     dq_root = f"{constants.dq_results_folder}/{dataset_prefix}"
 
@@ -59,47 +116,95 @@ def generate_dq_kit_zip_bytes(
 
     context.log.info(f"Generating DQ Kit ZIP for {country_code}/{upload_id}")
 
+    # Collect entries first so the README can describe the actual contents.
+    entries: list[tuple[str, bytes]] = []
+    sections: list[tuple[str, list[str]]] = []
+
+    # Raw data
+    if data := _safe_download(adls_client, paths["raw_data"], context):
+        entries.append((f"1_raw_data/{original_filename}", data))
+        sections.append(("1_raw_data/", ["Original uploaded file (as submitted)"]))
+        context.log.info("Added raw_data")
+
+    # DQ summary (json + txt)
+    summary_lines = []
+    if data := _safe_download(adls_client, paths["dq_summary_json"], context):
+        entries.append((f"2_dq_summary/{stem}.json", data))
+        summary_lines.append("*.json  - Data quality summary (machine-readable)")
+        context.log.info("Added dq_summary_json")
+
+    if data := _safe_download(adls_client, paths["dq_report_txt"], context):
+        entries.append((f"2_dq_summary/{stem}.txt", data))
+        summary_lines.append("*.txt   - Data quality report (human-readable)")
+        context.log.info("Added dq_report_txt")
+
+    if summary_lines:
+        sections.append(("2_dq_summary/", summary_lines))
+
+    # Approved/rejected rows (skipped entirely when there are zero data rows)
+    row_csv_stem = _display_stem(country_code, upload_id, dataset, stem)
+    _collect_row_csv_entry(
+        adls_client,
+        paths["passed_rows"],
+        "approved",
+        "3_approved_data",
+        row_csv_stem,
+        "Schools APPROVED by all data quality checks",
+        entries,
+        sections,
+        context,
+    )
+    _collect_row_csv_entry(
+        adls_client,
+        paths["failed_rows"],
+        "rejected",
+        "4_rejected_data",
+        row_csv_stem,
+        "Schools REJECTED by data quality checks, with reasons",
+        entries,
+        sections,
+        context,
+    )
+
+    # Map HTML
+    if data := _safe_download(adls_client, paths["map_html"], context):
+        entries.append((f"5_map_visualization/school_map_{country_code}.html", data))
+        sections.append(
+            (
+                "5_map_visualization/",
+                [
+                    "*.html  - Interactive map showing approved (green) and",
+                    "          rejected (red) schools. Open in a web browser to view.",
+                ],
+            )
+        )
+        context.log.info("Added map_html")
+
+    # School master snapshot (only present after the post-approval run has exported it)
+    if data := _safe_download(adls_client, paths["master_export"], context):
+        entries.append((f"6_school_master/school_master_{country_code}.csv", data))
+        sections.append(
+            (
+                "6_school_master/",
+                [
+                    "*.csv   - Snapshot of the school_master table for this country,",
+                    "          taken immediately after the approved rows were merged.",
+                ],
+            )
+        )
+        context.log.info("Added master_export")
+
+    zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-        # README
         zipf.writestr(
             "README.txt",
-            generate_readme(country_code, dataset, upload_id, original_filename),
+            generate_readme(
+                country_code, dataset, upload_id, original_filename, sections
+            ),
         )
         context.log.info("Added README.txt")
-
-        # Raw data
-        if data := _safe_download(adls_client, paths["raw_data"], context):
-            zipf.writestr(f"1_raw_data/{original_filename}", data)
-            context.log.info("Added raw_data")
-
-        # DQ summary (json + txt)
-        if data := _safe_download(adls_client, paths["dq_summary_json"], context):
-            zipf.writestr(f"2_dq_summary/{stem}.json", data)
-            context.log.info("Added dq_summary_json")
-
-        if data := _safe_download(adls_client, paths["dq_report_txt"], context):
-            zipf.writestr(f"2_dq_summary/{stem}.txt", data)
-            context.log.info("Added dq_report_txt")
-
-        # Passed rows
-        if data := _safe_download(adls_client, paths["passed_rows"], context):
-            zipf.writestr(f"3_accepted_data/{stem}.csv", data)
-            context.log.info("Added passed_rows")
-
-        # Failed rows
-        if data := _safe_download(adls_client, paths["failed_rows"], context):
-            zipf.writestr(f"4_rejected_data/{stem}.csv", data)
-            context.log.info("Added failed_rows")
-
-        # Map HTML
-        if data := _safe_download(adls_client, paths["map_html"], context):
-            zipf.writestr(f"5_map_visualization/school_map_{country_code}.html", data)
-            context.log.info("Added map_html")
-
-        # School master snapshot (only present after the post-approval run has exported it;
-        if data := _safe_download(adls_client, paths["master_export"], context):
-            zipf.writestr(f"6_school_master/school_master_{country_code}.csv", data)
-            context.log.info("Added master_export")
+        for arcname, data in entries:
+            zipf.writestr(arcname, data)
 
     zip_buffer.seek(0)
     zip_bytes = zip_buffer.getvalue()
@@ -110,10 +215,47 @@ def generate_dq_kit_zip_bytes(
     return zip_bytes, filename
 
 
+_HOW_TO_USE_STEPS = {
+    "2_dq_summary/": "Review the DQ report (2_dq_summary/*.txt) for overall statistics.",
+    "3_approved_data/": (
+        "Check approved data (3_approved_data/*.csv) for schools ready to ingest."
+    ),
+    "4_rejected_data/": (
+        "Review rejected data (4_rejected_data/*.csv) to understand why rows "
+        "were rejected."
+    ),
+    "5_map_visualization/": (
+        "Open the map (5_map_visualization/*.html) for visual analysis."
+    ),
+}
+
+
 def generate_readme(
-    country_code: str, dataset: str, upload_id: str, original_filename: str
+    country_code: str,
+    dataset: str,
+    upload_id: str,
+    original_filename: str,
+    sections: list[tuple[str, list[str]]],
 ) -> str:
-    """Generate README content for the DQ Kit."""
+    """Generate README content describing the actual DQ Kit contents."""
+    contents = "\n\n".join(
+        folder + "\n" + "\n".join(f"    {line}" for line in lines)
+        for folder, lines in sections
+    )
+
+    included_folders = {folder for folder, _ in sections}
+    steps = "\n".join(
+        f"{i}. {step}"
+        for i, step in enumerate(
+            (
+                step
+                for folder, step in _HOW_TO_USE_STEPS.items()
+                if folder in included_folders
+            ),
+            start=1,
+        )
+    )
+
     return f"""\
 ================================================================================
                           DATA QUALITY KIT
@@ -128,35 +270,13 @@ Original File: {original_filename}
                               CONTENTS
 ================================================================================
 
-1_raw_data/
-    Original uploaded file (as submitted)
+{contents}
 
-2_dq_summary/
-    *.json  - Data quality summary (machine-readable)
-    *.txt   - Data quality report (human-readable)
-
-3_accepted_data/
-    *.csv   - Schools that PASSED all data quality checks
-
-4_rejected_data/
-    *.csv   - Schools that FAILED data quality checks (with reasons)
-
-5_map_visualization/
-    *.html  - Interactive map showing passed (green) and failed (red) schools.
-              Open in a web browser to view.
-
-6_school_master/
-    *.csv   - Snapshot of the school_master table for this country, taken
-              immediately after the approved rows were merged. Only present
-              for kits regenerated after the approval flow.
 ================================================================================
                            HOW TO USE
 ================================================================================
 
-1. Review the DQ report (2_dq_summary/*.txt) for overall statistics.
-2. Check accepted data (3_accepted_data/*.csv) for schools ready to ingest.
-3. Review rejected data (4_rejected_data/*.csv) to understand failures.
-4. Open the map (5_map_visualization/*.html) for visual analysis.
+{steps}
 
 ================================================================================
 Generated by: Giga Sync Data Ingestion Platform

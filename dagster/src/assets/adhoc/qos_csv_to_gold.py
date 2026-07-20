@@ -1,8 +1,5 @@
-from io import BytesIO
-
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from numpy import nan
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -15,6 +12,7 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.pandas import read_df_from_bytes
 from src.utils.schema import get_schema_columns_datahub
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
@@ -47,9 +45,7 @@ def adhoc__qos_transforms(
 ) -> Output[pd.DataFrame]:
     s: SparkSession = spark.spark_session
 
-    with BytesIO(adhoc__load_qos_csv) as buffer:
-        buffer.seek(0)
-        df = pd.read_csv(buffer).fillna(nan).replace([nan], [None])
+    df = read_df_from_bytes(adhoc__load_qos_csv, config.filepath)
 
     sdf = s.createDataFrame(df)
     column_actions = {

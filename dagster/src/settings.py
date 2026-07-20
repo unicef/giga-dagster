@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     NOCODB_BASE_URL: str = ""
     NOCODB_TOKEN: str = ""
     NOCODB_NAME_MAPPINGS_TABLE_ID: str = ""
+    GIGAMETER_API_BASE_URL: str = ""
+    GIGAMETER_API_TOKEN: str = ""
     TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
     MONGOLIA_API_USER: str = ""
@@ -76,6 +78,7 @@ class Settings(BaseSettings):
     MONGOLIA_API_URL: str = ""
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
+    VCT_MERAKI_API_KEY: str = ""
 
     # Derived settings
     @property
