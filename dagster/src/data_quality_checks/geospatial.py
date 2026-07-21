@@ -41,11 +41,29 @@ def _get_data_store() -> ADLSDataStore:
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
-    """Extract school_id_giga, latitude, longitude from Spark DF to Pandas."""
-    pdf = df.select("school_id_giga", "latitude", "longitude").toPandas()
+    """Extract school_id_giga, latitude, longitude (and the out-of-country flag when
+    present) from Spark DF to Pandas."""
+    columns = ["school_id_giga", "latitude", "longitude"]
+    if "dq_is_not_within_country" in df.columns:
+        columns.append("dq_is_not_within_country")
+    pdf = df.select(*columns).toPandas()
     pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
     pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
     return pdf
+
+
+def _drop_out_of_country(pdf: pd.DataFrame, logger, check_name: str) -> pd.DataFrame:
+    """Drop rows flagged outside the country boundary (``dq_is_not_within_country == 1``)"""
+
+    if "dq_is_not_within_country" not in pdf.columns:
+        return pdf
+    outside = pdf["dq_is_not_within_country"] == 1
+    if outside.any():
+        logger.info(
+            f"{check_name}: dropping {int(outside.sum())} out-of-country rows "
+            f"(dq_is_not_within_country == 1)"
+        )
+    return pdf[~outside].copy()
 
 
 def _get_valid_coords_mask(pdf: pd.DataFrame) -> pd.Series:
@@ -298,8 +316,9 @@ class POIContextEnricher(PoiViewGenerator):
 
         # Each signal contributes a (condition, availability) pair so that a missing
         # value is excluded from the all/any reduction instead of counting as False.
-        # nearest_building_distance_m is deliberately unused: the search is capped at
-        # search_radius, so "distance > search_radius" can never be true.
+        # nearest_building_distance_m is deliberately unused: wherever it is non-null,
+        # "distance > search_radius" is the exact complement of building_within, so it
+        # would add a duplicate vote and skew the all/any reduction.
         signals = []
         within_column = f"building_within_{search_radius}m"
         if within_column in view.columns:
@@ -349,7 +368,11 @@ class POIContextEnricher(PoiViewGenerator):
         flag_column, group_column, count_column = self.duplicate_columns
 
         gdf = self.to_geodataframe().set_index("poi_id")
-        G = build_distance_graph(gdf, gdf, threshold)
+        # exclude_same_index is set rather than left to build_distance_graph's
+        # left_df.equals(right_df) auto-detection: the view carries nullable dtypes by
+        # this point, and a False there would give every node a self-loop, which
+        # nx.degree counts as 2.
+        G = build_distance_graph(gdf, gdf, threshold, exclude_same_index=True)
         self.log.info(
             f"Duplicate groups: graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
         )
@@ -415,13 +438,17 @@ class POIContextEnricher(PoiViewGenerator):
         for radius in self.radii_meters:
             column = f"pop_within_{radius // 1000}km"
             self.log.info(f"Computing {column} (radius={radius}m)...")
-            self.map_wp_pop(
-                country=self.country_code_iso3,
-                map_radius_meters=radius,
-                resolution=1000,
-                predicate="centroid_within",
-                output_column=column,
-            )
+            # Isolated per radius so one unavailable raster nulls only its own column.
+            try:
+                self.map_wp_pop(
+                    country=self.country_code_iso3,
+                    map_radius_meters=radius,
+                    resolution=1000,
+                    predicate="centroid_within",
+                    output_column=column,
+                )
+            except Exception as e:
+                self.log.error(f"Population context failed for {column}: {e}")
 
     def add_poi_density(self) -> None:
         """Count neighbouring POIs within each radius."""
@@ -429,18 +456,22 @@ class POIContextEnricher(PoiViewGenerator):
             column = f"poi_count_{radius // 1000}km"
             self.log.info(f"Computing {column} (radius={radius}m)...")
 
-            # poi_id is dropped because map_zonal_stats uses it as the zone id column.
-            result = self.map_zonal_stats(
-                data=self.to_geodataframe().drop(columns="poi_id"),
-                stat="count",
-                map_radius_meters=radius,
-                output_column=column,
-            )
-            # Each buffer contains its own POI.
-            result[column] = result[column] - 1
+            # Isolated per radius so one failure nulls only its own column.
+            try:
+                # poi_id is dropped because map_zonal_stats uses it as the zone id column.
+                result = self.map_zonal_stats(
+                    data=self.to_geodataframe().drop(columns="poi_id"),
+                    stat="count",
+                    map_radius_meters=radius,
+                    output_column=column,
+                )
+                # Each buffer contains its own POI.
+                result[column] = result[column] - 1
 
-            # map_zonal_stats returns a frame rather than updating the view itself.
-            self._update_view(result)
+                # map_zonal_stats returns a frame rather than updating the view itself.
+                self._update_view(result)
+            except Exception as e:
+                self.log.error(f"POI density failed for {column}: {e}")
 
 
 GEOSPATIAL_COLUMN_MAPPING = {
@@ -479,14 +510,19 @@ GEOSPATIAL_COLUMNS = (
 
 
 def _geospatial_result_schema() -> StructType:
-    """Explicit schema so all-null result columns still get a usable Spark type."""
-    fields = [StructField("school_id_giga", StringType(), True)]
-    fields += [
-        StructField(c, LongType(), True)
-        for c in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS
-    ]
-    fields += [StructField(c, StringType(), True) for c in GEOSPATIAL_STRING_COLUMNS]
-    return StructType(fields)
+    """Explicit schema so all-null result columns still get a usable Spark type.
+
+    Driven off GEOSPATIAL_COLUMNS in order, so reordering that list cannot silently
+    shift values between columns of the same type.
+    """
+    types = {c: StringType() for c in GEOSPATIAL_STRING_COLUMNS}
+    types.update(
+        {c: LongType() for c in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS}
+    )
+    return StructType(
+        [StructField("school_id_giga", StringType(), True)]
+        + [StructField(c, types[c], True) for c in GEOSPATIAL_COLUMNS]
+    )
 
 
 def _null_geospatial_columns(df: sql.DataFrame) -> sql.DataFrame:
@@ -530,6 +566,8 @@ def run_geospatial_checks(
     valid_mask = _get_valid_coords_mask(pdf)
     pdf_valid = pdf[valid_mask].copy()
     _log_coordinate_summary(logger, "Geospatial checks", len(pdf), len(pdf_valid))
+
+    pdf_valid = _drop_out_of_country(pdf_valid, logger, "Geospatial checks")
 
     poi_points = _prepare_poi_points(pdf_valid, logger, "Geospatial checks")
     if poi_points.empty:
