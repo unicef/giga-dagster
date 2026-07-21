@@ -158,84 +158,64 @@ def aggregate_report_spark_df(
     return report
 
 
-def _non_critical_dq_check_keys() -> list[str] | None:
-    """Warning-tier check keys from NocoDB (everything not in "critical checks").
+# Structural warning checks surfaced in the DQ report's "Warnings" section:
+# duplicate / uniqueness / similar-name / density. Field-level validity checks
+# (completeness, domain, range, format, precision) are intentionally excluded —
+# they fire on every row when an optional column is absent from the upload and
+# would otherwise mark 100% of approved schools as "with warnings" (e.g. an empty
+# connectivity_govt column trips both is_null_optional and is_invalid_domain on
+# every row). Also excluded: duplicate-school_id_* (critical, so 0 on approved
+# rows anyway) and duplicate_location_rows_* (count/id metadata, not 0/1 flags).
+# Extend the allow-list here if a new structural warning is added to the report.
+_WARNING_CHECK_KEY_ALLOWLIST = frozenset(
+    {
+        "duplicate_all_except_school_code",
+        "duplicate_name_level_within_110m_radius",
+        "duplicate_similar_name_same_level_within_110m_radius",
+        "is_school_density_greater_than_5",
+        # Coordinate precision: null-safe (missing coords yield null, not a
+        # failure). A school failing latitude and/or longitude counts once,
+        # since the count is over distinct rows with any warning set.
+        "precision-latitude",
+        "precision-longitude",
+    }
+)
+_WARNING_CHECK_KEY_PREFIXES = ("duplicate_set-",)
 
-    Returns None if the NocoDB table cannot be read, so the caller can tell a
-    lookup failure apart from a table that legitimately has no warning checks.
+
+def _is_warning_check_key(key: str) -> bool:
+    """True if a dq_results check key counts as a report "warning"."""
+    return key in _WARNING_CHECK_KEY_ALLOWLIST or key.startswith(
+        _WARNING_CHECK_KEY_PREFIXES
+    )
+
+
+def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
+    """Approved rows (no critical error) failing at least one report-level warning.
+
+    Only the structural warnings shown in the DQ report count (see
+    _is_warning_check_key); field-level validity checks are excluded so that a
+    missing optional column does not flag every approved school as "with warnings".
     """
-    logger = get_context_with_fallback_logger()
-    try:
-        table_id = get_nocodb_table_id_from_name(
-            table_name="SchoolGeolocationMasterDQChecks",
-        )
-        noco = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
-    except Exception as error:
-        logger.error(
-            "Could not read SchoolGeolocationMasterDQChecks from NocoDB for the "
-            f"warning count; rows_passed_with_warnings will be null: {error}"
-        )
-        return None
-
-    keys: list[str] = []
-    for _, row in noco.iterrows():
-        # Tolerant match: NocoDB values may carry stray casing/whitespace.
-        category = str(row.get("DQ Check Category") or "").strip().lower()
-        if category == "critical checks":
-            continue
-        col_name = str(row.get("DQ Table Column Name") or "")
-        # Strip only the leading "dq_" prefix (the map keys have no prefix).
-        if col_name.startswith("dq_"):
-            col_name = col_name[len("dq_") :]
-        if col_name and col_name != "has_critical_error":
-            keys.append(col_name)
-    return keys
-
-
-def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int | None:
-    """Approved rows (no critical error) failing at least one warning-tier check.
-
-    Returns None when the count cannot be determined (NocoDB unavailable or its
-    check keys do not match the DataFrame) so a genuine 0 is never confused with
-    a failed lookup.
-    """
-    logger = get_context_with_fallback_logger()
-
     if "dq_has_critical_error" not in df.columns:
-        logger.warning(
-            "dq_has_critical_error missing; cannot compute rows_passed_with_warnings"
-        )
-        return None
+        return 0
 
     approved = df.filter(f.col("dq_has_critical_error") == 0)
     if approved.limit(1).count() == 0:
         return 0
 
-    keys = _non_critical_dq_check_keys()
-    if keys is None:
-        return None
-    if not keys:
-        logger.warning(
-            "NocoDB returned no non-critical DQ check keys; "
-            "rows_passed_with_warnings will be null"
-        )
-        return None
-
     if "dq_results" in df.columns:
-        # Only count keys that actually exist in the map. If none match, the
-        # NocoDB config and the DQ output have drifted apart — report null
-        # instead of a silent 0.
         map_keys_row = approved.select(
             f.map_keys(f.col("dq_results")).alias("map_keys")
         ).first()
-        present_keys = set(map_keys_row["map_keys"]) if map_keys_row else set()
-        matched = [key for key in keys if key in present_keys]
+        present_keys = (
+            set(map_keys_row["map_keys"])
+            if map_keys_row and map_keys_row["map_keys"]
+            else set()
+        )
+        matched = [key for key in present_keys if _is_warning_check_key(key)]
         if not matched:
-            logger.warning(
-                "None of the NocoDB warning keys matched the dq_results map; "
-                "rows_passed_with_warnings will be null"
-            )
-            return None
+            return 0
         has_warning = f.greatest(
             *[
                 f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
@@ -244,13 +224,13 @@ def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int | None:
         )
         return approved.filter(has_warning == 1).count()
 
-    dq_cols = [f"dq_{key}" for key in keys if f"dq_{key}" in approved.columns]
+    dq_cols = [
+        col
+        for col in approved.columns
+        if col.startswith("dq_") and _is_warning_check_key(col[len("dq_") :])
+    ]
     if not dq_cols:
-        logger.warning(
-            "None of the NocoDB warning keys matched flat dq_ columns; "
-            "rows_passed_with_warnings will be null"
-        )
-        return None
+        return 0
     has_warning = f.greatest(
         *[f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols],
     )
@@ -393,6 +373,17 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         ).otherwise(0),
     )
 
+    # Coordinate precision as a single per-school flag: a school with low
+    # precision in latitude and/or longitude counts once (the DQR shows one
+    # combined "precision" warning rather than two separate lat/lng entries).
+    df = df.withColumn(
+        "dq_low_precision_coordinates",
+        f.when(
+            (_check("precision-latitude") == 1) | (_check("precision-longitude") == 1),
+            1,
+        ).otherwise(0),
+    )
+
     count_schools_raw_file = df.count()
 
     # Keys in the dq_results map needed for the statistics report
@@ -423,12 +414,14 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         f.col("dq_has_critical_error").cast("int"),
         f.col("dq_missing_location").cast("int"),
         f.col("dq_is_null_connectivity_type_when_connectivity_govt").cast("int"),
+        f.col("dq_low_precision_coordinates").cast("int"),
     )
 
     dq_report_columns = [f"dq_{key}" for key in static_check_keys] + [
         "dq_has_critical_error",
         "dq_missing_location",
         "dq_is_null_connectivity_type_when_connectivity_govt",
+        "dq_low_precision_coordinates",
     ]
 
     dq_duplicate_columns = [
@@ -592,6 +585,10 @@ def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
         "count_precision_latitude": agg_df_pd.at["precision-latitude", "count_schools"],
         "count_precision_longitude": agg_df_pd.at[
             "precision-longitude", "count_schools"
+        ],
+        # Unique schools with low precision in latitude and/or longitude (deduped).
+        "count_schools_low_precision_coordinates": agg_df_pd.at[
+            "low_precision_coordinates", "count_schools"
         ],
     }
 
