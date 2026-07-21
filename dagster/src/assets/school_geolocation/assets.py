@@ -457,9 +457,9 @@ def geolocation_data_quality_results_human_readable(
                 f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
             ),
         )
-    # is_new_school is kept in dq_results for the summary counts, but it is an
-    # internal flag and should not appear in the user-facing human-readable report.
-    df = df.drop("dq_results", "is_new_school")
+    # Keep is_new_school in both human-readable outputs so users can distinguish
+    # schools that will be created from schools that will be updated.
+    df = df.drop("dq_results")
 
     # Cache once — both filters read from the same plan
     df.cache()
