@@ -12,6 +12,13 @@ class ADLSGenericFileIOManager(BaseConfigurableIOManager):
 
         if isinstance(output, str):
             output = output.encode()
+
+        # An empty payload means the asset had nothing to produce (e.g. a map for an
+        # upload with no coordinates). Write no blob at all rather than an empty file.
+        if not output:
+            context.log.info(f"Empty output for {path.name}; nothing written to ADLS.")
+            return
+
         adls_client.upload_raw(context, output, str(path))
 
         context.log.info(f"Uploaded {path.name} to {path.parent} in ADLS.")

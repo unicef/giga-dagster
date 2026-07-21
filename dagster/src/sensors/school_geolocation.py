@@ -127,7 +127,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                     tier=DataTier.STAGING,
                 ),
                 "geolocation_school_map": OpDestinationMapping(
-                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
+                    source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-overall/{country_code}/{stem}.parquet",
                     destination_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
