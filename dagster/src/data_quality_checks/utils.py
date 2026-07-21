@@ -158,6 +158,105 @@ def aggregate_report_spark_df(
     return report
 
 
+def _non_critical_dq_check_keys() -> list[str] | None:
+    """Warning-tier check keys from NocoDB (everything not in "critical checks").
+
+    Returns None if the NocoDB table cannot be read, so the caller can tell a
+    lookup failure apart from a table that legitimately has no warning checks.
+    """
+    logger = get_context_with_fallback_logger()
+    try:
+        table_id = get_nocodb_table_id_from_name(
+            table_name="SchoolGeolocationMasterDQChecks",
+        )
+        noco = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+    except Exception as error:
+        logger.error(
+            "Could not read SchoolGeolocationMasterDQChecks from NocoDB for the "
+            f"warning count; rows_passed_with_warnings will be null: {error}"
+        )
+        return None
+
+    keys: list[str] = []
+    for _, row in noco.iterrows():
+        # Tolerant match: NocoDB values may carry stray casing/whitespace.
+        category = str(row.get("DQ Check Category") or "").strip().lower()
+        if category == "critical checks":
+            continue
+        col_name = str(row.get("DQ Table Column Name") or "")
+        # Strip only the leading "dq_" prefix (the map keys have no prefix).
+        if col_name.startswith("dq_"):
+            col_name = col_name[len("dq_") :]
+        if col_name and col_name != "has_critical_error":
+            keys.append(col_name)
+    return keys
+
+
+def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int | None:
+    """Approved rows (no critical error) failing at least one warning-tier check.
+
+    Returns None when the count cannot be determined (NocoDB unavailable or its
+    check keys do not match the DataFrame) so a genuine 0 is never confused with
+    a failed lookup.
+    """
+    logger = get_context_with_fallback_logger()
+
+    if "dq_has_critical_error" not in df.columns:
+        logger.warning(
+            "dq_has_critical_error missing; cannot compute rows_passed_with_warnings"
+        )
+        return None
+
+    approved = df.filter(f.col("dq_has_critical_error") == 0)
+    if approved.limit(1).count() == 0:
+        return 0
+
+    keys = _non_critical_dq_check_keys()
+    if keys is None:
+        return None
+    if not keys:
+        logger.warning(
+            "NocoDB returned no non-critical DQ check keys; "
+            "rows_passed_with_warnings will be null"
+        )
+        return None
+
+    if "dq_results" in df.columns:
+        # Only count keys that actually exist in the map. If none match, the
+        # NocoDB config and the DQ output have drifted apart — report null
+        # instead of a silent 0.
+        map_keys_row = approved.select(
+            f.map_keys(f.col("dq_results")).alias("map_keys")
+        ).first()
+        present_keys = set(map_keys_row["map_keys"]) if map_keys_row else set()
+        matched = [key for key in keys if key in present_keys]
+        if not matched:
+            logger.warning(
+                "None of the NocoDB warning keys matched the dq_results map; "
+                "rows_passed_with_warnings will be null"
+            )
+            return None
+        has_warning = f.greatest(
+            *[
+                f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+                for key in matched
+            ]
+        )
+        return approved.filter(has_warning == 1).count()
+
+    dq_cols = [f"dq_{key}" for key in keys if f"dq_{key}" in approved.columns]
+    if not dq_cols:
+        logger.warning(
+            "None of the NocoDB warning keys matched flat dq_ columns; "
+            "rows_passed_with_warnings will be null"
+        )
+        return None
+    has_warning = f.greatest(
+        *[f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols],
+    )
+    return approved.filter(has_warning == 1).count()
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -212,6 +311,9 @@ def aggregate_report_json(
         "rows": rows_count,
         "rows_passed": rows_passed,
         "rows_failed": rows_failed,
+        "rows_passed_with_warnings": _count_approved_rows_with_warnings(
+            df_data_quality_checks,
+        ),
         "columns": columns_count,
         "timestamp": timestamp,
     }
@@ -229,25 +331,6 @@ def aggregate_report_json(
         )
         summary["schools_created"] = school_counts.schools_created
         summary["schools_updated"] = school_counts.schools_updated
-
-    # Count passed schools with at least one non-critical warning.
-    passed_df = df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
-    if "dq_results" in df_data_quality_checks.columns:
-        has_warning = f.array_contains(f.map_values(f.col("dq_results")), 1)
-        summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
-    else:
-        warning_columns = [
-            col
-            for col in df_data_quality_checks.columns
-            if col.startswith("dq_") and col != "dq_has_critical_error"
-        ]
-        if warning_columns:
-            has_warning = (
-                f.greatest(*[f.col(col).cast("int") for col in warning_columns]) == 1
-            )
-            summary["schools_with_warnings"] = passed_df.filter(has_warning).count()
-        else:
-            summary["schools_with_warnings"] = 0
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
