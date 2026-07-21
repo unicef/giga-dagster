@@ -237,6 +237,34 @@ def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
     return approved.filter(has_warning == 1).count()
 
 
+_LOW_PRECISION_CHECK_KEYS = ("precision-latitude", "precision-longitude")
+
+
+def _count_schools_with_low_precision(df: sql.DataFrame) -> int:
+    """Unique schools with low precision in latitude and/or longitude.
+
+    A school failing either or both coordinates counts once. Mirrors the
+    dq_low_precision_coordinates figure in aggregate_report_statistics (same
+    all-rows population), so the summary carries the identical value. Returns 0
+    for datasets without precision checks (non-geolocation pipelines).
+    """
+    if "dq_results" in df.columns:
+        exprs = [
+            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+            for key in _LOW_PRECISION_CHECK_KEYS
+        ]
+    else:
+        dq_cols = [
+            f"dq_{key}"
+            for key in _LOW_PRECISION_CHECK_KEYS
+            if f"dq_{key}" in df.columns
+        ]
+        if not dq_cols:
+            return 0
+        exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
+    return df.filter(f.greatest(*exprs) == 1).count()
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -292,6 +320,9 @@ def aggregate_report_json(
         "rows_passed": rows_passed,
         "rows_failed": rows_failed,
         "rows_passed_with_warnings": _count_approved_rows_with_warnings(
+            df_data_quality_checks,
+        ),
+        "count_schools_low_precision_coordinates": _count_schools_with_low_precision(
             df_data_quality_checks,
         ),
         "columns": columns_count,
