@@ -173,21 +173,18 @@ _WARNING_CHECK_KEY_ALLOWLIST = frozenset(
         "duplicate_name_level_within_110m_radius",
         "duplicate_similar_name_same_level_within_110m_radius",
         "is_school_density_greater_than_5",
-        # Coordinate precision: null-safe (missing coords yield null, not a
-        # failure). A school failing latitude and/or longitude counts once,
-        # since the count is over distinct rows with any warning set.
+        "duplicate_set-location_id",
+        "duplicate_set-school_name_education_level_location_id",
+        "duplicate_set-school_id_govt_school_name_education_level_location_id",
         "precision-latitude",
         "precision-longitude",
     }
 )
-_WARNING_CHECK_KEY_PREFIXES = ("duplicate_set-",)
 
 
 def _is_warning_check_key(key: str) -> bool:
     """True if a dq_results check key counts as a report "warning"."""
-    return key in _WARNING_CHECK_KEY_ALLOWLIST or key.startswith(
-        _WARNING_CHECK_KEY_PREFIXES
-    )
+    return key in _WARNING_CHECK_KEY_ALLOWLIST
 
 
 def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
