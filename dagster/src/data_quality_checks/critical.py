@@ -131,7 +131,7 @@ def critical_error_checks(
         )
         if dataset_type == "master":
             noco_table_id = get_nocodb_table_id_from_name(
-                table_name="SchoolGeolocationMasterDQChecks"
+            table_name="SchoolGeolocationMasterDQChecks"
             )
             noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
             critical_rows = noco_table[

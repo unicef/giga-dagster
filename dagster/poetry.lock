@@ -31,7 +31,7 @@ packaging = "*"
 progressbar2 = "*"
 psutil = ">=5.8.0"
 pydantic = [
-    {version = ">=1.10.0,<1.10.3 || >1.10.3"},
+    {version = ">=1.10.0,<1.10.3 || >1.10.3", optional = true, markers = "extra != \"azure-ad\""},
     {version = ">=1.10.0,<1.10.3 || >1.10.3,<2", optional = true, markers = "extra == \"azure-ad\""},
 ]
 python-dateutil = ">=2.8.0"
@@ -6761,6 +6761,21 @@ pymysql = ["pymysql"]
 sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
+name = "sqlparse"
+version = "0.5.5"
+description = "A non-validating SQL parser."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba"},
+    {file = "sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e"},
+]
+
+[package.extras]
+dev = ["build"]
+doc = ["sphinx"]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -7977,4 +7992,4 @@ cffi = ["cffi (>=1.17,<2.0)", "cffi (>=2.0.0b)"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "1453f690807cb3cf241e7a97cdf6338d6ee34068d9c7e1bbcae934e5b8642e1f"
+content-hash = "eb499508d31f11334d3b27440e6bd930732aa553d59c97de59fc18b0165d160b"

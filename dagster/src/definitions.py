@@ -3,6 +3,7 @@ from src import jobs, schedule, sensors
 from src.assets import (
     adhoc,
     admin,
+    analytics_tables,
     common,
     datahub_assets,
     debug,
@@ -83,6 +84,7 @@ defs = Definitions(
             package_module=giga_meter,
             group_name=giga_meter.GROUP_NAME,
         ),
+        *load_assets_from_package_module(package_module=analytics_tables),
     ],
     resources=RESOURCE_DEFINITIONS,
     jobs=load_jobs_from_package_module(jobs),

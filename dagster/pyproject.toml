@@ -23,6 +23,7 @@ folium = "^0.20.0"
 numpy = ">=1.26,<2"
 meraki = "3.1.0"
 pandas = "<3.0"
+sqlparse = "^0.5.5"
 
 [tool.poetry.group.dagster.dependencies]
 dagster-webserver = "^1.6.0"
