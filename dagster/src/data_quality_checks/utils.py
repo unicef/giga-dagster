@@ -198,55 +198,56 @@ def aggregate_report_spark_df(
     return report_all, report_approved_only
 
 
-# Structural warning checks surfaced in the DQ report's "Warnings" section:
-# duplicate / uniqueness / similar-name / density. Field-level validity checks
-# (completeness, domain, range, format, precision) are intentionally excluded —
-# they fire on every row when an optional column is absent from the upload and
-# would otherwise mark 100% of approved schools as "with warnings" (e.g. an empty
-# connectivity_govt column trips both is_null_optional and is_invalid_domain on
-# every row). Also excluded: duplicate-school_id_* (critical, so 0 on approved
-# rows anyway) and duplicate_location_rows_* (count/id metadata, not 0/1 flags).
-# Extend the allow-list here if a new structural warning is added to the report.
-_WARNING_CHECK_KEY_ALLOWLIST = frozenset(
-    {
-        "duplicate_all_except_school_code",
-        "duplicate_name_level_within_110m_radius",
-        "duplicate_similar_name_same_level_within_110m_radius",
-        "is_school_density_greater_than_5",
-        "duplicate_set-location_id",
-        "duplicate_set-school_name_education_level_location_id",
-        "duplicate_set-school_id_govt_school_name_education_level_location_id",
-        "precision-latitude",
-        "precision-longitude",
-    }
-)
+# Report warnings are defined in NocoDB: the SchoolGeolocationMasterDQChecks table
+# has a "DQR Warnings" column set to "Yes" for the checks that count as warnings in
+# the DQ report (duplicate / uniqueness / similar-name / density and coordinate
+# precision). Field-level completeness/domain/range/format checks are left "No" so
+# that a missing optional column does not mark 100% of approved schools as "with
+# warnings".
+_DQR_WARNINGS_COLUMN = "DQR Warnings"
 
 
-def _is_warning_check_key(key: str) -> bool:
-    """True if a dq_results check key counts as a report "warning"."""
-    return key in _WARNING_CHECK_KEY_ALLOWLIST
+def _warning_check_keys() -> set[str]:
+    """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes)."""
+    table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+    is_warning = (
+        table[_DQR_WARNINGS_COLUMN].astype(str).str.strip().str.lower() == "yes"
+    )
+    keys: set[str] = set()
+    for col_name in table.loc[is_warning, "DQ Table Column Name"]:
+        col_name = str(col_name or "")
+        if col_name.startswith("dq_"):
+            col_name = col_name[len("dq_") :]
+        if col_name:
+            keys.add(col_name)
+    return keys
 
 
 def _warning_expr(df: sql.DataFrame) -> Column:
     """Boolean column: True where the row fails at least one report-level warning.
 
-    Only the structural warnings shown in the DQ report count (see
-    _is_warning_check_key); field-level validity checks are excluded so that a
+    The set of warning checks comes from NocoDB (see _warning_check_keys), so a
     missing optional column does not flag every approved school as "with warnings".
-    element_at/coalesce already handle allow-listed keys absent from a given
-    row's dq_results map, so no upfront check of which keys are present is needed.
+    element_at/coalesce handle keys absent from a given row's dq_results map.
     """
+    warning_keys = _warning_check_keys()
+    if not warning_keys:
+        return f.lit(False)
+
     if "dq_results" in df.columns:
         exprs = [
             f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
-            for key in _WARNING_CHECK_KEY_ALLOWLIST
+            for key in warning_keys
         ]
         return f.greatest(*exprs) == 1
 
     dq_cols = [
         col
         for col in df.columns
-        if col.startswith("dq_") and _is_warning_check_key(col[len("dq_") :])
+        if col.startswith("dq_") and col[len("dq_") :] in warning_keys
     ]
     if not dq_cols:
         return f.lit(False)
@@ -254,7 +255,9 @@ def _warning_expr(df: sql.DataFrame) -> Column:
     return f.greatest(*exprs) == 1
 
 
-_LOW_PRECISION_CHECK_KEYS = ("precision-latitude", "precision-longitude")
+# Derived from config.PRECISION so the keys stay in sync with the columns that
+# actually get a precision check (e.g. precision-latitude, precision-longitude).
+_LOW_PRECISION_CHECK_KEYS = tuple(f"precision-{column}" for column in config.PRECISION)
 
 
 def _low_precision_expr(df: sql.DataFrame) -> Column:
