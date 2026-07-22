@@ -21,7 +21,6 @@ from src.data_quality_checks.create_update import (
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
-    aggregate_report_statistics,
     build_dq_summary_statistics,
     dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
@@ -54,7 +53,6 @@ from src.utils.schema import (
     construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
-    get_schema_table,
 )
 from src.utils.school_registrations.common import (
     process_school_registration_dq_result,
@@ -568,60 +566,6 @@ async def geolocation_data_quality_results_summary(
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
-
-
-@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
-def geolocation_data_quality_report(
-    context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
-    geolocation_raw: bytes,
-    config: FileConfig,
-    spark: PySparkResource,
-):
-    with get_db_context() as db:
-        file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id),
-        )
-        if file_upload is None:
-            raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
-            )
-
-        file_upload = FileUploadConfig.from_orm(file_upload)
-
-    with BytesIO(geolocation_raw) as buffer:
-        buffer.seek(0)
-        original_df = pandas_loader(buffer, config.filepath, context=context).map(str)
-
-    original_df_columns = original_df.columns
-    uploaded_columns = file_upload.column_to_schema_mapping.values()
-
-    uploaded_columns_not_used = list(set(original_df_columns) - set(uploaded_columns))
-
-    schema = get_schema_table(spark.spark_session, config.metastore_schema)
-    important_columns_df = schema.filter(f.col("is_important"))
-    important_columns_list = [
-        row[0] for row in important_columns_df.select("name").collect()
-    ]
-
-    important_columns_not_uploaded = list(
-        set(important_columns_list) - set(uploaded_columns)
-    )
-    important_columns_not_uploaded = [
-        col for col in important_columns_not_uploaded if not col.startswith("admin")
-    ]
-
-    upload_details = {
-        "country_code": file_upload.country,
-        "file_name": file_upload.original_filename,
-        "uploaded_columns_not_used": uploaded_columns_not_used,
-        "important_columns_not_uploaded": important_columns_not_uploaded,
-    }
-
-    dq_report = aggregate_report_statistics(
-        geolocation_data_quality_results, upload_details
-    )
-    return Output(dq_report)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
