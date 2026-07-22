@@ -511,6 +511,8 @@ async def geolocation_data_quality_results_summary(
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
+    geolocation_data_quality_results = geolocation_data_quality_results.cache()
+
     dq_results, _ = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
     )
@@ -525,6 +527,8 @@ async def geolocation_data_quality_results_summary(
         geolocation_data_quality_results,
         uploaded_columns=uploaded_columns,
     )
+    geolocation_data_quality_results.unpersist()
+
     if value_maps:
         dq_summary_statistics["valueMaps"] = value_maps
         context.log.info(

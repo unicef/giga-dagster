@@ -4,6 +4,7 @@ from typing import Any, Optional
 import pandas as pd
 from pyspark import sql
 from pyspark.sql import (
+    Column,
     SparkSession,
     functions as f,
     window as w,
@@ -44,12 +45,19 @@ from src.utils.schema import get_schema_columns
 def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
-    *,
-    approved_only: bool = False,
-):  # input df == row level checks results
-    work_df = df
-    if approved_only and "dq_has_critical_error" in df.columns:
-        work_df = df.filter(f.col("dq_has_critical_error") == 0)
+) -> tuple[sql.DataFrame, sql.DataFrame]:
+    """Aggregate per-check pass/fail counts, computed once over all rows.
+
+    Returns (df_aggregated, df_aggregated_approved_only): the same unpivot →
+    groupBy → NocoDB join is done a single time, with both an all-rows and an
+    approved-only (dq_has_critical_error == 0) count computed per check key in
+    the same aggregation, so the two views can be derived without a second pass.
+    """
+    is_approved_expr = (
+        (f.col("dq_has_critical_error") == 0)
+        if "dq_has_critical_error" in df.columns
+        else f.lit(True)
+    )
 
     # Geolocation DQ results store individual checks in a single dq_results map column.
     # Other pipelines (master, coverage, connectivity) still use flat dq_* columns.
@@ -63,19 +71,21 @@ def aggregate_report_spark_df(
                 f.col("dq_has_critical_error").cast("int"),
             ),
         )
-        unpivoted_df = work_df.select(
-            f.explode(all_checks_map).alias("check_key", "value")
+        unpivoted_df = df.select(
+            is_approved_expr.alias("is_approved"),
+            f.explode(all_checks_map).alias("check_key", "value"),
         )
     else:
         # Flat path: stack all dq_* columns into (check_key, value) rows
-        dq_columns = [col for col in work_df.columns if col.startswith("dq_")]
-        df_flat = work_df.select(*dq_columns)
+        dq_columns = [col for col in df.columns if col.startswith("dq_")]
+        df_flat = df.select(is_approved_expr.alias("is_approved"), *dq_columns)
         for col_name in dq_columns:
             df_flat = df_flat.withColumn(col_name, f.col(col_name).cast("int"))
         stack_expr = ", ".join(
             [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns]
         )
         unpivoted_df = df_flat.selectExpr(
+            "is_approved",
             f"stack({len(dq_columns)}, {stack_expr}) as (check_key, value)",
         )
 
@@ -83,6 +93,15 @@ def aggregate_report_spark_df(
         f.expr("count(CASE WHEN value = 1 THEN value END) as count_failed"),
         f.expr("count(CASE WHEN value = 0 THEN value END) as count_passed"),
         f.expr("count(value) as count_overall"),
+        f.expr(
+            "count(CASE WHEN value = 1 AND is_approved THEN value END) "
+            "as count_failed_approved"
+        ),
+        f.expr(
+            "count(CASE WHEN value = 0 AND is_approved THEN value END) "
+            "as count_passed_approved"
+        ),
+        f.expr("count(CASE WHEN is_approved THEN value END) as count_overall_approved"),
     )
 
     agg_df = agg_df.withColumn(
@@ -96,6 +115,18 @@ def aggregate_report_spark_df(
     agg_df = agg_df.withColumn(
         "dq_remarks",
         f.when(f.col("count_failed") == 0, "pass").otherwise("fail"),
+    )
+    agg_df = agg_df.withColumn(
+        "percent_failed_approved",
+        (f.col("count_failed_approved") / f.col("count_overall_approved")) * 100,
+    )
+    agg_df = agg_df.withColumn(
+        "percent_passed_approved",
+        (f.col("count_passed_approved") / f.col("count_overall_approved")) * 100,
+    )
+    agg_df = agg_df.withColumn(
+        "dq_remarks_approved",
+        f.when(f.col("count_failed_approved") == 0, "pass").otherwise("fail"),
     )
 
     # Processing for Human Readable Report
@@ -138,8 +169,9 @@ def aggregate_report_spark_df(
         agg_df["dq_column"] == dq_column_name_df["merge_col"],
         how="inner",
     )
+    report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
 
-    report = report.select(
+    report_all = report.select(
         "type",
         "assertion",
         "column",
@@ -151,9 +183,20 @@ def aggregate_report_spark_df(
         "percent_passed",
         "dq_remarks",
     )
-    report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
+    report_approved_only = report.select(
+        "type",
+        "assertion",
+        "column",
+        "description",
+        f.col("count_failed_approved").alias("count_failed"),
+        f.col("count_passed_approved").alias("count_passed"),
+        f.col("count_overall_approved").alias("count_overall"),
+        f.col("percent_failed_approved").alias("percent_failed"),
+        f.col("percent_passed_approved").alias("percent_passed"),
+        f.col("dq_remarks_approved").alias("dq_remarks"),
+    )
 
-    return report
+    return report_all, report_approved_only
 
 
 # Structural warning checks surfaced in the DQ report's "Warnings" section:
@@ -185,62 +228,41 @@ def _is_warning_check_key(key: str) -> bool:
     return key in _WARNING_CHECK_KEY_ALLOWLIST
 
 
-def _count_approved_rows_with_warnings(df: sql.DataFrame) -> int:
-    """Approved rows (no critical error) failing at least one report-level warning.
+def _warning_expr(df: sql.DataFrame) -> Column:
+    """Boolean column: True where the row fails at least one report-level warning.
 
     Only the structural warnings shown in the DQ report count (see
     _is_warning_check_key); field-level validity checks are excluded so that a
     missing optional column does not flag every approved school as "with warnings".
+    element_at/coalesce already handle allow-listed keys absent from a given
+    row's dq_results map, so no upfront check of which keys are present is needed.
     """
-    if "dq_has_critical_error" not in df.columns:
-        return 0
-
-    approved = df.filter(f.col("dq_has_critical_error") == 0)
-    if approved.limit(1).count() == 0:
-        return 0
-
     if "dq_results" in df.columns:
-        map_keys_row = approved.select(
-            f.map_keys(f.col("dq_results")).alias("map_keys")
-        ).first()
-        present_keys = (
-            set(map_keys_row["map_keys"])
-            if map_keys_row and map_keys_row["map_keys"]
-            else set()
-        )
-        matched = [key for key in present_keys if _is_warning_check_key(key)]
-        if not matched:
-            return 0
-        has_warning = f.greatest(
-            *[
-                f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
-                for key in matched
-            ]
-        )
-        return approved.filter(has_warning == 1).count()
+        exprs = [
+            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+            for key in _WARNING_CHECK_KEY_ALLOWLIST
+        ]
+        return f.greatest(*exprs) == 1
 
     dq_cols = [
         col
-        for col in approved.columns
+        for col in df.columns
         if col.startswith("dq_") and _is_warning_check_key(col[len("dq_") :])
     ]
     if not dq_cols:
-        return 0
-    has_warning = f.greatest(
-        *[f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols],
-    )
-    return approved.filter(has_warning == 1).count()
+        return f.lit(False)
+    exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
+    return f.greatest(*exprs) == 1
 
 
 _LOW_PRECISION_CHECK_KEYS = ("precision-latitude", "precision-longitude")
 
 
-def _count_schools_with_low_precision(df: sql.DataFrame) -> int:
-    """Unique schools with low precision in latitude and/or longitude.
+def _low_precision_expr(df: sql.DataFrame) -> Column:
+    """Boolean column: True where the row has low precision lat and/or long.
 
-    A school failing either or both coordinates counts once. Runs over all rows
-    (not just approved). Returns 0 for datasets without precision checks
-    (non-geolocation pipelines).
+    A school failing either or both coordinates counts once. False for
+    datasets without precision checks (non-geolocation pipelines).
     """
     if "dq_results" in df.columns:
         exprs = [
@@ -254,9 +276,9 @@ def _count_schools_with_low_precision(df: sql.DataFrame) -> int:
             if f"dq_{key}" in df.columns
         ]
         if not dq_cols:
-            return 0
+            return f.lit(False)
         exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
-    return df.filter(f.greatest(*exprs) == 1).count()
+    return f.greatest(*exprs) == 1
 
 
 def build_dq_summary_statistics(
@@ -265,20 +287,20 @@ def build_dq_summary_statistics(
     df_bronze: sql.DataFrame,
 ) -> dict:
     """DQ summary with warning counts limited to approved (non-critical) rows."""
-    return aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
+    df_data_quality_checks = df_data_quality_checks.cache()
+    try:
+        df_aggregated, df_aggregated_approved_only = aggregate_report_spark_df(
             spark,
             df_data_quality_checks,
-            approved_only=False,
-        ),
-        df_bronze=df_bronze,
-        df_data_quality_checks=df_data_quality_checks,
-        df_aggregated_approved_only=aggregate_report_spark_df(
-            spark,
-            df_data_quality_checks,
-            approved_only=True,
-        ),
-    )
+        )
+        return aggregate_report_json(
+            df_aggregated=df_aggregated,
+            df_bronze=df_bronze,
+            df_data_quality_checks=df_data_quality_checks,
+            df_aggregated_approved_only=df_aggregated_approved_only,
+        )
+    finally:
+        df_data_quality_checks.unpersist()
 
 
 def aggregate_report_json(
@@ -286,38 +308,61 @@ def aggregate_report_json(
     df_bronze: sql.DataFrame,
     df_data_quality_checks: sql.DataFrame,
     df_aggregated_approved_only: sql.DataFrame | None = None,
-):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
-    # Summary Report
-    counts = df_data_quality_checks.select(
+):
+    """Build the dq-summary.json dict from aggregated + row-level DQ results.
+
+    df_aggregated: per-check counts (all rows) from aggregate_report_spark_df,
+    used for the critical_checks section.
+    df_aggregated_approved_only: the same, scoped to non-critical rows, used for
+    every other check-type section (falls back to df_aggregated if not given).
+    df_bronze: pre-DQ dataframe, used only for columns_count.
+    """
+    is_approved = f.col("dq_has_critical_error") == 0
+    warning_expr = _warning_expr(df_data_quality_checks)
+    low_precision_expr = _low_precision_expr(df_data_quality_checks)
+    has_is_new_school = "is_new_school" in df_data_quality_checks.columns
+
+    agg_exprs = [
         f.count("*").alias("rows_count"),
-        f.count(f.when(f.col("dq_has_critical_error") == 0, 1)).alias("rows_passed"),
-        f.count(f.when(f.col("dq_has_critical_error") == 1, 1)).alias("rows_failed"),
-    ).first()
-    rows_count = counts.rows_count
-    rows_passed = counts.rows_passed
-    rows_failed = counts.rows_failed
+        f.count(f.when(is_approved, 1)).alias("rows_passed"),
+        f.count(f.when(~is_approved, 1)).alias("rows_failed"),
+        f.count(f.when(is_approved & warning_expr, 1)).alias(
+            "rows_passed_with_warnings"
+        ),
+        f.count(f.when(is_approved & low_precision_expr, 1)).alias(
+            "count_schools_low_precision_coordinates"
+        ),
+    ]
+    if has_is_new_school:
+        agg_exprs += [
+            f.count(f.when(is_approved & f.col("is_new_school"), 1)).alias(
+                "schools_created"
+            ),
+            f.count(f.when(is_approved & ~f.col("is_new_school"), 1)).alias(
+                "schools_updated"
+            ),
+        ]
+    stats = df_data_quality_checks.select(*agg_exprs).first()
 
     columns_count = len(
         [
             col
             for col in df_bronze.columns
             if not col.startswith("dq_")
-            or not col.startswith("_")
-            or col != "failure_reason"
+            and not col.startswith("_")
+            and col != "failure_reason"
         ]
     )
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
 
     # Summary Dictionary
     summary = {
-        "rows": rows_count,
-        "rows_passed": rows_passed,
-        "rows_failed": rows_failed,
-        "rows_passed_with_warnings": _count_approved_rows_with_warnings(
-            df_data_quality_checks,
-        ),
-        "count_schools_low_precision_coordinates": _count_schools_with_low_precision(
-            df_data_quality_checks,
+        "rows": stats.rows_count,
+        "rows_passed": stats.rows_passed,
+        "rows_failed": stats.rows_failed,
+        "rows_passed_with_warnings": stats.rows_passed_with_warnings,
+        "count_schools_low_precision_coordinates": (
+            stats.count_schools_low_precision_coordinates
         ),
         "columns": columns_count,
         "timestamp": timestamp,
@@ -325,17 +370,9 @@ def aggregate_report_json(
 
     # Count created/updated schools among rows that passed the critical checks.
     # is_new_school is carried through dq_results so we can count on it directly.
-    if "is_new_school" in df_data_quality_checks.columns:
-        school_counts = (
-            df_data_quality_checks.filter(f.col("dq_has_critical_error") == 0)
-            .select(
-                f.count(f.when(f.col("is_new_school"), 1)).alias("schools_created"),
-                f.count(f.when(~f.col("is_new_school"), 1)).alias("schools_updated"),
-            )
-            .first()
-        )
-        summary["schools_created"] = school_counts.schools_created
-        summary["schools_updated"] = school_counts.schools_updated
+    if has_is_new_school:
+        summary["schools_created"] = stats.schools_created
+        summary["schools_updated"] = stats.schools_updated
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
