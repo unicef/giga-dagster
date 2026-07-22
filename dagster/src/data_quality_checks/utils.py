@@ -32,7 +32,6 @@ from src.data_quality_checks.geometry import (
 )
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
-from src.settings import settings
 from src.spark.config_expectations import config
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
@@ -344,6 +343,27 @@ def aggregate_report_json(
         ]
     stats = df_data_quality_checks.select(*agg_exprs).first()
 
+    df_aggregated = df_aggregated.withColumn(
+        "is_critical_dq_check",
+        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+    )
+
+    critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
+    critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
+    critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
+
+    # duplicate-school_id_govt is a critical check, so its count_failed is already
+    # one of the critical_checks_summary records above — no extra Spark pass needed.
+    count_duplicate_school_id = next(
+        (
+            record["count_failed"]
+            for record in critical_checks_summary
+            if record.get("assertion") == "duplicate"
+            and record.get("column") == "school_id_govt"
+        ),
+        0,
+    )
+
     columns_count = len(
         [
             col
@@ -364,6 +384,7 @@ def aggregate_report_json(
         "count_schools_low_precision_coordinates": (
             stats.count_schools_low_precision_coordinates
         ),
+        "count_duplicate_school_id": count_duplicate_school_id,
         "columns": columns_count,
         "timestamp": timestamp,
     }
@@ -373,15 +394,6 @@ def aggregate_report_json(
     if has_is_new_school:
         summary["schools_created"] = stats.schools_created
         summary["schools_updated"] = stats.schools_updated
-
-    df_aggregated = df_aggregated.withColumn(
-        "is_critical_dq_check",
-        f.when(f.col("type") == "critical checks", 1).otherwise(0),
-    )
-
-    critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
-    critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
-    critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
 
     warn_source = df_aggregated_approved_only or df_aggregated
     warn_source = warn_source.withColumn(
