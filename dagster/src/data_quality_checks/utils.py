@@ -2,9 +2,9 @@ from datetime import UTC, datetime
 from typing import Any, Optional
 
 import pandas as pd
-from jinja2 import BaseLoader, Environment
 from pyspark import sql
 from pyspark.sql import (
+    Column,
     SparkSession,
     functions as f,
     window as w,
@@ -32,9 +32,7 @@ from src.data_quality_checks.geometry import (
 )
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
-from src.settings import settings
 from src.spark.config_expectations import config
-from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
@@ -46,7 +44,18 @@ from src.utils.schema import get_schema_columns
 def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
-):  # input df == row level checks results
+) -> tuple[sql.DataFrame, sql.DataFrame]:
+    """Aggregate per-check pass/fail counts.
+
+    Returns (df_aggregated, df_aggregated_approved_only): counts over all rows,
+    and counts restricted to rows with dq_has_critical_error == 0.
+    """
+    is_approved_expr = (
+        (f.col("dq_has_critical_error") == 0)
+        if "dq_has_critical_error" in df.columns
+        else f.lit(True)
+    )
+
     # Geolocation DQ results store individual checks in a single dq_results map column.
     # Other pipelines (master, coverage, connectivity) still use flat dq_* columns.
     # Detect which format is present and unify into (check_key, value) rows.
@@ -59,17 +68,21 @@ def aggregate_report_spark_df(
                 f.col("dq_has_critical_error").cast("int"),
             ),
         )
-        unpivoted_df = df.select(f.explode(all_checks_map).alias("check_key", "value"))
+        unpivoted_df = df.select(
+            is_approved_expr.alias("is_approved"),
+            f.explode(all_checks_map).alias("check_key", "value"),
+        )
     else:
         # Flat path: stack all dq_* columns into (check_key, value) rows
         dq_columns = [col for col in df.columns if col.startswith("dq_")]
-        df_flat = df.select(*dq_columns)
+        df_flat = df.select(is_approved_expr.alias("is_approved"), *dq_columns)
         for col_name in dq_columns:
             df_flat = df_flat.withColumn(col_name, f.col(col_name).cast("int"))
         stack_expr = ", ".join(
             [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_columns]
         )
         unpivoted_df = df_flat.selectExpr(
+            "is_approved",
             f"stack({len(dq_columns)}, {stack_expr}) as (check_key, value)",
         )
 
@@ -77,6 +90,15 @@ def aggregate_report_spark_df(
         f.expr("count(CASE WHEN value = 1 THEN value END) as count_failed"),
         f.expr("count(CASE WHEN value = 0 THEN value END) as count_passed"),
         f.expr("count(value) as count_overall"),
+        f.expr(
+            "count(CASE WHEN value = 1 AND is_approved THEN value END) "
+            "as count_failed_approved"
+        ),
+        f.expr(
+            "count(CASE WHEN value = 0 AND is_approved THEN value END) "
+            "as count_passed_approved"
+        ),
+        f.expr("count(CASE WHEN is_approved THEN value END) as count_overall_approved"),
     )
 
     agg_df = agg_df.withColumn(
@@ -90,6 +112,18 @@ def aggregate_report_spark_df(
     agg_df = agg_df.withColumn(
         "dq_remarks",
         f.when(f.col("count_failed") == 0, "pass").otherwise("fail"),
+    )
+    agg_df = agg_df.withColumn(
+        "percent_failed_approved",
+        (f.col("count_failed_approved") / f.col("count_overall_approved")) * 100,
+    )
+    agg_df = agg_df.withColumn(
+        "percent_passed_approved",
+        (f.col("count_passed_approved") / f.col("count_overall_approved")) * 100,
+    )
+    agg_df = agg_df.withColumn(
+        "dq_remarks_approved",
+        f.when(f.col("count_failed_approved") == 0, "pass").otherwise("fail"),
     )
 
     # Processing for Human Readable Report
@@ -132,8 +166,9 @@ def aggregate_report_spark_df(
         agg_df["dq_column"] == dq_column_name_df["merge_col"],
         how="inner",
     )
+    report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
 
-    report = report.select(
+    report_all = report.select(
         "type",
         "assertion",
         "column",
@@ -145,45 +180,169 @@ def aggregate_report_spark_df(
         "percent_passed",
         "dq_remarks",
     )
-    report = report.withColumn("column", f.coalesce(f.col("column"), f.lit("")))
+    report_approved_only = report.select(
+        "type",
+        "assertion",
+        "column",
+        "description",
+        f.col("count_failed_approved").alias("count_failed"),
+        f.col("count_passed_approved").alias("count_passed"),
+        f.col("count_overall_approved").alias("count_overall"),
+        f.col("percent_failed_approved").alias("percent_failed"),
+        f.col("percent_passed_approved").alias("percent_passed"),
+        f.col("dq_remarks_approved").alias("dq_remarks"),
+    )
 
-    return report
+    return report_all, report_approved_only
+
+
+# Report warnings are defined in NocoDB: the SchoolGeolocationMasterDQChecks table
+# has a "DQR Warnings" column set to "Yes" for the checks that count as warnings in
+# the DQ report (duplicate / uniqueness / similar-name / density and coordinate
+# precision). Field-level completeness/domain/range/format checks are left "No" so
+# that a missing optional column does not mark 100% of approved schools as "with
+# warnings".
+_DQR_WARNINGS_COLUMN = "DQR Warnings"
+
+
+def _warning_check_keys() -> set[str]:
+    """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes)."""
+    table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+    is_warning = (
+        table[_DQR_WARNINGS_COLUMN].astype(str).str.strip().str.lower() == "yes"
+    )
+    keys: set[str] = set()
+    for col_name in table.loc[is_warning, "DQ Table Column Name"]:
+        col_name = str(col_name or "")
+        if col_name.startswith("dq_"):
+            col_name = col_name[len("dq_") :]
+        if col_name:
+            keys.add(col_name)
+    return keys
+
+
+def _warning_expr(df: sql.DataFrame) -> Column:
+    """Boolean column: True where the row fails at least one report-level warning.
+
+    The set of warning checks comes from NocoDB (see _warning_check_keys), so a
+    missing optional column does not flag every approved school as "with warnings".
+    element_at/coalesce handle keys absent from a given row's dq_results map.
+    """
+    warning_keys = _warning_check_keys()
+    if not warning_keys:
+        return f.lit(False)
+
+    if "dq_results" in df.columns:
+        exprs = [
+            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+            for key in warning_keys
+        ]
+        return f.greatest(*exprs) == 1
+
+    dq_cols = [
+        col
+        for col in df.columns
+        if col.startswith("dq_") and col[len("dq_") :] in warning_keys
+    ]
+    if not dq_cols:
+        return f.lit(False)
+    exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
+    return f.greatest(*exprs) == 1
+
+
+# Derived from config.PRECISION so the keys stay in sync with the columns that
+# actually get a precision check (e.g. precision-latitude, precision-longitude).
+_LOW_PRECISION_CHECK_KEYS = tuple(f"precision-{column}" for column in config.PRECISION)
+
+
+def _low_precision_expr(df: sql.DataFrame) -> Column:
+    """Boolean column: True where the row has low precision lat and/or long.
+
+    A school failing either or both coordinates counts once. False for
+    datasets without precision checks (non-geolocation pipelines).
+    """
+    if "dq_results" in df.columns:
+        exprs = [
+            f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+            for key in _LOW_PRECISION_CHECK_KEYS
+        ]
+    else:
+        dq_cols = [
+            f"dq_{key}"
+            for key in _LOW_PRECISION_CHECK_KEYS
+            if f"dq_{key}" in df.columns
+        ]
+        if not dq_cols:
+            return f.lit(False)
+        exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
+    return f.greatest(*exprs) == 1
+
+
+def build_dq_summary_statistics(
+    spark: SparkSession,
+    df_data_quality_checks: sql.DataFrame,
+    df_bronze: sql.DataFrame,
+) -> dict:
+    """DQ summary with warning counts limited to approved (non-critical) rows."""
+    df_data_quality_checks = df_data_quality_checks.cache()
+    try:
+        df_aggregated, df_aggregated_approved_only = aggregate_report_spark_df(
+            spark,
+            df_data_quality_checks,
+        )
+        return aggregate_report_json(
+            df_aggregated=df_aggregated,
+            df_bronze=df_bronze,
+            df_data_quality_checks=df_data_quality_checks,
+            df_aggregated_approved_only=df_aggregated_approved_only,
+        )
+    finally:
+        df_data_quality_checks.unpersist()
 
 
 def aggregate_report_json(
     df_aggregated: sql.DataFrame,
     df_bronze: sql.DataFrame,
     df_data_quality_checks: sql.DataFrame,
-):  # input: df_aggregated = aggregated row level checks, df_bronze = bronze df
-    # Summary Report
-    counts = df_data_quality_checks.select(
+    df_aggregated_approved_only: sql.DataFrame | None = None,
+):
+    """Build the dq-summary.json dict from aggregated + row-level DQ results.
+
+    df_aggregated: per-check counts (all rows) from aggregate_report_spark_df,
+    used for the critical_checks section.
+    df_aggregated_approved_only: the same, scoped to non-critical rows, used for
+    every other check-type section (falls back to df_aggregated if not given).
+    df_bronze: pre-DQ dataframe, used only for columns_count.
+    """
+    is_approved = f.col("dq_has_critical_error") == 0
+    warning_expr = _warning_expr(df_data_quality_checks)
+    low_precision_expr = _low_precision_expr(df_data_quality_checks)
+    has_is_new_school = "is_new_school" in df_data_quality_checks.columns
+
+    agg_exprs = [
         f.count("*").alias("rows_count"),
-        f.count(f.when(f.col("dq_has_critical_error") == 0, 1)).alias("rows_passed"),
-        f.count(f.when(f.col("dq_has_critical_error") == 1, 1)).alias("rows_failed"),
-    ).first()
-    rows_count = counts.rows_count
-    rows_passed = counts.rows_passed
-    rows_failed = counts.rows_failed
-
-    columns_count = len(
-        [
-            col
-            for col in df_bronze.columns
-            if not col.startswith("dq_")
-            or not col.startswith("_")
-            or col != "failure_reason"
+        f.count(f.when(is_approved, 1)).alias("rows_passed"),
+        f.count(f.when(~is_approved, 1)).alias("rows_failed"),
+        f.count(f.when(is_approved & warning_expr, 1)).alias(
+            "rows_passed_with_warnings"
+        ),
+        f.count(f.when(is_approved & low_precision_expr, 1)).alias(
+            "count_schools_low_precision_coordinates"
+        ),
+    ]
+    if has_is_new_school:
+        agg_exprs += [
+            f.count(f.when(is_approved & f.col("is_new_school"), 1)).alias(
+                "schools_created"
+            ),
+            f.count(f.when(is_approved & ~f.col("is_new_school"), 1)).alias(
+                "schools_updated"
+            ),
         ]
-    )
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
-
-    # Summary Dictionary
-    summary = {
-        "rows": rows_count,
-        "rows_passed": rows_passed,
-        "rows_failed": rows_failed,
-        "columns": columns_count,
-        "timestamp": timestamp,
-    }
+    stats = df_data_quality_checks.select(*agg_exprs).first()
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
@@ -194,7 +353,55 @@ def aggregate_report_json(
     critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
     critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
 
-    df_aggregated = df_aggregated[df_aggregated.is_critical_dq_check != 1]
+    # duplicate-school_id_govt is a critical check, so its count_failed is already
+    # one of the critical_checks_summary records above — no extra Spark pass needed.
+    count_duplicate_school_id = next(
+        (
+            record["count_failed"]
+            for record in critical_checks_summary
+            if record.get("assertion") == "duplicate"
+            and record.get("column") == "school_id_govt"
+        ),
+        0,
+    )
+
+    columns_count = len(
+        [
+            col
+            for col in df_bronze.columns
+            if not col.startswith("dq_")
+            and not col.startswith("_")
+            and col != "failure_reason"
+        ]
+    )
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
+
+    # Summary Dictionary
+    summary = {
+        "rows": stats.rows_count,
+        "rows_passed": stats.rows_passed,
+        "rows_failed": stats.rows_failed,
+        "rows_passed_with_warnings": stats.rows_passed_with_warnings,
+        "count_schools_low_precision_coordinates": (
+            stats.count_schools_low_precision_coordinates
+        ),
+        "count_duplicate_school_id": count_duplicate_school_id,
+        "columns": columns_count,
+        "timestamp": timestamp,
+    }
+
+    # Count created/updated schools among rows that passed the critical checks.
+    # is_new_school is carried through dq_results so we can count on it directly.
+    if has_is_new_school:
+        summary["schools_created"] = stats.schools_created
+        summary["schools_updated"] = stats.schools_updated
+
+    warn_source = df_aggregated_approved_only or df_aggregated
+    warn_source = warn_source.withColumn(
+        "is_critical_dq_check",
+        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+    )
+    df_aggregated = warn_source[warn_source.is_critical_dq_check != 1]
     df_aggregated = df_aggregated.drop("is_critical_dq_check")
 
     # Initialize an empty dictionary for the transformed data
@@ -213,296 +420,6 @@ def aggregate_report_json(
             transformed_data[key].append(agg)
 
     return transformed_data
-
-
-def aggregate_report_statistics(df: sql.DataFrame, upload_details: dict):
-    df = normalize_dq_results_map(df)
-
-    # dq_results is now a map<string, int>; access specific keys via element_at().
-    def _check(key):
-        return f.element_at(f.col("dq_results"), key)
-
-    # Computed composite columns derived from map values
-    df = df.withColumn(
-        "dq_missing_location",
-        f.when(
-            (_check("is_null_optional-latitude") == 1)
-            | (_check("is_null_optional-longitude") == 1),
-            1,
-        ).otherwise(0),
-    )
-
-    df = df.withColumn(
-        "dq_is_null_connectivity_type_when_connectivity_govt",
-        f.when(
-            (_check("is_null_optional-connectivity_type_govt") == 1)
-            & (_check("is_null_optional-connectivity_govt") == 0),
-            1,
-        ).otherwise(0),
-    )
-
-    count_schools_raw_file = df.count()
-
-    # Keys in the dq_results map needed for the statistics report
-    static_check_keys = [
-        "duplicate-school_id_govt",
-        "duplicate_all_except_school_code",
-        "duplicate_name_level_within_110m_radius",
-        "duplicate_location_rows_flag",
-        "duplicate_set-education_level_location_id",
-        "duplicate_set-school_id_govt_school_name_education_level_location_id",
-        "duplicate_set-school_name_education_level_location_id",
-        "duplicate_similar_name_same_level_within_110m_radius",
-        "is_not_within_country",
-        "is_not_alphanumeric-school_name",
-        "is_null_mandatory-school_id_govt",
-        "is_null_optional-computer_availability",
-        "is_null_optional-connectivity_govt",
-        "is_null_optional-education_level_govt",
-        "is_null_optional-school_name",
-        "is_school_density_greater_than_5",
-        "precision-latitude",
-        "precision-longitude",
-    ]
-
-    # Flatten only the needed map keys into individual columns for the stack/agg step
-    df_report = df.select(
-        *[_check(key).cast("int").alias(f"dq_{key}") for key in static_check_keys],
-        f.col("dq_has_critical_error").cast("int"),
-        f.col("dq_missing_location").cast("int"),
-        f.col("dq_is_null_connectivity_type_when_connectivity_govt").cast("int"),
-    )
-
-    dq_report_columns = [f"dq_{key}" for key in static_check_keys] + [
-        "dq_has_critical_error",
-        "dq_missing_location",
-        "dq_is_null_connectivity_type_when_connectivity_govt",
-    ]
-
-    dq_duplicate_columns = [
-        col for col in dq_report_columns if col.startswith("dq_duplicate")
-    ]
-    check_duplicate_columns = [
-        f.col(duplicate_col) == 1 for duplicate_col in dq_duplicate_columns
-    ]
-
-    df_report = df_report.withColumn(
-        "dq_suspected_duplicate",
-        f.when(f.greatest(*check_duplicate_columns), 1).otherwise(0),
-    )
-    dq_report_columns.append("dq_suspected_duplicate")
-
-    stack_expr = ", ".join(
-        [f"'{col.split('_', 1)[1]}', `{col}`" for col in dq_report_columns]
-    )
-
-    unpivoted_df = df_report.selectExpr(
-        f"stack({len(dq_report_columns)}, {stack_expr}) as (assertion, value)",
-    )
-
-    agg_df = unpivoted_df.groupBy("assertion").agg(
-        f.expr("count(CASE WHEN value = 1 THEN value END) as count_schools")
-    )
-
-    agg_df_pd = agg_df.toPandas()
-    agg_df_pd.set_index("assertion", inplace=True)
-
-    columns_in_dataset = agg_df_pd.index.tolist()
-
-    # extract required statistics
-    count_unique_schools_ids = df.select("school_id_govt").distinct().count()
-    stats = {
-        "country": upload_details["country_code"],
-        "file_name": upload_details["file_name"],
-        "uploaded_columns_not_used": upload_details["uploaded_columns_not_used"],
-        "important_columns_not_uploaded": upload_details[
-            "important_columns_not_uploaded"
-        ],
-        "count_schools_raw_file": count_schools_raw_file,
-        "count_schools_dropped": agg_df_pd.at["has_critical_error", "count_schools"],
-        "count_schools_passed": count_schools_raw_file
-        - agg_df_pd.at["has_critical_error", "count_schools"],
-        "count_schools_no_location": agg_df_pd.at["missing_location", "count_schools"],
-        "percent_schools_no_location": round(
-            (
-                100
-                * agg_df_pd.at["missing_location", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_schools_outside_country": agg_df_pd.at[
-            "is_not_within_country", "count_schools"
-        ],
-        "percent_schools_outside_country": round(
-            (
-                100
-                * agg_df_pd.at["is_not_within_country", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_unique_school_id_govt": count_unique_schools_ids,
-        "percent_unique_school_ids": round(
-            (100 * count_unique_schools_ids / count_schools_raw_file), 2
-        ),
-        "count_null_school_id_govt": agg_df_pd.at[
-            "is_null_mandatory-school_id_govt", "count_schools"
-        ],
-        "count_duplicate_school_id": agg_df_pd.at[
-            "duplicate-school_id_govt", "count_schools"
-        ],
-        "count_invalid_school_name": agg_df_pd.at[
-            "is_not_alphanumeric-school_name", "count_schools"
-        ],
-        "percent_invalid_school_name": round(
-            (
-                100
-                * agg_df_pd.at["is_not_alphanumeric-school_name", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_null_school_name": agg_df_pd.at[
-            "is_null_optional-school_name", "count_schools"
-        ],
-        "percent_null_school_name": round(
-            (
-                100
-                * agg_df_pd.at["is_null_optional-school_name", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_null_education_level_govt": agg_df_pd.at[
-            "is_null_optional-education_level_govt", "count_schools"
-        ],
-        "percent_null_education_level_govt": round(
-            (
-                100
-                * agg_df_pd.at["is_null_optional-education_level_govt", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_null_connectivity_govt": agg_df_pd.at[
-            "is_null_optional-connectivity_govt", "count_schools"
-        ],
-        "percent_null_connectivity_govt": round(
-            (
-                100
-                * agg_df_pd.at["is_null_optional-connectivity_govt", "count_schools"]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_null_connectivity_type_govt_when_connectivity": agg_df_pd.at[
-            "is_null_connectivity_type_when_connectivity_govt", "count_schools"
-        ],
-        "percent_null_connectivity_type_govt_when_connectivity": round(
-            (
-                100
-                * agg_df_pd.at[
-                    "is_null_connectivity_type_when_connectivity_govt", "count_schools"
-                ]
-                / count_schools_raw_file
-            ),
-            2,
-        ),
-        "count_school_density_greater_than_5": agg_df_pd.at[
-            "is_school_density_greater_than_5", "count_schools"
-        ],
-        "count_suspected_duplicate": agg_df_pd.at[
-            "suspected_duplicate", "count_schools"
-        ],
-        "count_duplicate_all_except_school_code": agg_df_pd.at[
-            "duplicate_all_except_school_code", "count_schools"
-        ],
-        "count_duplicate_school_id_govt_school_name_education_level_location_id": agg_df_pd.at[
-            "duplicate_set-school_id_govt_school_name_education_level_location_id",
-            "count_schools",
-        ],
-        "count_duplicate_school_name_education_level_location_id": agg_df_pd.at[
-            "duplicate_set-school_name_education_level_location_id", "count_schools"
-        ],
-        "count_duplicate_education_level_location_id": agg_df_pd.at[
-            "duplicate_set-education_level_location_id", "count_schools"
-        ],
-        "count_duplicate_location_id": agg_df_pd.at[
-            "duplicate_location_rows_flag", "count_schools"
-        ],
-        "count_duplicate_name_level_within_110m_radius": agg_df_pd.at[
-            "duplicate_name_level_within_110m_radius", "count_schools"
-        ],
-        "count_duplicate_similar_name_same_level_within_110m_radius": agg_df_pd.at[
-            "duplicate_similar_name_same_level_within_110m_radius", "count_schools"
-        ],
-        "count_precision_latitude": agg_df_pd.at["precision-latitude", "count_schools"],
-        "count_precision_longitude": agg_df_pd.at[
-            "precision-longitude", "count_schools"
-        ],
-    }
-
-    def add_null_count_and_pct(dq_column_name):
-        col_base_name = dq_column_name.split("-")[-1]
-        counts_name = f"count_null_{col_base_name}"
-        pct_name = f"percent_null_{col_base_name}"
-
-        column_count = agg_df_pd.at["dq_column_name", "count_schools"]
-        stats[counts_name] = column_count
-        stats[pct_name] = round(100 * column_count / count_schools_raw_file, 2)
-
-    cols_null_counts_to_add = [
-        "computer_availability",
-        "num_computers",
-        "num_students",
-        "num_teachers",
-    ]
-
-    for column in cols_null_counts_to_add:
-        if column in columns_in_dataset:
-            add_null_count_and_pct(column)
-
-    def add_column_counts_summary(column):
-        column_counts = df.groupBy(column).count().toPandas().fillna("Unknown")
-        if not (list(column_counts[column].unique()) == ["Unknown"]):
-            # Ensure there is no column header
-            column_counts.columns = [None] * len(column_counts.columns)
-            column_counts_string = column_counts.to_string(index=False)
-            column_counts_string = column_counts_string.split("\n", 1)[1]
-            stats[f"{column}_counts"] = column_counts_string
-
-    cols_for_counts_summary = [
-        "education_level_govt",
-        "connectivity_govt",
-        "connectivity_type_govt",
-        "computer_availability",
-        "electricity_availability",
-        "water_availability",
-        "school_area_type",
-        "school_funding_type",
-    ]
-
-    for column in cols_for_counts_summary:
-        if column in columns_in_dataset:
-            add_column_counts_summary(column)
-
-    report_template_string = get_report_template()
-    report_template = Environment(loader=BaseLoader()).from_string(
-        report_template_string
-    )
-    data_quality_report = report_template.render(**stats)
-
-    return data_quality_report
-
-
-def get_report_template() -> str:
-    container_name = settings.AZURE_BLOB_CONTAINER_NAME
-    service = get_blob_service_client()
-    filename = "templates/data_quality/data_quality_report_template.txt"
-    blob_client = service.get_blob_client(container=container_name, blob=filename)
-    data = blob_client.download_blob(encoding="UTF-8").readall()
-    return data
 
 
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
@@ -614,6 +531,7 @@ def dq_geolocation_extract_relevant_columns(
             "dq_has_critical_error",
             "failure_reason",
             "dq_results",
+            "is_new_school",
         ]
         if col in df.columns
     ]
