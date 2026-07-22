@@ -262,6 +262,21 @@ def _count_schools_with_low_precision(df: sql.DataFrame) -> int:
     return df.filter(f.greatest(*exprs) == 1).count()
 
 
+_DUPLICATE_SCHOOL_ID_CHECK_KEY = "duplicate-school_id_govt"
+
+
+def _count_schools_with_duplicate_school_id(df: sql.DataFrame) -> int:
+    """Schools with a duplicate school_id_govt, over all rows (0 if absent)."""
+    key = _DUPLICATE_SCHOOL_ID_CHECK_KEY
+    if "dq_results" in df.columns:
+        expr = f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+    elif f"dq_{key}" in df.columns:
+        expr = f.coalesce(f.col(f"dq_{key}"), f.lit(0))
+    else:
+        return 0
+    return df.filter(expr == 1).count()
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -320,6 +335,9 @@ def aggregate_report_json(
             df_data_quality_checks,
         ),
         "count_schools_low_precision_coordinates": _count_schools_with_low_precision(
+            df_data_quality_checks,
+        ),
+        "count_duplicate_school_id": _count_schools_with_duplicate_school_id(
             df_data_quality_checks,
         ),
         "columns": columns_count,
