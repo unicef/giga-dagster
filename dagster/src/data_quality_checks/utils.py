@@ -45,12 +45,10 @@ def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
 ) -> tuple[sql.DataFrame, sql.DataFrame]:
-    """Aggregate per-check pass/fail counts, computed once over all rows.
+    """Aggregate per-check pass/fail counts.
 
-    Returns (df_aggregated, df_aggregated_approved_only): the same unpivot →
-    groupBy → NocoDB join is done a single time, with both an all-rows and an
-    approved-only (dq_has_critical_error == 0) count computed per check key in
-    the same aggregation, so the two views can be derived without a second pass.
+    Returns (df_aggregated, df_aggregated_approved_only): counts over all rows,
+    and counts restricted to rows with dq_has_critical_error == 0.
     """
     is_approved_expr = (
         (f.col("dq_has_critical_error") == 0)
