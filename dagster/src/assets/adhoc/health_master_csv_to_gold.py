@@ -27,6 +27,7 @@ from src.utils.schema import (
 from src.utils.sentry import capture_op_exceptions
 
 from dagster import (
+    Failure,
     OpExecutionContext,
     Output,
     asset,
@@ -61,6 +62,12 @@ def adhoc__health_master_data_transforms(
 
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
+
+    if df.empty:
+        raise Failure(
+            f"Uploaded file {config.filepath} was read as an empty dataframe "
+            "(0 data rows). Aborting run to avoid wiping the existing gold table."
+        )
 
     df = df[[column.name for column in schema_columns if column.name in df.columns]]
     for column, dtype in df.dtypes.items():
@@ -103,6 +110,12 @@ def adhoc__health_master_data_transforms(
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
 
+    if df.empty:
+        raise Failure(
+            f"All rows from {config.filepath} were dropped during transforms. "
+            "Aborting run to avoid wiping the existing gold table."
+        )
+
     return Output(
         df, metadata={**get_output_metadata(config), "preview": get_table_preview(df)}
     )
@@ -116,6 +129,12 @@ def adhoc__publish_health_master_to_gold(
     adhoc__health_master_data_transforms: sql.DataFrame,
 ) -> Output[sql.DataFrame]:
     df = adhoc__health_master_data_transforms
+
+    if df.isEmpty():
+        raise Failure(
+            "Incoming health master dataframe is empty. Refusing to publish: "
+            "merging an empty dataset would delete all existing rows in gold."
+        )
 
     context.log.info("original schema")
     context.log.info(df.schema.simpleString())
