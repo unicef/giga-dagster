@@ -448,16 +448,37 @@ def geolocation_data_quality_results_human_readable(
         geolocation_data_quality_results, uploaded_columns
     )
 
+    # duplicate_location_rows_count/_id carry values (not pass/fail flags) and are
+    # only meaningful when the location actually has duplicates (count > 1).
+    duplicate_count_col = f.element_at(
+        f.col("dq_results"), "duplicate_location_rows_count"
+    )
     for map_key, human_name in human_readable_mappings.items():
-        df = df.withColumn(
-            human_name,
-            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
-                f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
-            ),
-        )
-    # Keep is_new_school in both human-readable outputs so users can distinguish
-    # schools that will be created from schools that will be updated.
+        if map_key == "duplicate_location_rows_count":
+            df = df.withColumn(
+                human_name,
+                f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
+                    duplicate_count_col
+                ),
+            )
+        elif map_key == "duplicate_location_rows_id":
+            df = df.withColumn(
+                human_name,
+                f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
+                    f.col("dq_duplicate_location_rows_id")
+                ),
+            )
+        else:
+            df = df.withColumn(
+                human_name,
+                f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
+                    f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
+                ),
+            )
+
     df = df.drop("dq_results")
+    if "dq_duplicate_location_rows_id" in df.columns:
+        df = df.drop("dq_duplicate_location_rows_id")
 
     # Cache once — both filters read from the same plan
     df.cache()
