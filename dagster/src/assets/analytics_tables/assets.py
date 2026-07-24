@@ -3,13 +3,15 @@ from pathlib import Path
 
 import sqlparse
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 from src.settings import settings
 from src.utils.db.trino import get_db_context
 
 from dagster import AssetKey, AssetsDefinition, OpExecutionContext, asset
 
 QUERIES_ROOT = settings.BASE_DIR / "analytics_tables_repo" / "analytics-tables"
-GROUPS = ("daily", "incremental")
+DELTA_LAKE_CATALOG = "delta_lake"
+DELTA_LAKE_SCHEMA = "default"
 
 # Matches `default.<table>` and `delta_lake.default.<table>` table references, the
 # only two qualified forms used across the source scripts' CREATE TABLE/FROM/JOIN clauses.
@@ -17,11 +19,17 @@ _TABLE_REF_PATTERN = re.compile(r"(?:delta_lake\.)?default\.([a-zA-Z0-9_]+)")
 
 
 def _discover_query_files() -> list[tuple[str, Path]]:
-    return [
-        (group, path)
-        for group in GROUPS
-        for path in sorted((QUERIES_ROOT / group).glob("*.sql"))
+    daily_files = [
+        ("daily", path) for path in sorted((QUERIES_ROOT / "daily").glob("*.sql"))
     ]
+    # Incremental scripts are split into a one-time `create` (CREATE TABLE ... AS)
+    # and a repeatable `update` (INSERT INTO ...) script per table; the asset picks
+    # one at runtime depending on whether the table already exists.
+    incremental_files = [
+        ("incremental", path)
+        for path in sorted((QUERIES_ROOT / "incremental" / "create").glob("*.sql"))
+    ]
+    return daily_files + incremental_files
 
 
 def _split_statements(sql_text: str) -> list[str]:
@@ -37,11 +45,27 @@ def _split_statements(sql_text: str) -> list[str]:
     return statements
 
 
+def _table_exists(db: Session, table_name: str) -> bool:
+    result = db.execute(
+        text(
+            f"SELECT 1 FROM {DELTA_LAKE_CATALOG}.information_schema.tables "  # nosec B608
+            "WHERE table_schema = :schema AND table_name = :table_name"
+        ),
+        {"schema": DELTA_LAKE_SCHEMA, "table_name": table_name},
+    ).first()
+    return result is not None
+
+
 def _build_analytics_table_asset(
     group: str, path: Path, deps: list[AssetKey]
 ) -> AssetsDefinition:
     name = path.stem
-    statements = _split_statements(path.read_text())
+    create_statements = _split_statements(path.read_text())
+
+    update_statements = None
+    if group == "incremental":
+        update_path = QUERIES_ROOT / "incremental" / "update" / path.name
+        update_statements = _split_statements(update_path.read_text())
 
     @asset(
         name=name,
@@ -52,6 +76,20 @@ def _build_analytics_table_asset(
     )
     def _analytics_table_asset(context: OpExecutionContext) -> None:
         with get_db_context() as db:
+            if update_statements is not None:
+                exists = _table_exists(db, name)
+                statements = update_statements if exists else create_statements
+                context.log.info(
+                    f"table {DELTA_LAKE_SCHEMA}.{name} "
+                    + (
+                        "exists, running update script"
+                        if exists
+                        else "does not exist, running create script"
+                    )
+                )
+            else:
+                statements = create_statements
+
             for i, statement in enumerate(statements):
                 context.log.info(f"executing statement {i + 1}/{len(statements)}")
                 db.execute(text(statement))

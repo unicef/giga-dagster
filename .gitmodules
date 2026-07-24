@@ -1,3 +1,4 @@
 [submodule "dagster/analytics_tables_repo"]
 	path = dagster/analytics_tables_repo
 	url = git@github.com:unicef/giga-data-analytics.git
+	branch = main

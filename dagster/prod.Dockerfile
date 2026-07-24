@@ -71,6 +71,7 @@ WORKDIR /app
 COPY src ./src
 COPY models ./models
 COPY scripts ./scripts
+COPY analytics_tables_repo ./analytics_tables_repo
 
 # Read the PORT environment variable, otherwise default to the specified port
 ENV PORT 3002
