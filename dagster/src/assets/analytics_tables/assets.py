@@ -9,7 +9,7 @@ from src.utils.db.trino import get_db_context
 
 from dagster import AssetKey, AssetsDefinition, OpExecutionContext, asset
 
-QUERIES_ROOT = settings.BASE_DIR / "analytics_tables_repo" / "analytics-tables"
+QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
 DELTA_LAKE_CATALOG = "delta_lake"
 DELTA_LAKE_SCHEMA = "default"
 
