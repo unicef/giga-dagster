@@ -40,6 +40,12 @@ from src.utils.nocodb.get_nocodb_data import (
 )
 from src.utils.schema import get_schema_columns
 
+# Metadata keys, not 0/1 check results: a count of 1 means "alone at this
+# location", which anything counting value == 1 would read as a failed check.
+METADATA_CHECK_KEYS = frozenset(
+    {"duplicate_location_rows_count", "duplicate_location_rows_id"}
+)
+
 
 def aggregate_report_spark_df(
     spark: SparkSession,
@@ -85,6 +91,10 @@ def aggregate_report_spark_df(
             "is_approved",
             f"stack({len(dq_columns)}, {stack_expr}) as (check_key, value)",
         )
+
+    unpivoted_df = unpivoted_df.filter(
+        ~f.col("check_key").isin(list(METADATA_CHECK_KEYS))
+    )
 
     agg_df = unpivoted_df.groupBy("check_key").agg(
         f.expr("count(CASE WHEN value = 1 THEN value END) as count_failed"),
@@ -221,7 +231,7 @@ def _warning_check_keys() -> set[str]:
             col_name = col_name[len("dq_") :]
         if col_name:
             keys.add(col_name)
-    return keys
+    return keys - METADATA_CHECK_KEYS
 
 
 def _warning_expr(df: sql.DataFrame) -> Column:
