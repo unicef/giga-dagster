@@ -16,24 +16,38 @@ def duplicate_set_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate set checks...")
 
-    df = df.withColumn(
-        "location_id",
-        f.concat_ws(
-            "_",
-            f.col("longitude").cast("string"),
-            f.col("latitude").cast("string"),
-        ),
-    )
+    has_lat_long = {"latitude", "longitude"}.issubset(df.columns)
 
-    null_coords = (
-        f.col("latitude").isNull()
-        | f.isnan(f.col("latitude"))
-        | f.col("longitude").isNull()
-        | f.isnan(f.col("longitude"))
-    )
+    if has_lat_long:
+        df = df.withColumn(
+            "location_id",
+            f.concat_ws(
+                "_",
+                f.col("longitude").cast("string"),
+                f.col("latitude").cast("string"),
+            ),
+        )
+        null_coords = (
+            f.col("latitude").isNull()
+            | f.isnan(f.col("latitude"))
+            | f.col("longitude").isNull()
+            | f.isnan(f.col("longitude"))
+        )
+    else:
+        null_coords = f.lit(False)
 
     column_actions = {}
     for column_set in config_column_list:
+        required_columns = set(column_set) - {"location_id"}
+        needs_location_id = "location_id" in column_set
+        if not required_columns.issubset(df.columns) or (
+            needs_location_id and not has_lat_long
+        ):
+            logger.info(
+                f"Skipping duplicate set check for {column_set} — missing columns"
+            )
+            continue
+
         is_location_only = list(column_set) == ["location_id"]
         flag_col = (
             "dq_duplicate_location_rows_flag"
@@ -55,7 +69,7 @@ def duplicate_set_checks(
             ).otherwise(f.substring(f.md5(f.col("location_id")), 1, 8))
 
     df = df.withColumns(column_actions)
-    return df.drop("location_id")
+    return df.drop("location_id") if has_lat_long else df
 
 
 def duplicate_all_except_checks(

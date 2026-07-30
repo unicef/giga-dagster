@@ -60,6 +60,14 @@ def is_not_within_country(
     logger = get_context_with_fallback_logger(context)
     logger.info("Checking if not within country...")
 
+    required_columns = {"latitude", "longitude"}
+    if not required_columns.issubset(df.columns):
+        logger.info(
+            "Skipping is_not_within_country check — missing columns: "
+            f"{required_columns - set(df.columns)}"
+        )
+        return df
+
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
         country_boundary_geodataframe = get_country_geometry(country_code_iso3)
         broadcast_country_boundary = df.sparkSession.sparkContext.broadcast(

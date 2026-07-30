@@ -25,6 +25,10 @@ def duplicate_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate checks...")
 
+    config_column_list = [
+        column for column in config_column_list if column in df.columns
+    ]
+
     column_actions = {}
     for column in config_column_list:
         column_actions[f"dq_duplicate-{column}"] = f.when(
