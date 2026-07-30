@@ -23,6 +23,14 @@ def duplicate_name_level_110_check(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate level within 110m checks...")
 
+    required_columns = {"latitude", "longitude", "school_name", "education_level"}
+    if not required_columns.issubset(df.columns):
+        logger.info(
+            "Skipping duplicate name level within 110m check — missing columns: "
+            f"{required_columns - set(df.columns)}"
+        )
+        return df
+
     df_columns = df.columns
 
     df = df.withColumn("lat_110", f.floor(f.col("latitude") * 1000) / 1000)
@@ -62,6 +70,14 @@ def similar_name_level_within_110_check(
     __test_name__ = "similar name level within 110m"
     logger = get_context_with_fallback_logger(context)
     logger.info(f"Running {__test_name__} checks...")
+
+    required_columns = {"latitude", "longitude", "education_level", "school_name"}
+    if not required_columns.issubset(df.columns):
+        logger.info(
+            f"Skipping {__test_name__} check — missing columns: "
+            f"{required_columns - set(df.columns)}"
+        )
+        return df
 
     df_columns = df.columns
 
@@ -160,6 +176,14 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
     __test_name__ = "school density"
     logger = ContextLoggerWithLoguruFallback(context, __test_name__)
     logger.log.info(f"Running {__test_name__} checks...")
+
+    required_columns = {"latitude", "longitude", "school_id_giga"}
+    if not required_columns.issubset(df.columns):
+        logger.log.info(
+            f"Skipping {__test_name__} check — missing columns: "
+            f"{required_columns - set(df.columns)}"
+        )
+        return df
 
     df = df.withColumn(
         "hex8",
