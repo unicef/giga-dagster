@@ -36,7 +36,7 @@
 
 
 
- CREATE TABLE default.all_gigameter_school_consistency_history AS (
+ CREATE TABLE test_tables.all_gigameter_school_consistency_history AS (
 
 WITH weekly_anchors AS (
     -- ─────────────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ school_first_dates AS (
     SELECT
         school_id_giga,
         MIN(date) AS first_measurement_date
-    FROM default.all_gmeter_only_measurements
+    FROM test_tables.all_gmeter_only_measurements
 
     GROUP BY school_id_giga
 ),
@@ -79,7 +79,7 @@ school_lifetime_activity AS (
         COUNT(DISTINCT gm.date) AS lifetime_active_days,
         MIN(gm.date)            AS lifetime_first_date,
         MAX(gm.date)            AS lifetime_last_date
-    FROM default.all_gigameter_measurement_data gm
+    FROM test_tables.all_gigameter_measurement_data gm
     WHERE
         gm.is_weekday              = True
         AND gm.measurement_time_window = '8am-4pm(within school hrs)'
@@ -113,7 +113,7 @@ school_window_daily_stats AS (
         COUNT(CASE WHEN gm.notes = 'daily'   THEN 1 END)       AS daily_daily,
         COUNT(CASE WHEN gm.notes = 'manual'  THEN 1 END)       AS daily_manual,
         COUNT(CASE WHEN gm.notes = 'first'   THEN 1 END)       AS daily_first
-    FROM default.all_gigameter_measurement_data  gm
+    FROM test_tables.all_gigameter_measurement_data  gm
     CROSS JOIN weekly_anchors wa
     WHERE
         gm.date                    >= wa.window_start

@@ -2,7 +2,7 @@
 
 -- ==============================================================================
 -- Script Name:     country_versions.sql
--- Table Created:   default.country_versions
+-- Table Created:   test_tables.country_versions
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -32,7 +32,7 @@ SET SESSION mark_distinct_strategy = 'none';
 SET SESSION query_max_stage_count = 400;
 
 
-CREATE TABLE IF NOT EXISTS default.country_versions AS (
+CREATE TABLE IF NOT EXISTS test_tables.country_versions AS (
 
 WITH vt_union AS (
 

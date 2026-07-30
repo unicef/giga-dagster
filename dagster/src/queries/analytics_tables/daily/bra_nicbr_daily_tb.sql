@@ -1,7 +1,7 @@
 
 
 
- CREATE TABLE IF NOT EXISTS default.bra_nicbr_daily_tb as (
+ CREATE TABLE IF NOT EXISTS test_tables.bra_nicbr_daily_tb as (
 
 
 WITH master AS (
@@ -33,7 +33,7 @@ WITH master AS (
         fs.fust_tax_exempt,
         fs.fust_install
     FROM school_master.bra bm
-    FULL JOIN default.bra_fust_schools fs
+    FULL JOIN test_tables.bra_fust_schools fs
         ON bm.school_id_govt = fs.school_id_govt
 ),
 nic_br_realtime AS (

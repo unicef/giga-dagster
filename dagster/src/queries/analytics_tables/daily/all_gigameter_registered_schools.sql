@@ -7,7 +7,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_registered_schools.sql
--- Table Created:   default.all_gigameter_registered_schools
+-- Table Created:   test_tables.all_gigameter_registered_schools
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -19,8 +19,8 @@
 --
 -- Dependencies:
 --   - gigameter_production_db.public.school (GigaMeter school registrations)
---   - default.all_gigameter_measurement_data (consolidated measurement history)
---   - default.all_school_master (school metadata and geography)
+--   - test_tables.all_gigameter_measurement_data (consolidated measurement history)
+--   - test_tables.all_school_master (school metadata and geography)
 --
 -- Output Columns:  ~30 columns
 -- Primary Key:     school_id_giga
@@ -34,7 +34,7 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_schools as (
+CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_registered_schools as (
 
 with
 
@@ -57,7 +57,7 @@ FROM
             ROW_NUMBER() OVER (PARTITION BY school_id_giga ORDER BY created_timestamp DESC) AS row_num
           --  rt_source
         FROM
-            default.all_gigameter_measurement_data
+            test_tables.all_gigameter_measurement_data
         WHERE
           measurement_time_window = '8am-4pm(within school hrs)'
         AND
@@ -86,7 +86,7 @@ WHERE
                     TRY_CAST(SPLIT_PART(app_version, '.', 2) AS INTEGER) DESC,
                     TRY_CAST(SPLIT_PART(app_version, '.', 3) AS INTEGER) DESC
             ) AS version_rank
-        FROM default.all_gigameter_measurement_data
+        FROM test_tables.all_gigameter_measurement_data
         WHERE app_version IS NOT NULL
     )
     WHERE version_rank = 1
@@ -148,7 +148,7 @@ SELECT
     date_diff('day', CAST(MIN(m.local_created_timestamp) AS DATE), current_date) as num_days_measuring        -- number of days since starting to send measurement data
     -- select *
 FROM
-  default.all_gigameter_measurement_data m
+  test_tables.all_gigameter_measurement_data m
 WHERE
   measurement_time_window = '8am-4pm(within school hrs)'            -- filter data for those inside measurement window only
 AND
@@ -213,7 +213,7 @@ SELECT
     ELSE 'Unknown'
     END AS VARCHAR) AS install_status
 from
-  default.all_school_master   master
+  test_tables.all_school_master   master
 
 LEFT JOIN
   measurement_data data

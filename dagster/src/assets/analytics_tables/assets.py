@@ -10,7 +10,7 @@ from dagster import AssetKey, OpExecutionContext, asset
 
 QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
 DELTA_LAKE_CATALOG = "delta_lake"
-DELTA_LAKE_SCHEMA = "default"
+DELTA_LAKE_SCHEMA = "test_tables"
 
 
 def _split_statements(sql_text: str) -> list[str]:

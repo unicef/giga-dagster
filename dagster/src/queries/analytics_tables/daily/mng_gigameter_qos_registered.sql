@@ -4,7 +4,7 @@
 
 -- ==============================================================================
 -- Script Name:     mng_gigameter_qos_registered.sql
--- Table Created:   default.mng_gigameter_qos_registered
+-- Table Created:   test_tables.mng_gigameter_qos_registered
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -17,7 +17,7 @@
 --
 -- Dependencies:
 --   - qos_raw.mng (raw LibreRouter data for Mongolia)
---   - default.all_gigameter_registered_tb_physical (GigaMeter registered schools)
+--   - test_tables.all_gigameter_registered_tb_physical (GigaMeter registered schools)
 --   - school_master.mng (Mongolia school master data)
 --
 -- Output Columns:  ~20 columns
@@ -43,7 +43,7 @@
 
 
 
-CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_registered AS (
+CREATE TABLE IF NOT EXISTS test_tables.mng_gigameter_qos_registered AS (
 
 WITH
 
@@ -82,7 +82,7 @@ libre AS (
 -- ==============================================================================
 -- CTE: gigameter_registered
 -- Purpose: GigaMeter app registrations for Mongolia
--- Source:  default.all_gigameter_registered_tb_physical
+-- Source:  test_tables.all_gigameter_registered_tb_physical
 -- Filter:  country = 'Mongolia' AND initial_registration_date IS NOT NULL
 -- ==============================================================================
 gigameter_registered AS (
@@ -104,7 +104,7 @@ gigameter_registered AS (
         secondary_isp_asn,
         primary_source,
         1 AS gigameter_source                   -- Flag for join logic
-    FROM default.all_gigameter_registered_tb_physical
+    FROM test_tables.all_gigameter_registered_tb_physical
     WHERE country = 'Mongolia'
         AND initial_registration_date IS NOT NULL
 ),

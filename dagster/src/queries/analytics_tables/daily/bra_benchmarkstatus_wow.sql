@@ -5,7 +5,7 @@
 
 -- ==============================================================================
 -- Script Name:     bra_benchmarkstatus_wow.sql
--- Table Created:   default.bra_benchmarkstatus_wow
+-- Table Created:   test_tables.bra_benchmarkstatus_wow
 -- Schema:          default
 -- Region:          Brazil
 -- Pipeline Status: Active (Integrated: true)
@@ -18,7 +18,7 @@
 --   connectivity performance over time.
 --
 -- Dependencies:
---   - default.bra_nicbr_daily_tb (daily NIC.BR measurements with benchmark flags)
+--   - test_tables.bra_nicbr_daily_tb (daily NIC.BR measurements with benchmark flags)
 --
 -- Output Columns:  ~20 columns
 -- Primary Key:     week (ISO week start date, Monday)
@@ -33,13 +33,13 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS default.bra_benchmarkstatus_wow AS (
+ CREATE TABLE IF NOT EXISTS test_tables.bra_benchmarkstatus_wow AS (
 
 WITH
   vt AS (
    SELECT *
    FROM
-     default.bra_nicbr_daily_tb
+     test_tables.bra_nicbr_daily_tb
    ORDER BY date ASC
 )
 , weekly_data_per_school AS (

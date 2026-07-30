@@ -1,5 +1,5 @@
 
-INSERT INTO  delta_lake.default.all_mlab_only_measurements_incremental
+INSERT INTO  delta_lake.test_tables.all_mlab_only_measurements_incremental
 
 
 -- =============================================================================
@@ -31,10 +31,10 @@ WITH school_lookup AS (
         gigameter_production_db.public.country
         ON country.id = school.country_id
     -- Timezone lookup by ISO3 code (primary method)
-    LEFT JOIN default.country_timezones tz
+    LEFT JOIN test_tables.country_timezones tz
         ON country.iso3_format = tz.iso3
     -- Timezone lookup by country name (fallback method)
-    LEFT JOIN default.country_timezones tz_name
+    LEFT JOIN test_tables.country_timezones tz_name
         ON LOWER(country.name) = LOWER(tz_name.country)
     WHERE
         -- FILTER: Exclude deleted schools at source
@@ -100,18 +100,18 @@ measurements_base AS (
               MAX(created_timestamp),
               TIMESTAMP '2022-01-01 00:00:00 UTC'
           )
-         FROM delta_lake.default.all_mlab_only_measurements_incremental
+         FROM delta_lake.test_tables.all_mlab_only_measurements_incremental
       )
       -- Duplicate protection
       AND id NOT IN (
           SELECT measurement_id
-         FROM delta_lake.default.all_mlab_only_measurements_incremental
+         FROM delta_lake.test_tables.all_mlab_only_measurements_incremental
       )
     -- future dates protection
       AND created_at < (
           SELECT
               date_add('hour', 1, MAX(created_timestamp))
-         FROM delta_lake.default.all_mlab_only_measurements_incremental
+         FROM delta_lake.test_tables.all_mlab_only_measurements_incremental
       )
 )
 
@@ -359,7 +359,7 @@ select
         - CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.StartTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE))        AS ndt5_duration_s,
 
     -- NDT-5 alternative download speed (Roberto's TCP-based formula) - NOT used in
-    -- download_speed or validity flags by default. NULL unless TCPInfoBytesAcked and
+    -- download_speed or validity flags by test_tables. NULL unless TCPInfoBytesAcked and
     -- a parseable duration are both present (~19.3% of NDT-5 tests). For monitoring /
     -- future switch-over only.
     ROUND(CAST(8 * CAST(JSON_EXTRACT_SCALAR(results, '$["TCPInfo.BytesAcked"]') AS DOUBLE)

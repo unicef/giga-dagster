@@ -3,7 +3,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_appversion_funnel.sql
--- Table Created:   default.all_gigameter_appversion_funnel
+-- Table Created:   test_tables.all_gigameter_appversion_funnel
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -17,7 +17,7 @@
 --   - gigameter_production_db.public.device (device registration records)
 --   - gigameter_production_db.public.measurements (measurement history)
 --   - gigameter_production_db.public.school (school registration)
---   - default.all_school_master (school metadata and geography)
+--   - test_tables.all_school_master (school metadata and geography)
 --
 -- Output Columns:  ~20 columns
 -- Primary Key:     device_id + school_id_giga
@@ -30,9 +30,9 @@
 --
 -- ==============================================================================
 
-  CREATE TABLE IF NOT EXISTS default.all_gigameter_appversion_funnel as (
+  CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_appversion_funnel as (
 
--- CREATE or replace view default.all_gigameter_appversion_funnel_vw as
+-- CREATE or replace view test_tables.all_gigameter_appversion_funnel_vw as
 -- ============================================================
 -- GigaMeter App Version Funnel Analysis - Version 1 (Fixed)
 -- ============================================================
@@ -65,7 +65,7 @@ devices_distinct AS (
         ROW_NUMBER() OVER (PARTITION BY dcs.giga_id_school ORDER BY dcs.created ASC) AS row_num,
         'GigaMeter' AS rt_source
     FROM gigameter_production_db.public.dailycheckapp_school dcs
-    LEFT JOIN default.all_school_master sm
+    LEFT JOIN test_tables.all_school_master sm
            ON dcs.giga_id_school = sm.school_id_giga
 
 )
@@ -86,7 +86,7 @@ devices_distinct AS (
         TRY_CAST(SPLIT_PART(app_version, '.', 3) AS integer) AS last_app_version_patch,
         created_timestamp AS measurement_date,
         rt_source
-    FROM default.all_gigameter_measurement_data
+    FROM test_tables.all_gigameter_measurement_data
     WHERE rt_source = 'GigaMeter'
 )
 

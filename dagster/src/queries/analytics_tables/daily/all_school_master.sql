@@ -1,7 +1,7 @@
 
 
 -- Script Name:     all_school_master.sql
--- Table Created:   default.all_school_master
+-- Table Created:   test_tables.all_school_master
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -15,7 +15,7 @@
 --   - custom_dataset.school_master_all (primary source of school data)
 --   - custom_dataset.country_geography (country names, regions, continents)
 --   - gigamaps_production_db.public.locations_country (ISO3 country codes)
---   - default.country_versions (school master version tracking)
+--   - test_tables.country_versions (school master version tracking)
 --
 -- Output Columns:  69 columns
 -- Primary Key:     school_id_giga (36-character hash)
@@ -50,7 +50,7 @@ SET SESSION query_max_stage_count = 300;
 
 
 
-CREATE TABLE IF NOT EXISTS default.all_school_master AS (
+CREATE TABLE IF NOT EXISTS test_tables.all_school_master AS (
 
 
 -- ==============================================================================
@@ -81,7 +81,7 @@ WITH country_geography AS (
 -- CTE: versions
 -- Purpose: Gets the latest version number and update date for each country's
 --          school master delta table
--- Source:  default.country_versions (tracks delta_lake.school_master versions)
+-- Source:  test_tables.country_versions (tracks delta_lake.school_master versions)
 -- Output:  country_code, school_master_latest_version, school_master_last_updated
 -- Caveats: Ensures we track which version of source data is being used
 -- ==============================================================================
@@ -93,7 +93,7 @@ versions AS (
         max_date AS school_master_last_updated,
         min_date as school_master_first_updated
     FROM
-        default.country_versions
+        test_tables.country_versions
 )
 
 

@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Script Name:     all_ping_daily.sql
--- Table Created:   default.all_ping_daily
+-- Table Created:   test_tables.all_ping_daily
 -- Schema:          default
 -- Pipeline Step:   1 of 2 (ping aggregation only)
 --
@@ -9,7 +9,7 @@
 --   of a two-step replacement for all_gigameter_inc_ping_daily.sql, split to
 --   reduce memory pressure from the original single-query approach.
 --
--- Source:          default.all_ping_hourly
+-- Source:          test_tables.all_ping_hourly
 -- Why this source:
 --   all_ping_hourly groups raw pings by device-school-HOUR, so each row
 --   represents exactly one hour (local_hour = 0..23). This means ping_records
@@ -32,7 +32,7 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS default.all_ping_daily AS
+ CREATE TABLE IF NOT EXISTS test_tables.all_ping_daily AS
 
 
 -- ==============================================================================
@@ -100,7 +100,7 @@ WITH ping_daily AS (
                 SUM(CASE WHEN local_hour BETWEEN 8 AND 19 THEN ping_records ELSE 0 END)
               AS DECIMAL(10,2)), 0)                                          AS uptime_8am_to_8pm_local
 
-    FROM default.all_ping_hourly
+    FROM test_tables.all_ping_hourly
     GROUP BY
         local_created_date,
         country,

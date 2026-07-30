@@ -1,6 +1,6 @@
 
 
-CREATE TABLE delta_lake.default.all_gigameter_valid_test_checker_incremental
+CREATE TABLE delta_lake.test_tables.all_gigameter_valid_test_checker_incremental
 
 WITH (
     location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_valid_test_checker_incremental'
@@ -15,9 +15,9 @@ AS
 -- Combines GigaMeter and MLab measurements via UNION ALL
 -- ============================================================
 WITH data AS (
-  SELECT m1.* FROM delta_lake.default.all_gmeter_only_measurements_incremental  m1
+  SELECT m1.* FROM delta_lake.test_tables.all_gmeter_only_measurements_incremental  m1
   UNION ALL
-  SELECT m2.* FROM delta_lake.default.all_mlab_only_measurements_incremental m2
+  SELECT m2.* FROM delta_lake.test_tables.all_mlab_only_measurements_incremental m2
 ),
 
 -- ============================================================

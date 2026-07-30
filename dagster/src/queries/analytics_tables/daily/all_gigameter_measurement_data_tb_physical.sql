@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Script Name:     all_gigameter_measurement_data_tb_physical.sql
--- Table Created:   default.all_gigameter_measurement_data_tb_physical
+-- Table Created:   test_tables.all_gigameter_measurement_data_tb_physical
 -- Schema:          default
 -- Pipeline Step:   3 of 3 (Final) - Backwards Compatible Version
 --
@@ -17,9 +17,9 @@
 --   4. Output schema matches original script exactly (~50 columns)
 --
 -- Dependencies:
---   - default.all_gmeter_only_measurements (Script 1 output)
---   - default.all_mlab_only_measurements (Script 2 output)
---   - default.all_school_master (school metadata enrichment)
+--   - test_tables.all_gmeter_only_measurements (Script 1 output)
+--   - test_tables.all_mlab_only_measurements (Script 2 output)
+--   - test_tables.all_school_master (school metadata enrichment)
 --   - lstringer.bih_school_canton_mapping_vw (Bosnia canton - optional)
 --   - lstringer.connectivity_credit_pilot_schools (pilot program - optional)
 --
@@ -31,7 +31,7 @@
 -- ==============================================================================
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data_tb_physical AS (
+CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_measurement_data_tb_physical AS (
 
 
 -- =============================================================================
@@ -56,7 +56,7 @@ WITH  measure AS (
 
     -- =========================================================================
     -- PART 1: GigaMeter Measurements
-    -- Source: default.all_gmeter_only_measurements
+    -- Source: test_tables.all_gmeter_only_measurements
     -- Join: school_id_giga (reliable, from GigaMeter app registration)
     -- =========================================================================
     SELECT
@@ -75,9 +75,9 @@ WITH  measure AS (
       s1.latitude,
       s1.longitude
     FROM
-      default.all_gmeter_only_measurements m1
+      test_tables.all_gmeter_only_measurements m1
     LEFT JOIN
-      default.all_school_master s1
+      test_tables.all_school_master s1
     on
       -- GigaMeter uses reliable giga_id for matching
       m1.school_id_giga = s1.school_id_giga
@@ -88,7 +88,7 @@ UNION ALL
 
     -- =========================================================================
     -- PART 2: MLAB Measurements
-    -- Source: default.all_mlab_only_measurements
+    -- Source: test_tables.all_mlab_only_measurements
     -- Join: school_id_govt + iso3_code (requires country for disambiguation)
     --
     -- CAVEAT: MLAB matching is less reliable
@@ -111,9 +111,9 @@ UNION ALL
       s2.latitude,
       s2.longitude
     FROM
-      default.all_mlab_only_measurements m2
+      test_tables.all_mlab_only_measurements m2
     LEFT JOIN
-      default.all_school_master s2
+      test_tables.all_school_master s2
     on
       -- MLAB requires compound key for reliable matching
       m2.school_id_govt = s2.school_id_govt

@@ -1,5 +1,5 @@
 
-CREATE TABLE  delta_lake.default.all_gigameter_measurement_data_incremental
+CREATE TABLE  delta_lake.test_tables.all_gigameter_measurement_data_incremental
 
 WITH (
     location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_incremental'
@@ -32,7 +32,7 @@ WITH  measure AS (
 
     -- =========================================================================
     -- PART 1: GigaMeter Measurements
-    -- Source: delta_lake.default.all_gmeter_only_measurements_incremental
+    -- Source: delta_lake.test_tables.all_gmeter_only_measurements_incremental
     -- Join: school_id_giga (reliable, from GigaMeter app registration)
     -- =========================================================================
     SELECT
@@ -52,9 +52,9 @@ WITH  measure AS (
       s1.latitude,
       s1.longitude
     FROM
-      delta_lake.default.all_gmeter_only_measurements_incremental m1
+      delta_lake.test_tables.all_gmeter_only_measurements_incremental m1
     LEFT JOIN
-      default.all_school_master s1
+      test_tables.all_school_master s1
     on
       -- GigaMeter uses reliable giga_id for matching
       m1.school_id_giga = s1.school_id_giga
@@ -67,7 +67,7 @@ UNION ALL
 
     -- =========================================================================
     -- PART 2: MLAB Measurements
-    -- Source: delta_lake.default.all_mlab_only_measurements_incremental
+    -- Source: delta_lake.test_tables.all_mlab_only_measurements_incremental
     -- Join: school_id_govt + iso3_code (requires country for disambiguation)
     --
     -- CAVEAT: MLAB matching is less reliable
@@ -91,9 +91,9 @@ UNION ALL
       s2.latitude,
       s2.longitude
     FROM
-      delta_lake.default.all_mlab_only_measurements_incremental m2
+      delta_lake.test_tables.all_mlab_only_measurements_incremental m2
     LEFT JOIN
-      default.all_school_master s2
+      test_tables.all_school_master s2
     on
       -- MLAB requires compound key for reliable matching
       m2.school_id_govt = s2.school_id_govt
@@ -310,7 +310,7 @@ SELECT
 FROM
   measure m
 LEFT JOIN
-  delta_lake.default.all_gigameter_valid_test_checker_incremental  mf
+  delta_lake.test_tables.all_gigameter_valid_test_checker_incremental  mf
 on
   m.measurement_id = mf.measurement_id
 -- JOIN: Bosnia canton mapping (country-specific enrichment)

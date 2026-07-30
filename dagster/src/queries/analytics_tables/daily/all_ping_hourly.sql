@@ -3,7 +3,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_ping_hourly.sql
--- Table Created:   default.all_ping_hourly
+-- Table Created:   test_tables.all_ping_hourly
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -30,7 +30,7 @@
 
 
 
-  CREATE TABLE IF NOT EXISTS default.all_ping_hourly AS (
+  CREATE TABLE IF NOT EXISTS test_tables.all_ping_hourly AS (
 
 
 -- ==============================================================================
@@ -66,10 +66,10 @@ WITH school_lookup AS (
         gigameter_production_db.public.country
         ON country.id = school.country_id
     -- Timezone lookup by ISO3 code (primary method)
-    LEFT JOIN default.country_timezones tz
+    LEFT JOIN test_tables.country_timezones tz
         ON country.iso3_format = tz.iso3
     -- Timezone lookup by country name (fallback method)
-    LEFT JOIN default.country_timezones tz_name
+    LEFT JOIN test_tables.country_timezones tz_name
         ON LOWER(country.name) = LOWER(tz_name.country)
     WHERE
         -- FILTER: Exclude deleted schools at source (was in final WHERE clause)

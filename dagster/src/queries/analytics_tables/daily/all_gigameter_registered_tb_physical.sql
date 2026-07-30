@@ -5,7 +5,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_registered_tb_physical.sql
--- Table Created:   default.all_gigameter_registered_tb_physical
+-- Table Created:   test_tables.all_gigameter_registered_tb_physical
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -16,11 +16,11 @@
 --   engagement, and connectivity status across the GigaMeter program.
 --
 -- Dependencies:
---   - default.all_gigameter_measurement_data_tb_physical (measurement data)
---   - default.all_school_master (school metadata)
---   - default.all_gigameter_appversion_funnel (app version tracking)
---   - default.all_gigameter_schools_initial_registration_date_vw (registration dates)
---   - default.all_gigameter_schools_funnel_status_vw (funnel status)
+--   - test_tables.all_gigameter_measurement_data_tb_physical (measurement data)
+--   - test_tables.all_school_master (school metadata)
+--   - test_tables.all_gigameter_appversion_funnel (app version tracking)
+--   - test_tables.all_gigameter_schools_initial_registration_date_vw (registration dates)
+--   - test_tables.all_gigameter_schools_funnel_status_vw (funnel status)
 --   - gigameter_production_db.public.dailycheckapp_school (registration attempts)
 --   - gigamaps_production_db.public.connection_statistics_schoolweeklystatus (GigaMaps status)
 --   - lstringer.bih_school_canton_mapping_vw (Bosnia canton mapping - optional)
@@ -45,7 +45,7 @@
 -- ==============================================================================
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_tb_physical AS (
+CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_registered_tb_physical AS (
 
 WITH
 
@@ -53,7 +53,7 @@ WITH
 -- ==============================================================================
 -- CTE: last_measurement_date
 -- Purpose: Gets the most recent measurement per school per data source
--- Source:  default.all_gigameter_measurement_data_tb_physical
+-- Source:  test_tables.all_gigameter_measurement_data_tb_physical
 -- Method:  ROW_NUMBER() window function to find latest record
 -- Output:  school_id_giga, last_app_version, last_measurement_date, rt_source
 -- ==============================================================================
@@ -76,7 +76,7 @@ last_measurement_date AS (
                 ORDER BY created_timestamp DESC
             ) AS row_num,
             rt_source
-        FROM default.all_gigameter_measurement_data_tb_physical
+        FROM test_tables.all_gigameter_measurement_data_tb_physical
     ) AS a
     WHERE row_num = 1  -- Keep only the most recent measurement
 ),
@@ -85,7 +85,7 @@ last_measurement_date AS (
 -- ==============================================================================
 -- CTE: max_app_version_per_school
 -- Purpose: Gets the highest semantic app version across all devices for a school
--- Source:  default.all_gigameter_measurement_data_tb_physical
+-- Source:  test_tables.all_gigameter_measurement_data_tb_physical
 -- Method:  Parse version into major.minor.patch and select max by semantic order
 -- Output:  school_id_giga, rt_source, max_app_version
 -- CAVEAT:  Assumes version format is X.Y.Z (major.minor.patch)
@@ -107,7 +107,7 @@ max_app_version_per_school AS (
                     TRY_CAST(SPLIT_PART(app_version, '.', 2) AS INTEGER) DESC,
                     TRY_CAST(SPLIT_PART(app_version, '.', 3) AS INTEGER) DESC
             ) AS version_rank
-        FROM default.all_gigameter_measurement_data_tb_physical
+        FROM test_tables.all_gigameter_measurement_data_tb_physical
         WHERE app_version IS NOT NULL
     )
     WHERE version_rank = 1
@@ -117,7 +117,7 @@ max_app_version_per_school AS (
 -- ==============================================================================
 -- CTE: devices_per_school
 -- Purpose: Counts distinct devices per school from measurement data
--- Source:  default.all_gigameter_measurement_data_tb_physical
+-- Source:  test_tables.all_gigameter_measurement_data_tb_physical
 -- Output:  school_id_giga, rt_source, num_devices
 -- ==============================================================================
 devices_per_school AS (
@@ -125,7 +125,7 @@ devices_per_school AS (
         school_id_giga,
         rt_source,
         COUNT(DISTINCT device_id) AS num_devices
-    FROM default.all_gigameter_measurement_data_tb_physical
+    FROM test_tables.all_gigameter_measurement_data_tb_physical
     WHERE device_id IS NOT NULL
     GROUP BY school_id_giga, rt_source
 ),
@@ -177,7 +177,7 @@ primary_source AS (
                 school_id_giga,
                 school_id_govt,
                 rt_source
-            FROM default.all_gigameter_measurement_data_tb_physical
+            FROM test_tables.all_gigameter_measurement_data_tb_physical
         ) AS c
         GROUP BY country, school_id_giga, school_id_govt
     ) AS d
@@ -228,7 +228,7 @@ primary_source_per_school AS (
         data.school_id_govt,
         ps.primary_source,
         ps.secondary_source
-    FROM default.all_gigameter_measurement_data_tb_physical data
+    FROM test_tables.all_gigameter_measurement_data_tb_physical data
     INNER JOIN primary_source AS ps
         ON data.school_id_giga = ps.school_id_giga
     GROUP BY
@@ -265,7 +265,7 @@ measurement_data AS (
         COUNT(DISTINCT m_server.local_created_timestamp) AS num_measurements,
         COUNT(DISTINCT DATE_TRUNC('day', m_server.local_created_timestamp)) AS num_days_measured
     FROM primary_source_per_school am
-    LEFT JOIN default.all_gigameter_measurement_data_tb_physical m_server
+    LEFT JOIN test_tables.all_gigameter_measurement_data_tb_physical m_server
         ON am.school_id_govt = m_server.school_id_govt
         AND am.country = m_server.country
     GROUP BY
@@ -281,7 +281,7 @@ measurement_data AS (
 -- ==============================================================================
 -- CTE: app_versions
 -- Purpose: Gets app version history from funnel tracking table
--- Source:  default.all_gigameter_appversion_funnel
+-- Source:  test_tables.all_gigameter_appversion_funnel
 -- Output:  Initial/most recent app versions, initial registration date
 -- ==============================================================================
 app_versions AS (
@@ -292,7 +292,7 @@ app_versions AS (
         MAX(ap.most_recent_app_version_clean) AS most_recent_app_version_clean,
         MIN(ap.initial_app_version_clean) AS initial_app_version_clean,
         MIN(initial_rt_source) AS initial_rt_source
-    FROM default.all_gigameter_appversion_funnel ap
+    FROM test_tables.all_gigameter_appversion_funnel ap
     GROUP BY school_id_govt, school_id_giga
 ),
 
@@ -339,7 +339,7 @@ pre_table AS (
         element_at(map_keys(measure.detected_isp), 2) AS secondary_isp,
         element_at(map_keys(measure.detected_isp_asn), 2) AS secondary_isp_asn
     FROM measurement_data measure
-    LEFT JOIN default.all_gigameter_schools_initial_registration_date_vw ir
+    LEFT JOIN test_tables.all_gigameter_schools_initial_registration_date_vw ir
         ON LOWER(measure.school_id_giga) = LOWER(ir.school_id_giga)
         AND measure.primary_source = ir.rt_source
     LEFT JOIN app_versions ap
@@ -465,9 +465,9 @@ vt AS (
 
     FROM pre_table pt
     -- FULL JOIN to include all schools, even those without measurements
-    FULL JOIN default.all_school_master master
+    FULL JOIN test_tables.all_school_master master
         ON master.school_id_giga = pt.school_id_giga
-    LEFT JOIN default.all_gigameter_schools_funnel_status_vw status
+    LEFT JOIN test_tables.all_gigameter_schools_funnel_status_vw status
         ON master.school_id_giga = status.school_id_giga
     LEFT JOIN lstringer.bih_school_canton_mapping_vw c
         ON master.school_id_giga = c.school_id_giga

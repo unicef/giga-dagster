@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- Script Name:     all_gigameter_inc_ping_daily.sql
--- Table Created:   default.all_gigameter_inc_ping_daily
+-- Table Created:   test_tables.all_gigameter_inc_ping_daily
 -- Schema:          default
 -- Pipeline Step:   2 of 2 (joins ping daily + speed test measurements)
 --
@@ -10,12 +10,12 @@
 --   all_gigameter_inc_ping_daily.sql, which was exceeding Trino's 12GB memory limit.
 --
 -- Dependencies:
---   - default.all_ping_daily              (Step 1 output — run first)
---   - default.all_gigameter_measurement_data  (replaces _tb_physical source)
---   - default.all_gigameter_appversion_funnel
+--   - test_tables.all_ping_daily              (Step 1 output — run first)
+--   - test_tables.all_gigameter_measurement_data  (replaces _tb_physical source)
+--   - test_tables.all_gigameter_appversion_funnel
 --
 -- Key Changes vs Original:
---   - Ping data sourced from default.all_ping_daily (pre-aggregated, no raw CTEs)
+--   - Ping data sourced from test_tables.all_ping_daily (pre-aggregated, no raw CTEs)
 --   - Measurement source: all_gigameter_measurement_data (not _tb_physical)
 --     Column rename: iso3_format → iso3_code
 --     deleted column removed (filtered upstream in measurement pipeline)
@@ -29,7 +29,7 @@
 -- ==============================================================================
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_inc_ping_daily AS
+CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_inc_ping_daily AS
 
 
 -- ==============================================================================
@@ -72,7 +72,7 @@ WITH gmeter_aggr AS (
         SUM(CASE WHEN notes = 'manual'  THEN 1 ELSE 0 END)                          AS notes_manual_count,
         SUM(CASE WHEN notes NOT IN ('startup', 'daily', 'manual') THEN 1 ELSE 0 END) AS notes_other_count
 
-    FROM default.all_gigameter_measurement_data
+    FROM test_tables.all_gigameter_measurement_data
     WHERE rt_source = 'GigaMeter'
       AND CAST(local_created_timestamp AS DATE) > CAST('2025-05-01' AS DATE)
 
@@ -151,12 +151,12 @@ SELECT
     TRY_CAST(split_part(m.app_version, '.', 2) AS INTEGER)              AS minor,
     TRY_CAST(split_part(m.app_version, '.', 3) AS INTEGER)              AS patch
 
-FROM default.all_ping_daily p
+FROM test_tables.all_ping_daily p
 
 FULL JOIN gmeter_aggr m
     ON  p.device_id          = m.device_id
     AND p.local_created_date = m.local_created_date
 
-LEFT JOIN default.all_gigameter_appversion_funnel a
+LEFT JOIN test_tables.all_gigameter_appversion_funnel a
     ON COALESCE(p.device_id, m.device_id) = a.device_id
 ;

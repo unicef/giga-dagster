@@ -2,16 +2,16 @@
 
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_valid_test_checker AS (
+CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_valid_test_checker AS (
 
 -- ============================================================
 -- CTE 1: data
 -- Combines GigaMeter and MLab measurements via UNION ALL
 -- ============================================================
 WITH data AS (
-  SELECT m1.* FROM default.all_gmeter_only_measurements m1
+  SELECT m1.* FROM test_tables.all_gmeter_only_measurements m1
   UNION ALL
-  SELECT m2.* FROM default.all_mlab_only_measurements m2
+  SELECT m2.* FROM test_tables.all_mlab_only_measurements m2
 ),
 
 -- ============================================================

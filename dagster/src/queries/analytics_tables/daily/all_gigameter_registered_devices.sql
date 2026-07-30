@@ -7,7 +7,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_registered_devices.sql
--- Table Created:   default.all_gigameter_registered_devices
+-- Table Created:   test_tables.all_gigameter_registered_devices
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -20,9 +20,9 @@
 --
 -- Dependencies:
 --   - gigameter_production_db.public.device (device registration records)
---   - default.all_gigameter_measurement_data (consolidated measurement history)
---   - default.all_school_master (school metadata and geography)
---   - default.all_gigameter_appversion_funnel (app version history per device)
+--   - test_tables.all_gigameter_measurement_data (consolidated measurement history)
+--   - test_tables.all_school_master (school metadata and geography)
+--   - test_tables.all_gigameter_appversion_funnel (app version history per device)
 --
 -- Output Columns:  ~30 columns
 -- Primary Key:     device_id + school_id_giga
@@ -35,7 +35,7 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
- CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_devices as (
+ CREATE TABLE IF NOT EXISTS test_tables.all_gigameter_registered_devices as (
 
 with
 
@@ -64,7 +64,7 @@ SELECT
 FROM
   gigameter_production_db.public.dailycheckapp_school s
 left join
-  default.all_school_master m
+  test_tables.all_school_master m
 on
   m.school_id_giga = s.giga_id_school
 
@@ -99,7 +99,7 @@ FROM
             rt_source
             -- select *
         FROM
-            default.all_gigameter_measurement_data
+            test_tables.all_gigameter_measurement_data
     ) AS a
 WHERE
     row_num = 1
@@ -130,7 +130,7 @@ SELECT
     count(distinct date_trunc('day', m.local_created_timestamp)) AS num_days_measured
     -- select *
 FROM
-  default.all_gigameter_measurement_data m
+  test_tables.all_gigameter_measurement_data m
 
 
 group by
@@ -191,7 +191,7 @@ on
 and
   devices.school_id_giga = measure.school_id_giga
 LEFT JOIN
-  default.all_gigameter_appversion_funnel ap
+  test_tables.all_gigameter_appversion_funnel ap
 ON
   measure.school_id_giga = ap.school_id_giga
 --AND

@@ -2,7 +2,7 @@
 
 -- ==============================================================================
 -- Script Name:     mng_gigameter_qos_measurements.sql
--- Table Created:   default.mng_gigameter_qos_measurements
+-- Table Created:   test_tables.mng_gigameter_qos_measurements
 -- Schema:          default
 -- Region:          Mongolia
 -- Pipeline Status: Active (Integrated: true)
@@ -16,7 +16,7 @@
 --
 -- Dependencies:
 --   - qos.mng (aggregated LibreRouter measurements for Mongolia)
---   - default.all_gigameter_measurement_data_tb_physical (GigaMeter daily data)
+--   - test_tables.all_gigameter_measurement_data_tb_physical (GigaMeter daily data)
 --   - school_master.mng (Mongolia school master)
 --
 -- Output Columns:  ~25 columns
@@ -32,7 +32,7 @@
 -- ==============================================================================
 
 
-CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_measurements AS  (
+CREATE TABLE IF NOT EXISTS test_tables.mng_gigameter_qos_measurements AS  (
 
 
 
@@ -135,7 +135,7 @@ SELECT
   1 as gigameter_source,
   'GigaMeter' as provider
 from
-  default.all_gigameter_measurement_data_tb_physical
+  test_tables.all_gigameter_measurement_data_tb_physical
 where
   country = 'Mongolia'
 group by

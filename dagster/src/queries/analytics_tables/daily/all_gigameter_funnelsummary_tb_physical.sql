@@ -4,7 +4,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_funnelsummary.sql
--- Table Created:   default.all_gigameter_funnelsummary_tb_physical
+-- Table Created:   test_tables.all_gigameter_funnelsummary_tb_physical
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -17,9 +17,9 @@
 -- Dependencies:
 --   - gigamaps_production_db.public.schools (school registry)
 --   - gigameter_production_db.public.school (GigaMeter registration)
---   - default.all_gigameter_measurement_data (GigaMeter measurements)
---   - default.all_mlab_only_measurements (MLab measurements)
---   - default.all_school_master (school metadata and geography)
+--   - test_tables.all_gigameter_measurement_data (GigaMeter measurements)
+--   - test_tables.all_mlab_only_measurements (MLab measurements)
+--   - test_tables.all_school_master (school metadata and geography)
 --   - custom_dataset.country_geography (region and continent classification)
 --   - qos.bra, qos.mng, qos.ken, qos.vct (country QoS measurement sources)
 --
@@ -35,7 +35,7 @@
 -- ==============================================================================
 
 
-  CREATE TABLE IF NOT EXISTS  default.all_gigameter_funnelsummary_tb_physical AS (
+  CREATE TABLE IF NOT EXISTS  test_tables.all_gigameter_funnelsummary_tb_physical AS (
 
 WITH registered AS (
 SELECT
@@ -45,7 +45,7 @@ SELECT
 FROM
   gigameter_production_db.public.dailycheckapp_school dcs
 LEFT JOIN
-  default.all_school_master sm
+  test_tables.all_school_master sm
 ON
   dcs.giga_id_school = sm.school_id_giga
 )
@@ -78,7 +78,7 @@ SELECT
     school_id_giga
 -- select *
 FROM
-  default.all_gmeter_measurements_vw
+  test_tables.all_gmeter_measurements_vw
 WHERE
   school_record_deleted is null
 )
@@ -91,7 +91,7 @@ select
     school_id_govt,
     school_id_giga
 from
-  default.all_mlab_measurements_vw
+  test_tables.all_mlab_measurements_vw
 where
   deleted is null
 )
@@ -305,7 +305,7 @@ SELECT
 from
   custom_dataset.country_geography g
 LEFT JOIN
-  default.all_school_master  master
+  test_tables.all_school_master  master
 on
   g.country = master.country
 )

@@ -1,5 +1,5 @@
 
-CREATE TABLE default.all_gigameter_measurement_data_weekly AS (
+CREATE TABLE test_tables.all_gigameter_measurement_data_weekly AS (
     SELECT
         DATE_TRUNC('week', date)                                    AS week_start,
         school_id_giga,
@@ -30,7 +30,7 @@ CREATE TABLE default.all_gigameter_measurement_data_weekly AS (
         ROUND(APPROX_PERCENTILE(packet_loss_rate, 0.50), 6)         AS p50_packet_loss_rate,
         ROUND(APPROX_PERCENTILE(packet_loss_rate, 0.95), 6)         AS p95_packet_loss_rate
 
-    FROM default.all_gigameter_measurement_data
+    FROM test_tables.all_gigameter_measurement_data
     WHERE day_of_week(date) BETWEEN 1 AND 5   -- working days only, consistent with all dashboard charts
     GROUP BY
         DATE_TRUNC('week', date),

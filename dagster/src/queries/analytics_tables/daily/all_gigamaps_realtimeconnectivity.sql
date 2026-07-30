@@ -3,7 +3,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigamaps_realtimeconnectivity.sql
--- Table Created:   default.all_gigamaps_realtimeconnectivity
+-- Table Created:   test_tables.all_gigamaps_realtimeconnectivity
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -29,7 +29,7 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS  default.all_gigamaps_realtimeconnectivity AS (
+ CREATE TABLE IF NOT EXISTS  test_tables.all_gigamaps_realtimeconnectivity AS (
 
 
 

@@ -1,7 +1,7 @@
 
 -- ==============================================================================
 -- Script Name:     bra_nicbr_registered_tb.sql
--- Table Created:   default.bra_nicbr_registered_tb
+-- Table Created:   test_tables.bra_nicbr_registered_tb
 -- Schema:          default
 -- Region:          Brazil
 -- Pipeline Status: Active (Integrated: true)
@@ -14,7 +14,7 @@
 --
 -- Dependencies:
 --   - school_master.bra (Brazil school master)
---   - default.bra_fust_schools (FUST program school list)
+--   - test_tables.bra_fust_schools (FUST program school list)
 --   - qos.bra (NIC.BR daily aggregated measurements)
 --
 -- Output Columns:  ~25 columns
@@ -29,7 +29,7 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
- CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_tb as (
+ CREATE TABLE IF NOT EXISTS test_tables.bra_nicbr_registered_tb as (
 
 
 WITH master AS (
@@ -66,7 +66,7 @@ WITH master AS (
     FROM
       custom_dataset.school_master_all  bm
     FULL JOIN
-      default.bra_fust_schools  fs
+      test_tables.bra_fust_schools  fs
     on
       bm.school_id_govt=fs.school_id_govt
     WHERE

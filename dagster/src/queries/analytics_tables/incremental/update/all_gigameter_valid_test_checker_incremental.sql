@@ -1,5 +1,5 @@
 
-INSERT INTO delta_lake.default.all_gigameter_valid_test_checker_incremental
+INSERT INTO delta_lake.test_tables.all_gigameter_valid_test_checker_incremental
 
 
 
@@ -10,16 +10,16 @@ INSERT INTO delta_lake.default.all_gigameter_valid_test_checker_incremental
 -- Combines GigaMeter and MLab measurements via UNION ALL
 -- ============================================================
 WITH data AS (
-  SELECT m1.* FROM delta_lake.default.all_gmeter_only_measurements_incremental  m1
+  SELECT m1.* FROM delta_lake.test_tables.all_gmeter_only_measurements_incremental  m1
   -- ID FILTERING
   WHERE m1.measurement_id NOT IN (
-    SELECT measurement_id FROM delta_lake.default.all_gigameter_valid_test_checker_incremental
+    SELECT measurement_id FROM delta_lake.test_tables.all_gigameter_valid_test_checker_incremental
   )
   UNION ALL
-  SELECT m2.* FROM delta_lake.default.all_mlab_only_measurements_incremental m2
+  SELECT m2.* FROM delta_lake.test_tables.all_mlab_only_measurements_incremental m2
   -- ID FILTERING
   WHERE m2.measurement_id NOT IN (
-    SELECT measurement_id FROM delta_lake.default.all_gigameter_valid_test_checker_incremental
+    SELECT measurement_id FROM delta_lake.test_tables.all_gigameter_valid_test_checker_incremental
   )
 ),
 
