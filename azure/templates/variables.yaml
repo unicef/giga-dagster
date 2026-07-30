@@ -39,6 +39,7 @@ variables:
   nocoDBToken: $(NOCODB_TOKEN)
   nocoDBNameMappingsTableId: $(NOCODB_NAME_MAPPINGS_TABLE_ID)
   trinoConnectionString: $(TRINO_CONNECTION_STRING)
+  analyticsTrinoConnectionString: $(ANALYTICS_TRINO_CONNECTION_STRING)
   mongoliaAPIUser: $(MONGOLIA_API_USER)
   mongoliaAPIPassword: $(MONGOLIA_API_PASSWORD)
   mongoliaAPIUrl: $(MONGOLIA_API_URL)

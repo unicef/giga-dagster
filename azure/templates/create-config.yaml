@@ -76,6 +76,7 @@ jobs:
                     NOCODB_TOKEN: "$(nocoDBToken)"
                     NOCODB_NAME_MAPPINGS_TABLE_ID: "$(nocoDBNameMappingsTableId)"
                     TRINO_CONNECTION_STRING: "$(trinoConnectionString)"
+                    ANALYTICS_TRINO_CONNECTION_STRING: "$(analyticsTrinoConnectionString)"
                     MONGOLIA_API_USER: "$(mongoliaApiUser)"
                     MONGOLIA_API_PASSWORD: "$(mongoliaApiPassword)"
                     MONGOLIA_API_URL: "$(mongoliaApiUrl)"

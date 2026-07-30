@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     GIGAMETER_API_BASE_URL: str = ""
     GIGAMETER_API_TOKEN: str = ""
     TRINO_CONNECTION_STRING: str = ""
+    ANALYTICS_TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
     MONGOLIA_API_USER: str = ""
     MONGOLIA_API_PASSWORD: str = ""

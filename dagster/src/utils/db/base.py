@@ -1,6 +1,7 @@
 from collections.abc import Generator
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
+from urllib.parse import urlsplit
 
 from loguru import logger
 from sqlalchemy import create_engine
@@ -8,6 +9,16 @@ from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.settings import settings
+
+HTTP_PORT = 8080
+
+
+def _infer_trino_http_scheme(url: str) -> str:
+    """Infer the Trino coordinator's http_scheme from the connection string's port.
+
+    Port 8080 is Trino's conventional plain-http port; everything else is treated as https.
+    """
+    return "http" if urlsplit(url).port == HTTP_PORT else "https"
 
 
 class PostgresDatabaseProvider:
@@ -58,7 +69,7 @@ class TrinoDatabaseProvider:
             url,
             echo=not settings.IN_PRODUCTION,
             future=True,
-            connect_args={"http_scheme": "https"},
+            connect_args={"http_scheme": _infer_trino_http_scheme(url)},
         )
         self.session_maker = sessionmaker(
             bind=self.engine,

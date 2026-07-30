@@ -4,7 +4,7 @@ import sqlparse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from src.settings import settings
-from src.utils.db.trino import get_db_context
+from src.utils.db.trino import get_analytics_db_context
 
 from dagster import AssetKey, OpExecutionContext, asset
 
@@ -52,7 +52,7 @@ def _execute_statements(
 
 def _run_daily(context: OpExecutionContext) -> None:
     name = context.asset_key.path[-1]
-    with get_db_context() as db:
+    with get_analytics_db_context() as db:
         _execute_statements(
             context, db, _read_statements(QUERIES_ROOT / "daily" / f"{name}.sql")
         )
@@ -60,7 +60,7 @@ def _run_daily(context: OpExecutionContext) -> None:
 
 def _run_incremental(context: OpExecutionContext) -> None:
     name = context.asset_key.path[-1]
-    with get_db_context() as db:
+    with get_analytics_db_context() as db:
         exists = _table_exists(db, name)
         subdir = "update" if exists else "create"
         context.log.info(
