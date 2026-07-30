@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 import sqlparse
@@ -7,29 +6,11 @@ from sqlalchemy.orm import Session
 from src.settings import settings
 from src.utils.db.trino import get_db_context
 
-from dagster import AssetKey, AssetsDefinition, OpExecutionContext, asset
+from dagster import AssetKey, OpExecutionContext, asset
 
 QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
 DELTA_LAKE_CATALOG = "delta_lake"
 DELTA_LAKE_SCHEMA = "default"
-
-# Matches `default.<table>` and `delta_lake.default.<table>` table references, the
-# only two qualified forms used across the source scripts' CREATE TABLE/FROM/JOIN clauses.
-_TABLE_REF_PATTERN = re.compile(r"(?:delta_lake\.)?default\.([a-zA-Z0-9_]+)")
-
-
-def _discover_query_files() -> list[tuple[str, Path]]:
-    daily_files = [
-        ("daily", path) for path in sorted((QUERIES_ROOT / "daily").glob("*.sql"))
-    ]
-    # Incremental scripts are split into a one-time `create` (CREATE TABLE ... AS)
-    # and a repeatable `update` (INSERT INTO ...) script per table; the asset picks
-    # one at runtime depending on whether the table already exists.
-    incremental_files = [
-        ("incremental", path)
-        for path in sorted((QUERIES_ROOT / "incremental" / "create").glob("*.sql"))
-    ]
-    return daily_files + incremental_files
 
 
 def _split_statements(sql_text: str) -> list[str]:
@@ -56,64 +37,328 @@ def _table_exists(db: Session, table_name: str) -> bool:
     return result is not None
 
 
-def _build_analytics_table_asset(
-    group: str, path: Path, deps: list[AssetKey]
-) -> AssetsDefinition:
-    name = path.stem
-    create_statements = _split_statements(path.read_text())
-
-    update_statements = None
-    if group == "incremental":
-        update_path = QUERIES_ROOT / "incremental" / "update" / path.name
-        update_statements = _split_statements(update_path.read_text())
-
-    @asset(
-        name=name,
-        key_prefix=[group],
-        group_name=group,
-        deps=deps,
-        compute_kind="trino",
-    )
-    def _analytics_table_asset(context: OpExecutionContext) -> None:
-        with get_db_context() as db:
-            if update_statements is not None:
-                exists = _table_exists(db, name)
-                statements = update_statements if exists else create_statements
-                context.log.info(
-                    f"table {DELTA_LAKE_SCHEMA}.{name} "
-                    + (
-                        "exists, running update script"
-                        if exists
-                        else "does not exist, running create script"
-                    )
-                )
-            else:
-                statements = create_statements
-
-            for i, statement in enumerate(statements):
-                context.log.info(f"executing statement {i + 1}/{len(statements)}")
-                db.execute(text(statement))
-            db.commit()
-
-    return _analytics_table_asset
+def _read_statements(path: Path) -> list[str]:
+    return _split_statements(path.read_text())
 
 
-def _build_analytics_table_assets() -> list[AssetsDefinition]:
-    query_files = _discover_query_files()
-    table_to_key = {
-        path.stem: AssetKey([group, path.stem]) for group, path in query_files
-    }
-
-    assets = []
-    for group, path in query_files:
-        referenced_tables = set(_TABLE_REF_PATTERN.findall(path.read_text()))
-        deps = [
-            table_to_key[table]
-            for table in referenced_tables
-            if table in table_to_key and table != path.stem
-        ]
-        assets.append(_build_analytics_table_asset(group, path, deps))
-    return assets
+def _execute_statements(
+    context: OpExecutionContext, db: Session, statements: list[str]
+) -> None:
+    for i, statement in enumerate(statements):
+        context.log.info(f"executing statement {i + 1}/{len(statements)}")
+        db.execute(text(statement))
+    db.commit()
 
 
-analytics_table_assets: list[AssetsDefinition] = _build_analytics_table_assets()
+def _run_daily(context: OpExecutionContext) -> None:
+    name = context.asset_key.path[-1]
+    with get_db_context() as db:
+        _execute_statements(
+            context, db, _read_statements(QUERIES_ROOT / "daily" / f"{name}.sql")
+        )
+
+
+def _run_incremental(context: OpExecutionContext) -> None:
+    name = context.asset_key.path[-1]
+    with get_db_context() as db:
+        exists = _table_exists(db, name)
+        subdir = "update" if exists else "create"
+        context.log.info(
+            f"table {DELTA_LAKE_SCHEMA}.{name} "
+            + (
+                "exists, running update script"
+                if exists
+                else "does not exist, running create script"
+            )
+        )
+        _execute_statements(
+            context,
+            db,
+            _read_statements(QUERIES_ROOT / "incremental" / subdir / f"{name}.sql"),
+        )
+
+
+# =============================================================================
+# Daily assets
+# =============================================================================
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def country_versions(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def all_gmeter_only_measurements(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def all_mlab_only_measurements(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def all_ping_hourly(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def bra_nicbr_daily_tb(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def bra_nicbr_registered_tb(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def all_gigamaps_realtimeconnectivity(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "country_versions"])],
+    compute_kind="trino",
+)
+def all_school_master(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_ping_hourly"])],
+    compute_kind="trino",
+)
+def all_ping_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "bra_nicbr_daily_tb"])],
+    compute_kind="trino",
+)
+def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gmeter_only_measurements"]),
+        AssetKey(["daily", "all_mlab_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_valid_test_checker"]),
+        AssetKey(["daily", "all_gmeter_only_measurements"]),
+        AssetKey(["daily", "all_mlab_only_measurements"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gmeter_only_measurements"]),
+        AssetKey(["daily", "all_mlab_only_measurements"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_school_master"])],
+    compute_kind="trino",
+)
+def all_gigameter_funnelsummary_tb_physical(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_gmeter_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_school_consistency_history(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_devices(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["daily", "all_gigameter_measurement_data_tb_physical"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_tb_physical(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_ping_daily"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_inc_ping_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_gigameter_measurement_data_tb_physical"])],
+    compute_kind="trino",
+)
+def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "all_gigameter_registered_tb_physical"])],
+    compute_kind="trino",
+)
+def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+# =============================================================================
+# Incremental assets
+# =============================================================================
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def all_gmeter_only_measurements_incremental(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def all_mlab_only_measurements_incremental(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(
+    key_prefix=["incremental"],
+    group_name="incremental",
+    deps=[
+        AssetKey(["incremental", "all_gmeter_only_measurements_incremental"]),
+        AssetKey(["incremental", "all_mlab_only_measurements_incremental"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_valid_test_checker_incremental(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(
+    key_prefix=["incremental"],
+    group_name="incremental",
+    deps=[
+        AssetKey(["incremental", "all_gigameter_valid_test_checker_incremental"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements_incremental"]),
+        AssetKey(["incremental", "all_mlab_only_measurements_incremental"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_incremental(context: OpExecutionContext) -> None:
+    _run_incremental(context)

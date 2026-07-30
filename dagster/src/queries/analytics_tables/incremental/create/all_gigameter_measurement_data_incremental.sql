@@ -32,7 +32,7 @@ WITH  measure AS (
 
     -- =========================================================================
     -- PART 1: GigaMeter Measurements
-    -- Source: default.all_gmeter_only_measurements
+    -- Source: delta_lake.default.all_gmeter_only_measurements_incremental
     -- Join: school_id_giga (reliable, from GigaMeter app registration)
     -- =========================================================================
     SELECT
@@ -67,7 +67,7 @@ UNION ALL
 
     -- =========================================================================
     -- PART 2: MLAB Measurements
-    -- Source: default.all_mlab_only_measurements
+    -- Source: delta_lake.default.all_mlab_only_measurements_incremental
     -- Join: school_id_govt + iso3_code (requires country for disambiguation)
     --
     -- CAVEAT: MLAB matching is less reliable
