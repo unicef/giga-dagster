@@ -25,7 +25,9 @@ def duplicate_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate checks...")
 
-    config_column_list = [c for c in config_column_list if c in df.columns]
+    config_column_list = [
+        column for column in config_column_list if column in df.columns
+    ]
 
     column_actions = {}
     for column in config_column_list:
