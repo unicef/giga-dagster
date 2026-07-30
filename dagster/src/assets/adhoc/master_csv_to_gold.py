@@ -14,8 +14,7 @@ from pyspark.sql import (
 from pyspark.sql.types import NullType, StructType
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
+    build_dq_summary_statistics,
     dq_split_failed_rows as extract_dq_failed_rows,
     dq_split_passed_rows as extract_dq_passed_rows,
     extract_school_id_govt_duplicates,
@@ -407,13 +406,10 @@ def adhoc__master_dq_checks_summary(
     spark: PySparkResource,
     config: FileConfig,
 ) -> PythonObjectDagsterType(python_type=(dict, list)):
-    df_summary = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
-            spark.spark_session,
-            adhoc__master_data_quality_checks,
-        ),
-        df_bronze=adhoc__master_data_quality_checks,
-        df_data_quality_checks=adhoc__master_data_quality_checks,
+    df_summary = build_dq_summary_statistics(
+        spark.spark_session,
+        adhoc__master_data_quality_checks,
+        adhoc__master_data_quality_checks,
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))

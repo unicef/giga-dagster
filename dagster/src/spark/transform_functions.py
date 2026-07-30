@@ -1182,5 +1182,5 @@ if __name__ == "__main__":
     )
     df.show()
 
-    df = aggregate_report_spark_df(spark=df.sparkSession, df=df)
-    df.show(500)
+    df_all, df_approved = aggregate_report_spark_df(spark=df.sparkSession, df=df)
+    df_all.show(500)

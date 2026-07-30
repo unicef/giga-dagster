@@ -95,7 +95,7 @@ def generate_dq_kit_zip_bytes(
 
     Includes (each section only when the artifact exists and is non-empty):
     - Raw data
-    - DQ reports (TXT, JSON)
+    - DQ summary (JSON)
     - Approved/rejected rows (human-readable CSV, row count in filename)
     - Map HTML
     - README describing the actual ZIP contents
@@ -107,7 +107,6 @@ def generate_dq_kit_zip_bytes(
     paths = {
         "raw_data": f"{constants.UPLOAD_PATH_PREFIX}/{dataset_prefix}/{country_code}/{original_filename}",
         "dq_summary_json": f"{dq_root}/dq-summary/{country_code}/{stem}.json",
-        "dq_report_txt": f"{dq_root}/dq-report/{country_code}/{stem}.txt",
         "passed_rows": f"{dq_root}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
         "failed_rows": f"{dq_root}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
         "map_html": f"{dq_root}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
@@ -126,20 +125,13 @@ def generate_dq_kit_zip_bytes(
         sections.append(("1_raw_data/", ["Original uploaded file (as submitted)"]))
         context.log.info("Added raw_data")
 
-    # DQ summary (json + txt)
-    summary_lines = []
+    # DQ summary (json)
     if data := _safe_download(adls_client, paths["dq_summary_json"], context):
         entries.append((f"2_dq_summary/{stem}.json", data))
-        summary_lines.append("*.json  - Data quality summary (machine-readable)")
+        sections.append(
+            ("2_dq_summary/", ["*.json  - Data quality summary (machine-readable)"])
+        )
         context.log.info("Added dq_summary_json")
-
-    if data := _safe_download(adls_client, paths["dq_report_txt"], context):
-        entries.append((f"2_dq_summary/{stem}.txt", data))
-        summary_lines.append("*.txt   - Data quality report (human-readable)")
-        context.log.info("Added dq_report_txt")
-
-    if summary_lines:
-        sections.append(("2_dq_summary/", summary_lines))
 
     # Approved/rejected rows (skipped entirely when there are zero data rows)
     row_csv_stem = _display_stem(country_code, upload_id, dataset, stem)
@@ -216,7 +208,7 @@ def generate_dq_kit_zip_bytes(
 
 
 _HOW_TO_USE_STEPS = {
-    "2_dq_summary/": "Review the DQ report (2_dq_summary/*.txt) for overall statistics.",
+    "2_dq_summary/": "Review the DQ summary (2_dq_summary/*.json) for overall statistics.",
     "3_approved_data/": (
         "Check approved data (3_approved_data/*.csv) for schools ready to ingest."
     ),
