@@ -4,6 +4,7 @@ from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
 from pyspark import sql
 from pyspark.sql import (
+    Column,
     SparkSession,
     functions as f,
 )
@@ -48,7 +49,7 @@ from src.utils.schema import (
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import DagsterExecutionInterruptError, OpExecutionContext, Output, asset
 
 # Approval file shorthands
 _APPROVE_ALL = "__all__"
@@ -311,6 +312,43 @@ def _stamp_processed_and_reset_approval(
             )
 
 
+def _verify_deletes_applied(
+    context: OpExecutionContext,
+    remaining_df: sql.DataFrame,
+    delete_condition: Column,
+    delete_count: int,
+    label: str,
+) -> None:
+    remaining_count = remaining_df.filter(delete_condition).count()
+    if remaining_count > 0:
+        context.log.error(
+            f"Delete verification failed: {remaining_count} of {delete_count} "
+            f"approved deletes still in {label}."
+        )
+        raise DagsterExecutionInterruptError(
+            f"Deletes not applied: {remaining_count} rows still in {label}"
+        )
+    context.log.info(
+        f"Delete verification passed: all {delete_count} deletes removed from {label}."
+    )
+
+
+# Scoped to _cascade_deletes_to_coverage_silver's repeated schema/table lookup;
+# not a general-purpose replacement for other check_table_exists+refreshTable sites.
+def _refresh_table_if_exists(
+    spark: SparkSession,
+    schema_name: str,
+    country_code: str,
+    tier: DataTier,
+) -> str | None:
+    tier_schema = construct_schema_name_for_tier(schema_name, tier)
+    full_table_name = construct_full_table_name(tier_schema, country_code)
+    if not check_table_exists(spark, schema_name, country_code, tier):
+        return None
+    spark.catalog.refreshTable(full_table_name)
+    return full_table_name
+
+
 def _cascade_deletes_to_coverage_silver(
     spark: SparkSession,
     context: OpExecutionContext,
@@ -318,19 +356,36 @@ def _cascade_deletes_to_coverage_silver(
     primary_key: str,
     delete_ids: list[str],
 ) -> None:
-    coverage_silver_tier_schema = construct_schema_name_for_tier(
-        "school_coverage", DataTier.SILVER
+    delete_condition = f.col(primary_key).isin(delete_ids)
+
+    coverage_silver_table = _refresh_table_if_exists(
+        spark, "school_coverage", country_code, DataTier.SILVER
     )
-    coverage_silver_table = construct_full_table_name(
-        coverage_silver_tier_schema, country_code
-    )
-    if check_table_exists(spark, "school_coverage", country_code, DataTier.SILVER):
-        spark.catalog.refreshTable(coverage_silver_table)
-        DeltaTable.forName(spark, coverage_silver_table).delete(
-            f.col(primary_key).isin(delete_ids)
+    if coverage_silver_table is not None:
+        delta_silver = DeltaTable.forName(spark, coverage_silver_table)
+        delta_silver.delete(delete_condition)
+        _verify_deletes_applied(
+            context,
+            delta_silver.toDF(),
+            delete_condition,
+            len(delete_ids),
+            f"coverage silver for {country_code}",
         )
         context.log.info(
             f"Cascaded {len(delete_ids)} deletes to coverage silver for {country_code}."
+        )
+
+    coverage_staging_table = _refresh_table_if_exists(
+        spark, "school_coverage", country_code, DataTier.STAGING
+    )
+    if coverage_staging_table is not None:
+        DeltaTable.forName(spark, coverage_staging_table).update(
+            condition=delete_condition & (f.col("status") == StagingStatus.PENDING),
+            set={"status": f.lit(StagingStatus.REJECTED)},
+        )
+        context.log.info(
+            f"Rejected pending coverage staging rows for {len(delete_ids)} "
+            f"deleted schools in {country_code}."
         )
 
 
@@ -455,20 +510,9 @@ def silver(  # noqa: C901
 
         # Verify deletes were applied
         if delete_ids:
-            remaining = new_silver.filter(new_silver[primary_key].isin(delete_ids))
-            remaining_count = remaining.count()
-            if remaining_count > 0:
-                context.log.error(
-                    f"Delete verification failed: {remaining_count} of {len(delete_ids)} "
-                    f"approved deletes still in silver."
-                )
-                from dagster import DagsterExecutionInterruptError
-
-                raise DagsterExecutionInterruptError(
-                    f"Deletes not applied: {remaining_count} rows still in silver"
-                )
-            context.log.info(
-                f"Delete verification passed: all {len(delete_ids)} deletes removed."
+            delete_condition = f.col(primary_key).isin(delete_ids)
+            _verify_deletes_applied(
+                context, new_silver, delete_condition, len(delete_ids), "silver"
             )
 
         if config.dataset_type == "geolocation":

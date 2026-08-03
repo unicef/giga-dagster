@@ -29,3 +29,22 @@ def get_table_preview(
         df_trunc = df.head(count)
 
     return MetadataValue.md(df_trunc.to_markdown(index=False))
+
+
+def get_staging_change_type_metadata(
+    pending: sql.DataFrame | None,
+    config: FileConfig,
+) -> dict:
+    if pending is None:
+        count_map = {}
+    else:
+        counts = pending.groupBy("change_type").count().collect()
+        count_map = {row["change_type"]: row["count"] for row in counts}
+
+    return {
+        **get_output_metadata(config),
+        "insert_count": MetadataValue.int(count_map.get("INSERT", 0)),
+        "update_count": MetadataValue.int(count_map.get("UPDATE", 0)),
+        "unchanged_count": MetadataValue.int(count_map.get("UNCHANGED", 0)),
+        "delete_count": MetadataValue.int(count_map.get("DELETE", 0)),
+    }

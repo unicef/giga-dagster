@@ -39,7 +39,11 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import create_delta_table, create_schema
-from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.metadata import (
+    get_output_metadata,
+    get_staging_change_type_metadata,
+    get_table_preview,
+)
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
@@ -349,8 +353,8 @@ def coverage_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-):
-    if coverage_bronze.count() == 0:
+) -> Output[None]:
+    if coverage_bronze.isEmpty():
         context.log.warning("Skipping staging as there are no passing bronze rows")
         return Output(None)
 
@@ -371,14 +375,5 @@ def coverage_staging(
         spark.spark_session,
         StagingMode.UPDATE,
     )
-    staging = staging_step(coverage_bronze)
-    row_count = 0 if staging is None else staging.count()
-
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": row_count,
-            "preview": get_table_preview(staging),
-        },
-    )
+    pending = staging_step(coverage_bronze)
+    return Output(None, metadata=get_staging_change_type_metadata(pending, config))

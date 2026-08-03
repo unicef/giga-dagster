@@ -238,26 +238,11 @@ class Config(BaseSettings):
         "school_id_govt",
     ]
 
-    NONEMPTY_COLUMNS_COVERAGE: list[str] = [
-        "school_id_giga",
-        "cellular_coverage_availability",
-        "cellular_coverage_type",
-    ]
+    NONEMPTY_COLUMNS_COVERAGE: list[str] = ["school_id_giga"]
 
-    NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = [
-        "school_id_giga",
-        "percent_2G",
-        "percent_3G",
-        "percent_4G",
-    ]
+    NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
 
-    NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = [
-        "school_id_giga",
-        "2g_mobile_coverage",
-        "3g_mobile_coverage",
-        "4g_mobile_coverage",
-        "5g_mobile_coverage",
-    ]
+    NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
         "school_id_giga",
