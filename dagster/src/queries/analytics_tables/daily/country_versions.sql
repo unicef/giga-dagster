@@ -32,7 +32,11 @@ SET SESSION mark_distinct_strategy = 'none';
 SET SESSION query_max_stage_count = 400;
 
 
-CREATE TABLE IF NOT EXISTS default.country_versions AS (
+CREATE TABLE IF NOT EXISTS default.country_versions
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/country_versions'
+)
+AS (
 
 WITH vt_union AS (
 

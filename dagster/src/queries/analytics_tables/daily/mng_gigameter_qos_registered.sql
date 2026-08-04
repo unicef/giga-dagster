@@ -43,7 +43,11 @@
 
 
 
-CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_registered AS (
+CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_registered
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/mng_gigameter_qos_registered'
+)
+AS (
 
 WITH
 

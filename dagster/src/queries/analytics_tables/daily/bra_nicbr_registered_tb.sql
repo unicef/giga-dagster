@@ -29,7 +29,11 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
- CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_tb as (
+ CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_tb
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/bra_nicbr_registered_tb'
+)
+as (
 
 
 WITH master AS (

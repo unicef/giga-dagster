@@ -2,7 +2,11 @@
 
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_valid_test_checker AS (
+CREATE TABLE IF NOT EXISTS default.all_gigameter_valid_test_checker
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_valid_test_checker'
+)
+AS (
 
 -- ============================================================
 -- CTE 1: data

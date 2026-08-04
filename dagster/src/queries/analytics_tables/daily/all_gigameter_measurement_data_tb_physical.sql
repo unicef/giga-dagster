@@ -31,7 +31,11 @@
 -- ==============================================================================
 
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data_tb_physical AS (
+CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data_tb_physical
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_tb_physical'
+)
+AS (
 
 
 -- =============================================================================

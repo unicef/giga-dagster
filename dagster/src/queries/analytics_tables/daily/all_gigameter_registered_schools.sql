@@ -34,7 +34,11 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_schools as (
+CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_schools
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_registered_schools'
+)
+as (
 
 with
 

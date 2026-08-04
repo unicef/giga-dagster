@@ -2,7 +2,11 @@
 
 
 
-  CREATE TABLE IF NOT EXISTS default.all_gmeter_only_measurements as (
+  CREATE TABLE IF NOT EXISTS default.all_gmeter_only_measurements
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gmeter_only_measurements'
+)
+as (
 
 
 -- =============================================================================

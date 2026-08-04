@@ -35,7 +35,11 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
- CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_devices as (
+ CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_devices
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_registered_devices'
+)
+as (
 
 with
 

@@ -1,7 +1,11 @@
 
 
 
- CREATE TABLE IF NOT EXISTS default.bra_nicbr_daily_tb as (
+ CREATE TABLE IF NOT EXISTS default.bra_nicbr_daily_tb
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/bra_nicbr_daily_tb'
+)
+as (
 
 
 WITH master AS (

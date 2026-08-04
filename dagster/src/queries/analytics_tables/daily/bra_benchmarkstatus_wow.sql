@@ -33,7 +33,11 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS default.bra_benchmarkstatus_wow AS (
+ CREATE TABLE IF NOT EXISTS default.bra_benchmarkstatus_wow
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/bra_benchmarkstatus_wow'
+)
+AS (
 
 WITH
   vt AS (

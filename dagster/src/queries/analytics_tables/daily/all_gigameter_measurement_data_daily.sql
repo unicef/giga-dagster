@@ -1,5 +1,9 @@
 
-CREATE TABLE default.all_gigameter_measurement_data_daily AS (
+CREATE TABLE default.all_gigameter_measurement_data_daily
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_daily'
+)
+AS (
     SELECT
         school_id_giga,
         country,

@@ -36,7 +36,11 @@
 
 
 
- CREATE TABLE default.all_gigameter_school_consistency_history AS (
+ CREATE TABLE default.all_gigameter_school_consistency_history
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_school_consistency_history'
+)
+AS (
 
 WITH weekly_anchors AS (
     -- ─────────────────────────────────────────────────────────────────────────

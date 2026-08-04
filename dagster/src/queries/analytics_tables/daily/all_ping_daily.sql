@@ -32,7 +32,11 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS default.all_ping_daily AS
+ CREATE TABLE IF NOT EXISTS default.all_ping_daily
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_ping_daily'
+)
+AS
 
 
 -- ==============================================================================

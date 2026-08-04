@@ -30,7 +30,11 @@
 --
 -- ==============================================================================
 
-  CREATE TABLE IF NOT EXISTS default.all_gigameter_appversion_funnel as (
+  CREATE TABLE IF NOT EXISTS default.all_gigameter_appversion_funnel
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_appversion_funnel'
+)
+as (
 
 -- CREATE or replace view default.all_gigameter_appversion_funnel_vw as
 -- ============================================================

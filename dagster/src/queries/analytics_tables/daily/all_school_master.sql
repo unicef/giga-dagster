@@ -50,7 +50,11 @@ SET SESSION query_max_stage_count = 300;
 
 
 
-CREATE TABLE IF NOT EXISTS default.all_school_master AS (
+CREATE TABLE IF NOT EXISTS default.all_school_master
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_school_master'
+)
+AS (
 
 
 -- ==============================================================================

@@ -1,5 +1,9 @@
 
-CREATE TABLE default.all_gigameter_measurement_data_weekly AS (
+CREATE TABLE default.all_gigameter_measurement_data_weekly
+WITH (
+    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_weekly'
+)
+AS (
     SELECT
         DATE_TRUNC('week', date)                                    AS week_start,
         school_id_giga,
