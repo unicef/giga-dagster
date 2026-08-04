@@ -91,13 +91,17 @@ def range_checks(
     for column in config_column_list:
         check_name = f"dq_is_invalid_range-{column}"
         if column in df.columns:
-            column_actions[check_name] = f.when(
-                f.col(f"{column}").between(
-                    config_column_list[column]["min"],
-                    config_column_list[column]["max"],
-                ),
-                0,
-            ).otherwise(1)
+            column_actions[check_name] = (
+                f.when(f.col(column).isNull() | f.isnan(f.col(column)), f.lit(0))
+                .when(
+                    f.col(column).between(
+                        config_column_list[column]["min"],
+                        config_column_list[column]["max"],
+                    ),
+                    0,
+                )
+                .otherwise(1)
+            )
         else:
             column_actions[check_name] = f.lit(1)
 
@@ -116,12 +120,19 @@ def domain_checks(
     for column in config_column_list:
         check_name = f"dq_is_invalid_domain-{column}"
         if column in df.columns:
-            column_actions[check_name] = f.when(
-                f.lower(f.col(f"{column}")).isin(
-                    [x.lower() for x in config_column_list[column]],
-                ),
-                0,
-            ).otherwise(1)
+            column_actions[check_name] = (
+                f.when(f.col(column).isNull(), f.lit(0))
+                .when(
+                    f.lower(f.col(column)).isin(
+                        [
+                            domain_value.lower()
+                            for domain_value in config_column_list[column]
+                        ],
+                    ),
+                    0,
+                )
+                .otherwise(1)
+            )
         else:
             column_actions[check_name] = f.lit(1)
     return df.withColumns(column_actions)
