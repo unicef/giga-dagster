@@ -370,9 +370,6 @@ select
 FROM
   measurements_enriched
 
-
-)
-
 -- =============================================================================
 -- MLAB-SPECIFIC NOTES
 --

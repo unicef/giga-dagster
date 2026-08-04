@@ -340,5 +340,3 @@ select
 
 FROM
   measurements_enriched
-
-   )
