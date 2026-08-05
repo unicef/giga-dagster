@@ -49,7 +49,7 @@ from src.utils.schema import (
 from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import compute_row_hash, transform_types
 
-from dagster import DagsterExecutionInterruptError, OpExecutionContext, Output, asset
+from dagster import DagsterExecutionInterruptedError, OpExecutionContext, Output, asset
 
 # Approval file shorthands
 _APPROVE_ALL = "__all__"
@@ -325,7 +325,7 @@ def _verify_deletes_applied(
             f"Delete verification failed: {remaining_count} of {delete_count} "
             f"approved deletes still in {label}."
         )
-        raise DagsterExecutionInterruptError(
+        raise DagsterExecutionInterruptedError(
             f"Deletes not applied: {remaining_count} rows still in {label}"
         )
     context.log.info(
