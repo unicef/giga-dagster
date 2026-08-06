@@ -683,11 +683,14 @@ def master(
                 .join(silver.alias("silver"), primary_key, "left")
                 .withColumns(
                     {
-                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"master.{c}"))
+                        f"resolved_{c}": f.coalesce(
+                            f.col(f"silver.{c}"), f.col(f"master.{c}")
+                        )
                         for c in column_names_no_pk
                     }
                 )
-                .select(*column_names)
+                .select(primary_key, *[f"resolved_{c}" for c in column_names_no_pk])
+                .withColumnsRenamed({f"resolved_{c}": c for c in column_names_no_pk})
             )
         else:
             new_master = full_in_cluster_merge(
@@ -755,11 +758,14 @@ def reference(
                 .join(silver.alias("silver"), primary_key, "left")
                 .withColumns(
                     {
-                        c: f.coalesce(f.col(f"silver.{c}"), f.col(f"reference.{c}"))
+                        f"resolved_{c}": f.coalesce(
+                            f.col(f"silver.{c}"), f.col(f"reference.{c}")
+                        )
                         for c in column_names_no_pk
                     }
                 )
-                .select(*column_names)
+                .select(primary_key, *[f"resolved_{c}" for c in column_names_no_pk])
+                .withColumnsRenamed({f"resolved_{c}": c for c in column_names_no_pk})
             )
         else:
             new_reference = full_in_cluster_merge(
