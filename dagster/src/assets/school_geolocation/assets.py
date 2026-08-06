@@ -45,7 +45,11 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
-from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.metadata import (
+    get_output_metadata,
+    get_staging_change_type_metadata,
+    get_table_preview,
+)
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
@@ -777,31 +781,7 @@ def geolocation_staging(
         StagingMode.UPDATE,
     )
     pending = staging_step(geolocation_dq_passed_rows)
-
-    if pending is None:
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "insert_count": MetadataValue.int(0),
-                "update_count": MetadataValue.int(0),
-                "unchanged_count": MetadataValue.int(0),
-                "delete_count": MetadataValue.int(0),
-            },
-        )
-
-    counts = pending.groupBy("change_type").count().collect()
-    count_map = {row["change_type"]: row["count"] for row in counts}
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "insert_count": MetadataValue.int(count_map.get("INSERT", 0)),
-            "update_count": MetadataValue.int(count_map.get("UPDATE", 0)),
-            "unchanged_count": MetadataValue.int(count_map.get("UNCHANGED", 0)),
-            "delete_count": MetadataValue.int(count_map.get("DELETE", 0)),
-        },
-    )
+    return Output(None, metadata=get_staging_change_type_metadata(pending, config))
 
 
 @asset

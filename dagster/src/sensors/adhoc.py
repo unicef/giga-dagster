@@ -156,12 +156,6 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
-            "adhoc__publish_silver_coverage": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.parquet",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                metastore_schema="school_coverage",
-                tier=DataTier.SILVER,
-            ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.parquet",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{master_metastore_schema}.db/{country_code}",

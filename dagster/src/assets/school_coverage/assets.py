@@ -7,7 +7,10 @@ from delta.tables import DeltaTable
 from icecream import ic
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -19,6 +22,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
+from src.spark.config_expectations import config as config_expectations
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
     fb_transforms,
@@ -39,7 +43,11 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import create_delta_table, create_schema
-from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.metadata import (
+    get_output_metadata,
+    get_staging_change_type_metadata,
+    get_table_preview,
+)
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
@@ -330,6 +338,10 @@ def coverage_bronze(
         schema_reference=schema_reference,
     )
 
+    for column in config_expectations.TITLE_CASE_COLUMNS:
+        if column in df.columns:
+            df = df.withColumn(column, f.initcap(f.col(column)))
+
     df_pandas = df.toPandas()
     return Output(
         df_pandas,
@@ -349,8 +361,8 @@ def coverage_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-):
-    if coverage_bronze.count() == 0:
+) -> Output[None]:
+    if coverage_bronze.isEmpty():
         context.log.warning("Skipping staging as there are no passing bronze rows")
         return Output(None)
 
@@ -371,14 +383,5 @@ def coverage_staging(
         spark.spark_session,
         StagingMode.UPDATE,
     )
-    staging = staging_step(coverage_bronze)
-    row_count = 0 if staging is None else staging.count()
-
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": row_count,
-            "preview": get_table_preview(staging),
-        },
-    )
+    pending = staging_step(coverage_bronze)
+    return Output(None, metadata=get_staging_change_type_metadata(pending, config))

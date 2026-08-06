@@ -186,11 +186,13 @@ def column_relation_checks(
         for id, distance in column_pairs:
             transforms[f"dq_column_relation_checks-{id}_{distance}"] = (
                 f.when(
-                    (f.col(f"{id}").isNull()) & (f.col(f"{distance}").isNull()),
+                    (_col_if_exists(df, id).isNull())
+                    & (_col_if_exists(df, distance).isNull()),
                     0,
                 )
                 .when(
-                    (f.col(f"{id}").isNotNull()) & (f.col(f"{distance}").isNotNull()),
+                    (_col_if_exists(df, id).isNotNull())
+                    & (_col_if_exists(df, distance).isNotNull()),
                     0,
                 )
                 .otherwise(1)
