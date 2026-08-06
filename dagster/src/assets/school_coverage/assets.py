@@ -7,7 +7,10 @@ from delta.tables import DeltaTable
 from icecream import ic
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
@@ -19,6 +22,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
+from src.spark.config_expectations import config as config_expectations
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
     fb_transforms,
@@ -333,6 +337,10 @@ def coverage_bronze(
         spark=spark,
         schema_reference=schema_reference,
     )
+
+    for column in config_expectations.TITLE_CASE_COLUMNS:
+        if column in df.columns:
+            df = df.withColumn(column, f.initcap(f.col(column)))
 
     df_pandas = df.toPandas()
     return Output(
