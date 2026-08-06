@@ -113,6 +113,8 @@ measurements_base AS (
               date_add('hour', 1, MAX(created_timestamp))
          FROM delta_lake.default.all_mlab_only_measurements_incremental
       )
+    ORDER BY id
+    LIMIT 40000
 )
 
 

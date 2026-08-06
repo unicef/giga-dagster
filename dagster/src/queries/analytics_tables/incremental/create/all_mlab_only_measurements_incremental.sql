@@ -96,6 +96,8 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'MLab'  -- MLAB measurements only
+    ORDER BY id
+    LIMIT 40000
 )
 
 
