@@ -38,7 +38,10 @@ def _table_exists(db: Session, table_name: str) -> bool:
 
 
 def _read_statements(path: Path) -> list[str]:
-    return _split_statements(path.read_text())
+    sql_text = path.read_text().replace(
+        "{AZURE_BLOB_CONNECTION_URI}", settings.AZURE_BLOB_CONNECTION_URI
+    )
+    return _split_statements(sql_text)
 
 
 def _execute_statements(

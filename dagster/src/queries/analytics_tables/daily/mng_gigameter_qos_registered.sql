@@ -45,7 +45,7 @@
 
 CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_registered
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/mng_gigameter_qos_registered'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/mng_gigameter_qos_registered'
 )
 AS (
 

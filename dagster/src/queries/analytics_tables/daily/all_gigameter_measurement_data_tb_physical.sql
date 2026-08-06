@@ -33,7 +33,7 @@
 
 CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data_tb_physical
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_tb_physical'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_tb_physical'
 )
 AS (
 

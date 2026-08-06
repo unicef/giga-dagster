@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS default.all_gigameter_valid_test_checker
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_valid_test_checker'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_valid_test_checker'
 )
 AS (
 

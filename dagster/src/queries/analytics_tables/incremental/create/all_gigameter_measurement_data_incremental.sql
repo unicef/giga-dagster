@@ -2,7 +2,7 @@
 CREATE TABLE  delta_lake.default.all_gigameter_measurement_data_incremental
 
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_incremental'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_incremental'
 )
 AS
 

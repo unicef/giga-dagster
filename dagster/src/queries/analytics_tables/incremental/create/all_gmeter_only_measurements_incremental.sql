@@ -1,6 +1,6 @@
 CREATE TABLE delta_lake.default.all_gmeter_only_measurements_incremental
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gmeter_only_measurements_incremental'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gmeter_only_measurements_incremental'
 )
 AS
 

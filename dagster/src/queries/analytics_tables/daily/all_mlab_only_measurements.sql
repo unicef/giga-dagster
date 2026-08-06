@@ -1,7 +1,7 @@
 
  CREATE TABLE IF NOT EXISTS default.all_mlab_only_measurements
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_mlab_only_measurements'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_mlab_only_measurements'
 )
 as (
 

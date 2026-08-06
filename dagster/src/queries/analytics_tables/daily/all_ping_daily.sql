@@ -34,7 +34,7 @@
 
  CREATE TABLE IF NOT EXISTS default.all_ping_daily
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_ping_daily'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_daily'
 )
 AS
 

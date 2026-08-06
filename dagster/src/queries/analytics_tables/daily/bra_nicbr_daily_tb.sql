@@ -3,7 +3,7 @@
 
  CREATE TABLE IF NOT EXISTS default.bra_nicbr_daily_tb
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/bra_nicbr_daily_tb'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_nicbr_daily_tb'
 )
 as (
 

@@ -31,7 +31,7 @@
 
  CREATE TABLE IF NOT EXISTS  default.all_gigamaps_realtimeconnectivity
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigamaps_realtimeconnectivity'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigamaps_realtimeconnectivity'
 )
 AS (
 

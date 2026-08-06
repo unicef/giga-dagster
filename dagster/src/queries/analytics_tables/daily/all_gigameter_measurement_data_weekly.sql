@@ -1,7 +1,7 @@
 
 CREATE TABLE default.all_gigameter_measurement_data_weekly
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/all_gigameter_measurement_data_weekly'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_weekly'
 )
 AS (
     SELECT

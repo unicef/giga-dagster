@@ -35,7 +35,7 @@
 
  CREATE TABLE IF NOT EXISTS default.bra_benchmarkstatus_wow
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/bra_benchmarkstatus_wow'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_benchmarkstatus_wow'
 )
 AS (
 

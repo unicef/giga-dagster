@@ -34,7 +34,7 @@ SET SESSION query_max_stage_count = 400;
 
 CREATE TABLE IF NOT EXISTS default.country_versions
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/country_versions'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/country_versions'
 )
 AS (
 

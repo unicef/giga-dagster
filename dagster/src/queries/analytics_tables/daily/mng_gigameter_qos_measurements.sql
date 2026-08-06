@@ -34,7 +34,7 @@
 
 CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_measurements
 WITH (
-    location = 'abfss://giga-dataops-prod@saunigiga.dfs.core.windows.net/warehouse/mng_gigameter_qos_measurements'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/mng_gigameter_qos_measurements'
 )
 AS  (
 
