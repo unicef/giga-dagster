@@ -13,8 +13,7 @@
 --
 -- Dependencies:
 --   - custom_dataset.school_master_all (primary source of school data)
---   - custom_dataset.country_geography (country names, regions, continents)
---   - gigamaps_production_db.public.locations_country (ISO3 country codes)
+--   - custom_dataset.country_geography (country names, ISO2/ISO3 codes, regions, continents)
 --   - default.country_versions (school master version tracking)
 --
 -- Output Columns:  69 columns
@@ -22,8 +21,10 @@
 -- Approximate Rows: ~2.1M schools (all countries)
 --
 -- CAVEATS:
---   - Some countries (TCA, NAM, SWZ, MNE, DJI, URY, AGO) require manual name
---     overrides because they are missing from the country_geography lookup
+--   - TCA (Turks and Caicos) requires a manual country-name override: the
+--     country_geography source value is 'Turks and Caicos ' (trailing space,
+--     no "Islands"). All other geography fields (region/continent/etc.) come
+--     straight from the country_geography lookup for every country.
 --   - connectivity vs connectivity_govt: 'connectivity' is Giga-standardized,
 --     'connectivity_govt' is original government-reported value
 --   - education_level vs education_level_govt: similar standardization applies
@@ -59,25 +60,21 @@ AS (
 
 -- ==============================================================================
 -- CTE: country_geography
--- Purpose: Builds a lookup table mapping ISO2 codes to country metadata
--- Source:  custom_dataset.country_geography (primary) + gigamaps locations
+-- Purpose: Lookup table mapping country codes to country metadata
+-- Source:  custom_dataset.country_geography — has both iso2_code (g.Code) and
+--          a native iso3_code column, so no bridging join is needed here
 -- Output:  Country name, ISO2/ISO3 codes, UNICEF region, ITU region, continent
--- Caveats: Some countries may be missing - handled via CASE statements in main query
 -- ==============================================================================
 WITH country_geography AS (
     SELECT
         g.Country,
         g.Code AS iso2_code,
-        lc.iso3_format AS iso3_code,
+        g.iso3_code,
         g.unicef_region,
         g.itu_region,
         g.continent
     FROM
         custom_dataset.country_geography g
-    LEFT JOIN
-        gigamaps_production_db.public.locations_country lc
-    ON
-        g.code = lc.code
 ),
 
 
@@ -106,55 +103,28 @@ versions AS (
 -- Purpose: Combines school data with geography and version info
 -- Source:  custom_dataset.school_master_all (consolidated school data)
 -- JOINs:
---   - LEFT JOIN country_geography: Adds regional classification (some countries missing)
+--   - LEFT JOIN country_geography: Adds regional classification
 --   - LEFT JOIN versions: Adds version tracking metadata
 -- ==============================================================================
 
 SELECT
     -- -------------------------------------------------------------------------
     -- Geographic Classification Fields
-    -- CAVEAT: Manual overrides for countries missing from country_geography
-    -- TCA = Turks and Caicos, NAM = Namibia, SWZ = Eswatini, MNE = Montenegro
-    -- DJI = Djibouti, URY = Uruguay, AGO = Angola
-    -- -------------------------------------------------------------------------
-    -- -------------------------------------------------------------------------
-    -- Geographic Classification Fields
-    -- CAVEAT: Manual overrides for countries missing from country_geography
-    -- TCA = Turks and Caicos, NAM = Namibia, SWZ = Eswatini, MNE = Montenegro
-    -- DJI = Djibouti, URY = Uruguay, AGO = Angola
+    -- CAVEAT: TCA's country_geography name is 'Turks and Caicos ' (trailing
+    -- space, no "Islands") — kept as a single manual override for display.
+    -- Every other country and every region/continent field comes straight
+    -- from the country_geography lookup.
     -- -------------------------------------------------------------------------
     CAST(CASE
         WHEN master.country = 'TCA' THEN 'Turks and Caicos Islands'
-        WHEN master.country = 'NAM' THEN 'Namibia'
-        WHEN master.country = 'SWZ' THEN 'Eswatini'
-        WHEN master.country = 'MNE' THEN 'Montenegro'
-        WHEN master.country = 'DJI' THEN 'Djibouti'
-        WHEN master.country = 'URY' THEN 'Uruguay'
-        WHEN master.country = 'AGO' THEN 'Angola'
-        WHEN master.country = 'ALB' THEN 'Albania'
         ELSE geo.country
-    END AS VARCHAR) AS country,             -- Full country name (with manual overrides)
+    END AS VARCHAR) AS country,             -- Full country name (TCA overridden for display)
 
-    CAST(CASE
-        WHEN master.country IN ('TCA', 'URY') THEN 'Latin America and Caribbean'
-        WHEN master.country IN ('NAM', 'SWZ', 'DJI', 'AGO') THEN 'Eastern and Southern Africa'
-        WHEN master.country IN ('MNE', 'ALB') THEN 'Eastern Europe and Central Asia'
-        ELSE geo.unicef_region
-    END AS VARCHAR) AS unicef_region,       -- UNICEF regional classification
+    CAST(geo.unicef_region AS VARCHAR) AS unicef_region,       -- UNICEF regional classification
 
-    CAST(CASE
-        WHEN master.country IN ('TCA', 'URY') THEN 'The Americas'
-        WHEN master.country IN ('NAM', 'SWZ', 'DJI', 'AGO') THEN 'Africa'
-        WHEN master.country IN ('MNE', 'ALB') THEN 'Europe'
-        ELSE geo.itu_region
-    END AS VARCHAR) AS itu_region,          -- ITU regional classification
+    CAST(geo.itu_region AS VARCHAR) AS itu_region,          -- ITU regional classification
 
-    CAST(CASE
-        WHEN master.country IN ('TCA', 'URY') THEN 'South America'
-        WHEN master.country IN ('NAM', 'SWZ', 'DJI', 'AGO') THEN 'Africa'
-        WHEN master.country IN ('MNE', 'ALB') THEN 'Europe'
-        ELSE geo.continent
-    END AS VARCHAR) AS continent,           -- Geographic continent
+    CAST(geo.continent AS VARCHAR) AS continent,           -- Geographic continent
 
     -- -------------------------------------------------------------------------
     -- School Identity Fields

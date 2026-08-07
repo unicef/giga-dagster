@@ -4,7 +4,7 @@
 
 -- ==============================================================================
 -- Script Name:     all_gigameter_funnelsummary.sql
--- Table Created:   default.all_gigameter_funnelsummary_tb_physical
+-- Table Created:   default.all_gigameter_funnelsummary
 -- Schema:          default
 -- Pipeline Status: Active (Integrated: true)
 --
@@ -12,34 +12,37 @@
 --   Country-level summary of the GigaMeter adoption funnel and measurement
 --   source distribution. Combines school registration counts, GigaMeter and
 --   MLab measurement activity, connectivity status breakdowns, and regional
---   QoS provider data (Brazil NIC.BR, Mongolia LibreRouter, Kenya providers).
+--   QoS provider data (Brazil NIC.BR, Mongolia LibreRouter, Kenya providers,
+--   South Africa Isizwe).
 --
 -- Dependencies:
 --   - gigamaps_production_db.public.schools (school registry)
 --   - gigameter_production_db.public.school (GigaMeter registration)
---   - default.all_gigameter_measurement_data (GigaMeter measurements)
+--   - default.all_gmeter_only_measurements (GigaMeter measurements)
 --   - default.all_mlab_only_measurements (MLab measurements)
 --   - default.all_school_master (school metadata and geography)
 --   - custom_dataset.country_geography (region and continent classification)
---   - qos.bra, qos.mng, qos.ken, qos.vct (country QoS measurement sources)
+--   - qos.bra, qos.mng, qos.ken, qos.vct, qos.zaf (country QoS measurement sources)
+--   - lstringer.school_connectivity_status_vw (connectivity classification --
+--     see analytics-tables/views/school_connectivity_status_vw.sql)
 --
--- Output Columns:  ~30 columns
+-- Output Columns:  ~34 columns
 -- Primary Key:     country
 -- Granularity:     One row per country
 --
 -- Run Notes:
 --   Recurring — refresh daily or weekly. Regional provider breakdowns are
---   scoped to Brazil, Mongolia, Kenya, and Saint Vincent & Grenadines.
+--   scoped to Brazil, Mongolia, Kenya, Saint Vincent & Grenadines, and South Africa.
 --
--- Last Updated:    2025-10-31 / Luke Stringer
+-- Last Updated:    2026-07-17 / Luke Stringer
 -- ==============================================================================
 
 
-  CREATE TABLE IF NOT EXISTS  default.all_gigameter_funnelsummary_tb_physical
-WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_funnelsummary_tb_physical'
-)
-AS (
+  CREATE TABLE IF NOT EXISTS  default.all_gigameter_funnelsummary
+  WITH (
+      location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_funnelsummary'
+  )
+  AS (
 
 WITH registered AS (
 SELECT
@@ -82,9 +85,9 @@ SELECT
     school_id_giga
 -- select *
 FROM
-  default.all_gmeter_measurements_vw
-WHERE
-  school_record_deleted is null
+  default.all_gmeter_only_measurements
+-- no school_record_deleted filter needed here -- all_gmeter_only_measurements'
+-- own school_lookup CTE already excludes deleted schools at the source
 )
 
 
@@ -95,64 +98,24 @@ select
     school_id_govt,
     school_id_giga
 from
-  default.all_mlab_measurements_vw
-where
-  deleted is null
+  default.all_mlab_only_measurements
+-- no deleted filter needed here -- all_mlab_only_measurements' own school_lookup
+-- CTE already excludes deleted schools at the source (and the old view's `deleted`
+-- column was always NULL for MLab anyway, so this was a no-op filter)
 )
 
 
 
+-- Reads the shared connectivity classification view instead of re-deriving it here --
+-- see analytics-tables/views/school_connectivity_status_vw.sql for the logic and why
+-- it has a 'Disputed' bucket (this used to silently drop those rows from every count).
 , connectivity_stats AS (
-
-   select
-    DISTINCT
-    c.name as country,
-    school.giga_id_school,
-    school.name as school_name,
-    case
-      when
-        connectivity_Status in ( 'good', 'moderate')
-      then
-        giga_id_school
-      else
-        null
-      end as connected_giga_id_schools,
-    case
-      when
-        connectivity = false and connectivity_status = 'no'
-      then
-        giga_id_school
-      else
-        null
-      end as not_connected_giga_id_schools,
-
-    case
-      when
-        connectivity is null and connectivity_status = 'unknown'
-      then
-        giga_id_school
-      else
-        null
-      end as unknown_connectivity_giga_id_schools
-
-
--- select distinct connectivity
-from
-gigamaps_production_db.public.connection_statistics_schoolweeklystatus conn_stats
-
-inner JOIN
-  gigamaps_production_db.public.schools_school AS school
-ON
-  school.id = conn_stats.school_id
-AND
-  school.last_weekly_status_id = conn_stats.id
-LEFT JOIN
-  gigamaps_production_db.public.locations_country AS c
-ON
-  c.id = school.country_id
-  WHERE
-    school.deleted is null
-
+    SELECT
+        v.gigamaps_country AS country,
+        v.school_id_giga,
+        v.connectivity_gigamaps
+    FROM
+        lstringer.school_connectivity_status_vw v
 )
 
 
@@ -160,9 +123,10 @@ ON
 
 SELECT
   country,
-  count(distinct connected_giga_id_schools) as connected_schools,
-  count(distinct not_connected_giga_id_schools) as not_connected_schools,
-  count(distinct unknown_connectivity_giga_id_schools) as unknown_connectivity_schools
+  count(distinct case when connectivity_gigamaps = 'Connected' then school_id_giga end) as connected_schools,
+  count(distinct case when connectivity_gigamaps = 'NotConnected' then school_id_giga end) as not_connected_schools,
+  count(distinct case when connectivity_gigamaps = 'Unknown' then school_id_giga end) as unknown_connectivity_schools,
+  count(distinct case when connectivity_gigamaps = 'Disputed' then school_id_giga end) as disputed_connectivity_schools
 from
   connectivity_stats
 GROUP BY
@@ -274,6 +238,16 @@ from qos.vct
 GROUP BY 1,2
 )
 
+, qos_zaf_schools as (
+SELECT
+     'South Africa' as country,
+     'Isizwe' as provider,
+     MIN(date) as initial_registration_date_qos_zaf,
+     COUNT(DISTINCT school_id_giga) qos_zaf_schools
+from qos.zaf
+GROUP BY 1,2
+)
+
 
 
 , gigameter_schools as (
@@ -344,6 +318,9 @@ SELECT
 -- Saint Vincent and the Grenadines (VCT)
   CAST(qosvct.qos_vct_schools AS BIGINT) AS qos_vct_schools,
   CAST(qosvct.initial_registration_date_qos_vct AS DATE) AS initial_registration_date_qos_vct,
+-- South Africa (ZAF)
+  CAST(qoszaf.qos_zaf_schools AS BIGINT) AS qos_zaf_schools,
+  CAST(qoszaf.initial_registration_date_qos_zaf AS DATE) AS initial_registration_date_qos_zaf,
 -- calculated cols
   CAST(con.connected_schools AS BIGINT) AS connected_schools,
 
@@ -355,7 +332,15 @@ SELECT
 
   CAST(con.unknown_connectivity_schools AS BIGINT) AS unknown_connectivity_schools,
 
-  CAST(ROUND(((con.unknown_connectivity_schools * DECIMAL '100.0') / NULLIF(gigamaps.gigamaps_schools, 0)), 2) AS DOUBLE) AS unknown_connectivity_schools_percentage
+  CAST(ROUND(((con.unknown_connectivity_schools * DECIMAL '100.0') / NULLIF(gigamaps.gigamaps_schools, 0)), 2) AS DOUBLE) AS unknown_connectivity_schools_percentage,
+
+  -- Schools where GigaMaps' connectivity_status and its own weekly connectivity
+  -- boolean disagree -- previously silently excluded from every bucket above.
+  -- Usually 0; only non-zero when the two signals haven't caught up with each
+  -- other yet (see school_connectivity_status_vw.sql for the mechanics).
+  CAST(con.disputed_connectivity_schools AS BIGINT) AS disputed_connectivity_schools,
+
+  CAST(ROUND(((con.disputed_connectivity_schools * DECIMAL '100.0') / NULLIF(gigamaps.gigamaps_schools, 0)), 2) AS DOUBLE) AS disputed_connectivity_schools_percentage
 
 
 FROM
@@ -404,6 +389,10 @@ left join
   qos_vct_schools qosvct
 on
   gigamaps.country = qosvct.country
+left join
+  qos_zaf_schools qoszaf
+on
+  gigamaps.country = qoszaf.country
 
 
-  )
+   )

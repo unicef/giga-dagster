@@ -257,7 +257,8 @@ SELECT
   END AS VARCHAR) AS install_status,
   CAST(c.canton_name AS VARCHAR) AS canton_bih_only,
   CAST(CASE WHEN cc.status IS NULL THEN 'not included' ELSE cc.status END AS VARCHAR) AS connectivity_credits_school,
-  CAST(p.zaf_province AS VARCHAR) AS province_zaf_only
+  CAST(p.zaf_province AS VARCHAR) AS province_zaf_only,
+  CAST(l.zone AS VARCHAR) as education_zone_lka_only
 FROM
   pre_table pt
 left join
@@ -271,5 +272,12 @@ on
 
 LEFT JOIN lstringer.zaf_province_mapping p
   on pt.school_id_giga = p.school_id_giga
+
+
+
+LEFT JOIN lstringer.lka_school_education_zones l
+  on pt.school_id_govt = l.school_id_govt
+  and pt.iso3_code = l.iso3_code
+
 
   )

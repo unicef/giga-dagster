@@ -69,7 +69,7 @@ WITH  measure AS (
       s1.admin1,
       s1.admin2,
       s1.connectivity,
-      s1.connectivity_type_govt,
+      s1.connectivity_type,
       s1.cellular_coverage_type,
       s1.education_level,
       s1.electricity_availability,
@@ -105,7 +105,7 @@ UNION ALL
       s2.admin1,
       s2.admin2,
       s2.connectivity,
-      s2.connectivity_type_govt,
+      s2.connectivity_type,
       s2.cellular_coverage_type,
       s2.education_level,
       s2.electricity_availability,
@@ -255,7 +255,7 @@ SELECT
     m.admin1,
     m.admin2,
     m.connectivity,
-    m.connectivity_type_govt,
+    m.connectivity_type,
     m.cellular_coverage_type,
     m.education_level,
     m.electricity_availability,
@@ -280,7 +280,8 @@ SELECT
     -- -------------------------------------------------------------------------
     c.canton_name AS canton_bih_only,    -- Bosnia and Herzegovina only
     cc.status AS connectivity_credits_school,  -- Connectivity credits pilot program
-    p.zaf_province as province_zaf_only
+    p.zaf_province as province_zaf_only,
+    l.zone as education_zone_lka_only
 
 FROM measure m
 
@@ -296,6 +297,10 @@ LEFT JOIN lstringer.connectivity_credit_pilot_schools cc
 
 LEFT JOIN lstringer.zaf_province_mapping p
   on m.school_id_giga = p.school_id_giga
+
+LEFT JOIN lstringer.lka_school_education_zones l
+  on m.school_id_govt = l.school_id_govt
+  and m.iso3_code = l.iso3_code
 
 -- where m.date > cast('2024-01-01' as date)       -- added
 )

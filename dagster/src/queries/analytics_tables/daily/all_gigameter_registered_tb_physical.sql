@@ -465,7 +465,8 @@ vt AS (
         c.canton_name AS canton_bih_only,
         cc.status AS connectivity_credits_school,
         cs.connectivity_gigamaps,
-        p.zaf_province as province_zaf_only
+        p.zaf_province as province_zaf_only,
+        CAST(l.zone AS VARCHAR) as education_zone_lka_only
 
     FROM pre_table pt
     -- FULL JOIN to include all schools, even those without measurements
@@ -482,6 +483,11 @@ vt AS (
 
     LEFT JOIN lstringer.zaf_province_mapping p
       on master.school_id_giga = p.school_id_giga
+
+
+    LEFT JOIN lstringer.lka_school_education_zones l
+      on master.school_id_govt = l.school_id_govt
+      and master.iso3_code = l.iso3_code
 )
 
 
@@ -552,7 +558,8 @@ SELECT
     canton_bih_only,
     connectivity_credits_school,
     connectivity_gigamaps,
-    province_zaf_only
+    province_zaf_only,
+    education_zone_lka_only
 
 FROM vt
 

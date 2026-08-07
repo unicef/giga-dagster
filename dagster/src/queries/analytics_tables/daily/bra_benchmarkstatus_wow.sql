@@ -18,14 +18,14 @@
 --   connectivity performance over time.
 --
 -- Dependencies:
---   - default.bra_nicbr_daily_tb (daily NIC.BR measurements with benchmark flags)
+--   - default.bra_nicbr_daily (daily NIC.BR measurements with benchmark flags)
 --
 -- Output Columns:  ~20 columns
 -- Primary Key:     week (ISO week start date, Monday)
 -- Granularity:     One row per week, ordered most recent first
 --
 -- Run Notes:
---   Recurring — refresh weekly after bra_nicbr_daily_tb is updated.
+--   Recurring — refresh weekly after bra_nicbr_daily is updated.
 --   wow_change_* columns show absolute change vs the prior week;
 --   wow_change_percentage_* shows percentage change vs the prior week.
 --
@@ -43,7 +43,7 @@ WITH
   vt AS (
    SELECT *
    FROM
-     default.bra_nicbr_daily_tb
+     default.bra_nicbr_daily
    ORDER BY date ASC
 )
 , weekly_data_per_school AS (

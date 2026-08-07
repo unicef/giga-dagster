@@ -1,7 +1,7 @@
 
 -- ==============================================================================
--- Script Name:     bra_nicbr_registered_tb.sql
--- Table Created:   default.bra_nicbr_registered_tb
+-- Script Name:     bra_nicbr_registered_schools.sql
+-- Table Created:   default.bra_nicbr_registered_schools
 -- Schema:          default
 -- Region:          Brazil
 -- Pipeline Status: Active (Integrated: true)
@@ -24,14 +24,14 @@
 --
 -- Run Notes:
 --   Recurring — refresh when NIC.BR data is updated. Upstream of
---   bra_nicbr_daily_tb.sql and bra_benchmarkstatus_wow.sql.
+--   bra_nicbr_daily.sql and bra_benchmarkstatus_wow.sql.
 --
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
- CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_tb
+ CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_schools
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_nicbr_registered_tb'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_nicbr_registered_schools'
 )
 as (
 
