@@ -55,4 +55,7 @@ variables:
   gigaspatialAdlsContainer: $(GIGASPATIAL_ADLS_CONTAINER)
   gigaspatialAdlsSasToken: $(GIGASPATIAL_ADLS_SAS_TOKEN)
   gigaspatialRootDataDir: $(GIGASPATIAL_ROOT_DATA_DIR)
+  gigameterApiBaseUrl: $(GIGAMETER_API_BASE_URL)
+  gigameterApiToken: $(GIGAMETER_API_TOKEN)
+  vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
   system.debug: true

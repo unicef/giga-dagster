@@ -89,6 +89,9 @@ jobs:
                     GIGASPATIAL_ADLS_CONTAINER: "$(gigaspatialAdlsContainer)"
                     GIGASPATIAL_ADLS_SAS_TOKEN: "$(gigaspatialAdlsSasToken)"
                     GIGASPATIAL_ROOT_DATA_DIR: "$(gigaspatialRootDataDir)"
+                    GIGAMETER_API_BASE_URL: "$(gigameterApiBaseUrl)"
+                    GIGAMETER_API_TOKEN: "$(gigameterApiToken)"
+                    VCT_MERAKI_API_KEY: "$(vctMerakiApiKey)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

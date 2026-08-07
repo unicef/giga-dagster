@@ -78,8 +78,8 @@ def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
         if col != "school_id_giga":  # add suffix except join key
             fb = fb.withColumnRenamed(col, col + "_fb")
 
-    # outer join
-    cov_stg = cov.join(fb, on="school_id_giga", how="outer")
+    # left join, scoped to uploaded schools
+    cov_stg = fb.join(cov, on="school_id_giga", how="left")
 
     # coalesce with updated values
     for col in cov.columns:
@@ -194,8 +194,8 @@ def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
         if col != "school_id_giga":  # add suffix except join key
             itu = itu.withColumnRenamed(col, col + "_itu")
 
-    # outer join
-    cov_stg = cov.join(itu, on="school_id_giga", how="outer")
+    # left join, scoped to uploaded schools
+    cov_stg = itu.join(cov, on="school_id_giga", how="left")
 
     # coalesce with updated values
     for col in cov.columns:

@@ -31,26 +31,26 @@ def column_relation_checks(
             "dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"
         ] = (
             f.when(
-                (f.lower(f.col("connectivity")) == "yes")
+                (f.lower(_col_if_exists(df, "connectivity")) == "yes")
                 & (
-                    (f.lower(f.col("connectivity_RT")) == "yes")
-                    | (f.lower(f.col("connectivity_govt")) == "yes")
-                    | (f.col("download_speed_contracted").isNotNull())
+                    (f.lower(_col_if_exists(df, "connectivity_RT")) == "yes")
+                    | (f.lower(_col_if_exists(df, "connectivity_govt")) == "yes")
+                    | (_col_if_exists(df, "download_speed_contracted").isNotNull())
                 ),
                 0,
             )
             .when(
-                (f.lower(f.col("connectivity")) == "no")
+                (f.lower(_col_if_exists(df, "connectivity")) == "no")
                 & (
                     (
-                        (f.lower(f.col("connectivity_RT")) == "no")
-                        | f.col("connectivity_RT").isNull()
+                        (f.lower(_col_if_exists(df, "connectivity_RT")) == "no")
+                        | _col_if_exists(df, "connectivity_RT").isNull()
                     )
                     & (
-                        (f.lower(f.col("connectivity_govt")) == "no")
-                        | f.col("connectivity_govt").isNull()
+                        (f.lower(_col_if_exists(df, "connectivity_govt")) == "no")
+                        | _col_if_exists(df, "connectivity_govt").isNull()
                     )
-                    & (f.col("download_speed_contracted").isNull())
+                    & (_col_if_exists(df, "download_speed_contracted").isNull())
                 ),
                 0,
             )
@@ -61,8 +61,8 @@ def column_relation_checks(
         transforms[
             "dq_column_relation_checks-connectivity_govt_download_speed_contracted"
         ] = f.when(
-            (f.col("download_speed_contracted").isNotNull())
-            & (f.col("connectivity_govt").isNull()),
+            (_col_if_exists(df, "download_speed_contracted").isNotNull())
+            & (_col_if_exists(df, "connectivity_govt").isNull()),
             1,
         ).otherwise(0)
 
@@ -71,15 +71,19 @@ def column_relation_checks(
             "dq_column_relation_checks-connectivity_RT_connectivity_RT_datasource_connectivity_RT_ingestion_timestamp"
         ] = (
             f.when(
-                (f.col("connectivity_RT").isNull())
-                & (f.col("connectivity_RT_datasource").isNull())
-                & (f.col("connectivity_RT_ingestion_timestamp").isNull()),
+                (_col_if_exists(df, "connectivity_RT").isNull())
+                & (_col_if_exists(df, "connectivity_RT_datasource").isNull())
+                & (_col_if_exists(df, "connectivity_RT_ingestion_timestamp").isNull()),
                 0,
             )
             .when(
-                (f.col("connectivity_RT").isNotNull())
-                & (f.col("connectivity_RT_datasource").isNotNull())
-                & (f.col("connectivity_RT_ingestion_timestamp").isNotNull()),
+                (_col_if_exists(df, "connectivity_RT").isNotNull())
+                & (_col_if_exists(df, "connectivity_RT_datasource").isNotNull())
+                & (
+                    _col_if_exists(
+                        df, "connectivity_RT_ingestion_timestamp"
+                    ).isNotNull()
+                ),
                 0,
             )
             .otherwise(1)
@@ -90,22 +94,25 @@ def column_relation_checks(
             "dq_column_relation_checks-cellular_coverage_availability_cellular_coverage_type"
         ] = (
             f.when(
-                (f.lower(f.col("cellular_coverage_availability")) == "yes")
+                (f.lower(_col_if_exists(df, "cellular_coverage_availability")) == "yes")
                 & (
-                    f.lower(f.col("cellular_coverage_type")).isin(
+                    f.lower(_col_if_exists(df, "cellular_coverage_type")).isin(
                         ["2g", "3g", "4g", "5g"],
                     )
                 ),
                 0,
             )
             .when(
-                (f.lower(f.col("cellular_coverage_availability")) == "no")
-                & (f.lower(f.col("cellular_coverage_type")) == "no coverage"),
+                (f.lower(_col_if_exists(df, "cellular_coverage_availability")) == "no")
+                & (
+                    f.lower(_col_if_exists(df, "cellular_coverage_type"))
+                    == "no coverage"
+                ),
                 0,
             )
             .when(
-                (f.col("cellular_coverage_availability").isNull())
-                & (f.col("cellular_coverage_type").isNull()),
+                (_col_if_exists(df, "cellular_coverage_availability").isNull())
+                & (_col_if_exists(df, "cellular_coverage_type").isNull()),
                 0,
             )
             .otherwise(1)
@@ -115,8 +122,8 @@ def column_relation_checks(
         transforms[
             "dq_column_relation_checks-connectivity_govt_connectivity_govt_ingestion_timestamp"
         ] = f.when(
-            (f.lower(f.col("connectivity_govt")) == "yes")
-            & (f.col("connectivity_govt_ingestion_timestamp").isNull()),
+            (f.lower(_col_if_exists(df, "connectivity_govt")) == "yes")
+            & (_col_if_exists(df, "connectivity_govt_ingestion_timestamp").isNull()),
             1,
         ).otherwise(0)
 
@@ -124,8 +131,8 @@ def column_relation_checks(
         transforms[
             "dq_column_relation_checks-electricity_availability_electricity_type"
         ] = f.when(
-            (f.lower(f.col("electricity_availability")) == "yes")
-            & (f.col("electricity_type").isNull()),
+            (f.lower(_col_if_exists(df, "electricity_availability")) == "yes")
+            & (_col_if_exists(df, "electricity_type").isNull()),
             1,
         ).otherwise(0)
 
@@ -179,11 +186,13 @@ def column_relation_checks(
         for id, distance in column_pairs:
             transforms[f"dq_column_relation_checks-{id}_{distance}"] = (
                 f.when(
-                    (f.col(f"{id}").isNull()) & (f.col(f"{distance}").isNull()),
+                    (_col_if_exists(df, id).isNull())
+                    & (_col_if_exists(df, distance).isNull()),
                     0,
                 )
                 .when(
-                    (f.col(f"{id}").isNotNull()) & (f.col(f"{distance}").isNotNull()),
+                    (_col_if_exists(df, id).isNotNull())
+                    & (_col_if_exists(df, distance).isNotNull()),
                     0,
                 )
                 .otherwise(1)

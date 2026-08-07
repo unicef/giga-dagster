@@ -4840,6 +4840,22 @@ files = [
 ]
 
 [[package]]
+name = "meraki"
+version = "3.1.0"
+description = "Cisco Meraki Dashboard API library"
+optional = false
+python-versions = ">=3.11"
+groups = ["main"]
+files = [
+    {file = "meraki-3.1.0-py3-none-any.whl", hash = "sha256:3639b620970a2a04b4c3f56f7c9c308e32f877681c762f248d0dfaf39eb30df3"},
+    {file = "meraki-3.1.0.tar.gz", hash = "sha256:220efac98311d30022b9fa0a1d55b2555eb72f6f841d61ec47f10cf5437f4b1a"},
+]
+
+[package.dependencies]
+aiohttp = ">=3.13.5,<4"
+requests = ">=2.33.1,<3"
+
+[[package]]
 name = "mercantile"
 version = "1.2.1"
 description = "Web mercator XYZ tile utilities"
@@ -8760,6 +8776,22 @@ pymysql = ["pymysql"]
 sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
+name = "sqlparse"
+version = "0.5.5"
+description = "A non-validating SQL parser."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "sqlparse-0.5.5-py3-none-any.whl", hash = "sha256:12a08b3bf3eec877c519589833aed092e2444e68240a3577e8e26148acc7b1ba"},
+    {file = "sqlparse-0.5.5.tar.gz", hash = "sha256:e20d4a9b0b8585fdf63b10d30066c7c94c5d7a7ec47c889a2d83a3caa93ff28e"},
+]
+
+[package.extras]
+dev = ["build"]
+doc = ["sphinx"]
+
+[[package]]
 name = "stack-data"
 version = "0.6.3"
 description = "Extract data from python stack frames and tracebacks for informative displays"
@@ -10131,4 +10163,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.13"
-content-hash = "bf0c4c8d31b1a53db972cd018111e47172e58688f481f6fa84be6d55cc8bd9c6"
+content-hash = "00fa7b877e3a965a6decd3862c3bf7e6847f8a6e1d78c826d2f8c4e9ea4829a2"

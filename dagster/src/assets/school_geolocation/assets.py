@@ -21,9 +21,7 @@ from src.data_quality_checks.create_update import (
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
-    aggregate_report_statistics,
+    build_dq_summary_statistics,
     dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
@@ -41,12 +39,17 @@ from src.spark.transform_functions import (
 from src.utils.adls import (
     ADLSFileClient,
 )
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
-from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.metadata import (
+    get_output_metadata,
+    get_staging_change_type_metadata,
+    get_table_preview,
+)
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
@@ -54,7 +57,9 @@ from src.utils.schema import (
     construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub,
-    get_schema_table,
+)
+from src.utils.school_registrations.common import (
+    process_school_registration_dq_result,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -255,7 +260,9 @@ def geolocation_bronze(
 
     df = add_is_new_school(df, silver_ids, context)
 
-    df = create_bronze_layer_columns_updated(df, uploaded_columns, country_code, s)
+    df = create_bronze_layer_columns_updated(
+        df, uploaded_columns, country_code, file_upload.source, s
+    )
 
     t2 = time.time()
     datahub_emit_metadata_with_exception_catcher(
@@ -342,15 +349,16 @@ def geolocation_data_quality_results(
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
-    # Drop is_new_school — it's a processing artifact, not part of the DQ output schema
-    dq_results = dq_results.drop("is_new_school")
+    # Keep is_new_school as a top-level column so the DQ summary can count
+    # created vs updated schools directly off dq_results (see aggregate_report_json).
 
     # Collapse all individual dq_ check columns into a single map<string, int> column.
     # This reduces ~120+ columns to one, cutting the DataFrame width by ~60 %.
     # dq_has_critical_error and failure_reason remain as top-level columns because
     # they are used for row-level filtering throughout the pipeline.
     # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
-    # String-valued dq_ columns (e.g. dq_school_density_group_id, an md5 hash) cannot
+    # String-valued dq_ columns (e.g. dq_school_density_group_id, dq_duplicate_location_rows_id,
+    # both md5 hashes) cannot
     # live in a map<string, int> and stay top-level.
     dq_flag_cols = [
         field.name
@@ -445,14 +453,49 @@ def geolocation_data_quality_results_human_readable(
         geolocation_data_quality_results, uploaded_columns
     )
 
+    # duplicate_location_rows_count/_id carry values (not pass/fail flags) and are
+    # only meaningful when the location actually has duplicates (count > 1).
+    duplicate_count_col = f.element_at(
+        f.col("dq_results"), "duplicate_location_rows_count"
+    )
+    # duplicate_group_id_50m/count_50m are metadata; gate on the flag, not count (count can be 1 for a real pair).
+    duplicate_group_flag_col = f.element_at(
+        f.col("dq_results"), "duplicate_group_flag_50m"
+    )
     for map_key, human_name in human_readable_mappings.items():
-        df = df.withColumn(
-            human_name,
-            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
-                f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
-            ),
-        )
+        if map_key == "duplicate_location_rows_count":
+            df = df.withColumn(
+                human_name,
+                f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
+                    duplicate_count_col
+                ),
+            )
+        elif map_key == "duplicate_location_rows_id":
+            df = df.withColumn(
+                human_name,
+                f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
+                    f.col("dq_duplicate_location_rows_id")
+                ),
+            )
+        elif map_key in ("duplicate_group_id_50m", "duplicate_group_count_50m"):
+            df = df.withColumn(
+                human_name,
+                f.when(
+                    duplicate_group_flag_col == 1,
+                    f.element_at(f.col("dq_results"), map_key),
+                ).otherwise(f.lit(None)),
+            )
+        else:
+            df = df.withColumn(
+                human_name,
+                f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").otherwise(
+                    f.when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes")
+                ),
+            )
+
     df = df.drop("dq_results")
+    if "dq_duplicate_location_rows_id" in df.columns:
+        df = df.drop("dq_duplicate_location_rows_id")
 
     # Cache once — both filters read from the same plan
     df.cache()
@@ -506,18 +549,30 @@ async def geolocation_data_quality_results_summary(
     uploaded_columns = list(column_mapping.values())
     context.log.info(f"The list of uploaded columns is: {uploaded_columns}")
 
+    geolocation_data_quality_results = geolocation_data_quality_results.cache()
+
     dq_results, _ = dq_geolocation_extract_relevant_columns(
         geolocation_data_quality_results, uploaded_columns
     )
 
-    dq_summary_statistics = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
-            spark.spark_session,
-            dq_results,
-        ),
-        df_bronze=geolocation_bronze,
-        df_data_quality_checks=dq_results,
+    dq_summary_statistics = build_dq_summary_statistics(
+        spark.spark_session,
+        dq_results,
+        geolocation_bronze,
     )
+
+    value_maps = aggregate_value_maps_for_pdf(
+        geolocation_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    geolocation_data_quality_results.unpersist()
+
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
 
     # Persist the row counts to the Ingestion Portal DB. We already have the
     # summary in memory here, so update directly instead of re-reading the DQ
@@ -549,63 +604,10 @@ async def geolocation_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))
-
-
-@asset(io_manager_key=ResourceKey.ADLS_GENERIC_FILE_IO_MANAGER.value)
-def geolocation_data_quality_report(
-    context: OpExecutionContext,
-    geolocation_data_quality_results: sql.DataFrame,
-    geolocation_raw: bytes,
-    config: FileConfig,
-    spark: PySparkResource,
-):
-    with get_db_context() as db:
-        file_upload = db.scalar(
-            select(FileUpload).where(FileUpload.id == config.filename_components.id),
-        )
-        if file_upload is None:
-            raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
-            )
-
-        file_upload = FileUploadConfig.from_orm(file_upload)
-
-    with BytesIO(geolocation_raw) as buffer:
-        buffer.seek(0)
-        original_df = pandas_loader(buffer, config.filepath, context=context).map(str)
-
-    original_df_columns = original_df.columns
-    uploaded_columns = file_upload.column_to_schema_mapping.values()
-
-    uploaded_columns_not_used = list(set(original_df_columns) - set(uploaded_columns))
-
-    schema = get_schema_table(spark.spark_session, config.metastore_schema)
-    important_columns_df = schema.filter(f.col("is_important"))
-    important_columns_list = [
-        row[0] for row in important_columns_df.select("name").collect()
-    ]
-
-    important_columns_not_uploaded = list(
-        set(important_columns_list) - set(uploaded_columns)
-    )
-    important_columns_not_uploaded = [
-        col for col in important_columns_not_uploaded if not col.startswith("admin")
-    ]
-
-    upload_details = {
-        "country_code": file_upload.country,
-        "file_name": file_upload.original_filename,
-        "uploaded_columns_not_used": uploaded_columns_not_used,
-        "important_columns_not_uploaded": important_columns_not_uploaded,
-    }
-
-    dq_report = aggregate_report_statistics(
-        geolocation_data_quality_results, upload_details
-    )
-    return Output(dq_report)
 
 
 @asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
@@ -634,6 +636,15 @@ def geolocation_dq_passed_rows(
 
     df_passed.cache()
     row_count = df_passed.count()
+
+    if config.metadata.get("source") == "gigameter":
+        process_school_registration_dq_result(
+            context=context,
+            country_iso3_code=config.country_code,
+            row_count=row_count,
+            df_passed=df_passed,
+            dq_results=geolocation_data_quality_results,
+        )
 
     return Output(
         df_passed,
@@ -783,31 +794,7 @@ def geolocation_staging(
         StagingMode.UPDATE,
     )
     pending = staging_step(geolocation_dq_passed_rows)
-
-    if pending is None:
-        return Output(
-            None,
-            metadata={
-                **get_output_metadata(config),
-                "insert_count": MetadataValue.int(0),
-                "update_count": MetadataValue.int(0),
-                "unchanged_count": MetadataValue.int(0),
-                "delete_count": MetadataValue.int(0),
-            },
-        )
-
-    counts = pending.groupBy("change_type").count().collect()
-    count_map = {row["change_type"]: row["count"] for row in counts}
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "insert_count": MetadataValue.int(count_map.get("INSERT", 0)),
-            "update_count": MetadataValue.int(count_map.get("UPDATE", 0)),
-            "unchanged_count": MetadataValue.int(count_map.get("UNCHANGED", 0)),
-            "delete_count": MetadataValue.int(count_map.get("DELETE", 0)),
-        },
-    )
+    return Output(None, metadata=get_staging_change_type_metadata(pending, config))
 
 
 @asset

@@ -156,12 +156,6 @@ def school_master__gold_csv_to_deltatable_sensor(
                 metastore_schema="school_geolocation",
                 tier=DataTier.SILVER,
             ),
-            "adhoc__publish_silver_coverage": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/dq-results/school-master/full/{stem}.parquet",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
-                metastore_schema="school_coverage",
-                tier=DataTier.SILVER,
-            ),
             "adhoc__publish_master_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/school-master/passed/{stem}.parquet",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{master_metastore_schema}.db/{country_code}",
@@ -305,7 +299,7 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
         if (
             file_data.is_directory
             or len(path.parent.name) != 3
-            or path.suffix.lower() != ".csv"
+            or path.suffix.lower() not in {".csv", ".parquet"}
         ):
             context.log.warning(f"Skipping {adls_filepath}")
             continue
@@ -326,12 +320,12 @@ def school_qos_raw__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__qos_raw_transforms": OpDestinationMapping(
                 source_filepath=str(path),
-                destination_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.csv",
+                destination_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.parquet",
                 metastore_schema=metastore_schema,
                 tier=DataTier.TRANSFORMS,
             ),
             "adhoc__publish_qos_raw_to_gold": OpDestinationMapping(
-                source_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.csv",
+                source_filepath=f"{constants.gold_folder}/dq-results/qos-raw/transforms/{country_code}/{stem}.parquet",
                 destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
@@ -466,11 +460,11 @@ def school_qos__gold_csv_to_deltatable_sensor(
         adls_filepath = file_data.name
         path = Path(adls_filepath)
 
-        # skip directories, invalid paths, or non-CSV files
+        # skip directories, invalid paths, or non-CSV/parquet files
         if (
             file_data.is_directory
             or len(path.parent.name) != 3
-            or path.suffix.lower() != ".csv"
+            or path.suffix.lower() not in {".csv", ".parquet"}
         ):
             context.log.warning(f"Skipping {adls_filepath}")
             continue

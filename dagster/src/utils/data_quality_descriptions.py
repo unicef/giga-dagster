@@ -96,7 +96,11 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     }
 
     duplicate_set_checks_desc = {
-        f"dq_duplicate_set-{'_'.join(column)}": f"Does the check pass with no duplicates across these columns [{column}]"
+        (
+            "dq_duplicate_location_rows_flag"
+            if list(column) == ["location_id"]
+            else f"dq_duplicate_set-{'_'.join(column)}"
+        ): f"Does the check pass with no duplicates across these columns [{column}]"
         for column in config_expectations_instance.UNIQUE_SET_COLUMNS
     }
 

@@ -29,6 +29,7 @@ x-common-config: &common-config
 x-dagster-common-config: &dagster-common-config
   <<: *common-config
   env_file: .env
+  image: giga-dagster:local
   build:
     context: ./dagster
     dockerfile: Dockerfile
@@ -63,6 +64,7 @@ x-dagster-common-config: &dagster-common-config
 x-spark-common-config: &spark-common-config
   <<: *common-config
   user: "1001:1001"
+  image: giga-dagster-spark:local
   # Custom Dockerfile based on bitnami/spark:3.5.0 with Azure/Delta dependencies
   build:
     context: .

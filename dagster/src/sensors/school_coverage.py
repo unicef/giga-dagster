@@ -149,7 +149,7 @@ def school_master_coverage__post_manual_checks_sensor(
             continue
         else:
             country_code = filename_components.country_code
-            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath)
+            metadata = adls_file_client.fetch_metadata_for_blob(adls_filepath) or {}
 
             ops_destination_mapping = {
                 "manual_review_passed_rows": OpDestinationMapping(
@@ -170,14 +170,8 @@ def school_master_coverage__post_manual_checks_sensor(
                     metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.SILVER,
                 ),
-                "reset_staging_table": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
-                    destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_staging.db/{country_code.lower()}",
-                    metastore_schema="school_coverage",
-                    tier=DataTier.STAGING,
-                ),
                 "master": OpDestinationMapping(
-                    source_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{country_code.lower()}",
+                    source_filepath=str(path),
                     destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/school_master.db/{country_code.upper()}",
                     metastore_schema="school_master",
                     tier=DataTier.GOLD,

@@ -7,12 +7,14 @@ from delta.tables import DeltaTable
 from icecream import ic
 from models.file_upload import FileUpload
 from pyspark import sql
-from pyspark.sql import SparkSession
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+)
 from sqlalchemy import select
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
+    build_dq_summary_statistics,
     dq_split_failed_rows,
     dq_split_passed_rows,
     row_level_checks,
@@ -20,6 +22,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
+from src.spark.config_expectations import config as config_expectations
 from src.spark.coverage_transform_functions import (
     fb_coverage_merge,
     fb_transforms,
@@ -31,6 +34,7 @@ from src.spark.transform_functions import (
     column_mapping_rename,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.data_quality_descriptions import (
     convert_dq_checks_to_human_readeable_descriptions_and_upload,
 )
@@ -39,7 +43,11 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.db.primary import get_db_context
 from src.utils.delta import create_delta_table, create_schema
-from src.utils.metadata import get_output_metadata, get_table_preview
+from src.utils.metadata import (
+    get_output_metadata,
+    get_staging_change_type_metadata,
+    get_table_preview,
+)
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
@@ -174,16 +182,38 @@ async def coverage_data_quality_results_summary(
 ) -> Output[dict]:
     s: SparkSession = spark.spark_session
 
+    with get_db_context() as db:
+        file_upload = db.scalar(
+            select(FileUpload).where(FileUpload.id == config.filename_components.id),
+        )
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{config.filename_components.id}` was not found",
+            )
+    file_upload = FileUploadConfig.from_orm(file_upload)
+    uploaded_columns = list(file_upload.column_to_schema_mapping.values())
+
     with BytesIO(coverage_raw) as buffer:
         buffer.seek(0)
         pdf = pandas_loader(buffer, config.filepath, context=context)
 
     df_raw = s.createDataFrame(pdf)
-    dq_summary_statistics = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(s, coverage_data_quality_results),
-        df_bronze=df_raw,
-        df_data_quality_checks=coverage_data_quality_results,
+    dq_summary_statistics = build_dq_summary_statistics(
+        s,
+        coverage_data_quality_results,
+        df_raw,
     )
+
+    value_maps = aggregate_value_maps_for_pdf(
+        coverage_data_quality_results,
+        uploaded_columns=uploaded_columns,
+    )
+    if value_maps:
+        dq_summary_statistics["valueMaps"] = value_maps
+        context.log.info(
+            "Computed PDF valueMaps sections: %s",
+            list(value_maps.keys()),
+        )
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -194,6 +224,7 @@ async def coverage_data_quality_results_summary(
     await send_email_dq_report_with_config(
         dq_results=dq_summary_statistics,
         config=config,
+        value_maps=value_maps or None,
         context=context,
     )
 
@@ -307,6 +338,10 @@ def coverage_bronze(
         schema_reference=schema_reference,
     )
 
+    for column in config_expectations.TITLE_CASE_COLUMNS:
+        if column in df.columns:
+            df = df.withColumn(column, f.initcap(f.col(column)))
+
     df_pandas = df.toPandas()
     return Output(
         df_pandas,
@@ -326,8 +361,8 @@ def coverage_staging(
     adls_file_client: ADLSFileClient,
     spark: PySparkResource,
     config: FileConfig,
-):
-    if coverage_bronze.count() == 0:
+) -> Output[None]:
+    if coverage_bronze.isEmpty():
         context.log.warning("Skipping staging as there are no passing bronze rows")
         return Output(None)
 
@@ -348,14 +383,5 @@ def coverage_staging(
         spark.spark_session,
         StagingMode.UPDATE,
     )
-    staging = staging_step(coverage_bronze)
-    row_count = 0 if staging is None else staging.count()
-
-    return Output(
-        None,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": row_count,
-            "preview": get_table_preview(staging),
-        },
-    )
+    pending = staging_step(coverage_bronze)
+    return Output(None, metadata=get_staging_change_type_metadata(pending, config))

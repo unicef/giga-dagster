@@ -14,8 +14,7 @@ from pyspark.sql import (
 from pyspark.sql.types import NullType, StructType
 from src.constants import DataTier
 from src.data_quality_checks.utils import (
-    aggregate_report_json,
-    aggregate_report_spark_df,
+    build_dq_summary_statistics,
     dq_split_failed_rows as extract_dq_failed_rows,
     dq_split_passed_rows as extract_dq_passed_rows,
     extract_school_id_govt_duplicates,
@@ -407,13 +406,10 @@ def adhoc__master_dq_checks_summary(
     spark: PySparkResource,
     config: FileConfig,
 ) -> PythonObjectDagsterType(python_type=(dict, list)):
-    df_summary = aggregate_report_json(
-        df_aggregated=aggregate_report_spark_df(
-            spark.spark_session,
-            adhoc__master_data_quality_checks,
-        ),
-        df_bronze=adhoc__master_data_quality_checks,
-        df_data_quality_checks=adhoc__master_data_quality_checks,
+    df_summary = build_dq_summary_statistics(
+        spark.spark_session,
+        adhoc__master_data_quality_checks,
+        adhoc__master_data_quality_checks,
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
@@ -479,72 +475,6 @@ def adhoc__publish_silver_geolocation(
     columns_non_nullable = [
         "school_id_govt_type",
         "education_level_govt",
-    ]
-    column_actions = {
-        c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
-    }
-    df_silver = df_silver.withColumns(column_actions)
-    df_silver = transform_types(df_silver, schema_name, context)
-    df_silver = compute_row_hash(df_silver, context)
-
-    schema_reference = get_schema_columns_datahub(
-        spark.spark_session,
-        schema_name,
-    )
-    datahub_emit_metadata_with_exception_catcher(
-        context=context,
-        config=config,
-        spark=spark,
-        schema_reference=schema_reference,
-    )
-
-    return Output(
-        df_silver,
-        metadata={
-            **get_output_metadata(config),
-            "row_count": df_silver.count(),
-            "preview": get_table_preview(df_silver),
-        },
-    )
-
-
-@asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
-@capture_op_exceptions
-def adhoc__publish_silver_coverage(
-    context: OpExecutionContext,
-    config: FileConfig,
-    spark: PySparkResource,
-    adhoc__master_dq_checks_passed: sql.DataFrame,
-    adhoc__reference_dq_checks_passed: sql.DataFrame,
-) -> Output[sql.DataFrame]:
-    s: SparkSession = spark.spark_session
-    schema_name = "school_coverage"
-    schema_columns = get_schema_columns(s, schema_name)
-    column_names = [c.name for c in schema_columns]
-    master_columns = [
-        c
-        for c in column_names
-        if c in adhoc__master_dq_checks_passed.schema.fieldNames()
-    ]
-
-    df_one_gold = adhoc__master_dq_checks_passed.select(*master_columns)
-    if not adhoc__reference_dq_checks_passed.isEmpty():
-        reference_columns = [
-            c
-            for c in column_names
-            if c in adhoc__reference_dq_checks_passed.schema.fieldNames()
-            and c != "signature"
-        ]
-        df_one_gold = df_one_gold.join(
-            adhoc__reference_dq_checks_passed.select(*reference_columns),
-            "school_id_giga",
-            "left",
-        )
-
-    df_silver = add_missing_columns(df_one_gold, schema_columns)
-    columns_non_nullable = [
-        "cellular_coverage_availability",
-        "cellular_coverage_type",
     ]
     column_actions = {
         c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
@@ -646,7 +576,6 @@ def adhoc__publish_master_to_gold(
 
     upstream_filepaths = [
         f"{settings.SPARK_WAREHOUSE_PATH}/school_geolocation_silver.db/{config.country_code.lower()}",
-        f"{settings.SPARK_WAREHOUSE_PATH}/school_coverage_silver.db/{config.country_code.lower()}",
     ]
     emit_lineage_base(
         upstream_datasets=upstream_filepaths,

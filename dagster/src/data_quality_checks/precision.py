@@ -16,6 +16,12 @@ def precision_check(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running precision checks...")
 
+    config_column_list = {
+        column: value
+        for column, value in config_column_list.items()
+        if column in df.columns
+    }
+
     column_actions = {}
     for column in config_column_list:
         precision = config_column_list[column]["min"]
