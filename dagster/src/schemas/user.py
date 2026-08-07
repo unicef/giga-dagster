@@ -1,27 +1,27 @@
 from typing import Literal
 
-from pydantic import UUID4, BaseModel, EmailStr
+from pydantic import UUID4, BaseModel, ConfigDict, EmailStr
 
 
 class GraphGroup(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID4
     description: str | None
     display_name: str
 
-    class Config:
-        orm_mode = True
-
 
 class GraphIdentity(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     issuer: str
     issuer_assigned_id: str | None
     sign_in_type: str
 
-    class Config:
-        orm_mode = True
-
 
 class GraphUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID4
     account_enabled: bool | None
     given_name: str | None
@@ -33,9 +33,6 @@ class GraphUser(BaseModel):
     member_of: list[GraphGroup] | None
     other_mails: list[EmailStr] | None
     identities: list[GraphIdentity] | None
-
-    class Config:
-        orm_mode = True
 
 
 class DatabaseUser(BaseModel):

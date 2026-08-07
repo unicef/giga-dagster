@@ -30,6 +30,9 @@ from src.data_quality_checks.geometry import (
     school_density_check,
     similar_name_level_within_110_check,
 )
+from src.data_quality_checks.geospatial import (
+    run_geospatial_checks,
+)
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.spark.config_expectations import config
@@ -40,10 +43,14 @@ from src.utils.nocodb.get_nocodb_data import (
 )
 from src.utils.schema import get_schema_columns
 
-# Metadata keys, not 0/1 check results: a count of 1 means "alone at this
-# location", which anything counting value == 1 would read as a failed check.
+# Metadata keys, not 0/1 check results
 METADATA_CHECK_KEYS = frozenset(
-    {"duplicate_location_rows_count", "duplicate_location_rows_id"}
+    {
+        "duplicate_location_rows_count",
+        "duplicate_location_rows_id",
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
+    }
 )
 
 
@@ -589,6 +596,7 @@ def run_master_checks(
     df = precision_check(df, config.PRECISION, context)
     df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
     df = duplicate_name_level_110_check(df, context)
+    df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
     df = column_relation_checks(df, dq_context.dataset_type, context)
     df = critical_error_checks(
         df,
@@ -617,6 +625,7 @@ def run_geolocation_checks(
     df = precision_check(df, config.PRECISION, context)
     df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
     df = duplicate_name_level_110_check(df, context)
+    df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
     df = critical_error_checks(
         df,
         dq_context.dataset_type,

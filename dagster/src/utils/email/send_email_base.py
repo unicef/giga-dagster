@@ -63,7 +63,7 @@ async def send_email_base(
                 html_part=html,
                 text_part=text,
                 attachments=attachments,
-            ).dict(),
+            ).model_dump(),
         )
         if res.is_error:
             logger.error(

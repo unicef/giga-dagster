@@ -357,7 +357,8 @@ def geolocation_data_quality_results(
     # dq_has_critical_error and failure_reason remain as top-level columns because
     # they are used for row-level filtering throughout the pipeline.
     # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
-    # String-valued dq_ columns (e.g. dq_duplicate_location_rows_id, an md5 hash) cannot
+    # String-valued dq_ columns (e.g. dq_school_density_group_id, dq_duplicate_location_rows_id,
+    # both md5 hashes) cannot
     # live in a map<string, int> and stay top-level.
     dq_flag_cols = [
         field.name
@@ -457,6 +458,10 @@ def geolocation_data_quality_results_human_readable(
     duplicate_count_col = f.element_at(
         f.col("dq_results"), "duplicate_location_rows_count"
     )
+    # duplicate_group_id_50m/count_50m are metadata; gate on the flag, not count (count can be 1 for a real pair).
+    duplicate_group_flag_col = f.element_at(
+        f.col("dq_results"), "duplicate_group_flag_50m"
+    )
     for map_key, human_name in human_readable_mappings.items():
         if map_key == "duplicate_location_rows_count":
             df = df.withColumn(
@@ -471,6 +476,14 @@ def geolocation_data_quality_results_human_readable(
                 f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
                     f.col("dq_duplicate_location_rows_id")
                 ),
+            )
+        elif map_key in ("duplicate_group_id_50m", "duplicate_group_count_50m"):
+            df = df.withColumn(
+                human_name,
+                f.when(
+                    duplicate_group_flag_col == 1,
+                    f.element_at(f.col("dq_results"), map_key),
+                ).otherwise(f.lit(None)),
             )
         else:
             df = df.withColumn(
@@ -842,13 +855,15 @@ def geolocation_school_map(
     """
     Generate an interactive HTML map showing passed and failed schools.
 
-    Emits an empty output when the upload has no coordinates: latitude/longitude
-    always exist on the DataFrame after the silver merge, so the uploaded columns
-    are what decide whether a map is meaningful.
+    Reads the DQ results directly and derives its own display columns; map concerns
+    stay here rather than in the shared DQ extraction helpers. Emits an empty output
+    when the upload has no coordinates: latitude/longitude always exist on the
+    DataFrame after the silver merge, so the uploaded columns are what decide whether
+    a map is meaningful.
     """
     from src.utils.map_generator import generate_school_map_html
 
-    # Columns shown in the map popups, on top of the DQ status columns
+    # Identity and admin columns shown in the map popups, on top of the DQ status
     map_columns = [
         "school_id_giga",
         "school_id_govt",
@@ -860,6 +875,14 @@ def geolocation_school_map(
         "admin1_id_giga",
         "admin2",
         "admin2_id_giga",
+    ]
+    # dq_results map keys surfaced on the map, each aliased to its raw-int dq_ column
+    map_dq_keys = [
+        "is_not_within_country",
+        "is_in_uninhabited_area",
+        "duplicate_group_flag_50m",
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
     ]
 
     country_code = config.country_code
@@ -893,9 +916,11 @@ def geolocation_school_map(
         *[col for col in map_columns if col in df.columns],
         "dq_has_critical_error",
         "failure_reason",
-        f.element_at(f.col("dq_results"), "is_not_within_country")
-        .cast("int")
-        .alias("dq_is_not_within_country"),
+        *(["rurban_detected"] if "rurban_detected" in df.columns else []),
+        *[
+            f.element_at(f.col("dq_results"), key).cast("int").alias(f"dq_{key}")
+            for key in map_dq_keys
+        ],
     )
     df.cache()
 

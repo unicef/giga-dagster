@@ -9,7 +9,7 @@ from src.utils.op_config import FileConfig
 
 def get_output_metadata(config: FileConfig, filepath: str = None) -> dict[str, str]:
     metadata = {
-        **config.dict(exclude={"metadata", "tier"}),
+        **config.model_dump(exclude={"metadata", "tier"}),
         **config.metadata,
         "tier": config.tier.name,
     }

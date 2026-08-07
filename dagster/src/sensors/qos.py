@@ -118,7 +118,7 @@ def qos_school_list__new_apis_sensor():
                 domain=DATAHUB_DOMAIN,
                 dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
                 country_code=country_code,
-                database_data=row_data.json(),
+                database_data=row_data.model_dump_json(),
             )
 
             run_key = f"{sanitized_api_name}_{sanitized_date}"
@@ -238,7 +238,7 @@ def qos_school_connectivity__new_apis_sensor():
             domain=DATAHUB_DOMAIN,
             dq_target_filepath=f"{constants.bronze_folder}/{DOMAIN}/{DATASET_TYPE}/{country_code}/{stem}.csv",
             country_code=country_code,
-            database_data=row_data.json(),
+            database_data=row_data.model_dump_json(),
         )
 
         run_key = f"{sanitized_api_name}_{sanitized_date}"

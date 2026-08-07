@@ -6,11 +6,14 @@ from models.qos_apis import (
     RequestMethodEnum,
     SendQueryInEnum,
 )
+from pydantic import ConfigDict
 
 from dagster import Config
 
 
 class ApiConfiguration(Config):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     api_auth_api_key: str | None
     api_auth_api_value: str | None
@@ -37,9 +40,6 @@ class ApiConfiguration(Config):
     request_method: RequestMethodEnum
     school_id_key: str | None
     size: int | None
-
-    class Config:
-        orm_mode = True
 
 
 class SchoolListConfig(ApiConfiguration):
