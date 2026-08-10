@@ -224,8 +224,9 @@ def aggregate_report_spark_df(
 _DQR_WARNINGS_COLUMN = "DQR Warnings"
 
 
-def _warning_check_keys() -> set[str]:
-    """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes)."""
+def get_warning_check_labels() -> dict[str, str]:
+    """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes),
+    mapped to their "Human Readable Name" label."""
     table_id = get_nocodb_table_id_from_name(
         table_name="SchoolGeolocationMasterDQChecks"
     )
@@ -233,24 +234,26 @@ def _warning_check_keys() -> set[str]:
     is_warning = (
         table[_DQR_WARNINGS_COLUMN].astype(str).str.strip().str.lower() == "yes"
     )
-    keys: set[str] = set()
-    for col_name in table.loc[is_warning, "DQ Table Column Name"]:
-        col_name = str(col_name or "")
+    labels: dict[str, str] = {}
+    for _, row in table.loc[is_warning].iterrows():
+        col_name = str(row.get("DQ Table Column Name") or "")
         if col_name.startswith("dq_"):
             col_name = col_name[len("dq_") :]
-        if col_name:
-            keys.add(col_name)
-    return keys - METADATA_CHECK_KEYS
+        if not col_name or col_name in METADATA_CHECK_KEYS:
+            continue
+        label = str(row.get("Human Readable Name") or "").strip()
+        labels[col_name] = label or col_name
+    return labels
 
 
 def _warning_expr(df: sql.DataFrame) -> Column:
     """Boolean column: True where the row fails at least one report-level warning.
 
-    The set of warning checks comes from NocoDB (see _warning_check_keys), so a
+    The set of warning checks comes from NocoDB (see get_warning_check_labels), so a
     missing optional column does not flag every approved school as "with warnings".
     element_at/coalesce handle keys absent from a given row's dq_results map.
     """
-    warning_keys = _warning_check_keys()
+    warning_keys = set(get_warning_check_labels())
     if not warning_keys:
         return f.lit(False)
 
@@ -270,6 +273,34 @@ def _warning_expr(df: sql.DataFrame) -> Column:
         return f.lit(False)
     exprs = [f.coalesce(f.col(col_name), f.lit(0)) for col_name in dq_cols]
     return f.greatest(*exprs) == 1
+
+
+def build_dq_warning_columns(df: sql.DataFrame) -> sql.DataFrame:
+    """Add dq_has_warning (int 0/1) and warning_reason (comma-joined labels).
+
+    warning_reason only lists the labels for checks that actually fired on a given
+    row (same pattern as failure_reason in critical.py), so it stays short even
+    though dozens of warning checks may be configured in NocoDB.
+    """
+    warning_labels = get_warning_check_labels()
+    if not warning_labels or "dq_results" not in df.columns:
+        return df.withColumns(
+            {"dq_has_warning": f.lit(0).cast("int"), "warning_reason": f.lit("")}
+        )
+
+    value_exprs = []
+    reason_exprs = []
+    for key, label in warning_labels.items():
+        value_expr = f.coalesce(f.element_at(f.col("dq_results"), f.lit(key)), f.lit(0))
+        value_exprs.append(value_expr)
+        reason_exprs.append(f.when(value_expr == 1, f.lit(label)))
+
+    return df.withColumns(
+        {
+            "dq_has_warning": (f.greatest(*value_exprs) == 1).cast("int"),
+            "warning_reason": f.concat_ws(", ", *reason_exprs),
+        }
+    )
 
 
 # Derived from config.PRECISION so the keys stay in sync with the columns that

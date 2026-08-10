@@ -22,6 +22,7 @@ from src.data_quality_checks.create_update import (
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.utils import (
     build_dq_summary_statistics,
+    build_dq_warning_columns,
     dq_geolocation_extract_relevant_columns,
     dq_split_failed_rows,
     dq_split_passed_rows,
@@ -910,12 +911,15 @@ def geolocation_school_map(
         )
 
     df = normalize_dq_results_map(geolocation_data_quality_results)
+    df = build_dq_warning_columns(df)
 
     # Casting for the map lives here, not in the shared DQ extraction helpers.
     df = df.select(
         *[col for col in map_columns if col in df.columns],
         "dq_has_critical_error",
         "failure_reason",
+        "dq_has_warning",
+        "warning_reason",
         *(["rurban_detected"] if "rurban_detected" in df.columns else []),
         *[
             f.element_at(f.col("dq_results"), key).cast("int").alias(f"dq_{key}")
@@ -937,10 +941,11 @@ def geolocation_school_map(
 
     passed_count = len(passed_pdf)
     failed_count = len(failed_pdf)
+    warning_count = int(passed_pdf["dq_has_warning"].sum())
 
     context.log.info(
         f"Generated map for {country_code} (upload: {upload_id}): "
-        f"{passed_count} passed, {failed_count} failed schools"
+        f"{passed_count} passed ({warning_count} with warnings), {failed_count} failed schools"
     )
 
     return Output(
@@ -949,6 +954,7 @@ def geolocation_school_map(
             **get_output_metadata(config),
             "passed_schools": passed_count,
             "failed_schools": failed_count,
+            "warning_schools": warning_count,
             "total_schools": passed_count + failed_count,
         },
     )
