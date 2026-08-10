@@ -287,4 +287,3 @@ SELECT
   ), '') AS VARCHAR) AS reasons_failed_upload
 
 FROM pf
-
