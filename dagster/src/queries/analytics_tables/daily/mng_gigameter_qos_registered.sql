@@ -17,7 +17,16 @@
 --
 -- Dependencies:
 --   - qos_raw.mng (raw LibreRouter data for Mongolia)
---   - default.all_gigameter_registered_tb_physical (GigaMeter registered schools)
+--   - default.all_gigameter_registered_schools (GigaMeter registered schools --
+--     replaces all_gigameter_registered_tb_physical; primary/secondary server/isp/asn
+--     are derived here from its detected_*_nested map columns since it doesn't
+--     expose them as scalars)
+--   - default.all_gigameter_appversion_funnel (initial_registration_date -- not
+--     present on all_gigameter_registered_schools)
+--   - default.all_gigameter_measurement_data (num_measurements, num_days_measured,
+--     latest_measurement_app_version -- not present on all_gigameter_registered_schools)
+--   - gigameter_production_db.public.dailycheckapp_school (num_registration_attempts --
+--     not present on all_gigameter_registered_schools)
 --   - school_master.mng (Mongolia school master data)
 --
 -- Output Columns:  ~20 columns
@@ -84,33 +93,141 @@ libre AS (
 
 
 -- ==============================================================================
--- CTE: gigameter_registered
+-- CTE: gigameter_base
 -- Purpose: GigaMeter app registrations for Mongolia
--- Source:  default.all_gigameter_registered_tb_physical
--- Filter:  country = 'Mongolia' AND initial_registration_date IS NOT NULL
+-- Source:  default.all_gigameter_registered_schools
+-- Filter:  country = 'Mongolia' AND registered_gigameter = 'Yes'
+-- Note:    primary/secondary server/isp/asn derived from the detected_*_nested
+--          map columns (approx_most_frequent output, most-frequent-first) via
+--          the same element_at(map_keys(...), N) pattern
+--          all_gigameter_registered_tb_physical.sql used internally.
+-- ==============================================================================
+gigameter_base AS (
+    SELECT
+        school_id_giga,
+        first_measurement_date,
+        last_measurement_date,
+        max_app_version_gigameter AS highest_app_version_in_use,
+        element_at(map_keys(detected_server_nested), 1) AS primary_server,
+        element_at(map_keys(detected_server_nested), 2) AS secondary_server,
+        element_at(map_keys(detected_isp_nested), 1) AS primary_isp,
+        element_at(map_keys(detected_isp_nested), 2) AS secondary_isp,
+        element_at(map_keys(detected_isp_asn_nested), 1) AS primary_isp_asn,
+        element_at(map_keys(detected_isp_asn_nested), 2) AS secondary_isp_asn,
+        1 AS gigameter_source                   -- Flag for join logic
+    FROM default.all_gigameter_registered_schools
+    WHERE country = 'Mongolia'
+        AND registered_gigameter = 'Yes'
+),
+
+
+-- ==============================================================================
+-- CTE: gigameter_initial_registration
+-- Purpose: Initial registration date per school -- not present on
+--          all_gigameter_registered_schools, sourced directly from the funnel
+--          tracking table (same source all_gigameter_registered_tb_physical.sql
+--          used internally).
+-- Source:  default.all_gigameter_appversion_funnel
+-- ==============================================================================
+gigameter_initial_registration AS (
+    SELECT
+        school_id_giga,
+        MIN(initial_registration_date) AS initial_registration_date
+    FROM default.all_gigameter_appversion_funnel
+    WHERE country = 'Mongolia'
+    GROUP BY school_id_giga
+),
+
+
+-- ==============================================================================
+-- CTE: gigameter_measurement_stats
+-- Purpose: Measurement counts per school -- not present on
+--          all_gigameter_registered_schools, computed directly from raw
+--          measurement data (same approach
+--          all_gigameter_registered_tb_physical.sql used internally).
+-- Source:  default.all_gigameter_measurement_data
+-- ==============================================================================
+gigameter_measurement_stats AS (
+    SELECT
+        school_id_giga,
+        COUNT(DISTINCT local_created_timestamp) AS num_measurements,
+        COUNT(DISTINCT DATE_TRUNC('day', local_created_timestamp)) AS num_days_measured
+    FROM default.all_gigameter_measurement_data
+    WHERE country = 'Mongolia'
+    GROUP BY school_id_giga
+),
+
+
+-- ==============================================================================
+-- CTE: gigameter_latest_app_version
+-- Purpose: App version from each school's most recent measurement (distinct
+--          from highest_app_version_in_use, which is the highest version ever
+--          seen) -- not present on all_gigameter_registered_schools.
+-- Source:  default.all_gigameter_measurement_data
+-- ==============================================================================
+gigameter_latest_app_version AS (
+    SELECT school_id_giga, app_version AS latest_measurement_app_version
+    FROM (
+        SELECT
+            school_id_giga,
+            app_version,
+            ROW_NUMBER() OVER (PARTITION BY school_id_giga ORDER BY created_timestamp DESC) AS row_num
+        FROM default.all_gigameter_measurement_data
+        WHERE country = 'Mongolia'
+    ) ranked
+    WHERE row_num = 1
+),
+
+
+-- ==============================================================================
+-- CTE: gigameter_registration_attempts
+-- Purpose: Registration attempt counts per school -- not present on
+--          all_gigameter_registered_schools, computed directly from the raw
+--          registration events table (same approach
+--          all_gigameter_registered_tb_physical.sql used internally).
+-- Source:  gigameter_production_db.public.dailycheckapp_school
+-- ==============================================================================
+gigameter_registration_attempts AS (
+    SELECT
+        giga_id_school AS school_id_giga,
+        COUNT(DISTINCT created) AS num_registration_attempts
+    FROM gigameter_production_db.public.dailycheckapp_school
+    WHERE giga_id_school IN (SELECT school_id_giga FROM school_master.mng)
+    GROUP BY giga_id_school
+),
+
+
+-- ==============================================================================
+-- CTE: gigameter_registered
+-- Purpose: Recombines the CTEs above into the same shape the rest of this
+--          script expects (previously read directly, pre-joined, from
+--          all_gigameter_registered_tb_physical).
+-- Filter:  initial_registration_date IS NOT NULL (matches original semantics)
 -- ==============================================================================
 gigameter_registered AS (
     SELECT
-        school_id_giga,
-        initial_registration_date,
-        first_measurement_date,
-        last_measurement_date,
-        latest_measurement_app_version,
-        highest_app_version_in_use,
-        num_measurements,
-        num_days_measured,
-        num_registration_attempts,
-        primary_server,
-        primary_isp,
-        primary_isp_asn,
-        secondary_server,
-        secondary_isp,
-        secondary_isp_asn,
-        primary_source,
-        1 AS gigameter_source                   -- Flag for join logic
-    FROM default.all_gigameter_registered_tb_physical
-    WHERE country = 'Mongolia'
-        AND initial_registration_date IS NOT NULL
+        gb.school_id_giga,
+        gir.initial_registration_date,
+        gb.first_measurement_date,
+        gb.last_measurement_date,
+        glav.latest_measurement_app_version,
+        gb.highest_app_version_in_use,
+        gms.num_measurements,
+        gms.num_days_measured,
+        gra.num_registration_attempts,
+        gb.primary_server,
+        gb.primary_isp,
+        gb.primary_isp_asn,
+        gb.secondary_server,
+        gb.secondary_isp,
+        gb.secondary_isp_asn,
+        gb.gigameter_source
+    FROM gigameter_base gb
+    LEFT JOIN gigameter_initial_registration gir ON gb.school_id_giga = gir.school_id_giga
+    LEFT JOIN gigameter_measurement_stats gms ON gb.school_id_giga = gms.school_id_giga
+    LEFT JOIN gigameter_latest_app_version glav ON gb.school_id_giga = glav.school_id_giga
+    LEFT JOIN gigameter_registration_attempts gra ON gb.school_id_giga = gra.school_id_giga
+    WHERE gir.initial_registration_date IS NOT NULL
 ),
 
 

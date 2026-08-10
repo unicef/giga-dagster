@@ -16,7 +16,7 @@
 --
 -- Dependencies:
 --   - qos.mng (aggregated LibreRouter measurements for Mongolia)
---   - default.all_gigameter_measurement_data_tb_physical (GigaMeter daily data)
+--   - default.all_gigameter_measurement_data (GigaMeter daily data)
 --   - school_master.mng (Mongolia school master)
 --
 -- Output Columns:  ~25 columns
@@ -127,19 +127,19 @@ SELECT
 SELECT
   date,
   school_id_giga,
-  sum(num_measurements) as num_measurements,
+  count(*) as num_measurements,
   count(DISTINCT device_id) as num_devices,
-  avg(avg_download_speed) as avg_download_speed,
-  avg(avg_upload_speed) as avg_upload_speed,
-  avg(avg_latency) as avg_latency,
+  avg(download_speed) as avg_download_speed,
+  avg(upload_speed) as avg_upload_speed,
+  avg(latency) as avg_latency,
   max(detected_server) as detected_server,
-  max(isp_clean) as isp_clean,
-  max(isp_asn_clean) as isp_asn_clean,
+  max(isp_name) as isp_clean,
+  max(isp_asn) as isp_asn_clean,
   max(app_version) as app_version,
   1 as gigameter_source,
   'GigaMeter' as provider
 from
-  default.all_gigameter_measurement_data_tb_physical
+  default.all_gigameter_measurement_data
 where
   country = 'Mongolia'
 group by

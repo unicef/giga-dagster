@@ -82,27 +82,16 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
-        
-      AND created_at >= (
-          SELECT COALESCE(
-              MAX(created_timestamp),
-              TIMESTAMP '2022-01-01 00:00:00 UTC'
-          )
+        -- Incremental watermark: id is a guaranteed-unique, strictly-increasing
+        -- integer, so this single comparison both selects new rows and
+        -- guarantees no duplicates -- replaces the old 3-part timestamp
+        -- watermark + NOT IN dedup + future-date guard (expensive, and broke
+        -- on table recreate/backfill). Future-dated source rows are now
+        -- filtered separately, downstream in Dagster.
+      AND id > (
+          SELECT COALESCE(MAX(measurement_id), 0)
          FROM delta_lake.default.all_gmeter_only_measurements_incremental
       )
-      -- Duplicate protection
-      AND id NOT IN (
-          SELECT measurement_id
-         FROM delta_lake.default.all_gmeter_only_measurements_incremental
-      )
-    -- future dates protection
-      AND created_at < (
-          SELECT
-              date_add('hour', 1, MAX(created_timestamp))
-         FROM delta_lake.default.all_gmeter_only_measurements_incremental
-      )
-    ORDER BY id
-    LIMIT 40000
 
 )
 

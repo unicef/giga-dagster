@@ -19,10 +19,13 @@
 --
 -- Dependencies:
 --   - gigameter_production_db.public.school (GigaMeter school registrations)
+--   - gigameter_production_db.public.dailycheckapp_school (registration/check-in events)
 --   - default.all_gigameter_measurement_data (consolidated measurement history)
 --   - default.all_school_master (school metadata and geography)
+--   - lstringer.school_connectivity_status_vw (GigaMaps connectivity classification
+--     -- see analytics-tables/views/school_connectivity_status_vw.sql)
 --
--- Output Columns:  ~30 columns
+-- Output Columns:  ~33 columns
 -- Primary Key:     school_id_giga
 -- Granularity:     One row per registered school
 --
@@ -30,15 +33,26 @@
 --   Recurring — refresh daily or on-demand to reflect latest activity.
 --   Connectivity status thresholds: live ≤21 days since last measurement,
 --   at-risk 21–30 days, drop-off >30 days.
+--   last_device_installed_id is device_hardware_id from the most recent
+--   dailycheckapp_school row per school -- only ~31% populated at source,
+--   NULL is expected/common, not a bug. last_device_installed_date is
+--   separately ~75% populated.
 --
--- Last Updated:    2025-10-31 / Luke Stringer
+-- Partitioned by: country (12 Superset datasets on dashboard 21 filter this
+-- table by a single country each -- unpartitioned, every one of them scanned
+-- the full table)
+--
+-- Last Updated:    2026-07-30 / Luke Stringer
 -- ==============================================================================
 
-CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_schools
+-- DROP TABLE IF EXISTS default.all_gigameter_registered_schools;
+
+CREATE TABLE default.all_gigameter_registered_schools
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_schools'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_schools',
+    partitioned_by = ARRAY['country']
 )
-as (
+AS (
 
 with
 
@@ -131,6 +145,27 @@ WHERE
 )
 
 
+-- most recently installed device per school (by registration/check-in event, not by
+-- currently-active status -- an install stays "most recent" even if later logged out).
+-- device_hardware_id is only ~31% populated at source; NULL here is expected.
+, last_device_installed AS (
+    SELECT
+        giga_id_school AS school_id_giga,
+        device_hardware_id AS last_device_installed_id,
+        created_at AS last_device_installed_date
+    FROM (
+        SELECT
+            giga_id_school,
+            device_hardware_id,
+            created_at,
+            ROW_NUMBER() OVER (PARTITION BY giga_id_school ORDER BY created_at DESC) AS row_num
+        FROM
+            gigameter_production_db.public.dailycheckapp_school
+    ) AS d
+    WHERE row_num = 1
+)
+
+
 -- get data from measurement table
 , measurement_data as (
 SELECT
@@ -185,6 +220,8 @@ SELECT
   CAST(r.devices_still_logged_in AS BIGINT) AS devices_still_logged_in,
   CAST(data.num_devices_measured AS BIGINT) AS num_devices_measured,
   CAST(app.max_app_version AS VARCHAR) AS max_app_version_gigameter,
+  CAST(dev.last_device_installed_id AS VARCHAR) AS last_device_installed_id,
+  CAST(dev.last_device_installed_date AS TIMESTAMP) AS last_device_installed_date,
   -- provider info (MAP — pass through)
   data.detected_isp_nested,
   data.detected_isp_asn_nested,
@@ -196,7 +233,15 @@ SELECT
   CAST(master.latitude AS DOUBLE) AS latitude,
   CAST(master.longitude AS DOUBLE) AS longitude,
   -- connection info
+  -- connectivity: from all_school_master (government-reported, optionally
+  -- overridden by real-time GigaMeter/MLab/QoS measurement presence) --
+  -- unchanged name/values, kept as-is for downstream dashboard compatibility.
+  -- connectivity_gigamaps: from GigaMaps' own weekly connectivity monitoring, a
+  -- separate signal -- see analytics-tables/views/school_connectivity_status_vw.sql.
+  -- These two can and do disagree (investigated 2026-07-31) -- do not assume they
+  -- mean the same thing.
   CAST(master.connectivity AS VARCHAR) AS connectivity,
+  CAST(gmconn.connectivity_gigamaps AS VARCHAR) AS connectivity_gigamaps,
   CAST(master.connectivity_type_govt AS VARCHAR) AS connectivity_type_govt,
   CAST(master.cellular_coverage_type AS VARCHAR) AS cellular_coverage_type,
   CAST(master.school_area_type AS VARCHAR) AS school_area_type,
@@ -208,6 +253,7 @@ SELECT
   CAST(c.canton_name AS VARCHAR) AS canton_bih_only,
   CAST(cc.status AS VARCHAR) AS connectivity_credits_school,
   CAST(p.zaf_province AS VARCHAR) AS province_zaf_only,
+  CAST(l.zone AS VARCHAR) as education_zone_lka_only,
   -- calculated columns
   -- to be removed once integrated with consistency indicator + IQB-edu
   CAST(CASE
@@ -237,6 +283,14 @@ LEFT JOIN
   registration_attempts r
 ON
   master.school_id_giga = r.school_id_giga
+LEFT JOIN
+  last_device_installed dev
+ON
+  master.school_id_giga = dev.school_id_giga
+LEFT JOIN
+  lstringer.school_connectivity_status_vw gmconn
+ON
+  master.school_id_giga = gmconn.school_id_giga
 -- canton mapping
 left join
   lstringer.bih_school_canton_mapping_vw c
@@ -252,5 +306,12 @@ LEFT JOIN
   lstringer.zaf_province_mapping p
 on
   master.school_id_giga = p.school_id_giga
+
+
+LEFT JOIN lstringer.lka_school_education_zones l
+  on master.school_id_govt = l.school_id_govt
+  and master.iso3_code = l.iso3_code
+
+
 
   );

@@ -144,22 +144,24 @@ def aggregate_report_spark_df(
     )
 
     # Processing for Human Readable Report
-    # Most check keys are "<assertion>-<column>". The duplicate location-rows checks
-    # are named without a hyphen, so their assertion/column are set explicitly.
+    # Most check keys are "<assertion>-<column>"; hyphen-less checks get explicit values.
     is_location_rows_check = f.col("check_key").startswith("duplicate_location_rows")
+    is_geospatial_check = f.col("check_key").isin(
+        "is_in_uninhabited_area", "is_suspect_location", "duplicate_group_flag_50m"
+    )
 
     agg_df = agg_df.withColumn("dq_column", f.col("check_key"))
     agg_df = agg_df.withColumn(
         "column",
-        f.when(is_location_rows_check, f.lit("location_id")).otherwise(
-            f.split(f.col("check_key"), "-").getItem(1)
-        ),
+        f.when(is_location_rows_check, f.lit("location_id"))
+        .when(is_geospatial_check, f.lit("latitude,longitude"))
+        .otherwise(f.split(f.col("check_key"), "-").getItem(1)),
     )
     agg_df = agg_df.withColumn(
         "assertion",
-        f.when(is_location_rows_check, f.lit("duplicate_location_rows")).otherwise(
-            f.split(f.col("check_key"), "-").getItem(0)
-        ),
+        f.when(is_location_rows_check, f.lit("duplicate_location_rows"))
+        .when(is_geospatial_check, f.col("check_key"))
+        .otherwise(f.split(f.col("check_key"), "-").getItem(0)),
     )
 
     # get data descriptions from nocodb

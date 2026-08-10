@@ -78,7 +78,13 @@ measurements_base AS (
         browser_id,
         device_hardware_id AS device_id,
         installed_path,
-        windows_username
+        windows_username,
+        -- Geolocation fields (available from app version 2.0.3+)
+        detected_latitude,
+        detected_longitude,
+        detected_location_is_flagged,
+        detected_location_distance,
+        detected_location_accuracy
     FROM
         gigameter_production_db.public.measurements
     WHERE
@@ -123,7 +129,12 @@ measurements_base AS (
       m.browser_id,
       m.device_id,
       m.installed_path,
-      m.windows_username
+      m.windows_username,
+      m.detected_latitude,
+      m.detected_longitude,
+      m.detected_location_is_flagged,
+      m.detected_location_distance,
+      m.detected_location_accuracy
   FROM
       measurements_base m
   LEFT JOIN
@@ -244,6 +255,15 @@ select
     -- -------------------------------------------------------------------------
     CAST(installed_path AS VARCHAR)                                                                  AS installed_path,
     CAST(windows_username AS VARCHAR)                                                                AS windows_username,
+
+    -- -------------------------------------------------------------------------
+    -- Geolocation (available from app version 2.0.3+)
+    -- -------------------------------------------------------------------------
+    CAST(detected_latitude AS DOUBLE)                                                                AS detected_latitude,
+    CAST(detected_longitude AS DOUBLE)                                                               AS detected_longitude,
+    CAST(detected_location_is_flagged AS BOOLEAN)                                                    AS detected_location_is_flagged,
+    CAST(detected_location_distance AS DOUBLE)                                                       AS detected_location_distance,
+    CAST(detected_location_accuracy AS DOUBLE)                                                       AS detected_location_accuracy,
 
     -- -------------------------------------------------------------------------
     -- Packet Loss Indicators (S2C - Server to Client)

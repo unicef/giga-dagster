@@ -34,10 +34,15 @@ WITH  measure AS (
       -- GigaMeter uses reliable giga_id for matching
       m1.school_id_giga = s1.school_id_giga
 
-      -- Duplicate protection
-      WHERE m1.measurement_id NOT IN (
-          SELECT measurement_id
-         FROM delta_lake.default.all_gmeter_only_measurements_incremental
+      -- Incremental watermark: id is strictly increasing, so this single
+      -- comparison selects new rows and guarantees no duplicates. Checked
+      -- against this table's OWN target (all_gigameter_measurement_data_incremental)
+      -- -- a prior version of this filter incorrectly checked m1 for
+      -- membership against the table m1 was itself selected FROM, which is
+      -- always true and filtered nothing.
+      WHERE m1.measurement_id > (
+          SELECT COALESCE(MAX(measurement_id), 0)
+         FROM delta_lake.default.all_gigameter_measurement_data_incremental
       )
 
 UNION ALL
@@ -77,12 +82,13 @@ UNION ALL
       m2.school_id_govt = s2.school_id_govt
     and
       m2.iso3_code = s2.iso3_code
-      -- Duplicate protection
-      WHERE m2.measurement_id NOT IN (
-          SELECT measurement_id
-         FROM delta_lake.default.all_mlab_only_measurements_incremental
+      -- Incremental watermark -- same fix as the GigaMeter branch above,
+      -- checked against this table's own target.
+      WHERE m2.measurement_id > (
+          SELECT COALESCE(MAX(measurement_id), 0)
+         FROM delta_lake.default.all_gigameter_measurement_data_incremental
       )
-    
+
 
 
 )
@@ -149,6 +155,17 @@ SELECT
     CAST(m.ip_address AS VARCHAR) AS ip_address,
     CAST(m.app_version AS VARCHAR) AS app_version,
     CAST(m.notes AS VARCHAR) AS notes,
+
+    -- -------------------------------------------------------------------------
+    -- ISP/ASN Canonical Mapping
+    -- Resolves ASN-truncation variants of the same ISP to a single canonical
+    -- name/ASN per country, and flags likely shared infrastructure (CDN/hosting)
+    -- -- see analytics-tables/daily/isp_asn_country_mapping.sql
+    -- -------------------------------------------------------------------------
+    CAST(map.canonical_isp_name AS VARCHAR) AS isp_name_clean,
+    CAST(map.canonical_asn AS VARCHAR) AS isp_asn_clean,
+    CAST(map.isp_key AS VARCHAR) AS isp_key,
+    CAST(map.is_likely_shared_infra AS BOOLEAN) AS is_likely_shared_infra,
 
     -- -------------------------------------------------------------------------
     -- WiFi Connection Details
@@ -259,6 +276,7 @@ SELECT
     CAST(c.canton_name AS VARCHAR) AS canton_bih_only,    -- Bosnia and Herzegovina only
     CAST(cc.status AS VARCHAR) AS connectivity_credits_school,  -- Connectivity credits pilot program
     CAST(p.zaf_province AS VARCHAR) AS province_zaf_only,
+    CAST(l.zone AS VARCHAR) as education_zone_lka_only,
 
     -- -------------------------------------------------------------------------
     -- Measurement Protocol
@@ -297,6 +315,11 @@ LEFT JOIN
   delta_lake.default.all_gigameter_valid_test_checker_incremental  mf
 on
   m.measurement_id = mf.measurement_id
+-- JOIN: ISP/ASN canonical mapping -- see isp_asn_country_mapping.sql
+LEFT JOIN default.isp_asn_country_mapping map
+  ON  map.iso3_code    = m.iso3_code
+  AND map.isp_name_raw = m.detected_isp_raw
+  AND map.isp_asn_raw  = m.detected_isp_asn
 -- JOIN: Bosnia canton mapping (country-specific enrichment)
 -- Only populates for schools in Bosnia and Herzegovina
 LEFT JOIN lstringer.bih_school_canton_mapping_vw c
@@ -310,4 +333,7 @@ LEFT JOIN lstringer.connectivity_credit_pilot_schools cc
 LEFT JOIN lstringer.zaf_province_mapping p
   on m.school_id_giga = p.school_id_giga
 
+LEFT JOIN lstringer.lka_school_education_zones l 
+  on m.school_id_govt = l.school_id_govt 
+  and m.iso3_code = l.iso3_code
  

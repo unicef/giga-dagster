@@ -84,8 +84,6 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
-    ORDER BY id
-    LIMIT 40000
 
 )
 
@@ -325,3 +323,5 @@ select
 
 FROM
   measurements_enriched
+
+   )
