@@ -491,12 +491,24 @@ GEOSPATIAL_COLUMN_MAPPING = {
     },
 }
 
+# Plain-named copies so these also survive dq_split_passed_rows and reach master.
+GEOSPATIAL_MASTER_ALIAS_MAPPING = {
+    "uninhabited": "uninhabited",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_flag": "duplicate_group_flag_50",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_group_id": "duplicate_group_id_50",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_count": "duplicate_group_count_50",
+}
+
 GEOSPATIAL_INT_COLUMNS = [
     "dq_is_in_uninhabited_area",
     "dq_is_suspect_location",
     "dq_duplicate_group_flag_50m",
     "dq_duplicate_group_id_50m",
     "dq_duplicate_group_count_50m",
+    "uninhabited",
+    "duplicate_group_flag_50",
+    "duplicate_group_id_50",
+    "duplicate_group_count_50",
     *[f"schools_within_{r // 1000}km" for r in CONTEXT_RADII_M],
 ]
 
@@ -533,6 +545,13 @@ def _null_geospatial_columns(df: sql.DataFrame) -> sql.DataFrame:
     for column in GEOSPATIAL_STRING_COLUMNS:
         df = df.withColumn(column, f.lit(None).cast("string"))
     return df
+
+
+def _apply_column_mapping(
+    result_pdf: pd.DataFrame, view: pd.DataFrame, mapping: dict[str, str]
+) -> None:
+    for source, target in mapping.items():
+        result_pdf[target] = view[source] if source in view.columns else pd.NA
 
 
 def _to_spark_safe(pdf: pd.DataFrame) -> pd.DataFrame:
@@ -603,8 +622,8 @@ def run_geospatial_checks(
 
     view = enricher.view
     result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})
-    for source, target in GEOSPATIAL_COLUMN_MAPPING.items():
-        result_pdf[target] = view[source] if source in view.columns else pd.NA
+    _apply_column_mapping(result_pdf, view, GEOSPATIAL_COLUMN_MAPPING)
+    _apply_column_mapping(result_pdf, view, GEOSPATIAL_MASTER_ALIAS_MAPPING)
 
     _log_non_null_counts(logger, "Geospatial checks", result_pdf, GEOSPATIAL_COLUMNS)
 

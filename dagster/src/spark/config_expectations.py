@@ -190,6 +190,10 @@ class Config(BaseSettings):
         ("schools_within_5km", "INT"),
         ("schools_within_10km", "INT"),
         ("rurban_detected", "STRING"),
+        ("uninhabited", "INT"),
+        ("duplicate_group_flag_50", "INT"),
+        ("duplicate_group_id_50", "INT"),
+        ("duplicate_group_count_50", "INT"),
         ("nearest_NR_id", "STRING"),
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),
@@ -591,6 +595,10 @@ class Config(BaseSettings):
         "is_school_open",
         "school_location_ingestion_timestamp",
         "rurban_detected",
+        "uninhabited",
+        "duplicate_group_flag_50",
+        "duplicate_group_id_50",
+        "duplicate_group_count_50",
     ]
 
     COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
@@ -613,6 +621,10 @@ class Config(BaseSettings):
         "schools_within_5km",
         "schools_within_10km",
         "rurban_detected",
+        "uninhabited",
+        "duplicate_group_flag_50",
+        "duplicate_group_id_50",
+        "duplicate_group_count_50",
         "connectivity_govt_collection_year",
         "connectivity_govt",
         # "school_id_giga",
