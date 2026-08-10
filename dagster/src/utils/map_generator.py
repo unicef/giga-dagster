@@ -17,6 +17,7 @@ from jinja2 import BaseLoader, Environment
 from dagster import OpExecutionContext
 
 PASSED_COLOR = "#1e7e34"
+WARNING_COLOR = "#fd7e14"
 FAILED_COLOR = "#dc3545"
 OUTSIDE_BOUNDARY_COLOR = "#343a40"
 
@@ -24,6 +25,8 @@ OUTSIDE_BOUNDARY_COLOR = "#343a40"
 BASEMAP_TILES = "CartoDB Positron"
 
 _OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
+_WARNING_COL = "dq_has_warning"
+_WARNING_REASON_COL = "warning_reason"
 
 _POPUP_TEMPLATE = Environment(
     loader=BaseLoader(),
@@ -38,7 +41,11 @@ _POPUP_TEMPLATE = Environment(
 
 # group key -> ordered list of (tag_value, checkbox_label)
 _FILTER_GROUPS = {
-    "status": [("passed", "Approved"), ("failed", "Rejected")],
+    "status": [
+        ("passed", "Approved"),
+        ("warning", "Approved (with warnings)"),
+        ("failed", "Rejected"),
+    ],
     "boundary": [("inside", "Inside boundary"), ("outside", "Outside boundary")],
 }
 _FILTER_GROUP_TITLES = {
@@ -133,6 +140,9 @@ def _render_school_popup_html(
     ]
     if include_failure_reason:
         fields.append(("Reason", _format_popup_value(row.get("failure_reason"))))
+    warning_reason = str(row.get(_WARNING_REASON_COL) or "").strip()
+    if warning_reason:
+        fields.append(("Warnings", warning_reason))
     return _POPUP_TEMPLATE.render(fields=fields)
 
 
@@ -173,6 +183,23 @@ def _is_outside_boundary(row: dict) -> bool:
         return False
 
 
+def _has_warning(row: dict) -> bool:
+    """Return whether a school row is flagged with a report-level warning."""
+    try:
+        return int(float(row.get(_WARNING_COL, 0))) == 1
+    except (TypeError, ValueError):
+        return False
+
+
+def _status_tag_and_color(
+    row: dict, base_status_tag: str, base_color: str
+) -> tuple[str, str]:
+    """Promote an approved row with a warning from "passed" to "warning"."""
+    if base_status_tag == "passed" and _has_warning(row):
+        return "warning", WARNING_COLOR
+    return base_status_tag, base_color
+
+
 def _add_school_markers(
     df: pd.DataFrame,
     base_color: str,
@@ -188,12 +215,14 @@ def _add_school_markers(
             status=status_label,
             include_failure_reason=include_failure_reason,
         )
+        row_status_tag, row_color = _status_tag_and_color(row, status_tag, base_color)
+
         outside_boundary = _is_outside_boundary(row)
         tags = [
-            status_tag,
+            row_status_tag,
             "outside" if outside_boundary else "inside",
         ]
-        color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else base_color
+        color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else row_color
         _add_circle_marker(main_layer, row, color, popup_html, tags)
 
 
@@ -201,11 +230,15 @@ def _calculate_filter_counts(
     passed_df: pd.DataFrame, failed_df: pd.DataFrame
 ) -> dict[str, int]:
     """Calculate per-tag-value counts for the grouped filter control's checkbox labels."""
-    counts = {"passed": len(passed_df), "failed": len(failed_df)}
-    for df in (passed_df, failed_df):
+    counts = {"passed": 0, "warning": 0, "failed": 0, "inside": 0, "outside": 0}
+    for status_tag, base_color, df in (
+        ("passed", PASSED_COLOR, passed_df),
+        ("failed", FAILED_COLOR, failed_df),
+    ):
         for row in df.to_dict("records"):
-            boundary_key = "outside" if _is_outside_boundary(row) else "inside"
-            counts[boundary_key] = counts.get(boundary_key, 0) + 1
+            row_status_tag, _ = _status_tag_and_color(row, status_tag, base_color)
+            counts[row_status_tag] += 1
+            counts["outside" if _is_outside_boundary(row) else "inside"] += 1
     return counts
 
 
