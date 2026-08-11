@@ -194,6 +194,9 @@ class Config(BaseSettings):
         ("duplicate_group_flag_50", "INT"),
         ("duplicate_group_id_50", "INT"),
         ("duplicate_group_count_50", "INT"),
+        ("duplicate_location_rows_flag", "INT"),
+        ("duplicate_location_rows_count", "INT"),
+        ("duplicate_location_rows_ID", "STRING"),
         ("nearest_NR_id", "STRING"),
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),
@@ -599,6 +602,9 @@ class Config(BaseSettings):
         "duplicate_group_flag_50",
         "duplicate_group_id_50",
         "duplicate_group_count_50",
+        "duplicate_location_rows_flag",
+        "duplicate_location_rows_count",
+        "duplicate_location_rows_ID",
     ]
 
     COLUMNS_EXCEPT_SCHOOL_ID_MASTER: list[str] = [
@@ -625,6 +631,9 @@ class Config(BaseSettings):
         "duplicate_group_flag_50",
         "duplicate_group_id_50",
         "duplicate_group_count_50",
+        "duplicate_location_rows_flag",
+        "duplicate_location_rows_count",
+        "duplicate_location_rows_ID",
         "connectivity_govt_collection_year",
         "connectivity_govt",
         # "school_id_giga",

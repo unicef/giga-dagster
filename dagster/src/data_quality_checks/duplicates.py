@@ -67,6 +67,14 @@ def duplicate_set_checks(
             column_actions["dq_duplicate_location_rows_id"] = f.when(
                 null_coords, f.lit(None)
             ).otherwise(f.substring(f.md5(f.col("location_id")), 1, 8))
+            # Plain-named copies so these also survive the dq_ prefix collapse and reach master.
+            column_actions["duplicate_location_rows_flag"] = column_actions[flag_col]
+            column_actions["duplicate_location_rows_count"] = column_actions[
+                "dq_duplicate_location_rows_count"
+            ]
+            column_actions["duplicate_location_rows_ID"] = column_actions[
+                "dq_duplicate_location_rows_id"
+            ]
 
     df = df.withColumns(column_actions)
     return df.drop("location_id") if has_lat_long else df
