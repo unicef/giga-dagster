@@ -226,7 +226,7 @@ _DQR_WARNINGS_COLUMN = "DQR Warnings"
 
 def get_warning_check_labels() -> dict[str, str]:
     """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes),
-    mapped to their "Human Readable Name" label."""
+    mapped to their "UI Error Description" label."""
     table_id = get_nocodb_table_id_from_name(
         table_name="SchoolGeolocationMasterDQChecks"
     )
@@ -241,7 +241,7 @@ def get_warning_check_labels() -> dict[str, str]:
             col_name = col_name[len("dq_") :]
         if not col_name or col_name in METADATA_CHECK_KEYS:
             continue
-        label = str(row.get("Human Readable Name") or "").strip()
+        label = str(row.get("UI Error Description") or "").strip()
         labels[col_name] = label or col_name
     return labels
 
