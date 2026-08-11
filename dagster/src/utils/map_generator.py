@@ -2,10 +2,10 @@
 Utility for generating interactive school maps using Folium.
 
 Each school gets exactly one marker (no per-filter duplication). Filtering is
-done client-side via a hand-written grouped-checkbox Leaflet control: two
-independent filter groups (status / boundary), AND across groups, OR within a
-group - a marker shows only if it matches at least one checked value in every
-group.
+done client-side via a hand-written grouped-checkbox Leaflet control: four
+independent filter groups (status / rurality / habitability / boundary),
+AND across groups, OR within a group - a marker shows only if it matches at
+least one checked value in every group.
 """
 
 import json
@@ -27,6 +27,7 @@ BASEMAP_TILES = "CartoDB Positron"
 _OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
 _WARNING_COL = "dq_has_warning"
 _WARNING_REASON_COL = "warning_reason"
+_UNINHABITED_COL = "dq_is_in_uninhabited_area"
 
 _POPUP_TEMPLATE = Environment(
     loader=BaseLoader(),
@@ -46,10 +47,18 @@ _FILTER_GROUPS = {
         ("warning", "Approved (with warnings)"),
         ("failed", "Rejected"),
     ],
+    "rurality": [
+        ("rural", "Rural"),
+        ("urban", "Urban"),
+        ("unknown", "Rurality unknown"),
+    ],
+    "habitability": [("inhabited", "Inhabited"), ("uninhabited", "Uninhabited")],
     "boundary": [("inside", "Inside boundary"), ("outside", "Outside boundary")],
 }
 _FILTER_GROUP_TITLES = {
     "status": "Data Quality Status",
+    "rurality": "Rurality",
+    "habitability": "Habitability",
     "boundary": "Country Boundary",
 }
 
@@ -135,7 +144,18 @@ def _render_school_popup_html(
         ("education_level", _format_popup_value(row.get("education_level"))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
+        ("rurban", _format_popup_value(row.get("rurban_detected"))),
+        ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
         ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
+        ("duplicate_50_flag", _format_dq_flag(row.get("dq_duplicate_group_flag_50m"))),
+        (
+            "duplicate_50_group_id",
+            _format_popup_value(row.get("dq_duplicate_group_id_50m")),
+        ),
+        (
+            "duplicate_50_count",
+            _format_popup_value(row.get("dq_duplicate_group_count_50m")),
+        ),
         ("Status", status),
     ]
     if include_failure_reason:
@@ -173,6 +193,24 @@ def _add_circle_marker(
         popup=folium.Popup(popup_html, max_width=380),
         tags=tags,
     ).add_to(layer)
+
+
+def _get_rurality_filter_key(row: dict) -> str:
+    """Return the rurality tag for a school row."""
+    rurban = str(row.get("rurban_detected", "")).strip().lower()
+    if rurban == "urban":
+        return "urban"
+    if rurban == "rural":
+        return "rural"
+    return "unknown"
+
+
+def _is_uninhabited(row: dict) -> bool:
+    """Return whether a school row is flagged as in an uninhabited area."""
+    try:
+        return int(float(row.get(_UNINHABITED_COL, 0))) == 1
+    except (TypeError, ValueError):
+        return False
 
 
 def _is_outside_boundary(row: dict) -> bool:
@@ -220,6 +258,8 @@ def _add_school_markers(
         outside_boundary = _is_outside_boundary(row)
         tags = [
             row_status_tag,
+            _get_rurality_filter_key(row),
+            "uninhabited" if _is_uninhabited(row) else "inhabited",
             "outside" if outside_boundary else "inside",
         ]
         color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else row_color
@@ -238,6 +278,10 @@ def _calculate_filter_counts(
         for row in df.to_dict("records"):
             row_status_tag, _ = _status_tag_and_color(row, status_tag, base_color)
             counts[row_status_tag] += 1
+            rurality_key = _get_rurality_filter_key(row)
+            counts[rurality_key] = counts.get(rurality_key, 0) + 1
+            habit_key = "uninhabited" if _is_uninhabited(row) else "inhabited"
+            counts[habit_key] = counts.get(habit_key, 0) + 1
             counts["outside" if _is_outside_boundary(row) else "inside"] += 1
     return counts
 
