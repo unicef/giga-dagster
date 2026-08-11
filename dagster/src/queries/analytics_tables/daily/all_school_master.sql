@@ -51,9 +51,12 @@ SET SESSION query_max_stage_count = 300;
 
 
 
-CREATE TABLE IF NOT EXISTS default.all_school_master
+-- DROP TABLE IF EXISTS default.all_school_master;
+
+CREATE TABLE default.all_school_master
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_school_master'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_school_master',
+    partitioned_by = ARRAY['country']
 )
 AS (
 

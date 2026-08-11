@@ -92,6 +92,12 @@ measurements_base AS (
           SELECT COALESCE(MAX(measurement_id), 0)
          FROM delta_lake.default.all_gmeter_only_measurements_incremental
       )
+    -- Batch cap: bounds this run's query cost/memory when catching up a large
+    -- backlog (e.g. after the initial bootstrap, or a missed run). Any rows
+    -- past this batch stay eligible for the id > MAX(measurement_id) watermark
+    -- above and get picked up on the next run -- nothing is skipped.
+    ORDER BY measurement_id
+    LIMIT 40000
 
 )
 
