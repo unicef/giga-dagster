@@ -85,11 +85,6 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
-    -- Batch cap: bounds this one-time bootstrap run's query cost/memory instead
-    -- of selecting the full unbounded history in one query. The rest of history
-    -- is picked up by repeated update/ runs afterward via the id-based
-    -- watermark (id > MAX(measurement_id) in the target) -- nothing is skipped,
-    -- just spread across more runs.
     ORDER BY measurement_id
     LIMIT 40000
 
