@@ -32,7 +32,6 @@
 -- ==============================================================================
 
 
--- DROP TABLE IF EXISTS default.all_ping_daily;
 
  CREATE TABLE default.all_ping_daily
 WITH (
