@@ -1,9 +1,6 @@
 
 
 
-
--- DROP TABLE IF EXISTS default.all_gmeter_only_measurements;
-
   CREATE TABLE default.all_gmeter_only_measurements
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gmeter_only_measurements',
