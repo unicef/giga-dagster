@@ -4,7 +4,11 @@ from uuid import uuid4
 from dagster_pyspark import PySparkResource
 from delta import configure_spark_with_delta_pip
 from pyspark import SparkConf, sql
-from pyspark.sql import SparkSession, types
+from pyspark.sql import (
+    SparkSession,
+    functions as f,
+    types,
+)
 from pyspark.sql.functions import col, concat_ws, count, sha2, udf
 
 from dagster import OpExecutionContext, OutputContext
@@ -291,6 +295,39 @@ def _fallback_schema_columns(
                 "Returning original DataFrame."
             )
         return None
+
+
+# Only markers pandas itself produces via str(). "none"/"null" are excluded on
+# purpose — they are plausible user input meaning "no such service".
+_MISSING_VALUE_STRINGS = ("", "nan", "nat", "<na>")
+
+
+def normalize_missing_value_strings(df: sql.DataFrame) -> sql.DataFrame:
+    """Replace stringified missing-value markers (e.g. "nan") with real nulls."""
+    string_columns = [
+        field.name
+        for field in df.schema.fields
+        if isinstance(field.dataType, types.StringType)
+    ]
+    if not string_columns:
+        return df
+
+    return df.withColumns(
+        {
+            name: f.when(
+                f.lower(f.trim(f.col(name))).isin(*_MISSING_VALUE_STRINGS),
+                f.lit(None).cast(types.StringType()),
+            ).otherwise(f.col(name))
+            for name in string_columns
+        }
+    )
+
+
+def is_missing_value(column: sql.Column, data_type: types.DataType) -> sql.Column:
+    """Null check that also treats NaN as missing for floating-point columns."""
+    if isinstance(data_type, types.DoubleType | types.FloatType):
+        return column.isNull() | f.isnan(column)
+    return column.isNull()
 
 
 def transform_types(
