@@ -59,6 +59,7 @@ from src.utils.school_registrations.common import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
+from src.utils.spark import normalize_missing_value_strings
 
 from dagster import (
     AssetOut,
@@ -207,12 +208,13 @@ def geolocation_bronze(
     t0 = time.time()
     with BytesIO(geolocation_raw) as buffer:
         buffer.seek(0)
+        # Keep every value a string — Spark can't infer types on mixed-type columns
         pdf = pandas_loader(
             buffer,
             config.filepath,
             dtype_mapping=string_col_mapping,
             context=context,
-        ).map(str)
+        ).map(lambda value: None if pd.isna(value) else str(value))
     context.log.info(
         f"pandas_loader completed in {time.time() - t0:.2f}s — {len(pdf)} rows"
     )
@@ -227,7 +229,12 @@ def geolocation_bronze(
     pdf.rename(column_mapping_filtered, axis="columns", inplace=True)
 
     t1 = time.time()
-    df = s.createDataFrame(pdf)
+    # Every cell is now None or str; an all-null column would break type inference
+    pdf_schema = StructType(
+        [StructField(name, StringType(), True) for name in pdf.columns]
+    )
+    df = s.createDataFrame(pdf, schema=pdf_schema)
+    df = normalize_missing_value_strings(df)
     uploaded_columns = df.columns
     context.log.info(f"createDataFrame completed in {time.time() - t1:.2f}s")
 
@@ -321,7 +328,7 @@ def geolocation_data_quality_results(
     casted_silver = silver.withColumn(
         "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
-    casted_bronze = geolocation_bronze.withColumn(
+    casted_bronze = normalize_missing_value_strings(geolocation_bronze).withColumn(
         "school_id_govt", f.col("school_id_govt").cast(StringType())
     )
 

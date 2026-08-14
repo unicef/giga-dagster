@@ -37,7 +37,7 @@ from src.utils.schema import (
     get_primary_key,
     get_schema_columns,
 )
-from src.utils.spark import compute_row_hash, transform_types
+from src.utils.spark import compute_row_hash, is_missing_value, transform_types
 
 
 def get_files_for_review(
@@ -129,6 +129,7 @@ class StagingStep:
 
         if not self.silver_table_exists:
             # No silver table yet — every row is an INSERT
+            df = self._fill_not_null_columns(df)
             df = compute_row_hash(df)
             df = self._select_schema_cols(df)
             df = (
@@ -173,6 +174,7 @@ class StagingStep:
         # (e.g. education_level from education_level_govt, admin columns from
         # lat/lon), and columns absent from the file — all with one rule.
         row_in_silver = f.col(f"_s_{self.match_key}").isNotNull()
+        joined_types = {field.name: field.dataType for field in joined.schema.fields}
         for col_name in schema_col_names:
             s_col = f"_s_{col_name}"
             if s_col not in joined.columns:
@@ -180,13 +182,20 @@ class StagingStep:
             joined = joined.withColumn(
                 col_name,
                 f.when(
-                    row_in_silver & f.col(col_name).isNull(), f.col(s_col)
+                    row_in_silver
+                    & is_missing_value(f.col(col_name), joined_types[col_name]),
+                    f.col(s_col),
                 ).otherwise(f.col(col_name)),
             )
 
         # Drop all silver-prefixed columns (including _s_signature)
         s_cols_to_drop = [c for c in joined.columns if c.startswith("_s_")]
         joined = joined.drop(*s_cols_to_drop)
+
+        # NOT NULL guard runs after the silver fallback — filling "Unknown" first
+        # would make every non-nullable string column look non-null to the loop
+        # above and permanently mask the silver value.
+        joined = self._fill_not_null_columns(joined)
 
         # Compute hash over the fully-merged row (same column set as when silver was written)
         joined = compute_row_hash(joined)
@@ -514,9 +523,15 @@ class StagingStep:
     def _prepare_df(self, df: sql.DataFrame) -> sql.DataFrame:
         """Add missing columns and cast types — does NOT compute row hash."""
         df = add_missing_columns(df, self.schema_columns)
-        df = transform_types(df, self.schema_name, self.context)
-        # Fill nulls in NOT NULL STRING schema columns with "Unknown" so that
-        # Delta NOT NULL constraints are never violated on write.
+        return transform_types(df, self.schema_name, self.context)
+
+    def _fill_not_null_columns(self, df: sql.DataFrame) -> sql.DataFrame:
+        """Fill nulls in NOT NULL STRING schema columns with "Unknown" so that
+        Delta NOT NULL constraints are never violated on write.
+
+        Must run after any silver fallback — "Unknown" is non-null and would
+        otherwise mask the silver value.
+        """
         unknown_fills = {
             col.name: f.coalesce(f.col(col.name), f.lit("Unknown"))
             for col in self.schema_columns
@@ -537,6 +552,7 @@ class StagingStep:
     def standard_transforms(self, df: sql.DataFrame) -> sql.DataFrame:
         """Backward-compatible wrapper used by other pipelines."""
         df = self._prepare_df(df)
+        df = self._fill_not_null_columns(df)
         return compute_row_hash(df)
 
     def _emit_lineage(self) -> None:
