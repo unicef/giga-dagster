@@ -92,6 +92,8 @@ measurements_base AS (
           SELECT COALESCE(MAX(measurement_id), 0)
          FROM delta_lake.default.all_gmeter_only_measurements_incremental
       )
+    ORDER BY measurement_id
+    LIMIT 40000
 
 )
 

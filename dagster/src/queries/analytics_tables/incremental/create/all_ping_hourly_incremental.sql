@@ -1,7 +1,8 @@
 
 CREATE TABLE delta_lake.default.all_ping_hourly_incremental
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_hourly_incremental'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_hourly_incremental',
+    partitioned_by = ARRAY['country']
 )
 AS (
 
