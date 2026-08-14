@@ -793,6 +793,7 @@ def geolocation_staging(
         adls_file_client,
         spark.spark_session,
         StagingMode.UPDATE,
+        match_key="school_id_govt",
     )
     pending = staging_step(geolocation_dq_passed_rows)
     return Output(None, metadata=get_staging_change_type_metadata(pending, config))
