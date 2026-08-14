@@ -70,6 +70,7 @@ class StagingStep:
         adls_file_client: ADLSFileClient,
         spark: SparkSession,
         change_type: StagingMode,
+        match_key: str | None = None,
     ):
         self.context = context
         self.config = config
@@ -81,6 +82,8 @@ class StagingStep:
         self.country_code = config.country_code
         self.schema_columns = get_schema_columns(spark, self.schema_name)
         self.primary_key = get_primary_key(spark, self.schema_name)
+        # Key used to locate the existing silver row. Defaults to the primary key
+        self.match_key = match_key or self.primary_key
         self.silver_tier_schema_name = construct_schema_name_for_tier(
             self.schema_name,
             DataTier.SILVER,
@@ -160,7 +163,7 @@ class StagingStep:
         )
         joined = df.join(
             silver_prefixed,
-            df[self.primary_key] == silver_prefixed[f"_s_{self.primary_key}"],
+            df[self.match_key] == silver_prefixed[f"_s_{self.match_key}"],
             "left",
         )
 
@@ -169,7 +172,7 @@ class StagingStep:
         # This handles uploaded columns, columns derived from uploaded columns
         # (e.g. education_level from education_level_govt, admin columns from
         # lat/lon), and columns absent from the file — all with one rule.
-        row_in_silver = f.col(f"_s_{self.primary_key}").isNotNull()
+        row_in_silver = f.col(f"_s_{self.match_key}").isNotNull()
         for col_name in schema_col_names:
             s_col = f"_s_{col_name}"
             if s_col not in joined.columns:
@@ -191,24 +194,24 @@ class StagingStep:
         # Join with silver signatures to determine INSERT / UPDATE / UNCHANGED
         # (must happen before _select_schema_cols so that 'signature' is still present)
         silver_sigs = silver_df.select(
-            f.col(self.primary_key).alias("_sig_pk"),
+            f.col(self.match_key).alias("_sig_key"),
             f.col("signature").alias("_silver_sig"),
         )
         joined = joined.join(
             silver_sigs,
-            joined[self.primary_key] == f.col("_sig_pk"),
+            joined[self.match_key] == f.col("_sig_key"),
             "left",
         )
         joined = joined.withColumn(
             "change_type",
-            f.when(f.col("_sig_pk").isNull(), f.lit(StagingChangeType.INSERT))
+            f.when(f.col("_sig_key").isNull(), f.lit(StagingChangeType.INSERT))
             .when(
                 f.col("signature") == f.col("_silver_sig"),
                 f.lit(StagingChangeType.UNCHANGED),
             )
             .otherwise(f.lit(StagingChangeType.UPDATE)),
         )
-        joined = joined.drop("_sig_pk", "_silver_sig")
+        joined = joined.drop("_sig_key", "_silver_sig")
 
         # Trim to schema columns + change_type before persisting.
         # Inline the select instead of calling _select_schema_cols so that
