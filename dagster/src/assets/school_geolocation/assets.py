@@ -319,11 +319,9 @@ def geolocation_data_quality_results(
     schema = StructType(columns)
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
-        silver_tier_schema_name = construct_schema_name_for_tier(
-            "school_geolocation", DataTier.SILVER
-        )
         silver_table_name = construct_full_table_name(
-            silver_tier_schema_name, country_code
+            construct_schema_name_for_tier("school_geolocation", DataTier.SILVER),
+            country_code,
         )
         s.catalog.refreshTable(silver_table_name)
         silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
@@ -492,6 +490,24 @@ def geolocation_data_quality_results_human_readable(
                     duplicate_group_flag_col == 1,
                     f.element_at(f.col("dq_results"), map_key),
                 ).otherwise(f.lit(None)),
+            )
+        elif map_key in (
+            "duplicate_location_rows_in_dataset",
+            "duplicate_group_in_dataset_50m",
+        ):
+            # Informational, and the opposite polarity to a check result: 1 means the
+            # duplicate is already in Giga rather than elsewhere in this file.
+            gate = (
+                duplicate_count_col > 1
+                if map_key == "duplicate_location_rows_in_dataset"
+                else duplicate_group_flag_col == 1
+            )
+            value = f.element_at(f.col("dq_results"), map_key)
+            df = df.withColumn(
+                human_name,
+                f.when(~gate, f.lit(None))
+                .when(value == 1, "Yes")
+                .when(value == 0, "No"),
             )
         else:
             df = df.withColumn(
