@@ -5,8 +5,8 @@
 -- ~8.5M row) all_gigameter_measurement_data_incremental table on every dashboard
 -- render — this table lets T0 read from ~2.5M pre-aggregated rows instead, once.
 --
--- One row per school per weekday. Full rebuild: drop and recreate (small table —
--- schools x working days, same shape as all_gigameter_measurement_data_daily).
+-- One row per school per day. Full rebuild: drop and recreate (small table —
+-- schools x days, same shape as all_gigameter_measurement_data_daily).
 --
 -- Deliberately separate from the in-progress device-grain all_gigameter_measurement_
 -- data_daily/_weekly rework (still "Testing" status, direction not yet locked) —
@@ -88,6 +88,5 @@ AS (
         MAX(detected_location_distance) AS max_location_distance_m
 
     FROM default.all_gigameter_measurement_data_incremental
-    WHERE day_of_week(date) BETWEEN 1 AND 5
     GROUP BY school_id_giga, country, date
 );
