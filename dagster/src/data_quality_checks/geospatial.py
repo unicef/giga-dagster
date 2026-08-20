@@ -578,6 +578,14 @@ def run_geospatial_checks(
     logger.info(f"Starting geospatial checks for country={country_code_iso3}...")
     logger.info(f"GIGASPATIAL_ROOT_DATA_DIR={settings.GIGASPATIAL_ROOT_DATA_DIR}")
 
+    required_columns = {"school_id_giga", "latitude", "longitude"}
+    if not required_columns.issubset(df.columns):
+        logger.info(
+            "Skipping geospatial checks — missing columns: "
+            f"{required_columns - set(df.columns)}"
+        )
+        return _null_geospatial_columns(df)
+
     initial_count = df.count()
     logger.info(f"Input rows: {initial_count}")
 
