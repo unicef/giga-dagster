@@ -1,56 +1,20 @@
 -- =============================================================================
 -- BOOTSTRAP: chunked historical backfill
 --
--- This table's GROUP BY (school+device+hour, with ARRAY_AGG(DISTINCT
--- connectivity_id) per bucket) cannot aggregate the full history of
--- connectivity_ping_checks in one query -- it hits Trino's per-node memory
--- limit (HashAggregationOperator exceeded 4GB against ~29M raw ping rows,
--- 2026-08-19). A raw-row LIMIT isn't safe here either: this table is built
--- once via CREATE TABLE and never revisited by a create/ run again (Dagster
--- switches to update/'s MERGE on every run after the table exists), and
--- create/ has no MERGE to self-correct a bucket whose raw pings got split
--- across an arbitrary row-count cutoff.
+-- A full-history GROUP BY in one query exceeds Trino's per-node memory limit
+-- (~29M raw rows, 2026-08-19). A raw-row LIMIT isn't safe: create/ runs once
+-- only (Dagster switches to update/'s MERGE once the table exists), and has
+-- no MERGE to fix a bucket split by an arbitrary cutoff.
 --
--- Instead this file is a sequence of statements -- one CREATE TABLE for the
--- earliest chunk, then INSERT INTO for each later chunk -- each bounded to a
--- local-time window using the same two-tier filter as update/:
---   - ping_base: a wide raw-UTC buffer (+/- 72h) around the chunk -- a
---     performance/safety margin only, not the correctness boundary.
---   - ping_enriched: the precise local-to-local filter on local_ts, applied
---     after timezone conversion.
--- Because local_date_hour = date_trunc('hour', local_ts) and every chunk
--- boundary below is an hour-aligned (midnight) timestamp literal, no
--- school+device+hour bucket can ever be split across two chunks -- every raw
--- ping's local_ts falls in exactly one chunk's [start, end) range by
--- construction. No dedup/anti-join is needed between chunks for that reason.
---
--- Chunk boundaries were sized from the actual row distribution in production
--- (SELECT date_trunc('day', timestamp), COUNT(*) ... GROUP BY 1, checked
--- 2026-08-19): volume is extremely back-loaded -- ~29.3M of ~29.4M total
--- rows fall in 2026 Q1-Q3 alone (ping monitoring scaled up sharply this
--- year), so a uniform quarterly or monthly chunk width badly under- or
--- over-shoots depending on the period. Chunk 1 covers all sparse history
--- through end of 2025 (~144K rows); chunks 2-10 target ~3.3-3.5M rows each
--- across the dense 2026 period -- comfortably under the ~4.37M rows that
--- daily/all_ping_hourly.sql's proven-working 90-day production window
--- processes today.
---
--- Chunk 1's floor (2018-01-01) also deliberately excludes a small number of
--- provably-implausible raw timestamps found in connectivity_ping_checks
--- (observed MIN was 1980-01-01, MAX was year 8663 -- ~7.5K rows total,
--- <0.03% of the table, predating this program's existence or postdating
--- "now" by millennia; a known data-quality issue already called out in
--- ../../incremental/README.md for other scripts, previously unfiltered here
--- because create/ had no time bound at all).
---
--- Stop point: chunk 10 ends 2026-08-15, a few days before "now" (2026-08-19)
--- rather than chunking to the live edge. The already-scheduled hourly
--- update/ MERGE job (cron 15 * * * *) picks up everything from there
--- forward on its own watermark (MAX(local_date_hour) in this table) -- its
--- existing 72h/48h buffers comfortably span that gap. Nothing past this
--- script's boundaries is lost, just deferred to the next few scheduled
--- update/ runs, the same deferral pattern the 4-hour settlement grace period
--- already uses.
+-- Fix: one CREATE + nine INSERTs, each bounded to an hour-aligned local-time
+-- window using update/'s two-tier filter (wide raw-UTC buffer in ping_base,
+-- precise local-to-local boundary in ping_enriched) -- since
+-- local_date_hour = date_trunc('hour', local_ts), no bucket can be split
+-- across chunks. Boundaries sized from actual 2026-08-19 row distribution
+-- (volume is back-loaded into 2026, so widths aren't uniform). Chunk 1's
+-- floor (2018-01-01) excludes ~7.5K rows with implausible timestamps (1980,
+-- year 8663). Chunk 10 stops 2026-08-15; update/'s hourly MERGE closes the
+-- rest on its own watermark.
 -- =============================================================================
 
 
