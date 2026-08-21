@@ -1,3 +1,5 @@
+import hashlib
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -384,14 +386,24 @@ class POIContextEnricher(PoiViewGenerator):
             if len(cc) <= 1:
                 continue
             if _is_complete_graph(cc):
+                # Hashing the sorted members keeps the ID
+                # stable across runs regardless of component-iteration order.
+                group_hash = hashlib.md5(
+                    ",".join(sorted(str(n) for n in cc.nodes())).encode(),
+                    usedforsecurity=False,
+                ).hexdigest()[:8]
                 for node in cc.nodes():
-                    duplicate_map[node] = group_id
+                    duplicate_map[node] = group_hash
                 group_id += 1
             else:
                 for clique in _partition_graph_by_max_cliques(cc):
                     if len(clique) > 1:
+                        group_hash = hashlib.md5(
+                            ",".join(sorted(str(n) for n in clique)).encode(),
+                            usedforsecurity=False,
+                        ).hexdigest()[:8]
                         for node in clique:
-                            duplicate_map[node] = group_id
+                            duplicate_map[node] = group_hash
                         group_id += 1
 
         degree_dict = dict(G.degree())
@@ -401,8 +413,10 @@ class POIContextEnricher(PoiViewGenerator):
         in_graph = poi_ids.isin(degree_dict)
 
         view[flag_column] = poi_ids.isin(duplicate_map).astype("Int64").where(in_graph)
-        view[group_column] = poi_ids.map(duplicate_map).astype("Int64")
-        view[count_column] = poi_ids.map(degree_dict).astype("Int64")
+        view[group_column] = poi_ids.map(duplicate_map)
+        # +1 so count includes the row itself, matching the exact-duplicate check's
+        # convention (1 = unique, 2+ = duplicate group size).
+        view[count_column] = (poi_ids.map(degree_dict) + 1).astype("Int64")
 
         self.log.info(
             f"Duplicate groups: {len(duplicate_map)} POIs in {group_id} groups"
@@ -503,18 +517,20 @@ GEOSPATIAL_INT_COLUMNS = [
     "dq_is_in_uninhabited_area",
     "dq_is_suspect_location",
     "dq_duplicate_group_flag_50m",
-    "dq_duplicate_group_id_50m",
     "dq_duplicate_group_count_50m",
     "uninhabited",
     "duplicate_group_flag_50",
-    "duplicate_group_id_50",
     "duplicate_group_count_50",
     *[f"schools_within_{r // 1000}km" for r in CONTEXT_RADII_M],
 ]
 
 GEOSPATIAL_LONG_COLUMNS = [f"pop_within_{r // 1000}km" for r in CONTEXT_RADII_M]
 
-GEOSPATIAL_STRING_COLUMNS = ["rurban_detected"]
+GEOSPATIAL_STRING_COLUMNS = [
+    "rurban_detected",
+    "dq_duplicate_group_id_50m",
+    "duplicate_group_id_50",
+]
 
 GEOSPATIAL_COLUMNS = (
     GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS + GEOSPATIAL_STRING_COLUMNS
