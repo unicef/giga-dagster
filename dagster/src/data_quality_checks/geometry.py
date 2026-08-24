@@ -6,6 +6,11 @@ from pyspark.sql import (
 from pyspark.sql.types import FloatType
 
 from dagster import OpExecutionContext
+from src.data_quality_checks.location_grouping import (
+    GROUP_COUNT_COLUMN,
+    add_group_counts,
+    null_coordinates,
+)
 from src.spark.user_defined_functions import (
     find_similar_names_in_group_udf,
     h3_geo_to_h3_udf,
@@ -172,7 +177,11 @@ def similar_name_level_within_110_check(
     return df.drop(*columns_to_drop)
 
 
-def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
+def school_density_check(
+    df: sql.DataFrame,
+    context: OpExecutionContext = None,
+    reference: sql.DataFrame = None,
+):
     __test_name__ = "school density"
     logger = ContextLoggerWithLoguruFallback(context, __test_name__)
     logger.log.info(f"Running {__test_name__} checks...")
@@ -185,24 +194,21 @@ def school_density_check(df: sql.DataFrame, context: OpExecutionContext = None):
         )
         return df
 
-    df = df.withColumn(
-        "hex8",
-        h3_geo_to_h3_udf(
-            f.col("latitude").cast(FloatType()), f.col("longitude").cast(FloatType())
-        ),
+    hex8 = h3_geo_to_h3_udf(
+        f.col("latitude").cast(FloatType()), f.col("longitude").cast(FloatType())
     )
+    df = df.withColumn("hex8", hex8)
 
-    df = df.withColumn(
-        "school_density",
-        f.count("school_id_giga").over(Window.partitionBy("hex8")),
-    )
+    if reference is not None and not required_columns.issubset(reference.columns):
+        reference = None
+    df = add_group_counts(
+        df,
+        reference.withColumn("hex8", hex8) if reference is not None else None,
+        ["hex8"],
+        count_column="school_id_giga",
+    ).withColumnRenamed(GROUP_COUNT_COLUMN, "school_density")
 
-    null_coords = (
-        f.col("latitude").isNull()
-        | f.isnan(f.col("latitude"))
-        | f.col("longitude").isNull()
-        | f.isnan(f.col("longitude"))
-    )
+    null_coords = null_coordinates(df)
 
     df = df.withColumn(
         "dq_is_school_density_greater_than_5",

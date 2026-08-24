@@ -20,6 +20,10 @@ from pyspark.sql.types import (
 )
 from sqlalchemy import select, update
 from src.constants import DataTier, StagingChangeType, StagingStatus
+from src.data_quality_checks.location_duplicate_refresh import (
+    needs_refresh,
+    refresh_location_duplicates,
+)
 from src.internal.common_assets.master_release_notes import send_master_release_notes
 from src.internal.merge import (
     core_merge_logic,
@@ -404,6 +408,21 @@ def _cascade_deletes_to_coverage_silver(
         )
 
 
+def _refresh_duplicate_columns(
+    context: OpExecutionContext,
+    new_silver: sql.DataFrame,
+    current_silver: sql.DataFrame,
+    changed_ids: list[str],
+    primary_key: str,
+) -> sql.DataFrame:
+    """Realign the location duplicate columns across the whole dataset."""
+    if not needs_refresh(current_silver, new_silver, primary_key, changed_ids):
+        context.log.info("No duplicate groups touched — skipping duplicate refresh.")
+        return new_silver
+
+    return refresh_location_duplicates(new_silver, context)
+
+
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
 @capture_op_exceptions
 def silver(  # noqa: C901
@@ -508,7 +527,11 @@ def silver(  # noqa: C901
     )
 
     delete_ids = [row[primary_key] for row in deletes.select(primary_key).collect()]
+    changed_ids = [
+        row[primary_key] for row in approved.select(primary_key).distinct().collect()
+    ]
 
+    current_silver = None
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
         s.catalog.refreshTable(silver_table_name)
         current_silver = DeltaTable.forName(s, silver_table_name).toDF()
@@ -540,6 +563,13 @@ def silver(  # noqa: C901
     if new_silver.isEmpty():
         context.log.info("Silver is empty after merge.")
         new_silver = s.createDataFrame([], StructType(schema_columns))
+
+    if config.dataset_type == "geolocation":
+        # Cached: needs_refresh probes it, then the refresh scans it again.
+        new_silver = new_silver.cache()
+        new_silver = _refresh_duplicate_columns(
+            context, new_silver, current_silver, changed_ids, primary_key
+        )
 
     new_silver = compute_row_hash(new_silver)
 

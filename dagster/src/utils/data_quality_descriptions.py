@@ -95,6 +95,10 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         for column, value in config_expectations_instance.PRECISION.items()
     }
 
+    duplicate_location_origin_desc = {
+        "dq_duplicate_location_rows_in_dataset": "Does the set of schools sharing this exact location include one or more already in the dataset, and not only rows from this file",
+    }
+
     duplicate_set_checks_desc = {
         (
             "dq_duplicate_location_rows_flag"
@@ -128,6 +132,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         "dq_duplicate_group_flag_50m": "Does the school have a potential duplicate within 50m proximity",
         "dq_duplicate_group_id_50m": "Cluster ID for schools within 50m of each other",
         "dq_duplicate_group_count_50m": "Number of schools within 50m of each other, including this one",
+        "dq_duplicate_group_in_dataset_50m": "Does the school's 50m duplicate group include one or more schools already in the dataset, and not only rows from this file",
     }
 
     geolocation_checks = {
@@ -137,6 +142,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         **duplicate_all_except_checks_desc,
         **precision_check_desc,
         **duplicate_set_checks_desc,
+        **duplicate_location_origin_desc,
         **duplicate_name_level_110_check_desc,
         **column_relation_checks_desc,
         **critical_error_checks_desc,
