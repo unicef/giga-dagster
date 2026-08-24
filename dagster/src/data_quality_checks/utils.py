@@ -33,6 +33,7 @@ from src.data_quality_checks.geometry import (
 from src.data_quality_checks.geospatial import (
     run_geospatial_checks,
 )
+from src.data_quality_checks.location_grouping import build_reference_frame
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.spark.config_expectations import config
@@ -43,13 +44,25 @@ from src.utils.nocodb.get_nocodb_data import (
 )
 from src.utils.schema import get_schema_columns
 
+# Silver columns the grouped location checks need to participate in counts
+LOCATION_REFERENCE_COLUMNS = [
+    "school_id_giga",
+    "school_id_govt",
+    "latitude",
+    "longitude",
+    "school_name",
+    "education_level",
+]
+
 # Metadata keys, not 0/1 check results
 METADATA_CHECK_KEYS = frozenset(
     {
         "duplicate_location_rows_count",
         "duplicate_location_rows_id",
+        "duplicate_location_rows_in_dataset",
         "duplicate_group_id_50m",
         "duplicate_group_count_50m",
+        "duplicate_group_in_dataset_50m",
     }
 )
 
@@ -646,9 +659,22 @@ def run_geolocation_checks(
     silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
+    # Grouped location checks count against the whole dataset, not just the upload,
+    # so a school duplicating one already in silver is caught.
+    reference = build_reference_frame(
+        silver, df, LOCATION_REFERENCE_COLUMNS, context=context
+    )
+    reference_points = None
+    if reference is not None:
+        # Six narrow columns, read by every grouped check below.
+        reference = reference.cache()
+        reference_points = reference.select(
+            "school_id_giga", "latitude", "longitude"
+        ).toPandas()
+
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
-    df = school_density_check(df, context)
+    df = school_density_check(df, context, reference=reference)
     df = standard_checks(df, dq_context.dataset_type, context)
     df = duplicate_all_except_checks(
         df,
@@ -656,9 +682,16 @@ def run_geolocation_checks(
         context,
     )
     df = precision_check(df, config.PRECISION, context)
-    df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
+    df = duplicate_set_checks(
+        df, config.UNIQUE_SET_COLUMNS, context, reference=reference
+    )
     df = duplicate_name_level_110_check(df, context)
-    df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
+    df = run_geospatial_checks(
+        df,
+        dq_context.country_code_iso3,
+        context,
+        reference_points=reference_points,
+    )
     df = critical_error_checks(
         df,
         dq_context.dataset_type,
@@ -666,6 +699,9 @@ def run_geolocation_checks(
         context,
     )
     df = column_relation_checks(df, dq_context.dataset_type, context)
+
+    if reference is not None:
+        reference.unpersist()
     return df
 
 

@@ -1,16 +1,20 @@
-import networkx as nx
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 from gigaspatial.config import config as gigaspatial_config
 from gigaspatial.core.io import ADLSDataStore
 from gigaspatial.generators.poi import PoiViewGenerator
 from gigaspatial.processing.algorithms import build_distance_graph
-from networkx.algorithms.clique import find_cliques as maximal_cliques
 from pyspark import sql
 from pyspark.sql import functions as f
 from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from dagster import OpExecutionContext
+from src.data_quality_checks.location_grouping import (
+    assign_proximity_groups,
+    join_pandas_result_to_spark,
+    to_spark_safe,
+)
 from src.settings import settings
 from src.utils.logger import get_context_with_fallback_logger
 
@@ -123,6 +127,28 @@ def _log_coord_finiteness(
         )
 
 
+def _points_to_gdf(points: pd.DataFrame, logger, check_name: str):
+    """Sanitised GeoDataFrame of POIs, indexed by school_id_giga.
+
+    Returns None when nothing usable is left.
+    """
+    pdf = points.copy()
+    pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
+    pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
+    pdf = _prepare_poi_points(
+        pdf[_get_valid_coords_mask(pdf)].copy(), logger, check_name
+    )
+    if pdf.empty:
+        logger.warning(f"{check_name}: no valid coordinates")
+        return None
+
+    return gpd.GeoDataFrame(
+        {"poi_id": pdf["school_id_giga"].astype(str)},
+        geometry=gpd.points_from_xy(pdf["longitude"], pdf["latitude"]),
+        crs="EPSG:4326",
+    ).set_index("poi_id")
+
+
 def _prepare_poi_points(
     pdf_valid: pd.DataFrame, logger, check_name: str
 ) -> pd.DataFrame:
@@ -145,23 +171,6 @@ def _prepare_poi_points(
         f"(dropped {null_ids} null-id, {before - null_ids - len(prepared)} duplicate-id rows)"
     )
     return prepared
-
-
-def _join_pandas_result_to_spark(
-    df: sql.DataFrame,
-    result_pdf: pd.DataFrame,
-    result_columns: list[str],
-    schema: StructType = None,
-) -> sql.DataFrame:
-    """Join a Pandas result DataFrame back to the original Spark DataFrame
-    using school_id_giga as the join key.
-    """
-    spark = df.sparkSession
-    result_keyed = result_pdf[["school_id_giga"] + result_columns].drop_duplicates(
-        subset="school_id_giga", keep="first"
-    )
-    result_sdf = spark.createDataFrame(result_keyed, schema=schema)
-    return df.join(result_sdf, on="school_id_giga", how="left")
 
 
 def _null_guard_int(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
@@ -208,37 +217,6 @@ def _null_guard_string(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     )
 
 
-def _is_complete_graph(G: nx.Graph) -> bool:
-    """Check if graph is complete (all nodes connected to each other)."""
-    n = len(G.nodes)
-    m = len(G.edges)
-    required_edges = n * (n - 1) // 2
-    return m == required_edges
-
-
-def _partition_graph_by_max_cliques(G: nx.Graph) -> list:
-    """Partition graph into maximal cliques for duplicate grouping."""
-
-    def total_clique_weight(G, clique):
-        return sum(
-            G[u][v].get("weight", 1)
-            for u in clique
-            for v in clique
-            if u < v and G.has_edge(u, v)
-        )
-
-    G2 = G.copy()
-    cliques = []
-    while len(G2.nodes) > 0:
-        all_cliques = list(maximal_cliques(G2))
-        max_size = max(len(c) for c in all_cliques)
-        largest_cliques = [c for c in all_cliques if len(c) == max_size]
-        chosen_clique = min(largest_cliques, key=lambda c: total_clique_weight(G2, c))
-        cliques.append(chosen_clique)
-        G2.remove_nodes_from(chosen_clique)
-    return cliques
-
-
 class POIContextEnricher(PoiViewGenerator):
     """Enriches POIs with contextual geospatial features from giga-spatial.
 
@@ -259,6 +237,7 @@ class POIContextEnricher(PoiViewGenerator):
         logger=None,
         radii_meters: list[int] = None,
         duplicate_threshold_m: int = PROXIMITY_DUPLICATE_THRESHOLD_M,
+        reference_points: pd.DataFrame = None,
     ):
         super().__init__(
             points=points,
@@ -268,6 +247,9 @@ class POIContextEnricher(PoiViewGenerator):
         self.country_code_iso3 = country_code_iso3
         self.radii_meters = radii_meters or CONTEXT_RADII_M
         self.duplicate_threshold_m = duplicate_threshold_m
+        # Reference points take part in the proximity graph only — never in the
+        # raster enrichments, which stay scoped to the uploaded rows.
+        self.reference_points = reference_points
         self.log = logger or self.logger
 
     @property
@@ -281,6 +263,7 @@ class POIContextEnricher(PoiViewGenerator):
             f"duplicate_{t}_flag",
             f"duplicate_{t}_group_id",
             f"duplicate_{t}_count",
+            f"duplicate_{t}_in_dataset",
         ]
 
     @property
@@ -359,55 +342,77 @@ class POIContextEnricher(PoiViewGenerator):
     def add_duplicate_groups(self) -> None:
         """Cluster POIs that sit within ``duplicate_threshold_m`` of each other.
 
-        Connected components are partitioned into maximal cliques so that a chain of
-        near-neighbours is not collapsed into one oversized group.
+        When ``reference_points`` are supplied they join the distance graph so that
+        an uploaded school duplicating one already in silver is detected, but they
+        are dropped before the result is written back to the view.
         """
         threshold = self.duplicate_threshold_m
         self.log.info(f"Detecting duplicate locations within {threshold}m...")
 
-        flag_column, group_column, count_column = self.duplicate_columns
+        flag_column, group_column, count_column, in_dataset_column = (
+            self.duplicate_columns
+        )
 
         gdf = self.to_geodataframe().set_index("poi_id")
+        upload_ids = set(gdf.index.astype(str))
+        graph_gdf = self._with_reference_points(gdf)
         # exclude_same_index is set rather than left to build_distance_graph's
         # left_df.equals(right_df) auto-detection: the view carries nullable dtypes by
         # this point, and a False there would give every node a self-loop, which
         # nx.degree counts as 2.
-        G = build_distance_graph(gdf, gdf, threshold, exclude_same_index=True)
+        G = build_distance_graph(
+            graph_gdf, graph_gdf, threshold, exclude_same_index=True
+        )
         self.log.info(
             f"Duplicate groups: graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
         )
 
-        group_id = 0
-        duplicate_map = {}
-        for component in nx.connected_components(G):
-            cc = G.subgraph(component).copy()
-            if len(cc) <= 1:
-                continue
-            if _is_complete_graph(cc):
-                for node in cc.nodes():
-                    duplicate_map[node] = group_id
-                group_id += 1
-            else:
-                for clique in _partition_graph_by_max_cliques(cc):
-                    if len(clique) > 1:
-                        for node in clique:
-                            duplicate_map[node] = group_id
-                        group_id += 1
-
-        degree_dict = dict(G.degree())
+        groups = assign_proximity_groups(G).set_index("school_id_giga")
 
         view = self.view.copy()
-        poi_ids = view["poi_id"]
-        in_graph = poi_ids.isin(degree_dict)
+        poi_ids = view["poi_id"].astype(str)
 
-        view[flag_column] = poi_ids.isin(duplicate_map).astype("Int64").where(in_graph)
-        view[group_column] = poi_ids.map(duplicate_map).astype("Int64")
-        view[count_column] = poi_ids.map(degree_dict).astype("Int64")
+        # .map yields NaN for ids absent from the graph, which Int64 carries
+        # through as <NA> — "not evaluated" stays distinct from "no neighbour".
+        view[flag_column] = poi_ids.map(groups["flag"]).astype("Int64")
+        view[group_column] = poi_ids.map(groups["group_id"]).astype("Int64")
+        view[count_column] = poi_ids.map(groups["count"]).astype("Int64")
+
+        # Whether any neighbour is a school already in the dataset rather than
+        # another row of this upload.
+        in_dataset = pd.Series(
+            {
+                node: int(any(str(n) not in upload_ids for n in G.neighbors(node)))
+                for node in G.nodes()
+            },
+            dtype="Int64",
+        )
+        view[in_dataset_column] = poi_ids.map(in_dataset).astype("Int64")
 
         self.log.info(
-            f"Duplicate groups: {len(duplicate_map)} POIs in {group_id} groups"
+            f"Duplicate groups: {int(groups['flag'].sum())} POIs in "
+            f"{int(groups['group_id'].nunique())} groups"
         )
         self._update_view(view[["poi_id"] + self.duplicate_columns])
+
+    def _with_reference_points(self, gdf):
+        """Append the reference points to ``gdf`` for graph building only."""
+        if self.reference_points is None or self.reference_points.empty:
+            return gdf
+
+        # Reference points get the same sanitisation as the upload's: an
+        # out-of-range coordinate or a null id would otherwise reach
+        # build_distance_graph and take down the whole check.
+        reference = _points_to_gdf(
+            self.reference_points, self.log, "Reference points"
+        ).to_crs(gdf.crs)
+        if reference is None:
+            return gdf
+
+        reference = reference[~reference.index.isin(gdf.index.astype(str))]
+
+        self.log.info(f"Duplicate groups: +{len(reference)} silver reference points")
+        return pd.concat([gdf[["geometry"]], reference[["geometry"]]])
 
     def add_settlement_classification(self) -> None:
         """Classify POIs as Urban/Rural from the GHSL Settlement Model."""
@@ -480,6 +485,7 @@ GEOSPATIAL_COLUMN_MAPPING = {
     f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_flag": "dq_duplicate_group_flag_50m",
     f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_group_id": "dq_duplicate_group_id_50m",
     f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_count": "dq_duplicate_group_count_50m",
+    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_in_dataset": "dq_duplicate_group_in_dataset_50m",
     "settlement_type": "rurban_detected",
     **{
         f"pop_within_{r // 1000}km": f"pop_within_{r // 1000}km"
@@ -505,6 +511,7 @@ GEOSPATIAL_INT_COLUMNS = [
     "dq_duplicate_group_flag_50m",
     "dq_duplicate_group_id_50m",
     "dq_duplicate_group_count_50m",
+    "dq_duplicate_group_in_dataset_50m",
     "uninhabited",
     "duplicate_group_flag_50",
     "duplicate_group_id_50",
@@ -554,19 +561,31 @@ def _apply_column_mapping(
         result_pdf[target] = view[source] if source in view.columns else pd.NA
 
 
-def _to_spark_safe(pdf: pd.DataFrame) -> pd.DataFrame:
-    """Convert nullable pandas dtypes to object columns Spark can infer from."""
-    for column in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS:
-        pdf[column] = [None if pd.isna(v) else int(v) for v in pdf[column]]
-    for column in GEOSPATIAL_STRING_COLUMNS:
-        pdf[column] = [None if pd.isna(v) else str(v) for v in pdf[column]]
-    return pdf
+def build_proximity_graph(
+    points: pd.DataFrame,
+    threshold_m: int = PROXIMITY_DUPLICATE_THRESHOLD_M,
+    context: OpExecutionContext = None,
+):
+    """Distance graph over ``points`` (school_id_giga, latitude, longitude)."""
+    logger = get_context_with_fallback_logger(context)
+
+    gdf = _points_to_gdf(points, logger, "Proximity graph")
+    if gdf is None:
+        return None
+
+    graph = build_distance_graph(gdf, gdf, threshold_m, exclude_same_index=True)
+    logger.info(
+        f"Proximity graph: nodes={graph.number_of_nodes()}, "
+        f"edges={graph.number_of_edges()}"
+    )
+    return graph
 
 
 def run_geospatial_checks(
     df: sql.DataFrame,
     country_code_iso3: str,
     context: OpExecutionContext = None,
+    reference_points: pd.DataFrame = None,
 ) -> sql.DataFrame:
     """Orchestrate all geospatial checks against a single shared POI view.
 
@@ -610,6 +629,7 @@ def run_geospatial_checks(
             poi_id_column="school_id_giga",
             data_store=_get_data_store(),
             logger=logger,
+            reference_points=reference_points,
         )
     except Exception as e:
         logger.error(f"Could not build POI view: {e}")
@@ -640,9 +660,13 @@ def run_geospatial_checks(
         logger.info(f"Dropping pre-existing geospatial columns: {existing}")
         df = df.drop(*existing)
 
-    df = _join_pandas_result_to_spark(
+    df = join_pandas_result_to_spark(
         df,
-        _to_spark_safe(result_pdf),
+        to_spark_safe(
+            result_pdf,
+            GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS,
+            GEOSPATIAL_STRING_COLUMNS,
+        ),
         GEOSPATIAL_COLUMNS,
         schema=_geospatial_result_schema(),
     )

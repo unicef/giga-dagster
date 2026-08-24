@@ -5,6 +5,13 @@ from pyspark.sql import (
 )
 
 from dagster import OpExecutionContext
+from src.data_quality_checks.location_grouping import (
+    GROUP_COUNT_COLUMN,
+    add_group_counts,
+    location_duplicate_columns,
+    location_id_column,
+    null_coordinates,
+)
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -12,31 +19,30 @@ def duplicate_set_checks(
     df: sql.DataFrame,
     config_column_list: set[str],
     context: OpExecutionContext = None,
+    reference: sql.DataFrame = None,
 ):
+    """Flag rows sharing every column in each configured set.
+
+    ``reference`` rows (silver schools absent from the upload) take part in the
+    counts without appearing in the output, so a school duplicating one already in
+    the dataset is caught.
+    """
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate set checks...")
 
     has_lat_long = {"latitude", "longitude"}.issubset(df.columns)
 
     if has_lat_long:
-        df = df.withColumn(
-            "location_id",
-            f.concat_ws(
-                "_",
-                f.col("longitude").cast("string"),
-                f.col("latitude").cast("string"),
-            ),
-        )
-        null_coords = (
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude"))
-        )
+        df = df.withColumn("location_id", location_id_column())
+        null_coords = null_coordinates(df)
+        if reference is not None:
+            reference = reference.withColumn("location_id", location_id_column())
     else:
         null_coords = f.lit(False)
+        reference = None
 
     column_actions = {}
+    count_columns = []
     for column_set in config_column_list:
         required_columns = set(column_set) - {"location_id"}
         needs_location_id = "location_id" in column_set
@@ -54,29 +60,52 @@ def duplicate_set_checks(
             if is_location_only
             else f"dq_duplicate_set-{'_'.join(column_set)}"
         )
-        window_count = f.count("*").over(Window.partitionBy(column_set))
+
+        set_reference = reference
+        if set_reference is not None and not set(column_set).issubset(
+            set_reference.columns
+        ):
+            logger.info(
+                f"Duplicate set check for {column_set} stays file-scoped — "
+                "reference is missing columns"
+            )
+            set_reference = None
+
+        file_count = f.count("*").over(Window.partitionBy(column_set))
+        if set_reference is None:
+            count_col = file_count
+        else:
+            count_column_name = f"_count-{flag_col}"
+            df = add_group_counts(
+                df, set_reference, list(column_set)
+            ).withColumnRenamed(GROUP_COUNT_COLUMN, count_column_name)
+            count_columns.append(count_column_name)
+            count_col = f.col(count_column_name)
+
         column_actions[flag_col] = (
             f.when(null_coords, f.lit(None).cast("int"))
-            .when(window_count > 1, 1)
+            .when(count_col > 1, 1)
             .otherwise(0)
         )
         if is_location_only:
-            column_actions["dq_duplicate_location_rows_count"] = f.when(
-                null_coords, f.lit(None).cast("int")
-            ).otherwise(window_count)
-            column_actions["dq_duplicate_location_rows_id"] = f.when(
-                null_coords, f.lit(None)
-            ).otherwise(f.substring(f.md5(f.col("location_id")), 1, 8))
-            # Plain-named copies so these also survive the dq_ prefix collapse and reach master.
-            column_actions["duplicate_location_rows_flag"] = column_actions[flag_col]
-            column_actions["duplicate_location_rows_count"] = column_actions[
-                "dq_duplicate_location_rows_count"
+            location_columns = location_duplicate_columns(count_col, null_coords)
+            column_actions.update(location_columns)
+            column_actions["dq_duplicate_location_rows_count"] = location_columns[
+                "duplicate_location_rows_count"
             ]
-            column_actions["duplicate_location_rows_ID"] = column_actions[
-                "dq_duplicate_location_rows_id"
+            column_actions["dq_duplicate_location_rows_id"] = location_columns[
+                "duplicate_location_rows_ID"
             ]
+            # Only answerable against a reference; without one the check never ran.
+            column_actions["dq_duplicate_location_rows_in_dataset"] = (
+                f.lit(None).cast("int")
+                if set_reference is None
+                else f.when(null_coords, f.lit(None).cast("int"))
+                .when(count_col > file_count, 1)
+                .otherwise(0)
+            )
 
-    df = df.withColumns(column_actions)
+    df = df.withColumns(column_actions).drop(*count_columns)
     return df.drop("location_id") if has_lat_long else df
 
 
