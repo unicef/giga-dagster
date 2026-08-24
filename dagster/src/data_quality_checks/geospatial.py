@@ -375,7 +375,7 @@ class POIContextEnricher(PoiViewGenerator):
         # .map yields NaN for ids absent from the graph, which Int64 carries
         # through as <NA> — "not evaluated" stays distinct from "no neighbour".
         view[flag_column] = poi_ids.map(groups["flag"]).astype("Int64")
-        view[group_column] = poi_ids.map(groups["group_id"]).astype("Int64")
+        view[group_column] = poi_ids.map(groups["group_id"])
         view[count_column] = poi_ids.map(groups["count"]).astype("Int64")
 
         # Whether any neighbour is a school already in the dataset rather than
@@ -509,19 +509,21 @@ GEOSPATIAL_INT_COLUMNS = [
     "dq_is_in_uninhabited_area",
     "dq_is_suspect_location",
     "dq_duplicate_group_flag_50m",
-    "dq_duplicate_group_id_50m",
     "dq_duplicate_group_count_50m",
     "dq_duplicate_group_in_dataset_50m",
     "uninhabited",
     "duplicate_group_flag_50",
-    "duplicate_group_id_50",
     "duplicate_group_count_50",
     *[f"schools_within_{r // 1000}km" for r in CONTEXT_RADII_M],
 ]
 
 GEOSPATIAL_LONG_COLUMNS = [f"pop_within_{r // 1000}km" for r in CONTEXT_RADII_M]
 
-GEOSPATIAL_STRING_COLUMNS = ["rurban_detected"]
+GEOSPATIAL_STRING_COLUMNS = [
+    "rurban_detected",
+    "dq_duplicate_group_id_50m",
+    "duplicate_group_id_50",
+]
 
 GEOSPATIAL_COLUMNS = (
     GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS + GEOSPATIAL_STRING_COLUMNS

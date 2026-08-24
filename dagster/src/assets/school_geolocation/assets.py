@@ -464,7 +464,7 @@ def geolocation_data_quality_results_human_readable(
     duplicate_count_col = f.element_at(
         f.col("dq_results"), "duplicate_location_rows_count"
     )
-    # duplicate_group_id_50m/count_50m are metadata; gate on the flag, not count (count can be 1 for a real pair).
+
     duplicate_group_flag_col = f.element_at(
         f.col("dq_results"), "duplicate_group_flag_50m"
     )
