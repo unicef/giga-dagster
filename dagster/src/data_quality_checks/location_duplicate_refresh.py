@@ -29,11 +29,9 @@ from src.data_quality_checks.location_grouping import (
 )
 from src.utils.logger import get_context_with_fallback_logger
 
-PROXIMITY_COLUMNS = [
-    "duplicate_group_flag_50",
-    "duplicate_group_id_50",
-    "duplicate_group_count_50",
-]
+PROXIMITY_INT_COLUMNS = ["duplicate_group_flag_50", "duplicate_group_count_50"]
+PROXIMITY_STRING_COLUMNS = ["duplicate_group_id_50"]
+PROXIMITY_COLUMNS = PROXIMITY_INT_COLUMNS + PROXIMITY_STRING_COLUMNS
 
 # A row already in a group, or with a neighbour, is one whose merge can shift a
 # count for a school outside the upload.
@@ -41,7 +39,8 @@ GROUPED_ROW_COLUMNS = ("duplicate_location_rows_count", "duplicate_group_count_5
 
 PROXIMITY_SCHEMA = StructType(
     [StructField("school_id_giga", StringType(), True)]
-    + [StructField(column, IntegerType(), True) for column in PROXIMITY_COLUMNS]
+    + [StructField(column, IntegerType(), True) for column in PROXIMITY_INT_COLUMNS]
+    + [StructField(column, StringType(), True) for column in PROXIMITY_STRING_COLUMNS]
 )
 
 
@@ -49,13 +48,14 @@ def _is_grouped(frame: sql.DataFrame) -> sql.Column:
     """Rows that belong to, or touch, a duplicate group.
 
     Keyed off the counts rather than the flags: the clique partition drops
-    singleton groups, so a school can sit within 50m of another (count 1) while
-    its own flag stays 0 — and that neighbour's count still changed.
+    singleton groups, so a school can sit within 50m of another (count 2) while
+    its own flag stays 0 — and that neighbour's count still changed. Both counts
+    include the row itself, so 1 is the unique baseline.
     """
     present = [c for c in GROUPED_ROW_COLUMNS if c in frame.columns]
     if not present:
         return None
-    return reduce(lambda a, b: a | b, [f.col(c) > 0 for c in present])
+    return reduce(lambda a, b: a | b, [f.col(c) > 1 for c in present])
 
 
 def needs_refresh(
@@ -116,7 +116,7 @@ def refresh_location_duplicates(
     # stay distinguishable from "evaluated, no neighbour".
     return join_pandas_result_to_spark(
         df.drop(*PROXIMITY_COLUMNS),
-        to_spark_safe(groups, PROXIMITY_COLUMNS),
+        to_spark_safe(groups, PROXIMITY_INT_COLUMNS, PROXIMITY_STRING_COLUMNS),
         PROXIMITY_COLUMNS,
         schema=PROXIMITY_SCHEMA,
     )

@@ -39,6 +39,13 @@ bucket if a ping arrives late. It uses `MERGE INTO` instead of `INSERT INTO` —
 block at the top of `update/all_ping_hourly_incremental.sql` for the full reasoning (4-hour grace
 period + `connectivity_ids`-based reconciliation).
 
+`create/all_ping_hourly_incremental.sql` (the one-time bootstrap) is also non-standard: unlike
+every other `create/` script here, which is a single unbounded statement, it's a sequence of
+one `CREATE TABLE` plus several `INSERT`s, each bounded to a disjoint, hour-aligned local-time
+window — a fix for a production `EXCEEDED_LOCAL_MEMORY_LIMIT` failure when the full unbounded
+history was aggregated in one `GROUP BY`. See the header comment in that file for the chunk
+sizing and stop-point reasoning.
+
 ---
 
 ## Scripts

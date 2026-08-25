@@ -76,10 +76,6 @@ FROM
           --  rt_source
         FROM
             default.all_gigameter_measurement_data
-        WHERE
-          measurement_time_window = '8am-4pm(within school hrs)'
-        AND
-          is_weekday = TRUE
     ) AS a
 WHERE
     row_num = 1
@@ -188,10 +184,6 @@ SELECT
     -- select *
 FROM
   default.all_gigameter_measurement_data m
-WHERE
-  measurement_time_window = '8am-4pm(within school hrs)'            -- filter data for those inside measurement window only
-AND
-  is_weekday = TRUE
 group by
     m.country,
     m.iso3_code,

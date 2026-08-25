@@ -1,6 +1,7 @@
 CREATE TABLE delta_lake.default.all_gmeter_only_measurements_incremental
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gmeter_only_measurements_incremental'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gmeter_only_measurements_incremental',
+    partitioned_by = ARRAY['country']
 )
 AS
 
@@ -84,6 +85,8 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
+    ORDER BY measurement_id
+    LIMIT 40000
 
 )
 

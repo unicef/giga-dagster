@@ -192,7 +192,7 @@ class Config(BaseSettings):
         ("rurban_detected", "STRING"),
         ("uninhabited", "INT"),
         ("duplicate_group_flag_50", "INT"),
-        ("duplicate_group_id_50", "INT"),
+        ("duplicate_group_id_50", "STRING"),
         ("duplicate_group_count_50", "INT"),
         ("duplicate_location_rows_flag", "INT"),
         ("duplicate_location_rows_count", "INT"),

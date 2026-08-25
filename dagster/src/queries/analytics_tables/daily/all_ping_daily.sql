@@ -32,9 +32,11 @@
 -- ==============================================================================
 
 
- CREATE TABLE IF NOT EXISTS default.all_ping_daily
+
+ CREATE TABLE default.all_ping_daily
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_daily'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_daily',
+    partitioned_by = ARRAY['country']
 )
 AS
 

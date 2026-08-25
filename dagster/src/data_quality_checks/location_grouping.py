@@ -5,6 +5,8 @@ the grouping but never appear in the output. ``None`` restores file-scoped
 behaviour, which is what master wants since its input is already the full dataset.
 """
 
+import hashlib
+
 import networkx as nx
 import pandas as pd
 from networkx.algorithms.clique import find_cliques as maximal_cliques
@@ -192,9 +194,9 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
     """Resolve a proximity graph into flag / group id / neighbour count per node.
 
     Connected components are partitioned into maximal cliques so a chain of
-    near-neighbours is not collapsed into one oversized group. Groups are numbered
-    in order of their smallest member id, so the same dataset always yields the
-    same ids.
+    near-neighbours is not collapsed into one oversized group. The group id is an
+    8-char md5 hash of its sorted members, matching duplicate_location_rows_ID's
+    hash-based ID convention.
     """
     groups = []
     for component in nx.connected_components(graph):
@@ -208,7 +210,10 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
         )
 
     duplicate_map = {}
-    for group_id, members in enumerate(sorted(groups, key=lambda g: g[0])):
+    for members in groups:
+        group_id = hashlib.md5(
+            ",".join(str(m) for m in members).encode(), usedforsecurity=False
+        ).hexdigest()[:8]
         for node in members:
             duplicate_map[node] = group_id
 
@@ -218,6 +223,7 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
             "school_id_giga": nodes,
             "flag": [1 if node in duplicate_map else 0 for node in nodes],
             "group_id": [duplicate_map.get(node) for node in nodes],
-            "count": [graph.degree(node) for node in nodes],
+            # +1 so count includes the row itself, matching duplicate_location_rows_count.
+            "count": [graph.degree(node) + 1 for node in nodes],
         }
     )

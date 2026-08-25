@@ -131,7 +131,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         "dq_is_suspect_location": "Is the school location suspect (any signal: no buildings OR no built surface nearby)",
         "dq_duplicate_group_flag_50m": "Does the school have a potential duplicate within 50m proximity",
         "dq_duplicate_group_id_50m": "Cluster ID for schools within 50m of each other",
-        "dq_duplicate_group_count_50m": "Number of other schools within 50m proximity",
+        "dq_duplicate_group_count_50m": "Number of schools within 50m of each other, including this one",
         "dq_duplicate_group_in_dataset_50m": "Does the school's 50m duplicate group include one or more schools already in the dataset, and not only rows from this file",
     }
 

@@ -64,7 +64,7 @@ from src.utils.school_registrations.common import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
-from src.utils.spark import normalize_missing_value_strings
+from src.utils.spark import normalize_missing_value_strings, transform_types
 
 from dagster import (
     AssetOut,
@@ -464,7 +464,7 @@ def geolocation_data_quality_results_human_readable(
     duplicate_count_col = f.element_at(
         f.col("dq_results"), "duplicate_location_rows_count"
     )
-    # duplicate_group_id_50m/count_50m are metadata; gate on the flag, not count (count can be 1 for a real pair).
+
     duplicate_group_flag_col = f.element_at(
         f.col("dq_results"), "duplicate_group_flag_50m"
     )
@@ -737,7 +737,7 @@ def geolocation_error_table(
     country_code = config.country_code
     dataset_type = config.dataset_type
 
-    df = geolocation_dq_failed_rows
+    df = transform_types(geolocation_dq_failed_rows, config.metastore_schema, context)
 
     df = df.withColumn("giga_sync_file_id", f.lit(file_id))
     df = df.withColumn("giga_sync_file_name", f.lit(file_name))

@@ -17,7 +17,7 @@ Scripts are maintained in [`unicef/giga-data-analytics`](https://github.com/unic
 | `all_gigameter_valid_test_checker.sql` | `default.all_gigameter_valid_test_checker` | Per-measurement quality validation (Step 3) | Steps 1 & 2 | Yes — Step 3 incremental in progress |
 | `isp_asn_country_mapping.sql` | `default.isp_asn_country_mapping` | Canonical ISP name/ASN lookup, resolves ASN-truncation variants per country | Steps 1 & 2 | |
 | `all_gigameter_measurement_data.sql` | `default.all_gigameter_measurement_data` | Consolidated validated measurements (Step 4) | Steps 1, 2, & 3, ISP/ASN mapping | Yes — Step 4 incremental in progress |
-| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | Daily aggregation per school+device (weekdays only) — p5/p50/p95 speed metrics, summed data volume, JSON categorical breakdowns, school attributes | `all_gigameter_measurement_data` | |
+| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | Daily aggregation per school+device — p5/p50/p95 speed metrics, summed data volume, JSON categorical breakdowns, school attributes | `all_gigameter_measurement_data` | |
 | `all_gigameter_measurement_data_weekly.sql` | `default.all_gigameter_measurement_data_weekly` | Weekly aggregation per school+device (weekdays only) — identical column structure to daily table | `all_gigameter_measurement_data` | |
 | `all_gigameter_measurement_data_tb_physical.sql` | `default.all_gigameter_measurement_data_tb_physical` | Backwards-compatible measurement data variant | Steps 1 & 2 | |
 | `all_ping_hourly.sql` | `default.all_ping_hourly` | Hourly ping/uptime aggregation per device-school | `gigameter_production_db.connectivity_ping_checks` | |
