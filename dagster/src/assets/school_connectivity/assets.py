@@ -24,7 +24,6 @@ from src.data_quality_checks.utils import (
     row_level_checks,
 )
 from src.internal.common_assets.master_release_notes import send_master_release_notes
-from src.internal.merge import full_in_cluster_merge
 from src.resources import ResourceKey
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -45,7 +44,6 @@ from src.utils.qos_apis.school_connectivity import query_school_connectivity_dat
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_primary_key,
     get_schema_columns,
     get_schema_columns_datahub,
 )
@@ -422,6 +420,7 @@ def school_connectivity_realtime_schools(
 
     schools_for_update = schools_for_update.filter(f.col("to_update"))
     schools_for_update = schools_for_update.select(*rt_schools_schema.fieldNames())
+    schools_for_update = schools_for_update.dropDuplicates(["school_id_giga"])
 
     context.log.info(
         f"{schools_for_update.count()} schools will have their connectivity updated"
@@ -499,7 +498,6 @@ def school_connectivity_realtime_silver(
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
-    primary_key = get_primary_key(s, schema_name)
 
     context.log.info(f"Updating data for country {country_code} from {file_path}")
     updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
@@ -565,9 +563,7 @@ def school_connectivity_realtime_silver(
 
         updated_silver = updated_silver.drop(*updated_connectivity_schs.columns)
 
-        new_silver = full_in_cluster_merge(
-            current_silver, updated_silver, primary_key, column_names
-        )
+        new_silver = updated_silver.select(*column_names)
     else:
         raise ValueError(f"The silver table for country {country_code} does not exist")
 
@@ -608,7 +604,6 @@ def school_connectivity_realtime_master(
     country_code = config.country_code
     schema_columns = get_schema_columns(s, schema_name)
     column_names = [c.name for c in schema_columns]
-    primary_key = get_primary_key(s, schema_name)
 
     context.log.info(f"Updating data for country {country_code} from {file_path}")
     updated_connectivity_schs_df = adls_file_client.download_csv_as_pandas_dataframe(
@@ -670,9 +665,7 @@ def school_connectivity_realtime_master(
 
         updated_master = updated_master.drop(*updated_connectivity_schs.columns)
 
-        new_master = full_in_cluster_merge(
-            current_master, updated_master, primary_key, column_names
-        )
+        new_master = updated_master.select(*column_names)
     else:
         raise ValueError(f"The master table for country {country_code} does not exist")
 
