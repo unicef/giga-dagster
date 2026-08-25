@@ -1,6 +1,5 @@
 import io
 import uuid
-from itertools import chain
 
 import country_converter as coco
 import geopandas as gpd
@@ -29,6 +28,8 @@ from src.utils.adls import get_blob_service_client
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_key_value_mapping,
+    get_nocodb_table_as_multi_value_mapping,
+    get_nocodb_table_id_from_name,
     get_nocodb_table_rows,
 )
 from src.utils.schema import construct_full_table_name
@@ -143,6 +144,13 @@ def create_health_id_giga(df: sql.DataFrame) -> sql.DataFrame:
     return df.drop("identifier_concat")
 
 
+def _govt_lookup_map(mapping: dict[str, str]) -> sql.Column:
+    """Build a Spark map Column from a {govt_value: giga_value} dict, keyed on
+    the lowercased/trimmed govt value."""
+    normalized = {k.lower().strip(): v.strip() for k, v in mapping.items()}
+    return f.create_map([f.lit(x) for pair in normalized.items() for x in pair])
+
+
 def map_govt_to_giga_columns(
     df: sql.DataFrame, uploaded_columns: list[str]
 ) -> sql.DataFrame:
@@ -161,26 +169,17 @@ def map_govt_to_giga_columns(
             continue
         if source_col not in uploaded_columns:
             continue
+        if source_col == "connectivity_type_govt":
+            # Handled separately by add_connectivity_type_columns.
+            continue
 
         mapping = get_nocodb_table_as_key_value_mapping(table_id=table_id)
         if not mapping:
             df = df.withColumn(target_col, f.lit("Unknown"))
             continue
 
-        govt_casing_map = f.create_map(
-            [
-                f.lit(x)
-                for x in chain(*{k.lower().strip(): k.strip() for k in mapping}.items())
-            ]
-        )
-        govt_to_giga_map = f.create_map(
-            [
-                f.lit(x)
-                for x in chain(
-                    *{k.lower().strip(): v.strip() for k, v in mapping.items()}.items()
-                )
-            ]
-        )
+        govt_casing_map = _govt_lookup_map({k: k for k in mapping})
+        govt_to_giga_map = _govt_lookup_map(mapping)
         df = df.withColumn(
             source_col,
             f.coalesce(
@@ -246,24 +245,53 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
     )
 
 
-def get_connectivity_type_root(value):
-    connectivity_root_mappings = {
-        "wired": ["fibre", "copper", "coaxial", "wired_other", "unknown_wired"],
-        "wireless": [
-            "cellular",
-            "p2p",
-            "satellite",
-            "haps",
-            "drones",
-            "unknown_wireless",
-            "other_wireless",
-        ],
-        "other": ["other"],
-        "unknown_connectivity_type": ["unknown"],
-    }
-    for key in connectivity_root_mappings:
-        if value in connectivity_root_mappings[key]:
-            return key
+def add_connectivity_type_columns(
+    df: sql.DataFrame, uploaded_columns: list[str]
+) -> sql.DataFrame:
+    """Derive connectivity_type and connectivity_type_root from connectivity_type_govt
+    via the NocoDB ConnectivityTypeMapping table (keyed on connectivity_type_govt).
+
+    No fallback value is applied here on purpose: an unmapped or null
+    connectivity_type_govt yields null connectivity_type/connectivity_type_root,
+    left for the per-row silver fallback (updates) or the NocoDB table itself
+    (once completed) to resolve rather than a synthetic "Unknown".
+    """
+    if "connectivity_type_govt" not in uploaded_columns:
+        return df
+
+    table_id = get_nocodb_table_id_from_name("ConnectivityTypeMapping")
+    mappings = get_nocodb_table_as_multi_value_mapping(
+        table_id=table_id,
+        key_column="connectivity_type_govt",
+        value_columns=["connectivity_type", "connectivity_type_root"],
+    )
+    type_mapping = mappings["connectivity_type"]
+    root_mapping = mappings["connectivity_type_root"]
+    if not (type_mapping and root_mapping):
+        return df.withColumn(
+            "connectivity_type", f.lit(None).cast(StringType())
+        ).withColumn("connectivity_type_root", f.lit(None).cast(StringType()))
+
+    govt_casing_map = _govt_lookup_map({k: k for k in type_mapping})
+    govt_to_type_map = _govt_lookup_map(type_mapping)
+    govt_to_root_map = _govt_lookup_map(root_mapping)
+
+    df = df.withColumn(
+        "connectivity_type_govt",
+        f.coalesce(
+            govt_casing_map[f.lower(f.trim(f.col("connectivity_type_govt")))],
+            f.col("connectivity_type_govt"),
+        ),
+    )
+    df = df.withColumn(
+        "connectivity_type",
+        govt_to_type_map[f.lower(f.trim(f.col("connectivity_type_govt")))],
+    )
+    df = df.withColumn(
+        "connectivity_type_root",
+        govt_to_root_map[f.lower(f.trim(f.col("connectivity_type_govt")))],
+    )
+    return df
 
 
 def column_mapping_rename(
@@ -431,17 +459,7 @@ def create_bronze_layer_columns_updated(
     spark: SparkSession = None,
 ):
     df = map_govt_to_giga_columns(df, uploaded_columns)
-
-    if "connectivity_type_govt" in uploaded_columns:
-        df = df.withColumn("connectivity_type", f.lower(f.col("connectivity_type")))
-        get_connectivity_type_root_udf = f.udf(get_connectivity_type_root, StringType())
-        df = df.withColumn(
-            "connectivity_type_root",
-            f.when(
-                f.col("connectivity_type_govt").isNotNull(),
-                get_connectivity_type_root_udf(f.col("connectivity_type")),
-            ).otherwise(f.lit(None).cast(StringType())),
-        )
+    df = add_connectivity_type_columns(df, uploaded_columns)
 
     # Generate school_id_giga for new schools only; existing schools get null here
     # and are enriched from silver later in enrich_with_silver_values.
