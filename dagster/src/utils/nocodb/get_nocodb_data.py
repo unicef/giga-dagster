@@ -132,6 +132,40 @@ def get_nocodb_table_as_key_value_mapping(
     return mapping_dict
 
 
+def get_nocodb_table_as_multi_value_mapping(table_id, key_column, value_columns):
+    """
+    Like get_nocodb_table_as_key_value_mapping, but resolves several value
+    columns for the same key column from a single NocoDB request.
+
+    Args:
+        table_id (str): The ID of the NoCoDB table to query.
+        key_column (str): Name of the column to use as the key.
+        value_columns (list[str]): Names of the columns to build mappings for.
+
+    Returns:
+        dict[str, dict]: value_column -> {key: value}, one entry per
+            value_column, only including rows where both the key and that
+            value column are non-empty.
+    """
+    fields = ",".join([key_column, *value_columns])
+    rows_list = get_nocodb_table_rows(table_id, fields=fields)
+
+    mappings = {value_column: {} for value_column in value_columns}
+    if not rows_list:
+        return mappings
+
+    for item in rows_list:
+        key = item.get(key_column)
+        if not key:
+            continue
+        for value_column in value_columns:
+            value = item.get(value_column)
+            if value:
+                mappings[value_column][key] = value
+
+    return mappings
+
+
 def get_nocodb_table_id_from_name(table_name):
     table_name_mappings_id = settings.NOCODB_NAME_MAPPINGS_TABLE_ID
     nocodb_response = get_nocodb_table_rows(
