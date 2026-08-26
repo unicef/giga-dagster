@@ -20,6 +20,11 @@ from src.data_quality_checks.create_update import (
     enrich_with_silver_values,
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
+from src.data_quality_checks.location_grouping import (
+    MEMBER_IDENTITY_SCHEMA,
+    attach_approval_status,
+    combine_duplicate_members,
+)
 from src.data_quality_checks.utils import (
     build_dq_summary_statistics,
     build_dq_warning_columns,
@@ -299,14 +304,37 @@ def geolocation_bronze(
     )
 
 
-@asset(io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value)
+_DUPLICATES_REPORT_SCHEMA = (
+    f"{MEMBER_IDENTITY_SCHEMA}, duplicate_location_rows_id string, "
+    "duplicate_location_rows_count int, duplicate_group_id_50m string, "
+    "duplicate_group_count_50m int"
+)
+
+
+def _get_or_empty(
+    extra_outputs: dict, key: str, spark: SparkSession, schema: str
+) -> sql.DataFrame:
+    value = extra_outputs.get(key)
+    return value if value is not None else spark.createDataFrame([], schema=schema)
+
+
+@multi_asset(
+    outs={
+        "geolocation_data_quality_results": AssetOut(
+            io_manager_key=ResourceKey.ADLS_SPARK_IO_MANAGER.value,
+        ),
+        "geolocation_dq_duplicates_report": AssetOut(
+            io_manager_key=ResourceKey.ADLS_SPARK_SINGLE_FILE_IO_MANAGER.value,
+        ),
+    },
+)
 @capture_op_exceptions
 def geolocation_data_quality_results(
     context: OpExecutionContext,
     config: FileConfig,
     geolocation_bronze: sql.DataFrame,
     spark: PySparkResource,
-) -> Output[sql.DataFrame]:
+):
     s: SparkSession = spark.spark_session
     country_code = config.country_code
     schema_name = config.metastore_schema
@@ -340,6 +368,7 @@ def geolocation_data_quality_results(
     # Enrich bronze with silver values for existing schools (fills gaps via coalesce)
     enriched_bronze = enrich_with_silver_values(renamed_bronze, casted_silver, context)
 
+    extra_outputs = {}
     dq_results = row_level_checks(
         df=enriched_bronze,
         silver=casted_silver,
@@ -351,7 +380,16 @@ def geolocation_data_quality_results(
             upload_mode=config.metadata.get("mode"),
         ),
         context=context,
+        extra_outputs=extra_outputs,
     )
+
+    location_members = _get_or_empty(
+        extra_outputs, "duplicate_location_members", s, _DUPLICATES_REPORT_SCHEMA
+    )
+    fifty_m_members = _get_or_empty(
+        extra_outputs, "duplicate_50m_members", s, _DUPLICATES_REPORT_SCHEMA
+    )
+    duplicates_report = combine_duplicate_members(location_members, fifty_m_members)
 
     dq_results = dq_results.withColumnRenamed("dq_signature", "signature")
 
@@ -405,18 +443,30 @@ def geolocation_data_quality_results(
     dq_results.cache()
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
+    duplicates_report = attach_approval_status(duplicates_report, dq_results).cache()
+
     datahub_emit_metadata_with_exception_catcher(
         context=context,
         config=config,
         spark=spark,
     )
 
-    return Output(
+    yield Output(
         dq_results.coalesce(1),
+        output_name="geolocation_data_quality_results",
         metadata={
             **get_output_metadata(config),
             "row_count": dq_results.count(),
             "preview": get_table_preview(dq_results),
+        },
+    )
+    yield Output(
+        duplicates_report.coalesce(1),
+        output_name="geolocation_dq_duplicates_report",
+        metadata={
+            **get_output_metadata(config),
+            "row_count": duplicates_report.count(),
+            "preview": get_table_preview(duplicates_report),
         },
     )
 

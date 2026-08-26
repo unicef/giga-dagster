@@ -11,6 +11,7 @@ from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from dagster import OpExecutionContext
 from src.data_quality_checks.location_grouping import (
+    MEMBER_IDENTITY_SCHEMA,
     assign_proximity_groups,
     join_pandas_result_to_spark,
     to_spark_safe,
@@ -45,9 +46,11 @@ def _get_data_store() -> ADLSDataStore:
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
-    """Extract school_id_giga, latitude, longitude (and the out-of-country flag when
-    present) from Spark DF to Pandas."""
+    """Extract school_id_giga, school_id_govt, latitude, longitude (and the
+    out-of-country flag when present) from Spark DF to Pandas."""
     columns = ["school_id_giga", "latitude", "longitude"]
+    if "school_id_govt" in df.columns:
+        columns.append("school_id_govt")
     if "dq_is_not_within_country" in df.columns:
         columns.append("dq_is_not_within_country")
     pdf = df.select(*columns).toPandas()
@@ -251,6 +254,12 @@ class POIContextEnricher(PoiViewGenerator):
         # raster enrichments, which stay scoped to the uploaded rows.
         self.reference_points = reference_points
         self.log = logger or self.logger
+        # Full 50m graph membership (file + master), flag==1 only. Populated by
+        # add_duplicate_groups; used to build the duplicates report, separately from
+        # self.view which only ever carries the upload's own rows.
+        self.duplicate_group_members = pd.DataFrame(
+            columns=["school_id_giga", "group_id", "count", "source"]
+        )
 
     @property
     def uninhabited_columns(self) -> list[str]:
@@ -368,6 +377,16 @@ class POIContextEnricher(PoiViewGenerator):
         )
 
         groups = assign_proximity_groups(G).set_index("school_id_giga")
+
+        members = groups[groups["flag"] == 1].reset_index()
+        members["source"] = (
+            members["school_id_giga"]
+            .astype(str)
+            .map(lambda i: "file" if i in upload_ids else "master")
+        )
+        self.duplicate_group_members = members[
+            ["school_id_giga", "group_id", "count", "source"]
+        ]
 
         view = self.view.copy()
         poi_ids = view["poi_id"].astype(str)
@@ -583,11 +602,91 @@ def build_proximity_graph(
     return graph
 
 
+_IDENTITY_COLUMNS = ["school_id_giga", "school_id_govt", "latitude", "longitude"]
+
+
+def _build_duplicate_50m_members(
+    members: pd.DataFrame,
+    file_points: pd.DataFrame,
+    spark: sql.SparkSession,
+    reference_points: pd.DataFrame = None,
+) -> sql.DataFrame:
+    """Attach school_id_govt/latitude/longitude to 50m duplicate group members.
+
+    ``members`` (from ``POIContextEnricher.duplicate_group_members``) only has ids —
+    file-side identities come from ``file_points`` (already-materialized pandas
+    coordinates), master-side from ``reference_points``.
+    """
+    schema = (
+        f"{MEMBER_IDENTITY_SCHEMA}, duplicate_group_id_50m string, "
+        "duplicate_group_count_50m int"
+    )
+    if members.empty:
+        return spark.createDataFrame([], schema)
+
+    file_ids = set(members.loc[members["source"] == "file", "school_id_giga"])
+    if file_ids:
+        file_identities = file_points[
+            file_points["school_id_giga"].astype(str).isin(file_ids)
+        ][_IDENTITY_COLUMNS]
+    else:
+        file_identities = pd.DataFrame(columns=_IDENTITY_COLUMNS)
+
+    if reference_points is not None:
+        master_ids = set(members.loc[members["source"] == "master", "school_id_giga"])
+        master_identities = reference_points[
+            reference_points["school_id_giga"].astype(str).isin(master_ids)
+        ][_IDENTITY_COLUMNS]
+    else:
+        master_identities = pd.DataFrame(columns=_IDENTITY_COLUMNS)
+
+    identities = pd.concat([file_identities, master_identities], ignore_index=True)
+    identities["school_id_giga"] = identities["school_id_giga"].astype(str)
+
+    result = members.merge(identities, on="school_id_giga", how="inner").rename(
+        columns={
+            "group_id": "duplicate_group_id_50m",
+            "count": "duplicate_group_count_50m",
+        }
+    )
+    result_pdf = to_spark_safe(
+        result[
+            [
+                "school_id_govt",
+                "latitude",
+                "longitude",
+                "source",
+                "duplicate_group_id_50m",
+                "duplicate_group_count_50m",
+            ]
+        ],
+        int_columns=["duplicate_group_count_50m"],
+        string_columns=["duplicate_group_id_50m"],
+    )
+    return spark.createDataFrame(result_pdf, schema=schema)
+
+
+def _record_duplicate_50m_members(
+    extra_outputs: dict,
+    enricher: "POIContextEnricher",
+    file_points: pd.DataFrame,
+    spark: sql.SparkSession,
+    reference_points: pd.DataFrame,
+) -> None:
+    """No-op when the caller isn't collecting extra outputs."""
+    if extra_outputs is None:
+        return
+    extra_outputs["duplicate_50m_members"] = _build_duplicate_50m_members(
+        enricher.duplicate_group_members, file_points, spark, reference_points
+    )
+
+
 def run_geospatial_checks(
     df: sql.DataFrame,
     country_code_iso3: str,
     context: OpExecutionContext = None,
     reference_points: pd.DataFrame = None,
+    extra_outputs: dict = None,
 ) -> sql.DataFrame:
     """Orchestrate all geospatial checks against a single shared POI view.
 
@@ -649,6 +748,10 @@ def run_geospatial_checks(
             step()
         except Exception as e:
             logger.error(f"{name} failed: {e}")
+
+    _record_duplicate_50m_members(
+        extra_outputs, enricher, pdf_valid, df.sparkSession, reference_points
+    )
 
     view = enricher.view
     result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})

@@ -24,6 +24,16 @@ _KEY_SEPARATOR = "\u0001"
 GROUP_KEY_COLUMN = "_group_key"
 GROUP_COUNT_COLUMN = "_group_count"
 
+# Shared identity columns for every duplicate-group-member frame in the duplicates
+# report; each check type appends its own group id/count columns to this prefix.
+MEMBER_IDENTITY_SCHEMA = (
+    "school_id_govt string, latitude double, longitude double, source string"
+)
+LOCATION_MEMBERS_SCHEMA = (
+    f"{MEMBER_IDENTITY_SCHEMA}, duplicate_location_rows_id string, "
+    "duplicate_location_rows_count int"
+)
+
 
 def null_coordinates(df: sql.DataFrame) -> sql.Column:
     return (
@@ -163,6 +173,111 @@ def add_group_counts(
         .withColumn(GROUP_COUNT_COLUMN, f.coalesce(f.col(GROUP_COUNT_COLUMN), f.lit(0)))
         .drop(GROUP_KEY_COLUMN)
     )
+
+
+def materialize_location_duplicate_members(
+    df: sql.DataFrame, reference: sql.DataFrame = None
+) -> sql.DataFrame:
+    """Every row (file or master) belonging to a flagged exact-location duplicate group.
+
+    ``df`` must already carry ``dq_duplicate_location_rows_flag/_id/_count`` (i.e. this
+    runs after ``duplicate_set_checks``).
+    """
+    if "dq_duplicate_location_rows_flag" not in df.columns:
+        return df.sparkSession.createDataFrame([], LOCATION_MEMBERS_SCHEMA)
+
+    flagged = df.filter(f.col("dq_duplicate_location_rows_flag") == 1).withColumn(
+        "location_id", location_id_column()
+    )
+    file_members = flagged.select(
+        "school_id_govt",
+        "latitude",
+        "longitude",
+        f.lit("file").alias("source"),
+        f.col("dq_duplicate_location_rows_id").alias("duplicate_location_rows_id"),
+        f.col("dq_duplicate_location_rows_count").alias(
+            "duplicate_location_rows_count"
+        ),
+    )
+
+    if reference is None:
+        return file_members
+
+    # The group's count is shared by every member, so any flagged file row's count
+    # broadcasts onto the master rows sharing its location_id.
+    group_counts = flagged.select(
+        "location_id", "dq_duplicate_location_rows_count"
+    ).distinct()
+    master_members = (
+        reference.withColumn("location_id", location_id_column())
+        .join(group_counts, on="location_id", how="inner")
+        .select(
+            "school_id_govt",
+            "latitude",
+            "longitude",
+            f.lit("master").alias("source"),
+            f.substring(f.md5(f.col("location_id")), 1, 8).alias(
+                "duplicate_location_rows_id"
+            ),
+            f.col("dq_duplicate_location_rows_count").alias(
+                "duplicate_location_rows_count"
+            ),
+        )
+    )
+    return file_members.unionByName(master_members)
+
+
+def combine_duplicate_members(
+    location_members: sql.DataFrame, fifty_m_members: sql.DataFrame
+) -> sql.DataFrame:
+    """One row per school (file or master) in either duplicate group."""
+    a = location_members.select(
+        "school_id_govt",
+        f.col("latitude").alias("_a_lat"),
+        f.col("longitude").alias("_a_lon"),
+        f.col("source").alias("_a_source"),
+        "duplicate_location_rows_id",
+        "duplicate_location_rows_count",
+    )
+    b = fifty_m_members.select(
+        "school_id_govt",
+        f.col("latitude").alias("_b_lat"),
+        f.col("longitude").alias("_b_lon"),
+        f.col("source").alias("_b_source"),
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
+    )
+    return a.join(b, on="school_id_govt", how="full_outer").select(
+        "school_id_govt",
+        f.coalesce(f.col("_a_lat"), f.col("_b_lat")).alias("latitude"),
+        f.coalesce(f.col("_a_lon"), f.col("_b_lon")).alias("longitude"),
+        f.coalesce(f.col("_a_source"), f.col("_b_source")).alias("source"),
+        "duplicate_location_rows_id",
+        "duplicate_location_rows_count",
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
+    )
+
+
+def attach_approval_status(
+    duplicates_report: sql.DataFrame, dq_results: sql.DataFrame
+) -> sql.DataFrame:
+    """approval_status is only meaningful for "file" rows — master rows have no DQ
+    run of their own for this upload, so they stay NULL."""
+    relevant_ids = duplicates_report.select("school_id_govt").distinct()
+    approval = (
+        dq_results.join(relevant_ids, on="school_id_govt", how="inner")
+        .select("school_id_govt", "dq_has_critical_error")
+        .dropDuplicates(["school_id_govt"])
+        .withColumn(
+            "approval_status",
+            f.when(f.col("dq_has_critical_error") == 1, "rejected").otherwise(
+                "approved"
+            ),
+        )
+        .drop("dq_has_critical_error")
+    )
+    return duplicates_report.join(approval, on="school_id_govt", how="left")
 
 
 def _partition_graph_by_max_cliques(graph: nx.Graph) -> list:
