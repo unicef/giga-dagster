@@ -3,7 +3,6 @@ from pyspark.sql import (
     SparkSession,
     functions as f,
 )
-from pyspark.sql.types import IntegerType, LongType, StringType
 from src.utils.schema import get_schema_columns
 from src.utils.sentry import capture_op_exceptions
 
@@ -23,13 +22,13 @@ def adhoc__migrate_error_table_column_types(
     drifted from the metaschema.
 
     geolocation_error_table appends with mergeSchema, so each column kept the type
-    of the first write. Two drifts have shown up so far:
-    - duplicate_location_rows_count came from an uncast f.count("*") and landed as
-      bigint; the write now runs through transform_types and is int.
-    - duplicate_group_id_50 used to be a sequential int; it's now an md5-hash
-      string (#497), so old rows still carry int/bigint values.
-    Delta only ever widens, and neither of these is a widening change, so the
-    tables have to be rewritten.
+    it had on its first write, and never converges back to the metaschema when the
+    write-side type changes later (e.g. duplicate_location_rows_count going from an
+    uncast f.count("*") bigint to an int, or duplicate_group_id_50 going from a
+    sequential int to an md5-hash string in #497). Delta only ever widens on merge,
+    so any narrowing or type-family change has to be rewritten explicitly. This
+    compares every column's stored type against the metaschema's declared type and
+    casts whatever has drifted, in either direction.
     """
     s: SparkSession = spark.spark_session
 
@@ -37,17 +36,10 @@ def adhoc__migrate_error_table_column_types(
         context.log.info(f"Schema {ERROR_TABLE_SCHEMA} does not exist, nothing to do.")
         return Output(None)
 
-    declared_int = set()
-    declared_string = set()
-    for column in get_schema_columns(s, METASCHEMA):
-        if isinstance(column.dataType, IntegerType):
-            declared_int.add(column.name)
-        elif isinstance(column.dataType, StringType):
-            declared_string.add(column.name)
-    context.log.info(
-        f"{len(declared_int)} columns declared as int, "
-        f"{len(declared_string)} declared as string in {METASCHEMA}"
-    )
+    declared_types = {
+        column.name: column.dataType for column in get_schema_columns(s, METASCHEMA)
+    }
+    context.log.info(f"{len(declared_types)} columns declared in {METASCHEMA}")
 
     migrated = []
     skipped = []
@@ -59,33 +51,23 @@ def adhoc__migrate_error_table_column_types(
 
         try:
             source = s.read.table(full_name)
-            narrow_to_int = [
-                field.name
+            casts = {
+                field.name: declared_types[field.name].simpleString()
                 for field in source.schema.fields
-                if field.name in declared_int and isinstance(field.dataType, LongType)
-            ]
-            cast_to_string = [
-                field.name
-                for field in source.schema.fields
-                if field.name in declared_string
-                and isinstance(field.dataType, IntegerType | LongType)
-            ]
+                if field.name in declared_types
+                and field.dataType != declared_types[field.name]
+            }
         except Exception as exc:
             context.log.error(f"{full_name}: could not read: {exc}")
             errors.append({"table": full_name, "error": str(exc)})
             continue
 
-        if not narrow_to_int and not cast_to_string:
+        if not casts:
             context.log.info(f"{full_name}: nothing to migrate, skipping")
             skipped.append(full_name)
             continue
 
-        casts = {column: "int" for column in narrow_to_int}
-        casts.update({column: "string" for column in cast_to_string})
-        context.log.info(
-            f"{full_name}: narrowing {narrow_to_int} to int, "
-            f"casting {cast_to_string} to string"
-        )
+        context.log.info(f"{full_name}: casting {casts}")
 
         try:
             source_count = source.count()
