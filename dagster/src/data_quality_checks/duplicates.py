@@ -82,26 +82,20 @@ def duplicate_set_checks(
             count_columns.append(count_column_name)
             count_col = f.col(count_column_name)
 
-        column_actions[flag_col] = (
-            f.when(null_coords, f.lit(None).cast("int"))
-            .when(count_col > 1, 1)
-            .otherwise(0)
-        )
         if is_location_only:
-            location_columns = location_duplicate_columns(count_col, null_coords)
-            column_actions.update(location_columns)
-            column_actions["dq_duplicate_location_rows_count"] = location_columns[
-                "duplicate_location_rows_count"
-            ]
-            column_actions["dq_duplicate_location_rows_id"] = location_columns[
-                "duplicate_location_rows_ID"
-            ]
+            column_actions.update(location_duplicate_columns(count_col, null_coords))
             # Only answerable against a reference; without one the check never ran.
             column_actions["dq_duplicate_location_rows_in_dataset"] = (
                 f.lit(None).cast("int")
                 if set_reference is None
                 else f.when(null_coords, f.lit(None).cast("int"))
                 .when(count_col > file_count, 1)
+                .otherwise(0)
+            )
+        else:
+            column_actions[flag_col] = (
+                f.when(null_coords, f.lit(None).cast("int"))
+                .when(count_col > 1, 1)
                 .otherwise(0)
             )
 
