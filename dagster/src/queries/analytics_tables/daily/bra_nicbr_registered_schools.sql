@@ -29,6 +29,8 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
+ DROP TABLE IF EXISTS default.bra_nicbr_registered_schools;
+
  CREATE TABLE IF NOT EXISTS default.bra_nicbr_registered_schools
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_nicbr_registered_schools'

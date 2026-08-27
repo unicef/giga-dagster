@@ -1,6 +1,8 @@
 
 
 
+ DROP TABLE IF EXISTS default.bra_nicbr_daily;
+
  CREATE TABLE IF NOT EXISTS default.bra_nicbr_daily
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_nicbr_daily'

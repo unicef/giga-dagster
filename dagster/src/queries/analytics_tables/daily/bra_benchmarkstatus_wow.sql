@@ -33,6 +33,8 @@
 -- ==============================================================================
 
 
+ DROP TABLE IF EXISTS default.bra_benchmarkstatus_wow;
+
  CREATE TABLE IF NOT EXISTS default.bra_benchmarkstatus_wow
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/bra_benchmarkstatus_wow'

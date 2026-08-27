@@ -31,6 +31,8 @@
 -- ==============================================================================
 
 
+DROP TABLE IF EXISTS default.all_gigameter_measurement_data_tb_physical;
+
 CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data_tb_physical
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_tb_physical'

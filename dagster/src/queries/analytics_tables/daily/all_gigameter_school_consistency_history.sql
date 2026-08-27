@@ -36,6 +36,8 @@
 
 
 
+ DROP TABLE IF EXISTS default.all_gigameter_school_consistency_history;
+
  CREATE TABLE default.all_gigameter_school_consistency_history
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_school_consistency_history'
