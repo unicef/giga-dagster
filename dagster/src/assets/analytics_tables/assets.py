@@ -14,7 +14,8 @@ QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
 DELTA_LAKE_CATALOG = "delta_lake"
 DELTA_LAKE_SCHEMA = "default"
 DROP_TABLE_PATTERN = re.compile(
-    r"^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:[\w]+\.)?([\w]+)", re.IGNORECASE
+    r"^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:[\w]+\.)?([\w]+)",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
@@ -68,7 +69,7 @@ def _execute_statements(
 ) -> None:
     for i, statement in enumerate(statements):
         if delete_adls_data_on_drop:
-            match = DROP_TABLE_PATTERN.match(statement)
+            match = DROP_TABLE_PATTERN.search(statement)
             if match:
                 _delete_adls_table_folder(context, match.group(1))
         context.log.info(f"executing statement {i + 1}/{len(statements)}")
