@@ -599,6 +599,7 @@ def dq_geolocation_extract_relevant_columns(
             "dq_results",
             "is_new_school",
             "dq_duplicate_location_rows_id",
+            "dq_duplicate_group_id_50m",
         ]
         if col in df.columns
     ]

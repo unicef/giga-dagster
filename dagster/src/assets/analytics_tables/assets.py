@@ -1,9 +1,11 @@
+import re
 from pathlib import Path
 
 import sqlparse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from src.settings import settings
+from src.utils.adls import ADLSFileClient
 from src.utils.db.trino import get_db_context
 
 from dagster import AssetKey, OpExecutionContext, asset
@@ -11,6 +13,9 @@ from dagster import AssetKey, OpExecutionContext, asset
 QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
 DELTA_LAKE_CATALOG = "delta_lake"
 DELTA_LAKE_SCHEMA = "default"
+DROP_TABLE_PATTERN = re.compile(
+    r"^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:[\w]+\.)?([\w]+)", re.IGNORECASE
+)
 
 
 def _split_statements(sql_text: str) -> list[str]:
@@ -44,10 +49,28 @@ def _read_statements(path: Path) -> list[str]:
     return _split_statements(sql_text)
 
 
+def _delete_adls_table_folder(context: OpExecutionContext, table_name: str) -> None:
+    folder_path = f"warehouse/{table_name}"
+    adls_file_client = ADLSFileClient()
+    if not adls_file_client.folder_exists(folder_path):
+        context.log.info(f"ADLS folder `{folder_path}` does not exist, skipping delete")
+        return
+    context.log.info(f"deleting ADLS folder `{folder_path}` before drop")
+    ADLSFileClient.delete(folder_path, is_directory=True)
+
+
 def _execute_statements(
-    context: OpExecutionContext, db: Session, statements: list[str]
+    context: OpExecutionContext,
+    db: Session,
+    statements: list[str],
+    *,
+    delete_adls_data_on_drop: bool = False,
 ) -> None:
     for i, statement in enumerate(statements):
+        if delete_adls_data_on_drop:
+            match = DROP_TABLE_PATTERN.match(statement)
+            if match:
+                _delete_adls_table_folder(context, match.group(1))
         context.log.info(f"executing statement {i + 1}/{len(statements)}")
         db.execute(text(statement))
     db.commit()
@@ -57,7 +80,10 @@ def _run_daily(context: OpExecutionContext) -> None:
     name = context.asset_key.path[-1]
     with get_db_context() as db:
         _execute_statements(
-            context, db, _read_statements(QUERIES_ROOT / "daily" / f"{name}.sql")
+            context,
+            db,
+            _read_statements(QUERIES_ROOT / "daily" / f"{name}.sql"),
+            delete_adls_data_on_drop=True,
         )
 
 

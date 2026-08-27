@@ -42,6 +42,8 @@
 -- Last Updated:    2026-07-30 / Luke Stringer
 -- ==============================================================================
 
+DROP TABLE IF EXISTS default.isp_asn_country_mapping;
+
 CREATE TABLE default.isp_asn_country_mapping
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/isp_asn_country_mapping'

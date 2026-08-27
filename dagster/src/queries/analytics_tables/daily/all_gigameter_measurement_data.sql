@@ -1,5 +1,7 @@
 
 
+ DROP TABLE IF EXISTS default.all_gigameter_measurement_data;
+
  CREATE TABLE IF NOT EXISTS default.all_gigameter_measurement_data
  WITH (
      location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data',

@@ -516,23 +516,12 @@ GEOSPATIAL_COLUMN_MAPPING = {
     },
 }
 
-# Plain-named copies so these also survive dq_split_passed_rows and reach master.
-GEOSPATIAL_MASTER_ALIAS_MAPPING = {
-    "uninhabited": "uninhabited",
-    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_flag": "duplicate_group_flag_50",
-    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_group_id": "duplicate_group_id_50",
-    f"duplicate_{PROXIMITY_DUPLICATE_THRESHOLD_M}_count": "duplicate_group_count_50",
-}
-
 GEOSPATIAL_INT_COLUMNS = [
     "dq_is_in_uninhabited_area",
     "dq_is_suspect_location",
     "dq_duplicate_group_flag_50m",
     "dq_duplicate_group_count_50m",
     "dq_duplicate_group_in_dataset_50m",
-    "uninhabited",
-    "duplicate_group_flag_50",
-    "duplicate_group_count_50",
     *[f"schools_within_{r // 1000}km" for r in CONTEXT_RADII_M],
 ]
 
@@ -541,7 +530,6 @@ GEOSPATIAL_LONG_COLUMNS = [f"pop_within_{r // 1000}km" for r in CONTEXT_RADII_M]
 GEOSPATIAL_STRING_COLUMNS = [
     "rurban_detected",
     "dq_duplicate_group_id_50m",
-    "duplicate_group_id_50",
 ]
 
 GEOSPATIAL_COLUMNS = (
@@ -756,7 +744,6 @@ def run_geospatial_checks(
     view = enricher.view
     result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})
     _apply_column_mapping(result_pdf, view, GEOSPATIAL_COLUMN_MAPPING)
-    _apply_column_mapping(result_pdf, view, GEOSPATIAL_MASTER_ALIAS_MAPPING)
 
     _log_non_null_counts(logger, "Geospatial checks", result_pdf, GEOSPATIAL_COLUMNS)
 

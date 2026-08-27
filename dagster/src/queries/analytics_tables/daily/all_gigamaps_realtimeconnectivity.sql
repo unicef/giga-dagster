@@ -29,6 +29,8 @@
 -- ==============================================================================
 
 
+ DROP TABLE IF EXISTS default.all_gigamaps_realtimeconnectivity;
+
  CREATE TABLE IF NOT EXISTS  default.all_gigamaps_realtimeconnectivity
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigamaps_realtimeconnectivity'

@@ -52,6 +52,8 @@
 
 
 
+DROP TABLE IF EXISTS default.mng_gigameter_qos_registered;
+
 CREATE TABLE IF NOT EXISTS default.mng_gigameter_qos_registered
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/mng_gigameter_qos_registered'

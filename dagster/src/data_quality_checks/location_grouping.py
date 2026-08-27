@@ -48,7 +48,7 @@ def location_id_column() -> sql.Column:
     """Key identifying an exact coordinate pair.
 
     Shared so the DQ run and the post-merge refresh hash the same string, and
-    ``duplicate_location_rows_ID`` stays stable between them.
+    ``dq_duplicate_location_rows_id`` stays stable between them.
     """
     return f.concat_ws(
         "_",
@@ -60,19 +60,19 @@ def location_id_column() -> sql.Column:
 def location_duplicate_columns(
     count_col: sql.Column, null_coords: sql.Column
 ) -> dict[str, sql.Column]:
-    """The three exact-location duplicate expressions, keyed by plain column name.
+    """The three exact-location duplicate expressions, keyed by dq_-prefixed column name.
 
     Shared by the DQ run and the post-merge refresh so the two cannot drift — the
     ID has to hash identically on both sides.
     """
     return {
-        "duplicate_location_rows_flag": f.when(null_coords, f.lit(None).cast("int"))
+        "dq_duplicate_location_rows_flag": f.when(null_coords, f.lit(None).cast("int"))
         .when(count_col > 1, 1)
         .otherwise(0),
-        "duplicate_location_rows_count": f.when(
+        "dq_duplicate_location_rows_count": f.when(
             null_coords, f.lit(None).cast("int")
         ).otherwise(count_col.cast("int")),
-        "duplicate_location_rows_ID": f.when(null_coords, f.lit(None)).otherwise(
+        "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
             f.substring(f.md5(location_id_column()), 1, 8)
         ),
     }
@@ -310,7 +310,7 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
 
     Connected components are partitioned into maximal cliques so a chain of
     near-neighbours is not collapsed into one oversized group. The group id is an
-    8-char md5 hash of its sorted members, matching duplicate_location_rows_ID's
+    8-char md5 hash of its sorted members, matching dq_duplicate_location_rows_id's
     hash-based ID convention.
     """
     groups = []
@@ -338,7 +338,7 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
             "school_id_giga": nodes,
             "flag": [1 if node in duplicate_map else 0 for node in nodes],
             "group_id": [duplicate_map.get(node) for node in nodes],
-            # +1 so count includes the row itself, matching duplicate_location_rows_count.
+            # +1 so count includes the row itself, matching dq_duplicate_location_rows_count.
             "count": [graph.degree(node) + 1 for node in nodes],
         }
     )

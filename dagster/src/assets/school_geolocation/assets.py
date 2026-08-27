@@ -533,13 +533,15 @@ def geolocation_data_quality_results_human_readable(
                     f.col("dq_duplicate_location_rows_id")
                 ),
             )
-        elif map_key in ("duplicate_group_id_50m", "duplicate_group_count_50m"):
+        elif map_key in ("duplicate_group_count_50m", "duplicate_group_id_50m"):
+            value = (
+                f.col("dq_duplicate_group_id_50m")
+                if map_key == "duplicate_group_id_50m"
+                else f.element_at(f.col("dq_results"), map_key)
+            )
             df = df.withColumn(
                 human_name,
-                f.when(
-                    duplicate_group_flag_col == 1,
-                    f.element_at(f.col("dq_results"), map_key),
-                ).otherwise(f.lit(None)),
+                f.when(duplicate_group_flag_col == 1, value).otherwise(f.lit(None)),
             )
         elif map_key in (
             "duplicate_location_rows_in_dataset",
@@ -568,8 +570,9 @@ def geolocation_data_quality_results_human_readable(
             )
 
     df = df.drop("dq_results")
-    if "dq_duplicate_location_rows_id" in df.columns:
-        df = df.drop("dq_duplicate_location_rows_id")
+    for raw_col in ("dq_duplicate_location_rows_id", "dq_duplicate_group_id_50m"):
+        if raw_col in df.columns:
+            df = df.drop(raw_col)
 
     # Cache once — both filters read from the same plan
     df.cache()

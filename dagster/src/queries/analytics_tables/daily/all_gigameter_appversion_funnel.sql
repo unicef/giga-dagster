@@ -30,6 +30,8 @@
 --
 -- ==============================================================================
 
+  DROP TABLE IF EXISTS default.all_gigameter_appversion_funnel;
+
   CREATE TABLE IF NOT EXISTS default.all_gigameter_appversion_funnel
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_appversion_funnel'
