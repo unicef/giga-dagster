@@ -32,6 +32,8 @@ SET SESSION mark_distinct_strategy = 'none';
 SET SESSION query_max_stage_count = 400;
 
 
+DROP TABLE IF EXISTS default.country_versions;
+
 CREATE TABLE IF NOT EXISTS default.country_versions
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/country_versions'
