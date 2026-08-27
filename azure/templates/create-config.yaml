@@ -158,7 +158,7 @@ jobs:
                       app.kubernetes.io/component: dagster
                   stringData:
                       METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
-                      AZURE_SAS_TOKEN: "$(azureSasTokenEscaped)"
+                      AZURE_SAS_TOKEN: '$(azureSasTokenEscaped)'
                       STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                       STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
                       HMS_POSTGRESQL_USERNAME: "$(hmsPostgresqlUsername)"
