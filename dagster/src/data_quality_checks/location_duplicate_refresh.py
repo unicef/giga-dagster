@@ -29,13 +29,16 @@ from src.data_quality_checks.location_grouping import (
 )
 from src.utils.logger import get_context_with_fallback_logger
 
-PROXIMITY_INT_COLUMNS = ["duplicate_group_flag_50", "duplicate_group_count_50"]
-PROXIMITY_STRING_COLUMNS = ["duplicate_group_id_50"]
+PROXIMITY_INT_COLUMNS = ["dq_duplicate_group_flag_50m", "dq_duplicate_group_count_50m"]
+PROXIMITY_STRING_COLUMNS = ["dq_duplicate_group_id_50m"]
 PROXIMITY_COLUMNS = PROXIMITY_INT_COLUMNS + PROXIMITY_STRING_COLUMNS
 
 # A row already in a group, or with a neighbour, is one whose merge can shift a
 # count for a school outside the upload.
-GROUPED_ROW_COLUMNS = ("duplicate_location_rows_count", "duplicate_group_count_50")
+GROUPED_ROW_COLUMNS = (
+    "dq_duplicate_location_rows_count",
+    "dq_duplicate_group_count_50m",
+)
 
 PROXIMITY_SCHEMA = StructType(
     [StructField("school_id_giga", StringType(), True)]
