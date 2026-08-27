@@ -35,6 +35,8 @@
 -- Last Updated:    2025-10-31 / Luke Stringer
 -- ==============================================================================
 
+ DROP TABLE IF EXISTS default.all_gigameter_registered_devices;
+
  CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_devices
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_devices'

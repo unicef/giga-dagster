@@ -45,7 +45,7 @@
 -- Last Updated:    2026-07-30 / Luke Stringer
 -- ==============================================================================
 
--- DROP TABLE IF EXISTS default.all_gigameter_registered_schools;
+DROP TABLE IF EXISTS default.all_gigameter_registered_schools;
 
 CREATE TABLE default.all_gigameter_registered_schools
 WITH (

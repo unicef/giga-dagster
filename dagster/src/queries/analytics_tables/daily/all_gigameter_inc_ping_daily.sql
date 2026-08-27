@@ -29,6 +29,8 @@
 -- ==============================================================================
 
 
+DROP TABLE IF EXISTS default.all_gigameter_inc_ping_daily;
+
 CREATE TABLE IF NOT EXISTS default.all_gigameter_inc_ping_daily
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_inc_ping_daily'

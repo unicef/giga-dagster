@@ -30,7 +30,7 @@
 
 
 
--- DROP TABLE IF EXISTS default.all_ping_hourly;
+DROP TABLE IF EXISTS default.all_ping_hourly;
 
   CREATE TABLE default.all_ping_hourly
 WITH (

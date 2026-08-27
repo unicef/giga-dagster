@@ -2,6 +2,8 @@
 
 
 
+DROP TABLE IF EXISTS default.all_gigameter_valid_test_checker;
+
 CREATE TABLE IF NOT EXISTS default.all_gigameter_valid_test_checker
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_valid_test_checker'
