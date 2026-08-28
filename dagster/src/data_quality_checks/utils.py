@@ -34,6 +34,7 @@ from src.data_quality_checks.geospatial import (
     run_geospatial_checks,
 )
 from src.data_quality_checks.location_grouping import (
+    DUPLICATE_REPORT_DISPLAY_COLUMNS,
     build_reference_frame,
     materialize_location_duplicate_members,
 )
@@ -51,10 +52,8 @@ from src.utils.schema import get_schema_columns
 LOCATION_REFERENCE_COLUMNS = [
     "school_id_giga",
     "school_id_govt",
-    "latitude",
-    "longitude",
-    "school_name",
     "education_level",
+    *DUPLICATE_REPORT_DISPLAY_COLUMNS,
 ]
 
 # Metadata keys, not 0/1 check results
@@ -671,10 +670,10 @@ def run_geolocation_checks(
     )
     reference_points = None
     if reference is not None:
-        # Six narrow columns, read by every grouped check below.
+        # Narrow columns, read by every grouped check below.
         reference = reference.cache()
         reference_points = reference.select(
-            "school_id_giga", "school_id_govt", "latitude", "longitude"
+            "school_id_giga", "school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS
         ).toPandas()
 
     df = is_not_within_country(df, dq_context.country_code_iso3, context)

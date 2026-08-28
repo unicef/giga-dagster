@@ -11,6 +11,7 @@ from pyspark.sql.types import LongType, StringType, StructField, StructType
 
 from dagster import OpExecutionContext
 from src.data_quality_checks.location_grouping import (
+    DUPLICATE_REPORT_DISPLAY_COLUMNS,
     MEMBER_IDENTITY_SCHEMA,
     assign_proximity_groups,
     join_pandas_result_to_spark,
@@ -46,11 +47,12 @@ def _get_data_store() -> ADLSDataStore:
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
-    """Extract school_id_giga, school_id_govt, latitude, longitude (and the
-    out-of-country flag when present) from Spark DF to Pandas."""
-    columns = ["school_id_giga", "latitude", "longitude"]
-    if "school_id_govt" in df.columns:
-        columns.append("school_id_govt")
+    """Extract school_id_giga, school_id_govt, DUPLICATE_REPORT_DISPLAY_COLUMNS,
+    and the out-of-country flag when present, from Spark DF to Pandas."""
+    columns = ["school_id_giga"]
+    for column in ["school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS]:
+        if column in df.columns:
+            columns.append(column)
     if "dq_is_not_within_country" in df.columns:
         columns.append("dq_is_not_within_country")
     pdf = df.select(*columns).toPandas()
@@ -590,7 +592,11 @@ def build_proximity_graph(
     return graph
 
 
-_IDENTITY_COLUMNS = ["school_id_giga", "school_id_govt", "latitude", "longitude"]
+_IDENTITY_COLUMNS = [
+    "school_id_giga",
+    "school_id_govt",
+    *DUPLICATE_REPORT_DISPLAY_COLUMNS,
+]
 
 
 def _build_duplicate_50m_members(
@@ -641,8 +647,7 @@ def _build_duplicate_50m_members(
         result[
             [
                 "school_id_govt",
-                "latitude",
-                "longitude",
+                *DUPLICATE_REPORT_DISPLAY_COLUMNS,
                 "source",
                 "duplicate_group_id_50m",
                 "duplicate_group_count_50m",

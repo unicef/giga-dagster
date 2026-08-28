@@ -24,11 +24,23 @@ _KEY_SEPARATOR = "\u0001"
 GROUP_KEY_COLUMN = "_group_key"
 GROUP_COUNT_COLUMN = "_group_count"
 
+# Non-key value columns of a duplicate-group-member frame, in report column order.
+DUPLICATE_REPORT_DISPLAY_COLUMNS = [
+    "school_name",
+    "education_level_govt",
+    "latitude",
+    "longitude",
+    "admin1",
+    "admin2",
+]
+
 # Shared identity columns for every duplicate-group-member frame in the duplicates
 # report; each check type appends its own group id/count columns to this prefix.
 MEMBER_IDENTITY_SCHEMA = (
-    "school_id_govt string, latitude double, longitude double, source string"
+    "school_id_govt string, school_name string, education_level_govt string, "
+    "latitude double, longitude double, admin1 string, admin2 string, source string"
 )
+
 LOCATION_MEMBERS_SCHEMA = (
     f"{MEMBER_IDENTITY_SCHEMA}, duplicate_location_rows_id string, "
     "duplicate_location_rows_count int"
@@ -225,8 +237,7 @@ def materialize_location_duplicate_members(
     )
     file_members = flagged.select(
         "school_id_govt",
-        "latitude",
-        "longitude",
+        *DUPLICATE_REPORT_DISPLAY_COLUMNS,
         f.lit("file").alias("source"),
         f.col("dq_duplicate_location_rows_id").alias("duplicate_location_rows_id"),
         f.col("dq_duplicate_location_rows_count").alias(
@@ -247,8 +258,7 @@ def materialize_location_duplicate_members(
         .join(group_counts, on="location_id", how="inner")
         .select(
             "school_id_govt",
-            "latitude",
-            "longitude",
+            *DUPLICATE_REPORT_DISPLAY_COLUMNS,
             f.lit("master").alias("source"),
             hash_id_column(f.col("location_id")).alias("duplicate_location_rows_id"),
             f.col("dq_duplicate_location_rows_count").alias(
@@ -263,27 +273,25 @@ def combine_duplicate_members(
     location_members: sql.DataFrame, fifty_m_members: sql.DataFrame
 ) -> sql.DataFrame:
     """One row per school (file or master) in either duplicate group."""
-    a = location_members.select(
+    value_columns = [*DUPLICATE_REPORT_DISPLAY_COLUMNS, "source"]
+    exact_location = location_members.select(
         "school_id_govt",
-        f.col("latitude").alias("_a_lat"),
-        f.col("longitude").alias("_a_lon"),
-        f.col("source").alias("_a_source"),
+        *[f.col(c).alias(f"_exact_location_{c}") for c in value_columns],
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",
     )
-    b = fifty_m_members.select(
+    fifty_m = fifty_m_members.select(
         "school_id_govt",
-        f.col("latitude").alias("_b_lat"),
-        f.col("longitude").alias("_b_lon"),
-        f.col("source").alias("_b_source"),
+        *[f.col(c).alias(f"_fifty_m_{c}") for c in value_columns],
         "duplicate_group_id_50m",
         "duplicate_group_count_50m",
     )
-    return a.join(b, on="school_id_govt", how="full_outer").select(
+    return exact_location.join(fifty_m, on="school_id_govt", how="full_outer").select(
         "school_id_govt",
-        f.coalesce(f.col("_a_lat"), f.col("_b_lat")).alias("latitude"),
-        f.coalesce(f.col("_a_lon"), f.col("_b_lon")).alias("longitude"),
-        f.coalesce(f.col("_a_source"), f.col("_b_source")).alias("source"),
+        *[
+            f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
+            for c in value_columns
+        ],
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",
         "duplicate_group_id_50m",
