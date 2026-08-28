@@ -66,10 +66,9 @@ def hash_id_column(source: sql.Column) -> sql.Column:
     """
     digest = f.md5(source)
     candidate = f.substring(digest, 1, 8)
-    fallback_letter = f.substring(
-        f.lit("abcdef"),
+    fallback_letter = f.element_at(
+        f.array(*[f.lit(c) for c in "abcdef"]),
         (f.conv(f.substring(digest, 9, 1), 16, 10).cast("int") % 6) + 1,
-        1,
     )
     return f.when(
         candidate.rlike("^[0-9]+$"),
