@@ -44,6 +44,40 @@ def null_coordinates(df: sql.DataFrame) -> sql.Column:
     )
 
 
+def hash_id_column(source: sql.Column) -> sql.Column:
+    """First 8 hex chars of source's md5.
+
+    ~2.3% of 8-char hex substrings land all-digit, which spreadsheets read as a
+    number and can mangle (leading zeros, scientific notation). When that
+    happens, the first character is swapped for a letter a-f, chosen
+    deterministically from the next hex digit, so the id stays valid text.
+    """
+    digest = f.md5(source)
+    candidate = f.substring(digest, 1, 8)
+    fallback_letter = f.substring(
+        f.lit("abcdef"),
+        (f.conv(f.substring(digest, 9, 1), 16, 10).cast("int") % 6) + 1,
+        1,
+    )
+    return f.when(
+        candidate.rlike("^[0-9]+$"),
+        f.concat(fallback_letter, f.substring(candidate, 2, 7)),
+    ).otherwise(candidate)
+
+
+def hash_id_str(digest_hex: str) -> str:
+    """Python-side counterpart to ``hash_id_column`` for a precomputed md5 hexdigest.
+
+    Used by callers (like ``assign_proximity_groups``) that already have a
+    ``hashlib`` digest rather than a Spark column to hash.
+    """
+    candidate = digest_hex[:8]
+    if not candidate.isdigit():
+        return candidate
+    fallback_letter = "abcdef"[int(digest_hex[8], 16) % 6]
+    return fallback_letter + candidate[1:]
+
+
 def location_id_column() -> sql.Column:
     """Key identifying an exact coordinate pair.
 
@@ -73,7 +107,7 @@ def location_duplicate_columns(
             null_coords, f.lit(None).cast("int")
         ).otherwise(count_col.cast("int")),
         "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
-            f.substring(f.md5(location_id_column()), 1, 8)
+            hash_id_column(location_id_column())
         ),
     }
 
@@ -216,9 +250,7 @@ def materialize_location_duplicate_members(
             "latitude",
             "longitude",
             f.lit("master").alias("source"),
-            f.substring(f.md5(f.col("location_id")), 1, 8).alias(
-                "duplicate_location_rows_id"
-            ),
+            hash_id_column(f.col("location_id")).alias("duplicate_location_rows_id"),
             f.col("dq_duplicate_location_rows_count").alias(
                 "duplicate_location_rows_count"
             ),
@@ -326,9 +358,10 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
 
     duplicate_map = {}
     for members in groups:
-        group_id = hashlib.md5(
+        digest_hex = hashlib.md5(
             ",".join(str(m) for m in members).encode(), usedforsecurity=False
-        ).hexdigest()[:8]
+        ).hexdigest()
+        group_id = hash_id_str(digest_hex)
         for node in members:
             duplicate_map[node] = group_id
 

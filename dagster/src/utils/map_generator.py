@@ -35,7 +35,12 @@ _POPUP_TEMPLATE = Environment(
 ).from_string(
     """
 {%- for label, value in fields -%}
-<b>{{ label }}</b>: {{ value }}{% if not loop.last %}<br>{% endif %}
+{% if loop.first -%}
+<span style="font-size: 1.15em;"><b>{{ label }}</b>: {{ value }}</span>
+{%- else -%}
+<b>{{ label }}</b>: {{ value }}
+{%- endif -%}
+{% if not loop.last %}<br>{% endif %}
 {%- endfor -%}
 """
 )
@@ -136,17 +141,29 @@ def _render_school_popup_html(
     admin2_id = _format_popup_value(row.get("admin2_id_giga"))
 
     fields = [
+        ("school_name", _format_popup_value(row.get("school_name"))),
         ("school_id_giga", _format_popup_value(row.get("school_id_giga"))),
         ("school_id_govt", _format_popup_value(row.get("school_id_govt"))),
         ("latitude", _format_popup_value(row.get("latitude"))),
         ("longitude", _format_popup_value(row.get("longitude"))),
-        ("school_name", _format_popup_value(row.get("school_name"))),
         ("education_level", _format_popup_value(row.get("education_level"))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
         ("rurban", _format_popup_value(row.get("rurban_detected"))),
         ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
         ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
+        (
+            "duplicate_location_flag",
+            _format_dq_flag(row.get("dq_duplicate_location_rows_flag")),
+        ),
+        (
+            "duplicate_location_id",
+            _format_popup_value(row.get("dq_duplicate_location_rows_id")),
+        ),
+        (
+            "duplicate_location_count",
+            _format_popup_value(row.get("dq_duplicate_location_rows_count")),
+        ),
         ("duplicate_50_flag", _format_dq_flag(row.get("dq_duplicate_group_flag_50m"))),
         (
             "duplicate_50_group_id",

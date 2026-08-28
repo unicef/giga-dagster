@@ -959,8 +959,15 @@ def geolocation_school_map(
         "is_not_within_country",
         "is_in_uninhabited_area",
         "duplicate_group_flag_50m",
-        "duplicate_group_id_50m",
         "duplicate_group_count_50m",
+        "duplicate_location_rows_flag",
+        "duplicate_location_rows_count",
+    ]
+    # String-valued dq_ columns (hash ids) never enter the dq_results map, so they're
+    # selected directly rather than through element_at like map_dq_keys above.
+    map_dq_string_columns = [
+        "dq_duplicate_group_id_50m",
+        "dq_duplicate_location_rows_id",
     ]
 
     country_code = config.country_code
@@ -998,6 +1005,7 @@ def geolocation_school_map(
         "dq_has_warning",
         "warning_reason",
         *(["rurban_detected"] if "rurban_detected" in df.columns else []),
+        *[col for col in map_dq_string_columns if col in df.columns],
         *[
             f.element_at(f.col("dq_results"), key).cast("int").alias(f"dq_{key}")
             for key in map_dq_keys
