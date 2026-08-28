@@ -173,12 +173,25 @@ def generate_dq_kit_zip_bytes(
         )
         context.log.info("Added map_html")
 
+    # All duplicates, file and master (skipped entirely when there are zero data rows)
+    _collect_row_csv_entry(
+        adls_client,
+        paths["duplicates_report"],
+        "duplicates",
+        "6_duplicates_report",
+        row_csv_stem,
+        "All schools in a duplicate group (exact-location or within 50m), file and master",
+        entries,
+        sections,
+        context,
+    )
+
     # School master snapshot (only present after the post-approval run has exported it)
     if data := _safe_download(adls_client, paths["master_export"], context):
-        entries.append((f"6_school_master/school_master_{country_code}.csv", data))
+        entries.append((f"7_school_master/school_master_{country_code}.csv", data))
         sections.append(
             (
-                "6_school_master/",
+                "7_school_master/",
                 [
                     "*.csv   - Snapshot of the school_master table for this country,",
                     "          taken immediately after the approved rows were merged.",
@@ -186,19 +199,6 @@ def generate_dq_kit_zip_bytes(
             )
         )
         context.log.info("Added master_export")
-
-    # All duplicates, file and master (skipped entirely when there are zero data rows)
-    _collect_row_csv_entry(
-        adls_client,
-        paths["duplicates_report"],
-        "duplicates",
-        "7_duplicates_report",
-        row_csv_stem,
-        "All schools in a duplicate group (exact-location or within 50m), file and master",
-        entries,
-        sections,
-        context,
-    )
 
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -233,8 +233,8 @@ _HOW_TO_USE_STEPS = {
     "5_map_visualization/": (
         "Open the map (5_map_visualization/*.html) for visual analysis."
     ),
-    "7_duplicates_report/": (
-        "Check the duplicates report (7_duplicates_report/*.csv) to see whether "
+    "6_duplicates_report/": (
+        "Check the duplicates report (6_duplicates_report/*.csv) to see whether "
         "each duplicate group is already in Giga (master) or only within this file."
     ),
 }
