@@ -140,6 +140,9 @@ def _render_school_popup_html(
     admin2 = _format_popup_value(row.get("admin2"))
     admin2_id = _format_popup_value(row.get("admin2_id_giga"))
 
+    location_flag = _format_dq_flag(row.get("dq_duplicate_location_rows_flag"))
+    fifty_m_flag = _format_dq_flag(row.get("dq_duplicate_group_flag_50m"))
+
     fields = [
         ("school_name", _format_popup_value(row.get("school_name"))),
         ("school_id_giga", _format_popup_value(row.get("school_id_giga"))),
@@ -152,26 +155,31 @@ def _render_school_popup_html(
         ("rurban", _format_popup_value(row.get("rurban_detected"))),
         ("uninhabited", _format_dq_flag(row.get(_UNINHABITED_COL))),
         ("outside_country", _format_dq_flag(row.get(_OUTSIDE_BOUNDARY_COL))),
-        (
-            "duplicate_location_flag",
-            _format_dq_flag(row.get("dq_duplicate_location_rows_flag")),
-        ),
+        ("duplicate_location_flag", location_flag),
         (
             "duplicate_location_id",
-            _format_popup_value(row.get("dq_duplicate_location_rows_id")),
+            _format_popup_value(row.get("dq_duplicate_location_rows_id"))
+            if location_flag == "true"
+            else "N/A",
         ),
         (
             "duplicate_location_count",
-            _format_popup_value(row.get("dq_duplicate_location_rows_count")),
+            _format_popup_value(row.get("dq_duplicate_location_rows_count"))
+            if location_flag == "true"
+            else "N/A",
         ),
-        ("duplicate_50_flag", _format_dq_flag(row.get("dq_duplicate_group_flag_50m"))),
+        ("duplicate_50m_flag", fifty_m_flag),
         (
-            "duplicate_50_group_id",
-            _format_popup_value(row.get("dq_duplicate_group_id_50m")),
+            "duplicate_50m_group_id",
+            _format_popup_value(row.get("dq_duplicate_group_id_50m"))
+            if fifty_m_flag == "true"
+            else "N/A",
         ),
         (
-            "duplicate_50_count",
-            _format_popup_value(row.get("dq_duplicate_group_count_50m")),
+            "duplicate_50m_count",
+            _format_popup_value(row.get("dq_duplicate_group_count_50m"))
+            if fifty_m_flag == "true"
+            else "N/A",
         ),
         ("Status", status),
     ]
