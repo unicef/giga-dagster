@@ -654,9 +654,9 @@ def _build_duplicate_50m_members(
                 "school_id_govt",
                 *DUPLICATE_REPORT_DISPLAY_COLUMNS,
                 "source",
+                "row_num",
                 "duplicate_group_id_50m",
                 "duplicate_group_count_50m",
-                "row_num",
             ]
         ],
         int_columns=["duplicate_group_count_50m", "row_num"],
