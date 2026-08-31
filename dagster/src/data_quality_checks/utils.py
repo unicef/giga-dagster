@@ -676,6 +676,12 @@ def run_geolocation_checks(
             "school_id_giga", "school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS
         ).toPandas()
 
+    # Numbered once here, before the location and 50m duplicate-member frames
+    # are built independently below, so the Nth physical row for a school_id_govt
+    # gets the same row_num in both — combine_duplicate_members relies on this to
+    # pair them up without a cross-product fan-out.
+    df = extract_school_id_govt_duplicates(df).cache()
+
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
     df = school_density_check(df, context, reference=reference)
@@ -701,6 +707,9 @@ def run_geolocation_checks(
         reference_points=reference_points,
         extra_outputs=extra_outputs,
     )
+    # row_num was only needed to pair up the two duplicate-member frames above —
+    # drop it so it doesn't leak into the persisted DQ results table.
+    df = df.drop("row_num")
     df = critical_error_checks(
         df,
         dq_context.dataset_type,

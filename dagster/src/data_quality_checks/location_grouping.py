@@ -38,8 +38,13 @@ DUPLICATE_REPORT_DISPLAY_COLUMNS = [
 # report; each check type appends its own group id/count columns to this prefix.
 MEMBER_IDENTITY_SCHEMA = (
     "school_id_govt string, school_name string, education_level_govt string, "
-    "latitude double, longitude double, admin1 string, admin2 string, source string"
+    "latitude double, longitude double, admin1 string, admin2 string, source string, "
+    "row_num int"
 )
+
+# Master is always a single row/source per school_id_govt — no need to
+# disambiguate, unlike file rows which may have physical dupes.
+MASTER_ROW_NUM = 1
 
 LOCATION_MEMBERS_SCHEMA = (
     f"{MEMBER_IDENTITY_SCHEMA}, duplicate_location_rows_id string, "
@@ -242,6 +247,7 @@ def materialize_location_duplicate_members(
         f.col("dq_duplicate_location_rows_count").alias(
             "duplicate_location_rows_count"
         ),
+        "row_num",
     )
 
     if reference is None:
@@ -263,6 +269,7 @@ def materialize_location_duplicate_members(
             f.col("dq_duplicate_location_rows_count").alias(
                 "duplicate_location_rows_count"
             ),
+            f.lit(MASTER_ROW_NUM).alias("row_num"),
         )
     )
     return file_members.unionByName(master_members)
@@ -271,25 +278,34 @@ def materialize_location_duplicate_members(
 def combine_duplicate_members(
     location_members: sql.DataFrame, fifty_m_members: sql.DataFrame
 ) -> sql.DataFrame:
-    """One row per school (file or master) in either duplicate group."""
-    value_columns = [*DUPLICATE_REPORT_DISPLAY_COLUMNS, "source"]
+    """One row per physical file/master row in either duplicate group.
+
+    Joined on school_id_govt + source + row_num, not school_id_govt alone — a
+    school with multiple physical duplicate rows in the file would otherwise fan
+    out into a cross product between the two member frames.
+    """
+    join_key = ["school_id_govt", "source", "row_num"]
     exact_location = location_members.select(
-        "school_id_govt",
-        *[f.col(c).alias(f"_exact_location_{c}") for c in value_columns],
+        *join_key,
+        *[
+            f.col(c).alias(f"_exact_location_{c}")
+            for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
+        ],
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",
     )
     fifty_m = fifty_m_members.select(
-        "school_id_govt",
-        *[f.col(c).alias(f"_fifty_m_{c}") for c in value_columns],
+        *join_key,
+        *[f.col(c).alias(f"_fifty_m_{c}") for c in DUPLICATE_REPORT_DISPLAY_COLUMNS],
         "duplicate_group_id_50m",
         "duplicate_group_count_50m",
     )
-    return exact_location.join(fifty_m, on="school_id_govt", how="full_outer").select(
+    return exact_location.join(fifty_m, on=join_key, how="full_outer").select(
         "school_id_govt",
+        "source",
         *[
             f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
-            for c in value_columns
+            for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
         ],
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",

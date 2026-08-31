@@ -12,6 +12,7 @@ from pyspark.sql.types import LongType, StringType, StructField, StructType
 from dagster import OpExecutionContext
 from src.data_quality_checks.location_grouping import (
     DUPLICATE_REPORT_DISPLAY_COLUMNS,
+    MASTER_ROW_NUM,
     MEMBER_IDENTITY_SCHEMA,
     assign_proximity_groups,
     join_pandas_result_to_spark,
@@ -55,6 +56,8 @@ def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
             columns.append(column)
     if "dq_is_not_within_country" in df.columns:
         columns.append("dq_is_not_within_country")
+    if "row_num" in df.columns:
+        columns.append("row_num")
     pdf = df.select(*columns).toPandas()
     pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
     pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
@@ -618,21 +621,23 @@ def _build_duplicate_50m_members(
     if members.empty:
         return spark.createDataFrame([], schema)
 
+    identity_columns_with_row_num = [*_IDENTITY_COLUMNS, "row_num"]
     file_ids = set(members.loc[members["source"] == "file", "school_id_giga"])
     if file_ids:
         file_identities = file_points[
             file_points["school_id_giga"].astype(str).isin(file_ids)
-        ][_IDENTITY_COLUMNS]
+        ][identity_columns_with_row_num]
     else:
-        file_identities = pd.DataFrame(columns=_IDENTITY_COLUMNS)
+        file_identities = pd.DataFrame(columns=identity_columns_with_row_num)
 
     if reference_points is not None:
         master_ids = set(members.loc[members["source"] == "master", "school_id_giga"])
         master_identities = reference_points[
             reference_points["school_id_giga"].astype(str).isin(master_ids)
-        ][_IDENTITY_COLUMNS]
+        ][_IDENTITY_COLUMNS].copy()
+        master_identities["row_num"] = MASTER_ROW_NUM
     else:
-        master_identities = pd.DataFrame(columns=_IDENTITY_COLUMNS)
+        master_identities = pd.DataFrame(columns=identity_columns_with_row_num)
 
     identities = pd.concat([file_identities, master_identities], ignore_index=True)
     identities["school_id_giga"] = identities["school_id_giga"].astype(str)
@@ -651,9 +656,10 @@ def _build_duplicate_50m_members(
                 "source",
                 "duplicate_group_id_50m",
                 "duplicate_group_count_50m",
+                "row_num",
             ]
         ],
-        int_columns=["duplicate_group_count_50m"],
+        int_columns=["duplicate_group_count_50m", "row_num"],
         string_columns=["duplicate_group_id_50m"],
     )
     return spark.createDataFrame(result_pdf, schema=schema)
