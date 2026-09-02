@@ -111,6 +111,7 @@ def generate_dq_kit_zip_bytes(
         "failed_rows": f"{dq_root}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
         "map_html": f"{dq_root}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
         "master_export": f"{dq_root}/master-export/{country_code}/{stem}.csv",
+        "duplicates_report": f"{dq_root}/dq-duplicates-report/{country_code}/{stem}.csv",
     }
 
     context.log.info(f"Generating DQ Kit ZIP for {country_code}/{upload_id}")
@@ -172,12 +173,25 @@ def generate_dq_kit_zip_bytes(
         )
         context.log.info("Added map_html")
 
+    # All duplicates, file and master (skipped entirely when there are zero data rows)
+    _collect_row_csv_entry(
+        adls_client,
+        paths["duplicates_report"],
+        "duplicates",
+        "6_duplicates_report",
+        row_csv_stem,
+        "All schools in a duplicate group (exact-location or within 50m), file and master",
+        entries,
+        sections,
+        context,
+    )
+
     # School master snapshot (only present after the post-approval run has exported it)
     if data := _safe_download(adls_client, paths["master_export"], context):
-        entries.append((f"6_school_master/school_master_{country_code}.csv", data))
+        entries.append((f"7_school_master/school_master_{country_code}.csv", data))
         sections.append(
             (
-                "6_school_master/",
+                "7_school_master/",
                 [
                     "*.csv   - Snapshot of the school_master table for this country,",
                     "          taken immediately after the approved rows were merged.",
@@ -218,6 +232,10 @@ _HOW_TO_USE_STEPS = {
     ),
     "5_map_visualization/": (
         "Open the map (5_map_visualization/*.html) for visual analysis."
+    ),
+    "6_duplicates_report/": (
+        "Check the duplicates report (6_duplicates_report/*.csv) to see whether "
+        "each duplicate group is already in Giga (master) or only within this file."
     ),
 }
 

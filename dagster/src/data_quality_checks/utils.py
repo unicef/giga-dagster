@@ -33,7 +33,11 @@ from src.data_quality_checks.geometry import (
 from src.data_quality_checks.geospatial import (
     run_geospatial_checks,
 )
-from src.data_quality_checks.location_grouping import build_reference_frame
+from src.data_quality_checks.location_grouping import (
+    DUPLICATE_REPORT_DISPLAY_COLUMNS,
+    build_reference_frame,
+    materialize_location_duplicate_members,
+)
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.spark.config_expectations import config
@@ -48,10 +52,8 @@ from src.utils.schema import get_schema_columns
 LOCATION_REFERENCE_COLUMNS = [
     "school_id_giga",
     "school_id_govt",
-    "latitude",
-    "longitude",
-    "school_name",
     "education_level",
+    *DUPLICATE_REPORT_DISPLAY_COLUMNS,
 ]
 
 # Metadata keys, not 0/1 check results
@@ -659,6 +661,7 @@ def run_geolocation_checks(
     dq_context: DQContext,
     silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
+    extra_outputs: dict = None,
 ) -> sql.DataFrame:
     # Grouped location checks count against the whole dataset, not just the upload,
     # so a school duplicating one already in silver is caught.
@@ -667,11 +670,17 @@ def run_geolocation_checks(
     )
     reference_points = None
     if reference is not None:
-        # Six narrow columns, read by every grouped check below.
+        # Narrow columns, read by every grouped check below.
         reference = reference.cache()
         reference_points = reference.select(
-            "school_id_giga", "latitude", "longitude"
+            "school_id_giga", "school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS
         ).toPandas()
+
+    # Numbered once here, before the location and 50m duplicate-member frames
+    # are built independently below, so the Nth physical row for a school_id_govt
+    # gets the same row_num in both — combine_duplicate_members relies on this to
+    # pair them up without a cross-product fan-out.
+    df = extract_school_id_govt_duplicates(df).cache()
 
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
@@ -686,13 +695,21 @@ def run_geolocation_checks(
     df = duplicate_set_checks(
         df, config.UNIQUE_SET_COLUMNS, context, reference=reference
     )
+    if extra_outputs is not None:
+        extra_outputs["duplicate_location_members"] = (
+            materialize_location_duplicate_members(df, reference)
+        )
     df = duplicate_name_level_110_check(df, context)
     df = run_geospatial_checks(
         df,
         dq_context.country_code_iso3,
         context,
         reference_points=reference_points,
+        extra_outputs=extra_outputs,
     )
+    # row_num was only needed to pair up the two duplicate-member frames above —
+    # drop it so it doesn't leak into the persisted DQ results table.
+    df = df.drop("row_num")
     df = critical_error_checks(
         df,
         dq_context.dataset_type,
@@ -778,6 +795,7 @@ def row_level_checks_internal(
     dq_context: Optional[DQContext] = None,
     silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
+    extra_outputs: dict = None,
 ) -> sql.DataFrame:
     if dq_context is None:
         raise ValueError("dq_context is required for row_level_checks_internal")
@@ -795,7 +813,7 @@ def row_level_checks_internal(
     if dq_context.dataset_type == "master":
         df = run_master_checks(df, dq_context, context)
     elif dq_context.dataset_type == "geolocation":
-        df = run_geolocation_checks(df, dq_context, silver, context)
+        df = run_geolocation_checks(df, dq_context, silver, context, extra_outputs)
     elif dq_context.dataset_type == "reference":
         df = run_reference_checks(df, dq_context, context)
     elif dq_context.dataset_type in ["coverage", "coverage_itu"]:
@@ -816,6 +834,7 @@ def row_level_checks(
     silver: sql.DataFrame = None,
     mode: str = None,
     dq_context: Any = None,
+    extra_outputs: dict = None,  # populated only on the geolocation dataset path
 ) -> sql.DataFrame:
     # Resolve which signature is being used
     if isinstance(dq_context, DQContext) or isinstance(dataset_type, DQContext):
@@ -823,7 +842,9 @@ def row_level_checks(
             dq_context if isinstance(dq_context, DQContext) else dataset_type
         )
         # Modern signature: row_level_checks(df, dq_context=DQContext(...), ...)
-        return row_level_checks_internal(df, actual_dq_context, silver, context)
+        return row_level_checks_internal(
+            df, actual_dq_context, silver, context, extra_outputs
+        )
     else:
         # Legacy signature: row_level_checks(df, dataset_type, country_code, ...)
 
@@ -834,7 +855,9 @@ def row_level_checks(
             country_code_iso3=_country_code_iso3,
             upload_mode=mode,
         )
-        return row_level_checks_internal(df, internal_context, silver, context)
+        return row_level_checks_internal(
+            df, internal_context, silver, context, extra_outputs
+        )
 
 
 def extract_school_id_govt_duplicates(df: sql.DataFrame):

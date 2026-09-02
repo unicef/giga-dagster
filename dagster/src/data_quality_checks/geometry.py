@@ -9,6 +9,7 @@ from dagster import OpExecutionContext
 from src.data_quality_checks.location_grouping import (
     GROUP_COUNT_COLUMN,
     add_group_counts,
+    hash_id_column,
     null_coordinates,
 )
 from src.spark.user_defined_functions import (
@@ -233,9 +234,7 @@ def school_density_check(
 
     df = df.withColumn(
         "dq_school_density_group_id",
-        f.when(null_coords, f.lit(None)).otherwise(
-            f.substring(f.md5(f.col("hex8")), 1, 8)
-        ),
+        f.when(null_coords, f.lit(None)).otherwise(hash_id_column(f.col("hex8"))),
     )
 
     return df.drop("hex8", "school_density")

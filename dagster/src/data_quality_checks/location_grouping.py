@@ -24,6 +24,33 @@ _KEY_SEPARATOR = "\u0001"
 GROUP_KEY_COLUMN = "_group_key"
 GROUP_COUNT_COLUMN = "_group_count"
 
+# Non-key value columns of a duplicate-group-member frame, in report column order.
+DUPLICATE_REPORT_DISPLAY_COLUMNS = [
+    "school_name",
+    "education_level_govt",
+    "latitude",
+    "longitude",
+    "admin1",
+    "admin2",
+]
+
+# Shared identity columns for every duplicate-group-member frame in the duplicates
+# report; each check type appends its own group id/count columns to this prefix.
+MEMBER_IDENTITY_SCHEMA = (
+    "school_id_govt string, school_name string, education_level_govt string, "
+    "latitude double, longitude double, admin1 string, admin2 string, source string, "
+    "row_num int"
+)
+
+# Master is always a single row/source per school_id_govt — no need to
+# disambiguate, unlike file rows which may have physical dupes.
+MASTER_ROW_NUM = 1
+
+LOCATION_MEMBERS_SCHEMA = (
+    f"{MEMBER_IDENTITY_SCHEMA}, duplicate_location_rows_id string, "
+    "duplicate_location_rows_count int"
+)
+
 
 def null_coordinates(df: sql.DataFrame) -> sql.Column:
     return (
@@ -32,6 +59,39 @@ def null_coordinates(df: sql.DataFrame) -> sql.Column:
         | f.col("longitude").isNull()
         | f.isnan(f.col("longitude"))
     )
+
+
+def hash_id_column(source: sql.Column) -> sql.Column:
+    """First 8 hex chars of source's md5.
+
+    ~2.3% of 8-char hex substrings land all-digit, which spreadsheets read as a
+    number and can mangle (leading zeros, scientific notation). When that
+    happens, the first character is swapped for a letter a-f, chosen
+    deterministically from the next hex digit, so the id stays valid text.
+    """
+    digest = f.md5(source)
+    candidate = f.substring(digest, 1, 8)
+    fallback_letter = f.element_at(
+        f.array(*[f.lit(c) for c in "abcdef"]),
+        (f.conv(f.substring(digest, 9, 1), 16, 10).cast("int") % 6) + 1,
+    )
+    return f.when(
+        candidate.rlike("^[0-9]+$"),
+        f.concat(fallback_letter, f.substring(candidate, 2, 7)),
+    ).otherwise(candidate)
+
+
+def hash_id_str(digest_hex: str) -> str:
+    """Python-side counterpart to ``hash_id_column`` for a precomputed md5 hexdigest.
+
+    Used by callers (like ``assign_proximity_groups``) that already have a
+    ``hashlib`` digest rather than a Spark column to hash.
+    """
+    candidate = digest_hex[:8]
+    if not candidate.isdigit():
+        return candidate
+    fallback_letter = "abcdef"[int(digest_hex[8], 16) % 6]
+    return fallback_letter + candidate[1:]
 
 
 def location_id_column() -> sql.Column:
@@ -63,7 +123,7 @@ def location_duplicate_columns(
             null_coords, f.lit(None).cast("int")
         ).otherwise(count_col.cast("int")),
         "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
-            f.substring(f.md5(location_id_column()), 1, 8)
+            hash_id_column(location_id_column())
         ),
     }
 
@@ -165,6 +225,116 @@ def add_group_counts(
     )
 
 
+def materialize_location_duplicate_members(
+    df: sql.DataFrame, reference: sql.DataFrame = None
+) -> sql.DataFrame:
+    """Every row (file or master) belonging to a flagged exact-location duplicate group.
+
+    ``df`` must already carry ``dq_duplicate_location_rows_flag/_id/_count`` (i.e. this
+    runs after ``duplicate_set_checks``).
+    """
+    if "dq_duplicate_location_rows_flag" not in df.columns:
+        return df.sparkSession.createDataFrame([], LOCATION_MEMBERS_SCHEMA)
+
+    flagged = df.filter(f.col("dq_duplicate_location_rows_flag") == 1).withColumn(
+        "location_id", location_id_column()
+    )
+    file_members = flagged.select(
+        "school_id_govt",
+        *DUPLICATE_REPORT_DISPLAY_COLUMNS,
+        f.lit("file").alias("source"),
+        f.col("dq_duplicate_location_rows_id").alias("duplicate_location_rows_id"),
+        f.col("dq_duplicate_location_rows_count").alias(
+            "duplicate_location_rows_count"
+        ),
+        "row_num",
+    )
+
+    if reference is None:
+        return file_members
+
+    # The group's count is shared by every member, so any flagged file row's count
+    # broadcasts onto the master rows sharing its location_id.
+    group_counts = flagged.select(
+        "location_id", "dq_duplicate_location_rows_count"
+    ).distinct()
+    master_members = (
+        reference.withColumn("location_id", location_id_column())
+        .join(group_counts, on="location_id", how="inner")
+        .select(
+            "school_id_govt",
+            *DUPLICATE_REPORT_DISPLAY_COLUMNS,
+            f.lit("master").alias("source"),
+            hash_id_column(f.col("location_id")).alias("duplicate_location_rows_id"),
+            f.col("dq_duplicate_location_rows_count").alias(
+                "duplicate_location_rows_count"
+            ),
+            f.lit(MASTER_ROW_NUM).alias("row_num"),
+        )
+    )
+    return file_members.unionByName(master_members)
+
+
+def combine_duplicate_members(
+    location_members: sql.DataFrame, fifty_m_members: sql.DataFrame
+) -> sql.DataFrame:
+    """One row per physical file/master row in either duplicate group.
+
+    Joined on school_id_govt + source + row_num, not school_id_govt alone — a
+    school with multiple physical duplicate rows in the file would otherwise fan
+    out into a cross product between the two member frames.
+    """
+    join_key = ["school_id_govt", "source", "row_num"]
+    exact_location = location_members.select(
+        *join_key,
+        *[
+            f.col(c).alias(f"_exact_location_{c}")
+            for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
+        ],
+        "duplicate_location_rows_id",
+        "duplicate_location_rows_count",
+    )
+    fifty_m = fifty_m_members.select(
+        *join_key,
+        *[f.col(c).alias(f"_fifty_m_{c}") for c in DUPLICATE_REPORT_DISPLAY_COLUMNS],
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
+    )
+    return exact_location.join(fifty_m, on=join_key, how="full_outer").select(
+        "school_id_govt",
+        "source",
+        *[
+            f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
+            for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
+        ],
+        "duplicate_location_rows_id",
+        "duplicate_location_rows_count",
+        "duplicate_group_id_50m",
+        "duplicate_group_count_50m",
+    )
+
+
+def attach_approval_status(
+    duplicates_report: sql.DataFrame, dq_results: sql.DataFrame
+) -> sql.DataFrame:
+    """approval_status is only meaningful for "file" rows — master rows have no DQ
+    run of their own for this upload, so they stay NULL."""
+    relevant_ids = duplicates_report.select("school_id_govt").distinct()
+    approval = (
+        dq_results.join(relevant_ids, on="school_id_govt", how="inner")
+        .select("school_id_govt", "dq_has_critical_error")
+        .dropDuplicates(["school_id_govt"])
+        .withColumn(
+            "approval_status",
+            f.when(f.col("dq_has_critical_error") == 1, "rejected").otherwise(
+                "approved"
+            ),
+        )
+        .drop("dq_has_critical_error")
+    )
+    return duplicates_report.join(approval, on="school_id_govt", how="left")
+
+
 def _partition_graph_by_max_cliques(graph: nx.Graph) -> list:
     """Partition a graph into maximal cliques for duplicate grouping."""
 
@@ -211,9 +381,10 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
 
     duplicate_map = {}
     for members in groups:
-        group_id = hashlib.md5(
+        digest_hex = hashlib.md5(
             ",".join(str(m) for m in members).encode(), usedforsecurity=False
-        ).hexdigest()[:8]
+        ).hexdigest()
+        group_id = hash_id_str(digest_hex)
         for node in members:
             duplicate_map[node] = group_id
 
