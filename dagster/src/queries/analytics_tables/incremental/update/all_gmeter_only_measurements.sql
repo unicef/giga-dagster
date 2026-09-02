@@ -1,13 +1,10 @@
 
-INSERT INTO  delta_lake.default.all_mlab_only_measurements_incremental
+INSERT INTO  delta_lake.default.all_gmeter_only_measurements
 
 
 -- =============================================================================
 -- CTE: school_lookup
 -- Purpose: Creates a reusable lookup for school metadata with pre-computed timezone
---
--- IDENTICAL to GigaMeter script school_lookup CTE
--- Reused pattern ensures consistency across both source scripts
 --
 -- Timezone Fallback Chain:
 --   1. Try timezone by ISO3 code (tz.timezone)
@@ -23,7 +20,7 @@ WITH school_lookup AS (
         country.code AS iso2_code,
         -- RENAMED: iso3_format -> iso3_code for clarity
         UPPER(TRIM(country.iso3_format)) AS iso3_code,
-        -- PRE-COMPUTED: Timezone with fallback
+        -- PRE-COMPUTED: Timezone with fallback, eliminates JOINs in final SELECT
         COALESCE(tz.timezone, tz_name.timezone, 'UTC') AS timezone
     FROM
         gigameter_production_db.public.school
@@ -37,30 +34,24 @@ WITH school_lookup AS (
     LEFT JOIN default.country_timezones tz_name
         ON LOWER(country.name) = LOWER(tz_name.country)
     WHERE
-        -- FILTER: Exclude deleted schools at source
+        -- FILTER: Exclude deleted schools at source (was in final WHERE clause)
         school.deleted IS NULL
-       -- DEBUGGING: Uncomment to test specific school
-       -- and school.external_id = 'bw10ps006'
 ),
 
 
 -- =============================================================================
 -- CTE: measurements_base
--- Purpose: Extracts raw MLAB measurement data with minimal transformation
+-- Purpose: Extracts raw measurement data with minimal transformation
 --
--- DIFFERENCE from GigaMeter:
---   - Uses school_id field directly (government ID, not giga_id)
---   - Extracts client_country from JSON for school matching
---   - Filter: source = 'MLab'
+-- Filter: source = 'DailyCheckApp' (GigaMeter mobile app only)
 -- =============================================================================
 measurements_base AS (
     SELECT
         id AS measurement_id,
         uuid,
         giga_id_school AS school_id_giga,
-        -- MLAB uses school_id (government ID) directly from measurement
-        school_id as school_id_govt,
         created_at AS created_timestamp,
+        -- Date truncated to day for partitioning/filtering
         CAST(DATE_TRUNC('day', created_at) AS date) AS date,
         -- Raw values - conversion done later
         download,
@@ -69,11 +60,9 @@ measurements_base AS (
         data_downloaded,
         data_uploaded,
         data_usage,
+        -- JSON fields passed through for extraction in final SELECT
         results,
         client_info,
-        -- PRE-EXTRACT: Country code for school matching
-        -- Used in JOIN condition for school_lookup
-        json_extract_scalar(client_info, '$.Country') AS client_country,
         server_info,
         wifi_connections,
         ip_address,
@@ -92,7 +81,7 @@ measurements_base AS (
     FROM
         gigameter_production_db.public.measurements
     WHERE
-        source = 'MLab'  -- MLAB measurements only
+        source = 'DailyCheckApp'  -- GigaMeter app measurements only
         -- Incremental watermark: id is a guaranteed-unique, strictly-increasing
         -- integer, so this single comparison both selects new rows and
         -- guarantees no duplicates -- replaces the old 3-part timestamp
@@ -101,77 +90,66 @@ measurements_base AS (
         -- filtered separately, downstream in Dagster.
       AND id > (
           SELECT COALESCE(MAX(measurement_id), 0)
-         FROM delta_lake.default.all_mlab_only_measurements_incremental
+         FROM delta_lake.default.all_gmeter_only_measurements
       )
     ORDER BY measurement_id
     LIMIT 40000
+
 )
 
 
 -- =============================================================================
 -- CTE: measurements_enriched
 -- Purpose: Joins measurements with school lookup for enrichment
---
--- CRITICAL DIFFERENCE from GigaMeter:
---   JOIN uses client_country + school_id_govt (not school_id_giga)
---   This is because MLAB measurements don't have reliable giga_id_school
---
--- Original comment preserved:
---   "MLAB joins on school_id_govt + country, not school_id_giga"
 -- =============================================================================
 , measurements_enriched as (
+  SELECT
+      m.measurement_id,
+      m.uuid,
+      m.school_id_giga,
+      s.school_name,
+      s.school_id_govt,
+      s.country,
+      s.iso3_code,
+      -- Preserve timezone for timestamp
+      CAST(m.created_timestamp AS timestamp with time zone) as created_timestamp,
+      m.date,
+      -- TIMEZONE CONVERSION: Done here using pre-computed timezone from school_lookup
+      -- Original did this in final SELECT on combined dataset
+      CAST(at_timezone(m.created_timestamp, s.timezone) AS timestamp) AS local_created_timestamp,
+      -- Pass through raw values for final transformation
+      m.download,
+      m.upload,
+      m.latency,
+      m.data_downloaded,
+      m.data_uploaded,
+      m.data_usage,
+      m.results,
+      m.client_info,
+      m.server_info,
+      m.ip_address,
+      m.wifi_connections,
+      m.app_version,
+      m.notes,
+      m.browser_id,
+      m.device_id,
+      m.installed_path,
+      m.windows_username,
+      m.detected_latitude,
+      m.detected_longitude,
+      m.detected_location_is_flagged,
+      m.detected_location_distance,
+      m.detected_location_accuracy
+  FROM
+      measurements_base m
+  LEFT JOIN
+      school_lookup s
+      -- GigaMeter uses giga_id_school for school matching
+      ON m.school_id_giga = s.school_id_giga
 
-
-SELECT
-    m.measurement_id,
-    m.uuid,
-    -- NOTE: school_id_giga comes from school_lookup, not measurement
-    -- MLAB measurements may have NULL or unreliable giga_id_school
-    s.school_id_giga,
-    s.school_name,
-    s.school_id_govt,
-    s.country,
-    s.iso3_code,
-    CAST(m.created_timestamp AS timestamp with time zone) as created_timestamp,
-    m.date,
-    -- TIMEZONE CONVERSION: Done here using pre-computed timezone
-    CAST(at_timezone(m.created_timestamp, s.timezone) AS timestamp) AS local_created_timestamp,
-    m.download,
-    m.upload,
-    m.latency,
-    m.data_downloaded,
-    m.data_uploaded,
-    m.data_usage,
-    m.results,
-    m.client_info,
-    m.client_country,
-    m.server_info,
-    m.ip_address,
-    m.wifi_connections,
-    m.app_version,
-    m.notes,
-    m.browser_id,
-    m.device_id,
-    m.installed_path,
-    m.windows_username,
-    m.detected_latitude,
-    m.detected_longitude,
-    m.detected_location_is_flagged,
-    m.detected_location_distance,
-    m.detected_location_accuracy
-FROM
-    measurements_base m
-LEFT JOIN school_lookup s
-    -- MLAB JOIN CONDITION:
-    -- 1. Match country code from client_info to school's country
-    -- 2. Match school_id (government ID) from measurement to school's external_id
-    -- CAVEAT: If either doesn't match, school fields will be NULL
-    ON TRIM(m.client_country) = TRIM(s.iso2_code)
-    AND m.school_id_govt = s.school_id_govt
-
-
+ -- WHERE
+   --  m.date > cast('2024-01-01' as date)
 )
-
 
 
 
@@ -179,9 +157,13 @@ LEFT JOIN school_lookup s
 -- FINAL SELECT
 -- Purpose: Apply unit conversions, extract JSON fields, compute time analysis
 --
--- IDENTICAL STRUCTURE to GigaMeter script with two exceptions:
---   1. app_version uses COALESCE to default to 'mlab' when NULL
---   2. rt_source is 'Mlab' instead of 'GigaMeter'
+-- Key Transformations:
+--   - Speed: kbps -> Mbps (divide by 1000)
+--   - Data volumes: bytes -> GB (divide by 1000, then by 1048576)
+--   - JSON extraction for server_info, client_info, wifi_connections
+--   - Local time analysis (hour, day of week, school hours)
+--
+-- NO AGGREGATION: Each row is one measurement (unlike original with GROUP BY)
 -- =============================================================================
 select
     CAST(measurement_id AS BIGINT)                                                                   AS measurement_id,
@@ -218,23 +200,25 @@ select
     AS VARCHAR)                                                                                      AS measurement_time_window,
 
     -- -------------------------------------------------------------------------
-    -- Speed Metrics (kbps -> Mbps)
+    -- Speed Metrics
+    -- Conversion: kbps -> Mbps (divide by 1000)
     -- -------------------------------------------------------------------------
     ROUND(CAST((download / 1000) AS REAL), 2)                                                       AS download_speed,
-   -- ROUND(CAST((upload / 1000) AS REAL), 2)                                                         AS upload_speed,
+    --ROUND(CAST((upload / 1000) AS REAL), 2)                                                         AS upload_speed,
     CAST(latency AS BIGINT)                                                                          AS latency,
 
     -- -------------------------------------------------------------------------
-    -- Data Volume Metrics (bytes -> GB)
+    -- Data Volume Metrics
+    -- Conversion: bytes -> KB -> GB
     -- -------------------------------------------------------------------------
-    (ROUND(CAST((data_downloaded / 1000) AS real), 2) / 1048576) AS data_downloaded_gb,
-    (ROUND(CAST((data_uploaded / 1000) AS real), 2) / 1048576) AS data_uploaded_gb,
-    (ROUND(CAST((data_usage / 1000) AS real), 2) / 1048576) AS data_usage_gb,
+    (ROUND(CAST((data_downloaded / 1000) AS REAL), 2) / 1048576)                                    AS data_downloaded_gb,
+    (ROUND(CAST((data_uploaded / 1000) AS REAL), 2) / 1048576)                                      AS data_uploaded_gb,
+    (ROUND(CAST((data_usage / 1000) AS REAL), 2) / 1048576)                                         AS data_usage_gb,
 
     -- -------------------------------------------------------------------------
-    -- Server Detection (simplified from approx_most_frequent)
+    -- Server Detection
     -- -------------------------------------------------------------------------
-    CAST(JSON_EXTRACT(server_info, '$.City') AS VARCHAR) AS server_location,
+    CAST(JSON_EXTRACT(server_info, '$.City') AS VARCHAR)                                             AS server_location,
 
     -- -------------------------------------------------------------------------
     -- ISP/Client Information
@@ -246,40 +230,36 @@ select
     COALESCE(CAST(json_extract_scalar(client_info, '$.ASN.asn') AS VARCHAR),  CAST(json_extract_scalar(client_info, '$.ASN') AS VARCHAR))   AS detected_isp_asn,
 
 
-    CAST(JSON_EXTRACT(client_info, '$.IP') AS VARCHAR) AS detected_isp_ip_address,
-    CAST(client_country AS VARCHAR) AS client_country,
-    CAST(ip_address AS VARCHAR) AS ip_address,
+    CAST(JSON_EXTRACT(client_info, '$.IP') AS VARCHAR)                                              AS detected_isp_ip_address,
+    CAST(json_extract_scalar(client_info, '$.Country') AS VARCHAR)                                  AS client_country,
+    CAST(ip_address as VARCHAR)                                                                     AS ip_address,
 
-    -- MLAB-SPECIFIC: Default app_version to 'mlab' when NULL
-    -- Original hardcoded 'mlab' AS app_version; this preserves actual version if present
-    CAST(COALESCE(app_version, 'mlab') AS VARCHAR) as app_version,
-    CAST('Mlab' AS VARCHAR) as rt_source,                 -- MLAB source identifier
-    CAST(notes AS VARCHAR) as notes,
+    CAST(app_version AS VARCHAR)                                                                     AS app_version,
+    CAST('GigaMeter' AS VARCHAR)                                                                     AS rt_source,
+    CAST(notes AS VARCHAR)                                                                           AS notes,
 
     -- -------------------------------------------------------------------------
     -- WiFi Connection Details
     -- -------------------------------------------------------------------------
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].ssid') AS VARCHAR) AS detected_wifi_ssid,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].model') AS VARCHAR) AS detected_wifi_model,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].quality') AS INTEGER) AS detected_wifi_quality,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].signalLevel') AS DECIMAL(10,2)) AS detected_wifi_signal,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].txRate') AS INTEGER) AS detected_wifi_tx_rate,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].channel') AS INTEGER) AS detected_wifi_channel,
-    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].frequency') AS INTEGER) AS detected_wifi_frequency,
-
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].ssid') AS VARCHAR)               AS detected_wifi_ssid,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].model') AS VARCHAR)              AS detected_wifi_model,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].quality') AS INTEGER)            AS detected_wifi_quality,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].signalLevel') AS DECIMAL(10,2))  AS detected_wifi_signal,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].txRate') AS INTEGER)             AS detected_wifi_tx_rate,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].channel') AS INTEGER)            AS detected_wifi_channel,
+    CAST(json_extract_scalar(CAST(wifi_connections AS JSON), '$[0].frequency') AS INTEGER)          AS detected_wifi_frequency,
 
     -- -------------------------------------------------------------------------
     -- Device Identification
     -- -------------------------------------------------------------------------
-    CAST(browser_id AS VARCHAR) AS browser_id,
-    CAST(device_id AS VARCHAR) AS device_id,
-
+    CAST(browser_id AS VARCHAR)                                                                      AS browser_id,
+    CAST(device_id AS VARCHAR)                                                                       AS device_id,
 
     -- -------------------------------------------------------------------------
     -- Installation
     -- -------------------------------------------------------------------------
-    CAST(installed_path AS VARCHAR) AS installed_path,
-    CAST(windows_username AS VARCHAR) AS windows_username,
+    CAST(installed_path AS VARCHAR)                                                                  AS installed_path,
+    CAST(windows_username AS VARCHAR)                                                                AS windows_username,
 
     -- -------------------------------------------------------------------------
     -- Geolocation (available from app version 2.0.3+)
@@ -290,29 +270,21 @@ select
     CAST(detected_location_distance AS DOUBLE)                                                       AS detected_location_distance,
     CAST(detected_location_accuracy AS DOUBLE)                                                       AS detected_location_accuracy,
 
-
--- -------------------------------------------------------------------------
-          -- Packet Loss Indicators (S2C - Server to Client)
-    -- Extracted from results JSON: NDTResult.S2C.LastServerMeasurement.TCPInfo
+    -- -------------------------------------------------------------------------
+    -- Packet Loss Indicators (S2C - Server to Client)
     -- -------------------------------------------------------------------------
     CAST(json_extract_scalar(CAST(results AS JSON), '$["NDTResult.S2C"].LastServerMeasurement.TCPInfo.Lost') AS INTEGER)         AS s2c_lost,
     CAST(json_extract_scalar(CAST(results AS JSON), '$["NDTResult.S2C"].LastServerMeasurement.TCPInfo.BytesRetrans') AS DOUBLE)  AS s2c_bytes_retrans,
     CAST(json_extract_scalar(CAST(results AS JSON), '$["NDTResult.S2C"].LastServerMeasurement.TCPInfo.BytesSent') AS DOUBLE)     AS s2c_bytes_sent,
-   ---------------
-    -- elapsed time --
-    ---------------
-    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C"].LastClientMeasurement.ElapsedTime') AS VARCHAR) AS s2c_lastclient_elapsed_time,  -- download  time
-    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.C2S"].LastClientMeasurement.ElapsedTime') AS VARCHAR) AS c2s_lastclient_elapsed_time,  -- upload time
-    ---------------
-    -- DATA SIZE --
-    ---------------
-    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C"].LastServerMeasurement.TCPInfo.BytesAcked') AS VARCHAR) AS s2c_bytes_Acked,       -- download size
-    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.C2S"].LastServerMeasurement.TCPInfo.BytesAcked') AS VARCHAR) AS c2s_bytes_Acked,       -- upload size
-    -------
-    -- json
-    -------
-    CAST(JSON_FORMAT(CAST(JSON_EXTRACT(results, '$["NDTResult.S2C"].LastServerMeasurement') AS JSON)) AS VARCHAR) AS s2c_FinalSnapshot,   --  download json populated
-    CAST(JSON_FORMAT(CAST(JSON_EXTRACT(results, '$["NDTResult.C2S"].LastServerMeasurement') AS JSON)) AS VARCHAR) AS c2s_FinalSnapshot,   --  upload json populated
+
+    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C"].LastClientMeasurement.ElapsedTime') AS VARCHAR)                     AS s2c_lastclient_elapsed_time,
+    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.C2S"].LastClientMeasurement.ElapsedTime') AS VARCHAR)                     AS c2s_lastclient_elapsed_time,
+
+    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C"].LastServerMeasurement.TCPInfo.BytesAcked') AS VARCHAR)              AS s2c_bytes_Acked,
+    CAST(JSON_EXTRACT_SCALAR(results, '$["NDTResult.C2S"].LastServerMeasurement.TCPInfo.BytesAcked') AS VARCHAR)              AS c2s_bytes_Acked,
+
+    CAST(JSON_FORMAT(CAST(JSON_EXTRACT(results, '$["NDTResult.S2C"].LastServerMeasurement') AS JSON)) AS VARCHAR)             AS s2c_FinalSnapshot,
+    CAST(JSON_FORMAT(CAST(JSON_EXTRACT(results, '$["NDTResult.C2S"].LastServerMeasurement') AS JSON)) AS VARCHAR)             AS c2s_FinalSnapshot,
 
     -- -------------------------------------------------------------------------
     -- NDT-7 Upload (C2S) TCP-based duration/bytes
@@ -361,23 +333,3 @@ select
 
 FROM
   measurements_enriched
-
--- =============================================================================
--- MLAB-SPECIFIC NOTES
---
--- 1. SCHOOL MATCHING RELIABILITY
---    - MLAB uses client_info.Country + school_id (govt ID) for matching
---    - Less reliable than GigaMeter which uses giga_id_school directly
---    - Unmatched measurements will have NULL school metadata
---    - Consider data quality checks on match rate
---
--- 2. APP VERSION
---    - MLAB measurements often have NULL app_version
---    - COALESCE defaults to 'mlab' for identification
---    - Original script hardcoded 'mlab' AS app_version
---
--- 3. DOWNSTREAM JOIN
---    - Script 3 joins MLAB data on school_id_govt + iso3_code
---    - This differs from GigaMeter which joins on school_id_giga
---    - Maintains original matching logic for consistency
--- =============================================================================

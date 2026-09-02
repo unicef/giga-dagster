@@ -1,15 +1,9 @@
-
-
-
-  DROP TABLE IF EXISTS default.all_gmeter_only_measurements;
-
-  CREATE TABLE default.all_gmeter_only_measurements
+CREATE TABLE delta_lake.default.all_gmeter_only_measurements
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gmeter_only_measurements',
     partitioned_by = ARRAY['country']
 )
-as (
-
+AS
 
 -- =============================================================================
 -- CTE: school_lookup
@@ -91,6 +85,8 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
+    ORDER BY measurement_id
+    LIMIT 40000
 
 )
 
@@ -201,7 +197,7 @@ select
     -- Conversion: kbps -> Mbps (divide by 1000)
     -- -------------------------------------------------------------------------
     ROUND(CAST((download / 1000) AS REAL), 2)                                                       AS download_speed,
-   -- ROUND(CAST((upload / 1000) AS REAL), 2)                                                         AS upload_speed,
+    --ROUND(CAST((upload / 1000) AS REAL), 2)                                                         AS upload_speed,
     CAST(latency AS BIGINT)                                                                          AS latency,
 
     -- -------------------------------------------------------------------------

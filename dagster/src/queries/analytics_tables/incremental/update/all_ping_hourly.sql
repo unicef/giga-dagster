@@ -5,7 +5,7 @@
 -- This table is a GROUP BY aggregation (one row per school+device+hour), unlike
 -- the other 4 incremental scripts which are flat, per-measurement rows. A plain
 -- INSERT can't safely correct an already-written bucket without duplicating its
--- key and double-counting downstream (all_ping_daily_incremental sums
+-- key and double-counting downstream (all_ping_daily sums
 -- ping_records by day off this table) -- so late-arriving pings are handled via
 -- MERGE: insert new (settled) buckets, replace a bucket in place if reconciliation
 -- finds its raw ping ids changed since it was last written.
@@ -21,7 +21,7 @@
 --      corrected aggregate.
 -- =============================================================================
 
-MERGE INTO delta_lake.default.all_ping_hourly_incremental AS target
+MERGE INTO delta_lake.default.all_ping_hourly AS target
 USING (
 
 
@@ -86,7 +86,7 @@ WITH school_lookup AS (
     WHERE
       cpc.timestamp >= (
           SELECT COALESCE(MAX(local_date_hour), TIMESTAMP '2022-01-01 00:00:00')
-          FROM delta_lake.default.all_ping_hourly_incremental
+          FROM delta_lake.default.all_ping_hourly
       ) - INTERVAL '72' HOUR
 )
 
@@ -134,7 +134,7 @@ ON
 WHERE
   CAST(at_timezone(pb.timestamp, sl.timezone) AS TIMESTAMP) >= (
       SELECT COALESCE(MAX(local_date_hour), TIMESTAMP '2022-01-01 00:00:00')
-      FROM delta_lake.default.all_ping_hourly_incremental
+      FROM delta_lake.default.all_ping_hourly
   ) - INTERVAL '48' HOUR
 
  )

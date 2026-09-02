@@ -9,9 +9,9 @@ Scripts are organised into three folders based on their execution model:
 ## Folders
 
 ### [`daily/`](daily/README.md)
-Production scripts executed once per day via Dagster. This is the main pipeline — 24 scripts covering the full measurement, registration, aggregation, and regional reporting layers.
+Production scripts executed once per day via Dagster. This is the main pipeline — 20 scripts covering the full measurement, registration, aggregation, and regional reporting layers. (Steps 1–4 of the measurement pipeline and the ping tables have already moved to the incremental model below.)
 
-Some of these scripts are planned for conversion to the incremental model (hourly cadence) in a future sprint. See the daily README for details.
+Some of the remaining scripts are planned for conversion to the incremental model (hourly cadence) in a future sprint. See the daily README for details.
 
 ### [`incremental/`](incremental/README.md)
 Scripts that run on an **hourly cadence** using an incremental insert pattern — new records are appended rather than the full table being recreated. Currently covers the 4 core measurement pipeline steps (Steps 1–4) plus the ping tables. Additional scripts (registration, regional) will be added in future iterations.

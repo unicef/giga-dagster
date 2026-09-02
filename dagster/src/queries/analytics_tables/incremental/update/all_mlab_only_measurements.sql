@@ -1,9 +1,5 @@
-CREATE TABLE delta_lake.default.all_mlab_only_measurements_incremental
-WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_mlab_only_measurements_incremental',
-    partitioned_by = ARRAY['country']
-)
-AS
+
+INSERT INTO  delta_lake.default.all_mlab_only_measurements
 
 
 -- =============================================================================
@@ -97,6 +93,16 @@ measurements_base AS (
         gigameter_production_db.public.measurements
     WHERE
         source = 'MLab'  -- MLAB measurements only
+        -- Incremental watermark: id is a guaranteed-unique, strictly-increasing
+        -- integer, so this single comparison both selects new rows and
+        -- guarantees no duplicates -- replaces the old 3-part timestamp
+        -- watermark + NOT IN dedup + future-date guard (expensive, and broke
+        -- on table recreate/backfill). Future-dated source rows are now
+        -- filtered separately, downstream in Dagster.
+      AND id > (
+          SELECT COALESCE(MAX(measurement_id), 0)
+         FROM delta_lake.default.all_mlab_only_measurements
+      )
     ORDER BY measurement_id
     LIMIT 40000
 )
@@ -355,9 +361,6 @@ select
 
 FROM
   measurements_enriched
-
-
-;
 
 -- =============================================================================
 -- MLAB-SPECIFIC NOTES
