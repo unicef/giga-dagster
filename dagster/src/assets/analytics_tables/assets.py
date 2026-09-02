@@ -119,21 +119,6 @@ def country_versions(context: OpExecutionContext) -> None:
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
-def all_gmeter_only_measurements(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
-def all_mlab_only_measurements(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
-def all_ping_hourly(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
 def bra_nicbr_daily(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -161,16 +146,6 @@ def all_school_master(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["daily", "all_ping_hourly"])],
-    compute_kind="trino",
-)
-def all_ping_daily(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(
-    key_prefix=["daily"],
-    group_name="daily",
     deps=[AssetKey(["daily", "bra_nicbr_daily"])],
     compute_kind="trino",
 )
@@ -182,21 +157,8 @@ def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
-        AssetKey(["daily", "all_mlab_only_measurements"]),
-    ],
-    compute_kind="trino",
-)
-def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(
-    key_prefix=["daily"],
-    group_name="daily",
-    deps=[
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
-        AssetKey(["daily", "all_mlab_only_measurements"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
     ],
     compute_kind="trino",
 )
@@ -208,24 +170,8 @@ def isp_asn_country_mapping(context: OpExecutionContext) -> None:
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["daily", "all_gigameter_valid_test_checker"]),
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
-        AssetKey(["daily", "all_mlab_only_measurements"]),
-        AssetKey(["daily", "all_school_master"]),
-        AssetKey(["daily", "isp_asn_country_mapping"]),
-    ],
-    compute_kind="trino",
-)
-def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
-    _run_daily(context)
-
-
-@asset(
-    key_prefix=["daily"],
-    group_name="daily",
-    deps=[
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
-        AssetKey(["daily", "all_mlab_only_measurements"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
@@ -237,7 +183,7 @@ def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> N
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["daily", "all_gigameter_measurement_data"])],
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
 def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
@@ -247,7 +193,7 @@ def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["daily", "all_gigameter_measurement_data"])],
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
 def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
@@ -258,7 +204,7 @@ def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
@@ -272,8 +218,8 @@ def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
     group_name="daily",
     deps=[
         AssetKey(["daily", "all_school_master"]),
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
-        AssetKey(["daily", "all_mlab_only_measurements"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
     ],
     compute_kind="trino",
 )
@@ -285,8 +231,8 @@ def all_gigameter_funnelsummary(context: OpExecutionContext) -> None:
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
-        AssetKey(["daily", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
     ],
     compute_kind="trino",
 )
@@ -298,7 +244,7 @@ def all_gigameter_school_consistency_history(context: OpExecutionContext) -> Non
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
@@ -312,7 +258,7 @@ def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
     group_name="daily",
     deps=[
         AssetKey(["daily", "all_gigameter_appversion_funnel"]),
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
@@ -340,8 +286,8 @@ def all_gigameter_registered_tb_physical(context: OpExecutionContext) -> None:
     group_name="daily",
     deps=[
         AssetKey(["daily", "all_gigameter_appversion_funnel"]),
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
-        AssetKey(["daily", "all_ping_daily"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_ping_daily"]),
     ],
     compute_kind="trino",
 )
@@ -352,7 +298,7 @@ def all_gigameter_inc_ping_daily(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["daily", "all_gigameter_measurement_data"])],
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
 def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
@@ -365,7 +311,7 @@ def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
     deps=[
         AssetKey(["daily", "all_gigameter_registered_schools"]),
         AssetKey(["daily", "all_gigameter_appversion_funnel"]),
-        AssetKey(["daily", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
     ],
     compute_kind="trino",
 )
@@ -376,7 +322,7 @@ def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["incremental", "all_gigameter_measurement_data_incremental"])],
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
 def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> None:
@@ -389,12 +335,12 @@ def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> N
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
-def all_gmeter_only_measurements_incremental(context: OpExecutionContext) -> None:
+def all_gmeter_only_measurements(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
-def all_mlab_only_measurements_incremental(context: OpExecutionContext) -> None:
+def all_mlab_only_measurements(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
@@ -402,12 +348,12 @@ def all_mlab_only_measurements_incremental(context: OpExecutionContext) -> None:
     key_prefix=["incremental"],
     group_name="incremental",
     deps=[
-        AssetKey(["incremental", "all_gmeter_only_measurements_incremental"]),
-        AssetKey(["incremental", "all_mlab_only_measurements_incremental"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
     ],
     compute_kind="trino",
 )
-def all_gigameter_valid_test_checker_incremental(context: OpExecutionContext) -> None:
+def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
@@ -415,28 +361,28 @@ def all_gigameter_valid_test_checker_incremental(context: OpExecutionContext) ->
     key_prefix=["incremental"],
     group_name="incremental",
     deps=[
-        AssetKey(["incremental", "all_gigameter_valid_test_checker_incremental"]),
-        AssetKey(["incremental", "all_gmeter_only_measurements_incremental"]),
-        AssetKey(["incremental", "all_mlab_only_measurements_incremental"]),
+        AssetKey(["incremental", "all_gigameter_valid_test_checker"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
         AssetKey(["daily", "all_school_master"]),
         AssetKey(["daily", "isp_asn_country_mapping"]),
     ],
     compute_kind="trino",
 )
-def all_gigameter_measurement_data_incremental(context: OpExecutionContext) -> None:
+def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
-def all_ping_hourly_incremental(context: OpExecutionContext) -> None:
+def all_ping_hourly(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(
     key_prefix=["incremental"],
     group_name="incremental",
-    deps=[AssetKey(["incremental", "all_ping_hourly_incremental"])],
+    deps=[AssetKey(["incremental", "all_ping_hourly"])],
     compute_kind="trino",
 )
-def all_ping_daily_incremental(context: OpExecutionContext) -> None:
+def all_ping_daily(context: OpExecutionContext) -> None:
     _run_incremental(context)

@@ -1,5 +1,5 @@
 
-INSERT INTO delta_lake.default.all_gigameter_valid_test_checker_incremental
+INSERT INTO delta_lake.default.all_gigameter_valid_test_checker
 
 
 
@@ -10,18 +10,18 @@ INSERT INTO delta_lake.default.all_gigameter_valid_test_checker_incremental
 -- Combines GigaMeter and MLab measurements via UNION ALL
 -- ============================================================
 WITH data AS (
-  SELECT m1.* FROM delta_lake.default.all_gmeter_only_measurements_incremental  m1
+  SELECT m1.* FROM delta_lake.default.all_gmeter_only_measurements  m1
   -- ID FILTERING: measurement_id is strictly increasing, so this single
   -- comparison selects new rows and guarantees no duplicates -- cheaper and
   -- more scalable than NOT IN (a full anti-join against a growing table)
   WHERE m1.measurement_id > (
-    SELECT COALESCE(MAX(measurement_id), 0) FROM delta_lake.default.all_gigameter_valid_test_checker_incremental
+    SELECT COALESCE(MAX(measurement_id), 0) FROM delta_lake.default.all_gigameter_valid_test_checker
   )
   UNION ALL
-  SELECT m2.* FROM delta_lake.default.all_mlab_only_measurements_incremental m2
+  SELECT m2.* FROM delta_lake.default.all_mlab_only_measurements m2
   -- ID FILTERING
   WHERE m2.measurement_id > (
-    SELECT COALESCE(MAX(measurement_id), 0) FROM delta_lake.default.all_gigameter_valid_test_checker_incremental
+    SELECT COALESCE(MAX(measurement_id), 0) FROM delta_lake.default.all_gigameter_valid_test_checker
   )
 ),
 

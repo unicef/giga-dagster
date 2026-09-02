@@ -52,12 +52,18 @@ sizing and stop-point reasoning.
 
 | Script | Cadence | Creates Table | Purpose | Depends On |
 |---|---|---|---|---|
-| `all_gmeter_only_measurements_incremental.sql` | Hourly | `default.all_gmeter_only_measurements_incremental` | GigaMeter app raw measurements — incremental Step 1 | `gigameter_production_db` |
-| `all_mlab_only_measurements_incremental.sql` | Hourly | `default.all_mlab_only_measurements_incremental` | MLab network test measurements — incremental Step 2 | `gigameter_production_db` |
-| `all_gigameter_valid_test_checker_incremental.sql` | Hourly | `default.all_gigameter_valid_test_checker_incremental` | Per-measurement quality validation — incremental Step 3 | Steps 1 & 2 incremental |
-| `all_gigameter_measurement_data_incremental.sql` | Hourly | `default.all_gigameter_measurement_data_incremental` | Consolidated validated measurements — incremental Step 4 | Steps 1, 2, & 3 incremental |
-| `all_ping_hourly_incremental.sql` | Hourly | `default.all_ping_hourly_incremental` | Hourly ping/uptime aggregation per device-school (`MERGE`, not `INSERT` — see above) | `gigameter_production_db.connectivity_ping_checks` |
-| `all_ping_daily_incremental.sql` | Daily | `default.all_ping_daily_incremental` | Daily ping aggregation | `all_ping_hourly_incremental` |
+| `all_gmeter_only_measurements.sql` | Hourly | `default.all_gmeter_only_measurements` | GigaMeter app raw measurements — incremental Step 1 | `gigameter_production_db` |
+| `all_mlab_only_measurements.sql` | Hourly | `default.all_mlab_only_measurements` | MLab network test measurements — incremental Step 2 | `gigameter_production_db` |
+| `all_gigameter_valid_test_checker.sql` | Hourly | `default.all_gigameter_valid_test_checker` | Per-measurement quality validation — incremental Step 3 | Steps 1 & 2 incremental |
+| `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4 | Steps 1, 2, & 3 incremental |
+| `all_ping_hourly.sql` | Hourly | `default.all_ping_hourly` | Hourly ping/uptime aggregation per device-school (`MERGE`, not `INSERT` — see above) | `gigameter_production_db.connectivity_ping_checks` |
+| `all_ping_daily.sql` | Daily | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
+
+Script filenames and their `@asset` function names dropped the `_incremental` suffix as part of
+the dev→prod cutover (mirrors `unicef/giga-data-analytics#25`) — each now writes directly to the
+same table name the retired `daily/` script used to own, since downstream consumers (other daily
+assets, Superset dashboards) already read that plain name. The `key_prefix=["incremental"]` on
+each `@asset` still keeps the Dagster `AssetKey` distinct from any same-named daily asset.
 
 Run each chain in order; each step depends on the previous within its own chain. The ping chain
 is independent of the measurement chain (Steps 1–4) — neither depends on the other.
@@ -68,20 +74,26 @@ is independent of the measurement chain (Steps 1–4) — neither depends on the
 
 ```
 Measurement chain (hourly):
-Step 1:  all_gmeter_only_measurements_incremental
-Step 2:  all_mlab_only_measurements_incremental
-Step 3:  all_gigameter_valid_test_checker_incremental
-Step 4:  all_gigameter_measurement_data_incremental
+Step 1:  all_gmeter_only_measurements
+Step 2:  all_mlab_only_measurements
+Step 3:  all_gigameter_valid_test_checker
+Step 4:  all_gigameter_measurement_data
 
 Ping chain (mixed cadence):
-Step 1:  all_ping_hourly_incremental   (hourly)
-Step 2:  all_ping_daily_incremental    (daily — must run after that day's hourly buckets have settled)
+Step 1:  all_ping_hourly   (hourly)
+Step 2:  all_ping_daily    (daily — must run after that day's hourly buckets have settled)
 ```
 
 ---
 
 ## Relationship to Daily Scripts
 
-These scripts create **separate tables** (with `_incremental` suffix) that run in parallel with the existing daily equivalents in [`../daily/`](../daily/README.md) while validation is ongoing. Once confirmed working in production, the daily versions of Steps 1–4 and `all_ping_hourly` / `all_ping_daily` will be retired.
+These scripts are now the sole producers of Steps 1–4 and the two ping tables — the daily
+versions and `@asset` functions in [`../daily/`](../daily/README.md) that used to create
+`all_gmeter_only_measurements`, `all_mlab_only_measurements`, `all_gigameter_valid_test_checker`,
+`all_gigameter_measurement_data`, `all_ping_hourly`, and `all_ping_daily` have been retired. Every
+other script in `../daily/` that reads one of these tables is unaffected — it keeps reading the
+same table name via an updated `deps=[AssetKey(["incremental", ...])]`, now populated
+hourly/daily by the scripts here instead of being dropped and recreated once a day.
 
 Next up for conversion: `mng_gigameter_qos_measurements` and `bra_nicbr_daily` (daily aggregations, same pattern as the ping chain), then `all_gigameter_registered_schools` and `all_gigameter_registered_devices` — those two are full school/device-state snapshots rather than append-only event aggregations, so they'll need a different conversion approach, not a direct copy of this pattern.

@@ -1,5 +1,5 @@
 
- INSERT INTO delta_lake.default.all_gigameter_measurement_data_incremental
+ INSERT INTO delta_lake.default.all_gigameter_measurement_data
 
 --STEP 4b
 
@@ -16,18 +16,19 @@ WITH  measure AS (
       s1.admin1,
       s1.admin2,
       s1.connectivity,
-      s1.connectivity_type_govt,
+      s1.connectivity_type,
       s1.cellular_coverage_type,
       s1.education_level,
       s1.electricity_availability,
       s1.fiber_node_distance,
       s1.school_area_type,
       s1.school_funding_type,
+      s1.download_speed_contracted,
       --s1.deleted,                      -- REMOVED: Filtered upstream
       s1.latitude,
       s1.longitude
     FROM
-      delta_lake.default.all_gmeter_only_measurements_incremental m1
+      delta_lake.default.all_gmeter_only_measurements m1
     LEFT JOIN
       default.all_school_master s1
     on
@@ -36,13 +37,13 @@ WITH  measure AS (
 
       -- Incremental watermark: id is strictly increasing, so this single
       -- comparison selects new rows and guarantees no duplicates. Checked
-      -- against this table's OWN target (all_gigameter_measurement_data_incremental)
+      -- against this table's OWN target (all_gigameter_measurement_data)
       -- -- a prior version of this filter incorrectly checked m1 for
       -- membership against the table m1 was itself selected FROM, which is
       -- always true and filtered nothing.
       WHERE m1.measurement_id > (
           SELECT COALESCE(MAX(measurement_id), 0)
-         FROM delta_lake.default.all_gigameter_measurement_data_incremental
+         FROM delta_lake.default.all_gigameter_measurement_data
       )
 
 UNION ALL
@@ -63,18 +64,19 @@ UNION ALL
       s2.admin1,
       s2.admin2,
       s2.connectivity,
-      s2.connectivity_type_govt,
+      s2.connectivity_type,
       s2.cellular_coverage_type,
       s2.education_level,
       s2.electricity_availability,
       s2.fiber_node_distance,
       s2.school_area_type,
       s2.school_funding_type,
+      s2.download_speed_contracted,
      -- s2.deleted,                       -- REMOVED: Filtered upstream
       s2.latitude,
       s2.longitude
     FROM
-      delta_lake.default.all_mlab_only_measurements_incremental m2
+      delta_lake.default.all_mlab_only_measurements m2
     LEFT JOIN
       default.all_school_master s2
     on
@@ -86,7 +88,7 @@ UNION ALL
       -- checked against this table's own target.
       WHERE m2.measurement_id > (
           SELECT COALESCE(MAX(measurement_id), 0)
-         FROM delta_lake.default.all_gigameter_measurement_data_incremental
+         FROM delta_lake.default.all_gigameter_measurement_data
       )
 
 
@@ -170,13 +172,13 @@ SELECT
     -- -------------------------------------------------------------------------
     -- WiFi Connection Details
     -- -------------------------------------------------------------------------
-    CAST(m.detected_wifi_ssid AS VARCHAR) AS detected_wifi_ssid,
-    CAST(m.detected_wifi_model AS VARCHAR) AS detected_wifi_model,
-    CAST(m.detected_wifi_quality AS INTEGER) AS detected_wifi_quality,
-    CAST(m.detected_wifi_signal AS DECIMAL(10,2)) AS detected_wifi_signal,
-    CAST(m.detected_wifi_tx_rate AS INTEGER) AS detected_wifi_tx_rate,
-    CAST(m.detected_wifi_channel AS INTEGER) AS detected_wifi_channel,
-    CAST(m.detected_wifi_frequency AS INTEGER) AS detected_wifi_frequency,
+    CAST(m.detected_wifi_ssid AS VARCHAR) AS wifi_ssid,
+    CAST(m.detected_wifi_model AS VARCHAR) AS wifi_model,
+    CAST(m.detected_wifi_quality AS INTEGER) AS wifi_quality,
+    CAST(m.detected_wifi_signal AS DECIMAL(10,2)) AS wifi_signal,
+    CAST(m.detected_wifi_tx_rate AS INTEGER) AS wifi_tx_rate,
+    CAST(m.detected_wifi_channel AS INTEGER) AS wifi_channel,
+    CAST(m.detected_wifi_frequency AS INTEGER) AS wifi_frequency,
 
     -- -------------------------------------------------------------------------
     -- Device Identification
@@ -226,34 +228,20 @@ SELECT
     cast(m.s2c_bytes_retrans as BIGINT)  / NULLIF(cast(m.s2c_bytes_sent as DECIMAL(18,6)) , 0) as packet_loss_rate,       -- NEW: download packet loss percentage
 
     -- -------------------------------------------------------------------------
-    -- BACKWARDS COMPATIBILITY ALIASES
-    -- These alias raw values as avg_*/total_* for existing dashboard compatibility
-    -- TODO: Remove after single country dashboard built and tested
-    -- -------------------------------------------------------------------------
-    CAST(m.download_speed AS REAL) as avg_download_speed,           -- Alias: In Mbps
-    CAST(m.upload_speed AS REAL) as avg_upload_speed,               -- Alias: In Mbps
-    CAST(m.latency AS BIGINT) as avg_latency,                         -- Alias: In milliseconds
-    CAST(m.data_downloaded_gb AS REAL) as avg_data_downloaded_gb,   -- Alias: In GB
-    CAST(m.data_uploaded_gb AS REAL) as avg_data_uploaded_gb,       -- Alias: In GB
-    CAST(m.data_usage_gb AS REAL) as avg_data_usage_gb,             -- Alias: In GB
-    CAST(m.data_downloaded_gb AS REAL) as total_data_downloaded_gb, -- Alias: In GB
-    CAST(m.data_uploaded_gb AS REAL) as total_data_uploaded_gb,     -- Alias: In GB
-    CAST(m.data_usage_gb AS REAL) as total_data_usage_gb,           -- Alias: In GB
-
-    -- -------------------------------------------------------------------------
     -- School Master Enrichment Fields
     -- Added via JOINs in measure CTE
     -- -------------------------------------------------------------------------
     CAST(m.admin1 AS VARCHAR) AS admin1,
     CAST(m.admin2 AS VARCHAR) AS admin2,
     CAST(m.connectivity AS VARCHAR) AS connectivity,
-    CAST(m.connectivity_type_govt AS VARCHAR) AS connectivity_type_govt,
+    CAST(m.connectivity_type AS VARCHAR) AS connectivity_type,
     CAST(m.cellular_coverage_type AS VARCHAR) AS cellular_coverage_type,
     CAST(m.education_level AS VARCHAR) AS education_level,
     CAST(m.electricity_availability AS VARCHAR) AS electricity_availability,
     CAST(m.fiber_node_distance AS DOUBLE) AS fiber_node_distance,
     CAST(m.school_area_type AS VARCHAR) AS school_area_type,
     CAST(m.school_funding_type AS VARCHAR) AS school_funding_type,
+    CAST(m.download_speed_contracted AS VARCHAR) AS download_speed_contracted,
     --m.deleted,                          -- REMOVED: Filtered upstream
     CAST(m.latitude AS DOUBLE) AS latitude,
     CAST(m.longitude AS DOUBLE) AS longitude,
@@ -312,7 +300,7 @@ SELECT
 FROM
   measure m
 LEFT JOIN
-  delta_lake.default.all_gigameter_valid_test_checker_incremental  mf
+  delta_lake.default.all_gigameter_valid_test_checker  mf
 on
   m.measurement_id = mf.measurement_id
 -- JOIN: ISP/ASN canonical mapping -- see isp_asn_country_mapping.sql

@@ -19,9 +19,9 @@
 
 
 -- CHUNK 1 of 10: 2018-01-01 00:00:00 -> 2025-12-31 00:00:00  (bootstrap CREATE)
-CREATE TABLE delta_lake.default.all_ping_hourly_incremental
+CREATE TABLE delta_lake.default.all_ping_hourly
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_hourly_incremental',
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_ping_hourly',
     partitioned_by = ARRAY['country']
 )
 AS (
@@ -209,7 +209,7 @@ FROM
 ;
 
 -- CHUNK 2 of 10: 2025-12-31 00:00:00 -> 2026-01-30 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -398,7 +398,7 @@ FROM
 ;
 
 -- CHUNK 3 of 10: 2026-01-30 00:00:00 -> 2026-02-14 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -587,7 +587,7 @@ FROM
 ;
 
 -- CHUNK 4 of 10: 2026-02-14 00:00:00 -> 2026-03-03 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -776,7 +776,7 @@ FROM
 ;
 
 -- CHUNK 5 of 10: 2026-03-03 00:00:00 -> 2026-03-19 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -965,7 +965,7 @@ FROM
 ;
 
 -- CHUNK 6 of 10: 2026-03-19 00:00:00 -> 2026-04-10 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -1154,7 +1154,7 @@ FROM
 ;
 
 -- CHUNK 7 of 10: 2026-04-10 00:00:00 -> 2026-04-28 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -1343,7 +1343,7 @@ FROM
 ;
 
 -- CHUNK 8 of 10: 2026-04-28 00:00:00 -> 2026-05-15 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -1532,7 +1532,7 @@ FROM
 ;
 
 -- CHUNK 9 of 10: 2026-05-15 00:00:00 -> 2026-06-27 00:00:00
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
@@ -1721,7 +1721,7 @@ FROM
 ;
 
 -- CHUNK 10 of 10: 2026-06-27 00:00:00 -> 2026-08-15 00:00:00  (stop point -- update/ takes the tail from here)
-INSERT INTO delta_lake.default.all_ping_hourly_incremental
+INSERT INTO delta_lake.default.all_ping_hourly
 (
     local_created_date, local_date_hour, local_date_minus_1hr, local_hour,
     device_id, school_id_govt, school_id_giga, school_name, country, admin1, admin2,
