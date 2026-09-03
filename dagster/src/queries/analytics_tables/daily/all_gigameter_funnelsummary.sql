@@ -2,7 +2,7 @@
 
 
 
--- ==============================================================================
+-- =============================================================================
 -- Script Name:     all_gigameter_funnelsummary.sql
 -- Table Created:   default.all_gigameter_funnelsummary
 -- Schema:          default
