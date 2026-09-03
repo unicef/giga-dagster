@@ -40,8 +40,8 @@ WITH vt_union AS (
 
 
 -- Africa
--- UNION ALL SELECT 'ago' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ago$history" -- Angola
-SELECT 'ben' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ben$history" -- Benin
+ SELECT 'ago' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ago$history" -- Angola
+ UNION ALL SELECT 'ben' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ben$history" -- Benin
  UNION ALL SELECT 'bfa' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."bfa$history" -- Burkina Faso
  UNION ALL SELECT 'bwa' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."bwa$history" -- Botswana
  UNION ALL SELECT 'caf' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."caf$history" -- Central African Republic
@@ -139,7 +139,7 @@ SELECT 'ben' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max
  UNION ALL SELECT 'ltu' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ltu$history" -- Lithuania
  UNION ALL SELECT 'lva' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."lva$history" -- Latvia
  UNION ALL SELECT 'mda' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."mda$history" -- Moldova
--- UNION ALL SELECT 'mne' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."mne$history" -- Montenegro
+ UNION ALL SELECT 'mne' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."mne$history" -- Montenegro
  UNION ALL SELECT 'nld' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."nld$history" -- Netherlands
  UNION ALL SELECT 'nor' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."nor$history" -- Norway
  UNION ALL SELECT 'pol' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."pol$history" -- Poland
@@ -184,7 +184,7 @@ SELECT 'ben' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max
  UNION ALL SELECT 'slv' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."slv$history" -- El Salvador
  UNION ALL SELECT 'tca' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."tca$history" -- Turks and Caicos Islands
  UNION ALL SELECT 'tto' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."tto$history" -- Trinidad and Tobago
--- UNION ALL SELECT 'ury' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ury$history" -- Uruguay
+ UNION ALL SELECT 'ury' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ury$history" -- Uruguay
  UNION ALL SELECT 'usa' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."usa$history" -- United States
  UNION ALL SELECT 'vct' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."vct$history" -- Saint Vincent and the Grenadines
  UNION ALL SELECT 'ven' AS country_code, MAX(version) AS max_version, MAX(timestamp) AS max_date, MIN(timestamp) AS min_date FROM delta_lake.school_master."ven$history" -- Venezuela
