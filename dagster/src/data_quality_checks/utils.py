@@ -68,6 +68,10 @@ METADATA_CHECK_KEYS = frozenset(
     }
 )
 
+# Minimum members a duplicate group needs before the DQ report counts it.
+DUPLICATE_LOCATION_GROUP_MIN_SIZE = 2
+PROXIMITY_50M_GROUP_MIN_SIZE = 2
+
 
 def aggregate_report_spark_df(
     spark: SparkSession,
@@ -346,6 +350,40 @@ def _low_precision_expr(df: sql.DataFrame) -> Column:
     return f.greatest(*exprs) == 1
 
 
+def _count_duplicate_groups(
+    df: sql.DataFrame,
+    id_column: str,
+    count_key: str,
+    min_size: int,
+) -> int | None:
+    """Distinct duplicate groups of at least ``min_size`` members, approved rows only.
+
+    Group size comes from the stored ``count_key`` (computed over the whole dataset,
+    master included). The coalesce falls back to the approved-only member count for
+    reports where dq_geolocation_extract_relevant_columns filtered that key out of
+    the dq_results map. Returns None when the pipeline has no such group column.
+    """
+    if id_column not in df.columns:
+        return None
+
+    size_expr = (
+        f.element_at(f.col("dq_results"), f.lit(count_key))
+        if "dq_results" in df.columns
+        else f.lit(None).cast("int")
+    )
+    grouped = (
+        df.filter((f.col("dq_has_critical_error") == 0) & f.col(id_column).isNotNull())
+        .groupBy(id_column)
+        .agg(
+            f.max(size_expr).alias("group_size"),
+            f.count("*").alias("approved_members"),
+        )
+    )
+    return grouped.filter(
+        f.coalesce(f.col("group_size"), f.col("approved_members")) >= min_size
+    ).count()
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -460,6 +498,32 @@ def aggregate_report_json(
     if has_is_new_school:
         summary["schools_created"] = stats.schools_created
         summary["schools_updated"] = stats.schools_updated
+
+    # Duplicate-group counts: the group id/size columns are metadata, not 0/1 checks,
+    # so they never reach df_aggregated (see METADATA_CHECK_KEYS) and have to be
+    # aggregated here for the DQ report PDF.
+    for count_field, size_field, id_column, count_key, min_size in (
+        (
+            "count_duplicate_location_groups",
+            "duplicate_location_group_min_size",
+            "dq_duplicate_location_rows_id",
+            "duplicate_location_rows_count",
+            DUPLICATE_LOCATION_GROUP_MIN_SIZE,
+        ),
+        (
+            "count_proximity_50m_groups",
+            "proximity_50m_group_min_size",
+            "dq_duplicate_group_id_50m",
+            "duplicate_group_count_50m",
+            PROXIMITY_50M_GROUP_MIN_SIZE,
+        ),
+    ):
+        group_count = _count_duplicate_groups(
+            df_data_quality_checks, id_column, count_key, min_size
+        )
+        if group_count is not None:
+            summary[count_field] = group_count
+            summary[size_field] = min_size
 
     warn_source = df_aggregated_approved_only or df_aggregated
     warn_source = warn_source.withColumn(
