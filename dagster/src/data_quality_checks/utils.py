@@ -68,10 +68,6 @@ METADATA_CHECK_KEYS = frozenset(
     }
 )
 
-# Minimum members a duplicate group needs before the DQ report counts it.
-DUPLICATE_LOCATION_GROUP_MIN_SIZE = 2
-PROXIMITY_50M_GROUP_MIN_SIZE = 2
-
 
 def aggregate_report_spark_df(
     spark: SparkSession,
@@ -508,14 +504,14 @@ def aggregate_report_json(
             "duplicate_location_group_min_size",
             "dq_duplicate_location_rows_id",
             "duplicate_location_rows_count",
-            DUPLICATE_LOCATION_GROUP_MIN_SIZE,
+            config.DUPLICATE_LOCATION_GROUP_MIN_SIZE,
         ),
         (
             "count_proximity_50m_groups",
             "proximity_50m_group_min_size",
             "dq_duplicate_group_id_50m",
             "duplicate_group_count_50m",
-            PROXIMITY_50M_GROUP_MIN_SIZE,
+            config.PROXIMITY_50M_GROUP_MIN_SIZE,
         ),
     ):
         group_count = _count_duplicate_groups(

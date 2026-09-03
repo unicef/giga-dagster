@@ -5,6 +5,12 @@ from pydantic_settings import BaseSettings
 
 class Config(BaseSettings):
     SIMILARITY_RATIO_CUTOFF: float = 0.7
+
+    # Smallest duplicate group the DQ report counts, per group type. Both are
+    # reported in dq-summary.json so the PDF label always matches the number it
+    # sits next to, and both are overridable by an env var of the same name.
+    DUPLICATE_LOCATION_GROUP_MIN_SIZE: int = 2
+    PROXIMITY_50M_GROUP_MIN_SIZE: int = 3
     date_today: date = date.today()
     current_year: int = date_today.year
 
