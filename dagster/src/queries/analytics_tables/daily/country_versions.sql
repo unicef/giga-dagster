@@ -31,6 +31,7 @@
 SET SESSION mark_distinct_strategy = 'none';
 SET SESSION query_max_stage_count = 400;
 
+DROP TABLE IF EXISTS default.country_versions;
 
 CREATE TABLE IF NOT EXISTS default.country_versions AS (
 
