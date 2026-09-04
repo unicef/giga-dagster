@@ -16,7 +16,7 @@ DROP TABLE IF EXISTS default.all_gigameter_school_daily_troubleshooting;
 
 CREATE TABLE default.all_gigameter_school_daily_troubleshooting 
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_school_daily_troubleshooting'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_school_daily_troubleshooting',
     partitioned_by = ARRAY['country']
 )
 AS (
