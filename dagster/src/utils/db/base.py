@@ -4,6 +4,7 @@ from typing import Any
 
 from loguru import logger
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DatabaseError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -54,11 +55,14 @@ class TrinoDatabaseProvider:
         if url == "":
             raise ValueError("Database URL is empty")
 
+        port = make_url(url).port
+        http_scheme = "http" if port == 8080 else "https"
+
         self.engine = create_engine(
             url,
             echo=not settings.IN_PRODUCTION,
             future=True,
-            connect_args={"http_scheme": "https"},
+            connect_args={"http_scheme": http_scheme},
         )
         self.session_maker = sessionmaker(
             bind=self.engine,
