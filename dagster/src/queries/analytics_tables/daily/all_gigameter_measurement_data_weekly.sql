@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS default.all_gigameter_measurement_data_weekly;
 
 CREATE TABLE default.all_gigameter_measurement_data_weekly
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_weekly'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_measurement_data_weekly',
     partitioned_by = ARRAY['country']
 )
 AS (
