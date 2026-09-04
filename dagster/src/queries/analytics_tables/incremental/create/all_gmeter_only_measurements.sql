@@ -86,7 +86,7 @@ measurements_base AS (
     WHERE
         source = 'DailyCheckApp'  -- GigaMeter app measurements only
     ORDER BY measurement_id
-    LIMIT 40000
+   LIMIT 200000
 
 )
 
