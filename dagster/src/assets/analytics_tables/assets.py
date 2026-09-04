@@ -1,0 +1,388 @@
+import re
+from pathlib import Path
+
+import sqlparse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from src.settings import settings
+from src.utils.adls import ADLSFileClient
+from src.utils.db.trino import get_db_context
+
+from dagster import AssetKey, OpExecutionContext, asset
+
+QUERIES_ROOT = settings.BASE_DIR / "src" / "queries" / "analytics_tables"
+DELTA_LAKE_CATALOG = "delta_lake"
+DELTA_LAKE_SCHEMA = "default"
+DROP_TABLE_PATTERN = re.compile(
+    r"^\s*DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:[\w]+\.)?([\w]+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _split_statements(sql_text: str) -> list[str]:
+    statements = []
+    for raw in sqlparse.split(sql_text):
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        parsed = sqlparse.parse(stripped)
+        if not parsed or parsed[0].token_first(skip_cm=True) is None:
+            continue
+        statements.append(stripped.rstrip(";").strip())
+    return statements
+
+
+def _table_exists(db: Session, table_name: str) -> bool:
+    result = db.execute(
+        text(
+            f"SELECT 1 FROM {DELTA_LAKE_CATALOG}.information_schema.tables "  # nosec B608
+            "WHERE table_schema = :schema AND table_name = :table_name"
+        ),
+        {"schema": DELTA_LAKE_SCHEMA, "table_name": table_name},
+    ).first()
+    return result is not None
+
+
+def _read_statements(path: Path) -> list[str]:
+    sql_text = path.read_text().replace(
+        "{AZURE_BLOB_CONNECTION_URI}", settings.AZURE_BLOB_CONNECTION_URI
+    )
+    return _split_statements(sql_text)
+
+
+def _delete_adls_table_folder(context: OpExecutionContext, table_name: str) -> None:
+    folder_path = f"warehouse/{table_name}"
+    adls_file_client = ADLSFileClient()
+    if not adls_file_client.folder_exists(folder_path):
+        context.log.info(f"ADLS folder `{folder_path}` does not exist, skipping delete")
+        return
+    context.log.info(f"deleting ADLS folder `{folder_path}` before drop")
+    ADLSFileClient.delete(folder_path, is_directory=True)
+
+
+def _execute_statements(
+    context: OpExecutionContext,
+    db: Session,
+    statements: list[str],
+    *,
+    delete_adls_data_on_drop: bool = False,
+) -> None:
+    for i, statement in enumerate(statements):
+        if delete_adls_data_on_drop:
+            match = DROP_TABLE_PATTERN.search(statement)
+            if match:
+                _delete_adls_table_folder(context, match.group(1))
+        context.log.info(f"executing statement {i + 1}/{len(statements)}")
+        db.execute(text(statement))
+    db.commit()
+
+
+def _run_daily(context: OpExecutionContext) -> None:
+    name = context.asset_key.path[-1]
+    with get_db_context() as db:
+        _execute_statements(
+            context,
+            db,
+            _read_statements(QUERIES_ROOT / "daily" / f"{name}.sql"),
+            delete_adls_data_on_drop=True,
+        )
+
+
+def _run_incremental(context: OpExecutionContext) -> None:
+    name = context.asset_key.path[-1]
+    with get_db_context() as db:
+        exists = _table_exists(db, name)
+        subdir = "update" if exists else "create"
+        context.log.info(
+            f"table {DELTA_LAKE_SCHEMA}.{name} "
+            + (
+                "exists, running update script"
+                if exists
+                else "does not exist, running create script"
+            )
+        )
+        _execute_statements(
+            context,
+            db,
+            _read_statements(QUERIES_ROOT / "incremental" / subdir / f"{name}.sql"),
+        )
+
+
+# =============================================================================
+# Daily assets
+# =============================================================================
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def country_versions(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def bra_nicbr_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def bra_nicbr_registered_schools(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def all_gigamaps_realtimeconnectivity(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "country_versions"])],
+    compute_kind="trino",
+)
+def all_school_master(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["daily", "bra_nicbr_daily"])],
+    compute_kind="trino",
+)
+def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def isp_asn_country_mapping(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_school_master"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_funnelsummary(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_school_consistency_history(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_devices(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["daily", "all_gigameter_measurement_data_tb_physical"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_tb_physical(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["incremental", "all_ping_daily"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_inc_ping_daily(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
+        AssetKey(["daily", "all_gigameter_registered_schools"]),
+        AssetKey(["daily", "all_gigameter_appversion_funnel"]),
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+    ],
+    compute_kind="trino",
+)
+def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+# =============================================================================
+# Incremental assets
+# =============================================================================
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def all_gmeter_only_measurements(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def all_mlab_only_measurements(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(
+    key_prefix=["incremental"],
+    group_name="incremental",
+    deps=[
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(
+    key_prefix=["incremental"],
+    group_name="incremental",
+    deps=[
+        AssetKey(["incremental", "all_gigameter_valid_test_checker"]),
+        AssetKey(["incremental", "all_gmeter_only_measurements"]),
+        AssetKey(["incremental", "all_mlab_only_measurements"]),
+        AssetKey(["daily", "all_school_master"]),
+        AssetKey(["daily", "isp_asn_country_mapping"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def all_ping_hourly(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(
+    key_prefix=["incremental"],
+    group_name="incremental",
+    deps=[AssetKey(["incremental", "all_ping_hourly"])],
+    compute_kind="trino",
+)
+def all_ping_daily(context: OpExecutionContext) -> None:
+    _run_incremental(context)
