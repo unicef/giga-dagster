@@ -3,7 +3,7 @@
 
 DROP TABLE IF EXISTS default.all_gigameter_school_percentile_distributions ;
 
-CREATE TABLE default.all_gigameter_school_percentile_distributions AS (
+CREATE TABLE default.all_gigameter_school_percentile_distributions
 
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_school_percentile_distributions'
