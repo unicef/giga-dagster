@@ -190,6 +190,7 @@ class Config(BaseSettings):
         ("schools_within_5km", "INT"),
         ("schools_within_10km", "INT"),
         ("rurban_detected", "STRING"),
+        ("uninhabited", "INT"),
         ("nearest_NR_id", "STRING"),
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),

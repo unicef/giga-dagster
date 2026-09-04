@@ -523,6 +523,7 @@ GEOSPATIAL_COLUMN_MAPPING = {
 
 GEOSPATIAL_INT_COLUMNS = [
     "dq_is_in_uninhabited_area",
+    "uninhabited",
     "dq_is_suspect_location",
     "dq_duplicate_group_flag_50m",
     "dq_duplicate_group_count_50m",
@@ -755,6 +756,11 @@ def run_geospatial_checks(
     view = enricher.view
     result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})
     _apply_column_mapping(result_pdf, view, GEOSPATIAL_COLUMN_MAPPING)
+    # Plain-named twin of dq_is_in_uninhabited_area so it can reach master, which
+    # drops every dq_-prefixed column (see dq_split_passed_rows).
+    result_pdf["uninhabited"] = (
+        view["uninhabited"] if "uninhabited" in view.columns else pd.NA
+    )
 
     _log_non_null_counts(logger, "Geospatial checks", result_pdf, GEOSPATIAL_COLUMNS)
 
