@@ -10,7 +10,8 @@ Scripts are sourced from the **Physical Tables** NocoDB table (`mzq6hlnsicq1r0v`
 
 | Script | Output Table | Purpose |
 |---|---|---|
-| `superset_session_lengths.sql` | `public.superset_session_lengths` | Calculates Superset user session lengths by organisation, used to analyse dashboard engagement |
+
+_Empty — `superset_session_lengths.sql` was promoted to [`daily/`](../daily/README.md)._
 
 ---
 
