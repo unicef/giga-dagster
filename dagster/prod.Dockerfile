@@ -1,18 +1,23 @@
 FROM python:3.11-bullseye AS base
 
 # Standard Python flags
-ENV PYTHONUNBUFFERED 1
-ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 ARG POETRY_VERSION=1.6.1
 
 # Spark flags
-ENV SPARK_HOME /opt/spark
+ENV SPARK_HOME=/opt/spark
 
 # Move to a temporary directory
 WORKDIR /tmp
 
 # Update packages & install JDK, Spark, Hadoop
-RUN apt-get update && \
+# bullseye-security's InRelease file has expired — Debian has stopped publishing fresh
+# Release files for it as this suite ages past EOL, so apt refuses to trust it and
+# `apt-get update` fails; bullseye/bullseye-updates alone satisfy these packages, so drop
+# it. Revisit when bumping off this bullseye-based base image.
+RUN sed -i '/security.debian.org/d' /etc/apt/sources.list && \
+    apt-get update && \
     apt-get install -y curl wget openjdk-11-jdk-headless gdal-bin libgdal-dev libgeos-dev g++ && \
     wget https://saunigigashare.blob.core.windows.net/sparkinstaller/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
@@ -73,6 +78,6 @@ COPY models ./models
 COPY scripts ./scripts
 
 # Read the PORT environment variable, otherwise default to the specified port
-ENV PORT 3002
+ENV PORT=3002
 
 CMD [ "/bin/sh", "-c", "dagster-webserver -h 0.0.0.0 -p $PORT" ]
