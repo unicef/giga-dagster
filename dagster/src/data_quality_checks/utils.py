@@ -531,8 +531,48 @@ def normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
     return df
 
 
+def _warn_on_unregistered_dq_checks(
+    df: sql.DataFrame,
+    dq_column_name_table: pd.DataFrame,
+    context: OpExecutionContext = None,
+) -> None:
+    """Warn about computed checks that have no row in NocoDB.
+
+    The DQ report inner-joins against that table and the dq_results map is
+    filtered by it, so an unregistered check is computed and persisted but never
+    reaches the report or the portal preview — silently, until now.
+
+    Only checks missing from the whole table are reported: a check that is
+    present but excluded from this run was filtered on purpose, by mode or by
+    the columns actually uploaded.
+    """
+    logger = get_context_with_fallback_logger(context)
+
+    if "dq_results" not in df.columns:
+        return
+
+    # Every row carries the same keys — the map is built from a fixed column
+    # list — so one row is enough and avoids scanning the whole frame.
+    first_row = df.select(f.map_keys(f.col("dq_results")).alias("keys")).first()
+    if first_row is None or not first_row["keys"]:
+        return
+
+    registered = {
+        str(name).replace("dq_", "", 1)
+        for name in dq_column_name_table["DQ Table Column Name"]
+        if pd.notna(name)
+    }
+    unregistered = sorted(set(first_row["keys"]) - registered)
+    if unregistered:
+        logger.warning(
+            "These DQ checks are computed but have no row in the NocoDB "
+            "SchoolGeolocationMasterDQChecks table, so they will not appear in the "
+            f"DQ report or the portal preview: {unregistered}"
+        )
+
+
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str]
+    df: sql.DataFrame, uploaded_columns: list[str], context: OpExecutionContext = None
 ):
     df = normalize_dq_results_map(df)
 
@@ -542,6 +582,8 @@ def dq_geolocation_extract_relevant_columns(
     dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
         table_id=dq_column_name_table_id
     )
+
+    _warn_on_unregistered_dq_checks(df, dq_column_name_table, context)
 
     # Union both mode columns — a check is mandatory if it's "always" in either mode,
     # and optional if it's "if in file" in either mode.

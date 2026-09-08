@@ -2,6 +2,13 @@ from pyspark import sql
 from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
+from src.spark.aggregate_derivations import (
+    aggregate_relation_check_name,
+    aggregate_rules,
+    availability_from_count,
+    present_parts,
+    sum_of_parts,
+)
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -10,6 +17,38 @@ def _col_if_exists(df: sql.DataFrame, col_name: str):
     if col_name in df.columns:
         return f.col(col_name)
     return f.lit(None)
+
+
+def _aggregate_relation_transforms(
+    df: sql.DataFrame, dataset_type: str
+) -> dict[str, sql.Column]:
+    """Flag aggregates that contradict their components.
+
+    Only rows where both sides are known are flagged: a missing aggregate is
+    derived upstream rather than reported here, and missing components carry no
+    information to contradict. Built from the same configuration and the same
+    expressions as the derivation, so the two cannot disagree.
+    """
+    transforms = {}
+    for target, parts, is_availability in aggregate_rules(dataset_type):
+        check_name = aggregate_relation_check_name(target, parts)
+        available = present_parts(df, parts)
+        if target not in df.columns or not available:
+            transforms[check_name] = f.lit(0)
+            continue
+
+        total = sum_of_parts(df, available)
+        expected = availability_from_count(total) if is_availability else total
+        actual = (
+            f.lower(f.col(target)) if is_availability else f.col(target).cast("int")
+        )
+        expected = f.lower(expected) if is_availability else expected
+
+        transforms[check_name] = f.when(
+            actual.isNotNull() & expected.isNotNull() & (actual != expected), 1
+        ).otherwise(0)
+
+    return transforms
 
 
 def column_relation_checks(
@@ -199,5 +238,9 @@ def column_relation_checks(
             )
     else:
         pass
+
+    # Aggregate relations are generated from configuration, so a new rule or a
+    # new dataset_type needs no change here.
+    transforms.update(_aggregate_relation_transforms(df, dataset_type))
 
     return df.withColumns(transforms)
