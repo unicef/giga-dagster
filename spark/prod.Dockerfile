@@ -17,7 +17,11 @@ USER root
 
 WORKDIR /tmp
 
-RUN apt-get update && \
+# bullseye-security's index/pool go out of sync intermittently (CDN mirror drift as this
+# suite ages out of active support), causing spurious 404s; bullseye/bullseye-updates alone
+# satisfy these packages, so drop it. Revisit when bumping off this bullseye-based base image.
+RUN sed -i '/security.debian.org/d' /etc/apt/sources.list && \
+    apt-get update && \
     apt-get install -y curl wget gdal-bin libgdal-dev libgeos-dev g++ unzip default-jdk && \
     apt-get clean
 
