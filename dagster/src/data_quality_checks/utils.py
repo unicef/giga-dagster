@@ -68,6 +68,13 @@ METADATA_CHECK_KEYS = frozenset(
     }
 )
 
+# dq_results map keys that are registered as STRING Yes/No columns in the
+# metaschema, rather than staying as raw 0/1 ints inside dq_results. Extended
+# as more binary checks need to reach staging in this form.
+BINARY_YES_NO_MAP_KEYS = {
+    "dq_is_in_uninhabited_area": "is_in_uninhabited_area",
+}
+
 
 def aggregate_report_spark_df(
     spark: SparkSession,
@@ -488,15 +495,31 @@ def aggregate_report_json(
 
 
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
+    schema_name = f"school_{dataset_type}"
+    schema_columns = get_schema_columns(df.sparkSession, schema_name)
+    schema_column_names = {col.name for col in schema_columns}
+
+    # Pull registered binary flags back out of dq_results as Yes/No before the
+    # dq_ filter below drops them.
+    if "dq_results" in df.columns:
+        df = df.withColumns(
+            {
+                target_col: f.when(
+                    f.element_at(f.col("dq_results"), map_key) == 1, "Yes"
+                ).when(f.element_at(f.col("dq_results"), map_key) == 0, "No")
+                for target_col, map_key in BINARY_YES_NO_MAP_KEYS.items()
+                if target_col in schema_column_names
+            }
+        )
+
     if dataset_type in ["master", "reference"]:
-        schema_name = f"school_{dataset_type}"
-        schema_columns = get_schema_columns(df.sparkSession, schema_name)
         columns = [col.name for col in schema_columns]
     else:
         columns = [
             col
             for col in df.columns
-            if not (col.startswith("dq_") or col == "failure_reason")
+            if col in schema_column_names
+            or not (col.startswith("dq_") or col == "failure_reason")
         ]
 
     df = df.filter(df.dq_has_critical_error == 0)
