@@ -2,7 +2,13 @@ FROM apache/hive:4.0.0
 
 USER root
 
-RUN apt-get update && \
+# bullseye is EOL: deb.debian.org's live bullseye-security index and pool have drifted out of
+# sync, causing spurious 404s, and its InRelease file goes stale as this suite ages past EOL.
+# Pin security to a fixed snapshot.debian.org timestamp for an index+pool that are guaranteed
+# consistent with each other, and skip the validity check since a pinned snapshot is always
+# "expired" by design. Revisit when bumping off this bullseye-based base image.
+RUN sed -i 's|^deb http://[a-z.]*/debian-security|deb http://snapshot.debian.org/archive/debian-security/20250721T000000Z|' /etc/apt/sources.list && \
+    apt-get update -o Acquire::Check-Valid-Until=false && \
     apt-get install -y curl wget default-jdk-headless && \
     apt-get clean
 
