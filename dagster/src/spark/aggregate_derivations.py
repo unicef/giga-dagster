@@ -8,7 +8,7 @@ expression builders below so the two can never drift apart.
 
 from pyspark import sql
 from pyspark.sql import functions as f
-from pyspark.sql.types import IntegerType, StringType
+from pyspark.sql.types import BooleanType, IntegerType, StringType
 
 from dagster import OpExecutionContext
 from src.data_quality_checks.config import (
@@ -73,6 +73,26 @@ def sum_of_parts(df: sql.DataFrame, parts: list[str]) -> sql.Column:
 
     return f.when(any_not_null, f.coalesce(total, f.lit(0))).otherwise(
         f.lit(None).cast(IntegerType())
+    )
+
+
+# Countries do not agree on how to spell a yes/no answer, so the comparison
+# parses the supplied value rather than matching "yes"/"no" literally.
+AVAILABILITY_TRUE_VALUES = ("yes", "y", "true", "1")
+AVAILABILITY_FALSE_VALUES = ("no", "n", "false", "0")
+
+
+def availability_as_boolean(column: sql.Column) -> sql.Column:
+    """Parse a supplied availability value into a boolean.
+
+    NULL for anything unrecognised, so that an odd value ("Unknown", a typo) is
+    left to the domain checks instead of being reported as a contradiction.
+    """
+    normalized = f.lower(f.trim(column))
+    return (
+        f.when(normalized.isin(list(AVAILABILITY_TRUE_VALUES)), f.lit(True))
+        .when(normalized.isin(list(AVAILABILITY_FALSE_VALUES)), f.lit(False))
+        .otherwise(f.lit(None).cast(BooleanType()))
     )
 
 

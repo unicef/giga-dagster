@@ -5,7 +5,7 @@ from dagster import OpExecutionContext
 from src.spark.aggregate_derivations import (
     aggregate_relation_check_name,
     aggregate_rules,
-    availability_from_count,
+    availability_as_boolean,
     present_parts,
     sum_of_parts,
 )
@@ -38,11 +38,12 @@ def _aggregate_relation_transforms(
             continue
 
         total = sum_of_parts(df, available)
-        expected = availability_from_count(total) if is_availability else total
-        actual = (
-            f.lower(f.col(target)) if is_availability else f.col(target).cast("int")
-        )
-        expected = f.lower(expected) if is_availability else expected
+        if is_availability:
+            actual = availability_as_boolean(f.col(target))
+            expected = total > 0
+        else:
+            actual = f.col(target).cast("int")
+            expected = total
 
         transforms[check_name] = f.when(
             actual.isNotNull() & expected.isNotNull() & (actual != expected), 1
