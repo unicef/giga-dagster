@@ -389,6 +389,10 @@ class POIContextEnricher(PoiViewGenerator):
             .astype(str)
             .map(lambda i: "file" if i in upload_ids else "master")
         )
+        # Report groups involving at least one uploaded row; a group made up
+        # entirely of pre-existing master schools isn't relevant to this upload.
+        uploaded_group_ids = members.loc[members["source"] == "file", "group_id"]
+        members = members[members["group_id"].isin(uploaded_group_ids)]
         self.duplicate_group_members = members[
             ["school_id_giga", "group_id", "count", "source"]
         ]
