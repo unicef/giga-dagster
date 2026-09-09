@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -67,6 +68,14 @@ METADATA_CHECK_KEYS = frozenset(
         "duplicate_group_in_dataset_50m",
     }
 )
+
+# NocoDB's free-text category becomes a top-level key of dq-summary.json, so
+# "location checks" and "location_checks" would ship as two separate sections.
+CRITICAL_CHECK_TYPE = "critical_checks"
+
+
+def normalize_check_category(value: object) -> str:
+    return re.sub(r"\s+", "_", str(value).strip().lower())
 
 
 def aggregate_report_spark_df(
@@ -192,6 +201,9 @@ def aggregate_report_spark_df(
     ].map(lambda v: v.replace("dq_", ""))
     dq_column_name_table = dq_column_name_table.rename(
         columns={"DQ Check Category": "type", "Human Readable Name": "description"}
+    )
+    dq_column_name_table["type"] = dq_column_name_table["type"].map(
+        normalize_check_category
     )
     dq_column_name_df = spark.createDataFrame(dq_column_name_table)
 
@@ -346,6 +358,38 @@ def _low_precision_expr(df: sql.DataFrame) -> Column:
     return f.greatest(*exprs) == 1
 
 
+def _count_duplicate_groups(
+    df: sql.DataFrame,
+    id_column: str,
+    count_key: str,
+    min_size: int,
+) -> int | None:
+    """Distinct duplicate groups of at least ``min_size`` members, approved rows only.
+
+    Group size comes from the stored ``count_key``; the coalesce falls back to the
+    approved-only member count when map_filter dropped that key from dq_results.
+    """
+    if id_column not in df.columns:
+        return None
+
+    size_expr = (
+        f.element_at(f.col("dq_results"), f.lit(count_key))
+        if "dq_results" in df.columns
+        else f.lit(None).cast("int")
+    )
+    grouped = (
+        df.filter((f.col("dq_has_critical_error") == 0) & f.col(id_column).isNotNull())
+        .groupBy(id_column)
+        .agg(
+            f.max(size_expr).alias("group_size"),
+            f.count("*").alias("approved_members"),
+        )
+    )
+    return grouped.filter(
+        f.coalesce(f.col("group_size"), f.col("approved_members")) >= min_size
+    ).count()
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -411,7 +455,7 @@ def aggregate_report_json(
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
-        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+        f.when(f.col("type") == CRITICAL_CHECK_TYPE, 1).otherwise(0),
     )
 
     critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
@@ -461,10 +505,35 @@ def aggregate_report_json(
         summary["schools_created"] = stats.schools_created
         summary["schools_updated"] = stats.schools_updated
 
+    # Group id/size columns are metadata, not 0/1 checks, so they never reach
+    # df_aggregated (see METADATA_CHECK_KEYS) and are aggregated separately.
+    for count_field, size_field, id_column, count_key, min_size in (
+        (
+            "count_duplicate_location_groups",
+            "duplicate_location_group_min_size",
+            "dq_duplicate_location_rows_id",
+            "duplicate_location_rows_count",
+            config.DUPLICATE_LOCATION_GROUP_MIN_SIZE,
+        ),
+        (
+            "count_proximity_50m_groups",
+            "proximity_50m_group_min_size",
+            "dq_duplicate_group_id_50m",
+            "duplicate_group_count_50m",
+            config.PROXIMITY_50M_GROUP_MIN_SIZE,
+        ),
+    ):
+        group_count = _count_duplicate_groups(
+            df_data_quality_checks, id_column, count_key, min_size
+        )
+        if group_count is not None:
+            summary[count_field] = group_count
+            summary[size_field] = min_size
+
     warn_source = df_aggregated_approved_only or df_aggregated
     warn_source = warn_source.withColumn(
         "is_critical_dq_check",
-        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+        f.when(f.col("type") == CRITICAL_CHECK_TYPE, 1).otherwise(0),
     )
     df_aggregated = warn_source[warn_source.is_critical_dq_check != 1]
     df_aggregated = df_aggregated.drop("is_critical_dq_check")
