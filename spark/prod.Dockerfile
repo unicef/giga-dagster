@@ -17,11 +17,13 @@ USER root
 
 WORKDIR /tmp
 
-# bullseye-security's index/pool go out of sync intermittently (CDN mirror drift as this
-# suite ages out of active support), causing spurious 404s; bullseye/bullseye-updates alone
-# satisfy these packages, so drop it. Revisit when bumping off this bullseye-based base image.
-RUN sed -i '/security.debian.org/d' /etc/apt/sources.list && \
-    apt-get update && \
+# bullseye is EOL: deb.debian.org's live bullseye-security index and pool have drifted out of
+# sync, causing spurious 404s, and its InRelease file goes stale as this suite ages past EOL.
+# Pin security to a fixed snapshot.debian.org timestamp for an index+pool that are guaranteed
+# consistent with each other, and skip the validity check since a pinned snapshot is always
+# "expired" by design. Revisit when bumping off this bullseye-based base image.
+RUN sed -i 's|^deb http://[a-z.]*/debian-security|deb http://snapshot.debian.org/archive/debian-security/20250721T000000Z|' /etc/apt/sources.list && \
+    apt-get update -o Acquire::Check-Valid-Until=false && \
     apt-get install -y curl wget gdal-bin libgdal-dev libgeos-dev g++ unzip default-jdk && \
     apt-get clean
 
@@ -55,4 +57,6 @@ USER 1001
 
 WORKDIR /opt/bitnami/spark/app
 
-COPY ../dagster /opt/bitnami/spark/app
+COPY dagster/src ./src
+COPY dagster/models ./models
+COPY dagster/scripts ./scripts

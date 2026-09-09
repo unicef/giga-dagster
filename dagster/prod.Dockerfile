@@ -12,12 +12,13 @@ ENV SPARK_HOME=/opt/spark
 WORKDIR /tmp
 
 # Update packages & install JDK, Spark, Hadoop
-# bullseye-security's InRelease file has expired — Debian has stopped publishing fresh
-# Release files for it as this suite ages past EOL, so apt refuses to trust it and
-# `apt-get update` fails; bullseye/bullseye-updates alone satisfy these packages, so drop
-# it. Revisit when bumping off this bullseye-based base image.
-RUN sed -i '/security.debian.org/d' /etc/apt/sources.list && \
-    apt-get update && \
+# bullseye is EOL: deb.debian.org's live bullseye-security index and pool have drifted out of
+# sync, causing spurious 404s, and its InRelease file goes stale as this suite ages past EOL.
+# Pin security to a fixed snapshot.debian.org timestamp for an index+pool that are guaranteed
+# consistent with each other, and skip the validity check since a pinned snapshot is always
+# "expired" by design. Revisit when bumping off this bullseye-based base image.
+RUN sed -i 's|^deb http://[a-z.]*/debian-security|deb http://snapshot.debian.org/archive/debian-security/20250721T000000Z|' /etc/apt/sources.list && \
+    apt-get update -o Acquire::Check-Valid-Until=false && \
     apt-get install -y curl wget openjdk-11-jdk-headless gdal-bin libgdal-dev libgeos-dev g++ && \
     wget https://saunigigashare.blob.core.windows.net/sparkinstaller/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \
