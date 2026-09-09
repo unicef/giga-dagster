@@ -2,7 +2,12 @@ FROM apache/hive:4.0.0
 
 USER root
 
-RUN apt-get update && \
+# bullseye-security's InRelease file has expired — Debian has stopped publishing fresh
+# Release files for it as this suite ages past EOL, so apt refuses to trust it and
+# `apt-get update` fails; bullseye/bullseye-updates alone satisfy these packages, so drop
+# it. Revisit when bumping off this bullseye-based base image.
+RUN sed -i '/security.debian.org/d' /etc/apt/sources.list && \
+    apt-get update && \
     apt-get install -y curl wget default-jdk-headless && \
     apt-get clean
 
