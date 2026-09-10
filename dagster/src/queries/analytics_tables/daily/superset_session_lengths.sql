@@ -1,8 +1,33 @@
+-- ==============================================================================
+-- Script Name:     superset_session_lengths.sql
+-- Table Created:   default.superset_session_lengths
+-- Schema:          default
+-- Pipeline Status: Active (Integrated: true)
+--
+-- Purpose:
+--   Derives Superset user sessions from the raw activity log by gap-splitting
+--   each user's events on a 30-minute idle threshold, then summarizing each
+--   session's start/end, event count, and duration in minutes. Feeds Superset
+--   usage/engagement dashboards.
+--
+-- Dependencies:
+--   - superset.public.logs, ab_user
+--     (Superset's own Postgres-backed metadata catalog)
+--
+-- Output Columns:  8 columns
+-- Primary Key:     (user_id, session_start)
+-- Granularity:     One row per user session
+--
+-- Last Updated:    2026-09-04 / Luke Stringer
+-- ==============================================================================
 
+DROP TABLE IF EXISTS default.superset_session_lengths;
 
-
-CREATE TABLE IF NOT EXISTS public.superset_session_lengths as
-
+CREATE TABLE default.superset_session_lengths
+WITH (
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/superset_session_lengths'
+)
+AS (
 
 WITH ev2 AS (
     SELECT
@@ -19,8 +44,8 @@ WITH ev2 AS (
           END AS user_org
         , l.dttm AS log_time
         , LAG(l.dttm) OVER (PARTITION BY l.user_id ORDER BY l.dttm) AS prev_t
-    FROM public.logs l
-    LEFT JOIN public.ab_user u ON l.user_id = u.id
+    FROM superset.public.logs l
+    LEFT JOIN superset.public.ab_user u ON l.user_id = u.id
     WHERE l.user_id IS NOT NULL
 )
 , flagged AS (
@@ -30,7 +55,7 @@ WITH ev2 AS (
         , user_org
         , log_time
         , CASE
-            WHEN prev_t IS NULL OR log_time - prev_t > INTERVAL '30 minutes'
+            WHEN prev_t IS NULL OR log_time - prev_t > INTERVAL '30' MINUTE
             THEN 1 ELSE 0
           END AS new_session
     FROM ev2
@@ -57,7 +82,7 @@ WITH ev2 AS (
         , MIN(log_time) AS session_start
         , MAX(log_time) AS session_end
         , COUNT(*) AS events
-        , EXTRACT(EPOCH FROM (MAX(log_time) - MIN(log_time))) AS session_seconds
+        , date_diff('second', MIN(log_time), MAX(log_time)) AS session_seconds
     FROM sessions
     GROUP BY 1, 2, 3, 4
 )
@@ -66,9 +91,11 @@ SELECT
     , user_email
     , user_org
     , session_start
-    , session_start::date AS day
+    , CAST(session_start AS date) AS day
     , session_end
     , events
-    , ROUND((session_seconds / 60.0)::numeric, 1) AS session_minutes
+    , CAST(ROUND(session_seconds / 60.0, 1) AS DECIMAL(22, 1)) AS session_minutes
 FROM spans
-ORDER BY session_start;
+ORDER BY session_start
+
+);

@@ -43,6 +43,9 @@ populates them changed. Mirrors `unicef/giga-data-analytics#25`.
 | `mng_gigameter_qos_registered.sql` | `default.mng_gigameter_qos_registered` | Mongolia school registration (GigaMeter + LibreRouter) | `qos_raw.mng`, `school_master.mng` | Planned (2nd iteration) |
 | `mng_gigameter_qos_measurements.sql` | `default.mng_gigameter_qos_measurements` | Mongolia daily measurements (GigaMeter + LibreRouter) | `qos.mng`, `school_master.mng` | Planned (2nd iteration) |
 | `all_gigameter_school_daily_troubleshooting.sql` | `default.all_gigameter_school_daily_troubleshooting` | Pre-aggregated school+day summary for Superset T0 troubleshooting | `all_gigameter_measurement_data` (incremental pipeline) | |
+| `all_gigameter_school_percentile_distributions.sql` | `default.all_gigameter_school_percentile_distributions` | Per-school percentile distributions (p25–p95) of speed test metrics, in-school-hours only | `all_gigameter_measurement_data` (incremental pipeline) | |
+| `superset_activity_logs.sql` | `default.superset_activity_logs` | Per-event Superset activity log enriched with user role/org and dashboard/chart context | `superset` Postgres connector | |
+| `superset_session_lengths.sql` | `default.superset_session_lengths` | Superset user sessions derived from the activity log via 30-minute gap-splitting | `superset` Postgres connector | |
 
 ---
 
@@ -71,6 +74,9 @@ Scripts are executed in dependency order via the `deps=[AssetKey(...)]` declarat
 18. all_gigameter_inc_ping_daily               ← incremental pipeline (all_gigameter_measurement_data, all_ping_daily), #7
 19. all_gigameter_school_consistency_history   ← incremental pipeline (all_gmeter_only_measurements, all_gigameter_measurement_data)
 20. all_gigameter_school_daily_troubleshooting ← incremental pipeline (all_gigameter_measurement_data), not part of this daily chain
+21. all_gigameter_school_percentile_distributions ← incremental pipeline (all_gigameter_measurement_data), not part of this daily chain
+22. superset_activity_logs                       ← superset Postgres connector, no giga-dagster deps
+23. superset_session_lengths                     ← superset Postgres connector, no giga-dagster deps
 ```
 
 Steps 3–4, 7, 9, 12, 15–19 depend on tables produced by the incremental pipeline
