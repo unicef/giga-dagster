@@ -9,6 +9,7 @@ VALID_PRIMITIVES = [
     "float",
     "double",
     "timestamp",
+    "date",
     "boolean",
 ]
 
@@ -26,4 +27,5 @@ class TypeMappings(BaseModel):
     float: TypeMapping
     double: TypeMapping
     timestamp: TypeMapping
+    date: TypeMapping
     boolean: TypeMapping

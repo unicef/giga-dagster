@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import ClassVar
 
 from datahub.metadata.schema_classes import (
@@ -11,6 +11,7 @@ from models import TypeMapping, TypeMappings
 from pydantic_settings import BaseSettings
 from pyspark.sql.types import (
     BooleanType,
+    DateType,
     DoubleType,
     FloatType,
     IntegerType,
@@ -90,6 +91,11 @@ class Constants(BaseSettings):
         timestamp=TypeMapping(
             native=datetime,
             pyspark=TimestampType,
+            datahub=DateTypeClass,
+        ),
+        date=TypeMapping(
+            native=date,
+            pyspark=DateType,
             datahub=DateTypeClass,
         ),
         boolean=TypeMapping(
