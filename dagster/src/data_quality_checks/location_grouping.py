@@ -114,7 +114,12 @@ def location_duplicate_columns(
 
     Shared by the DQ run and the post-merge refresh so the two cannot drift — the
     ID has to hash identically on both sides.
+
+    ``_id`` is null unless the row actually shares its coordinate with another row
+    (``count_col > 1``), matching ``dq_duplicate_group_id_50m``'s null-when-not-grouped
+    behaviour — a unique coordinate has no duplicate group to identify.
     """
+    is_duplicate = ~null_coords & (count_col > 1)
     return {
         "dq_duplicate_location_rows_flag": f.when(null_coords, f.lit(None).cast("int"))
         .when(count_col > 1, 1)
@@ -122,9 +127,9 @@ def location_duplicate_columns(
         "dq_duplicate_location_rows_count": f.when(
             null_coords, f.lit(None).cast("int")
         ).otherwise(count_col.cast("int")),
-        "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
-            hash_id_column(location_id_column())
-        ),
+        "dq_duplicate_location_rows_id": f.when(
+            is_duplicate, hash_id_column(location_id_column())
+        ).otherwise(f.lit(None).cast("string")),
     }
 
 

@@ -68,11 +68,23 @@ METADATA_CHECK_KEYS = frozenset(
     }
 )
 
-# dq_results map keys that are registered as STRING Yes/No columns in the
-# metaschema, rather than staying as raw 0/1 ints inside dq_results. Extended
-# as more binary checks need to reach staging in this form.
-BINARY_YES_NO_MAP_KEYS = {
-    "dq_is_in_uninhabited_area": "is_in_uninhabited_area",
+# dq_results map keys to rescue back onto the passed-rows frame when the
+# metaschema registers a matching column. Every int-valued dq_ column is folded
+# into dq_results and dropped upstream (see geolocation_data_quality_results), so
+# without this they're lost before dq_split_passed_rows' dq_ filter even runs.
+# Extend as more checks need to reach staging this way.
+#
+# Each entry is (map_key, is_flag). Flags carry a pass/fail signal and become
+# Yes/No when the metaschema registers them as STRING (matching how DQ checks are
+# represented elsewhere); counts are never Yes/No, so they're always cast
+# straight to the registered type, string or not.
+DQ_RESULTS_MASTER_COLUMNS = {
+    "dq_is_in_uninhabited_area": ("is_in_uninhabited_area", True),
+    "dq_is_suspect_location": ("is_suspect_location", True),
+    "dq_duplicate_group_flag_50m": ("duplicate_group_flag_50m", True),
+    "dq_duplicate_group_count_50m": ("duplicate_group_count_50m", False),
+    "dq_duplicate_location_rows_flag": ("duplicate_location_rows_flag", True),
+    "dq_duplicate_location_rows_count": ("duplicate_location_rows_count", False),
 }
 
 
@@ -497,20 +509,25 @@ def aggregate_report_json(
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
     schema_name = f"school_{dataset_type}"
     schema_columns = get_schema_columns(df.sparkSession, schema_name)
-    schema_column_names = {col.name for col in schema_columns}
+    schema_columns_by_name = {col.name: col for col in schema_columns}
 
-    # Pull registered binary flags back out of dq_results as Yes/No before the
-    # dq_ filter below drops them.
+    # Pull registered checks back out of dq_results before the dq_ filter below
+    # drops it. See DQ_RESULTS_MASTER_COLUMNS for the flag-vs-count distinction.
     if "dq_results" in df.columns:
-        df = df.withColumns(
-            {
-                target_col: f.when(
-                    f.element_at(f.col("dq_results"), map_key) == 1, "Yes"
-                ).when(f.element_at(f.col("dq_results"), map_key) == 0, "No")
-                for target_col, map_key in BINARY_YES_NO_MAP_KEYS.items()
-                if target_col in schema_column_names
-            }
-        )
+        rescued_columns = {}
+        for target_col, (map_key, is_flag) in DQ_RESULTS_MASTER_COLUMNS.items():
+            schema_col = schema_columns_by_name.get(target_col)
+            if schema_col is None:
+                continue
+            value = f.element_at(f.col("dq_results"), map_key)
+            if is_flag and isinstance(schema_col.dataType, StringType):
+                rescued_columns[target_col] = f.when(value == 1, "Yes").when(
+                    value == 0, "No"
+                )
+            else:
+                rescued_columns[target_col] = value.cast(schema_col.dataType)
+        if rescued_columns:
+            df = df.withColumns(rescued_columns)
 
     if dataset_type in ["master", "reference"]:
         columns = [col.name for col in schema_columns]
@@ -518,7 +535,7 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         columns = [
             col
             for col in df.columns
-            if col in schema_column_names
+            if col in schema_columns_by_name
             or not (col.startswith("dq_") or col == "failure_reason")
         ]
 
