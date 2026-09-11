@@ -1,0 +1,127 @@
+
+-- If table doesn't already exist, it rebuilds default.superset_session_lengths from Superset logs.
+-- Groups each user's events into sessions (new session after a 30+ minute gap)
+-- and stores start/end, event count, and duration in minutes.
+
+-----superset session lengths------------
+
+DROP TABLE IF EXISTS default.superset_session_lengths;
+
+CREATE TABLE IF NOT EXISTS default.superset_session_lengths as 
+
+WITH ev AS (
+
+    SELECT
+        l.user_id,
+        u.email AS user_email,
+
+        CASE
+            WHEN lower(u.email) LIKE '%@unicef.org' THEN 'unicef'
+            WHEN lower(u.email) LIKE '%@itu.%' THEN 'itu'
+            WHEN lower(u.email) LIKE '%@edu%' THEN 'external'
+            WHEN lower(u.email) LIKE '%.gov.%' THEN 'external'
+            WHEN lower(u.email) LIKE '%thinkingmachin%' THEN 'thinkingmachine'
+            WHEN lower(u.email) LIKE '%@nagarro%' THEN 'nagarro'
+            ELSE 'unknown'
+        END AS user_org,
+
+        l.dttm AS log_time
+
+    FROM superset.public.logs l
+
+    LEFT JOIN superset.public.ab_user u
+        ON l.user_id = u.id
+
+    WHERE l.user_id IS NOT NULL
+),
+
+ev2 AS (
+
+    SELECT
+        user_id,
+        user_email,
+        user_org,
+        log_time,
+        lag(log_time) OVER (
+            PARTITION BY user_id
+            ORDER BY log_time
+        ) AS prev_t
+    FROM ev
+),
+
+flagged AS (
+
+    SELECT
+        user_id,
+        user_email,
+        user_org,
+        log_time,
+
+        CASE
+            WHEN prev_t IS NULL
+                 OR date_diff('minute', prev_t, log_time) > 30
+            THEN 1
+            ELSE 0
+        END AS new_session
+
+    FROM ev2
+),
+
+sessions AS (
+
+    SELECT
+        user_id,
+        user_email,
+        user_org,
+        log_time,
+
+        SUM(new_session) OVER (
+            PARTITION BY user_id
+            ORDER BY log_time
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS session_seq
+
+    FROM flagged
+),
+
+spans AS (
+
+    SELECT
+        user_id,
+        user_email,
+        user_org,
+        session_seq,
+
+        MIN(log_time) AS session_start,
+        MAX(log_time) AS session_end,
+        COUNT(*) AS events,
+
+        date_diff(
+            'second',
+            MIN(log_time),
+            MAX(log_time)
+        ) AS session_seconds
+
+    FROM sessions
+
+    GROUP BY
+        user_id,
+        user_email,
+        user_org,
+        session_seq
+)
+
+SELECT
+    user_id,
+    user_email,
+    user_org,
+    session_start,
+    CAST(session_start AS DATE) AS day,
+    session_end,
+    events,
+    ROUND(session_seconds / 60.0, 1) AS session_minutes
+FROM spans
+ORDER BY session_start;
+
+
+
