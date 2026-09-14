@@ -15,6 +15,10 @@ from pyspark.sql import functions as f
 from pyspark.sql.types import StructType
 
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.nocodb.get_nocodb_data import (
+    get_nocodb_table_as_pandas_dataframe,
+    get_nocodb_table_id_from_name,
+)
 
 # Spark equi-joins drop null keys, whereas Window.partitionBy groups them
 # together; the sentinel keeps the union-based grouping equivalent.
@@ -340,36 +344,43 @@ def combine_duplicate_members(
     )
 
 
-# Non-upload columns in the duplicates report, mapped to human-readable labels.
-# Upload-derived columns (school_id_govt, DUPLICATE_REPORT_DISPLAY_COLUMNS) are left
-# as-is since they mirror what the uploader typed in their file.
 DUPLICATES_REPORT_FLAG_COLUMNS = [
     "duplicate_location_rows_flag",
     "duplicate_group_flag_50m",
 ]
 
-DUPLICATES_REPORT_HUMAN_READABLE_COLUMNS = {
+# Structural report columns with no backing dq_ check, so NocoDB has no row for them.
+_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES = {
     "source": "Source",
-    "duplicate_location_rows_flag": "Exact Location Duplicate",
-    "duplicate_location_rows_id": "Exact Location Duplicate Group ID",
-    "duplicate_location_rows_count": "Exact Location Duplicate Group Size",
-    "duplicate_group_flag_50m": "50m Proximity Duplicate",
-    "duplicate_group_id_50m": "50m Proximity Duplicate Group ID",
-    "duplicate_group_count_50m": "50m Proximity Duplicate Group Size",
     "approval_status": "Approval Status",
 }
 
 
-def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFrame:
-    """Render flag columns as Yes/No and rename generated columns to human-readable labels.
+def _human_readable_column_names() -> dict[str, str]:
+    """dq_ check column (sans prefix) -> NocoDB "Human Readable Name"."""
+    table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+    names = table.set_index("DQ Table Column Name")["Human Readable Name"].to_dict()
+    return {
+        col.replace("dq_", "", 1): name
+        for col, name in names.items()
+        if isinstance(col, str) and col.startswith("dq_")
+    }
 
-    Must run last, after ``attach_approval_status`` — it renames that column too.
-    """
+
+def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFrame:
+    """Render flag columns as Yes/No and rename generated columns to human-readable labels."""
     for column in DUPLICATES_REPORT_FLAG_COLUMNS:
         duplicates_report = duplicates_report.withColumn(
             column, f.when(f.col(column) == 1, "Yes").otherwise("No")
         )
-    for raw_name, human_name in DUPLICATES_REPORT_HUMAN_READABLE_COLUMNS.items():
+    names = {
+        **_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES,
+        **_human_readable_column_names(),
+    }
+    for raw_name, human_name in names.items():
         if raw_name in duplicates_report.columns:
             duplicates_report = duplicates_report.withColumnRenamed(
                 raw_name, human_name
