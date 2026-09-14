@@ -114,28 +114,46 @@ def location_duplicate_columns(
 
     Shared by the DQ run and the post-merge refresh so the two cannot drift — the
     ID has to hash identically on both sides.
+
+    ``_count`` and ``_id`` are null unless the row actually shares its coordinate
+    with another row (``count_col > 1``), matching ``dq_duplicate_group_count_50m``/
+    ``dq_duplicate_group_id_50m``'s null-when-not-grouped behaviour — a unique
+    coordinate has no duplicate group to size or identify.
     """
+    is_duplicate = ~null_coords & (count_col > 1)
     return {
         "dq_duplicate_location_rows_flag": f.when(null_coords, f.lit(None).cast("int"))
         .when(count_col > 1, 1)
         .otherwise(0),
-        "dq_duplicate_location_rows_count": f.when(
-            null_coords, f.lit(None).cast("int")
-        ).otherwise(count_col.cast("int")),
-        "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
-            hash_id_column(location_id_column())
-        ),
+        "dq_duplicate_location_rows_count": f.when(is_duplicate, count_col.cast("int")),
+        "dq_duplicate_location_rows_id": f.when(
+            is_duplicate, hash_id_column(location_id_column())
+        ).otherwise(f.lit(None).cast("string")),
     }
 
 
 def to_spark_safe(
     pdf: pd.DataFrame, int_columns: list[str], string_columns: list[str] = ()
 ) -> pd.DataFrame:
-    """Convert nullable pandas dtypes to object columns Spark can infer from."""
+    """Convert nullable pandas dtypes to object columns Spark can infer from.
+
+    dtype=object on assignment is required, not cosmetic: a plain list mixing
+    ``int`` and ``None`` gets silently upcast back to float64 by pandas (turning
+    2 into 2.0) the moment it's assigned into a column, which IntegerType()
+    then rejects outright.
+    """
     for column in int_columns:
-        pdf[column] = [None if pd.isna(v) else int(v) for v in pdf[column]]
+        pdf[column] = pd.Series(
+            [None if pd.isna(v) else int(v) for v in pdf[column]],
+            index=pdf.index,
+            dtype=object,
+        )
     for column in string_columns:
-        pdf[column] = [None if pd.isna(v) else str(v) for v in pdf[column]]
+        pdf[column] = pd.Series(
+            [None if pd.isna(v) else str(v) for v in pdf[column]],
+            index=pdf.index,
+            dtype=object,
+        )
     return pdf
 
 
@@ -389,12 +407,13 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
             duplicate_map[node] = group_id
 
     nodes = list(graph.nodes())
+    # +1 so count includes the row itself, matching dq_duplicate_location_rows_count. Only displayed when count > 1
+    counts = [graph.degree(node) + 1 for node in nodes]
     return pd.DataFrame(
         {
             "school_id_giga": nodes,
             "flag": [1 if node in duplicate_map else 0 for node in nodes],
             "group_id": [duplicate_map.get(node) for node in nodes],
-            # +1 so count includes the row itself, matching dq_duplicate_location_rows_count.
-            "count": [graph.degree(node) + 1 for node in nodes],
+            "count": [c if c > 1 else None for c in counts],
         }
     )
