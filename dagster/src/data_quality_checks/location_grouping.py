@@ -325,11 +325,56 @@ def combine_duplicate_members(
             f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
             for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
         ],
+        f.col("duplicate_location_rows_id")
+        .isNotNull()
+        .cast("int")
+        .alias("duplicate_location_rows_flag"),
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",
+        f.col("duplicate_group_id_50m")
+        .isNotNull()
+        .cast("int")
+        .alias("duplicate_group_flag_50m"),
         "duplicate_group_id_50m",
         "duplicate_group_count_50m",
     )
+
+
+# Non-upload columns in the duplicates report, mapped to human-readable labels.
+# Upload-derived columns (school_id_govt, DUPLICATE_REPORT_DISPLAY_COLUMNS) are left
+# as-is since they mirror what the uploader typed in their file.
+DUPLICATES_REPORT_FLAG_COLUMNS = [
+    "duplicate_location_rows_flag",
+    "duplicate_group_flag_50m",
+]
+
+DUPLICATES_REPORT_HUMAN_READABLE_COLUMNS = {
+    "source": "Source",
+    "duplicate_location_rows_flag": "Exact Location Duplicate",
+    "duplicate_location_rows_id": "Exact Location Duplicate Group ID",
+    "duplicate_location_rows_count": "Exact Location Duplicate Group Size",
+    "duplicate_group_flag_50m": "50m Proximity Duplicate",
+    "duplicate_group_id_50m": "50m Proximity Duplicate Group ID",
+    "duplicate_group_count_50m": "50m Proximity Duplicate Group Size",
+    "approval_status": "Approval Status",
+}
+
+
+def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFrame:
+    """Render flag columns as Yes/No and rename generated columns to human-readable labels.
+
+    Must run last, after ``attach_approval_status`` — it renames that column too.
+    """
+    for column in DUPLICATES_REPORT_FLAG_COLUMNS:
+        duplicates_report = duplicates_report.withColumn(
+            column, f.when(f.col(column) == 1, "Yes").otherwise("No")
+        )
+    for raw_name, human_name in DUPLICATES_REPORT_HUMAN_READABLE_COLUMNS.items():
+        if raw_name in duplicates_report.columns:
+            duplicates_report = duplicates_report.withColumnRenamed(
+                raw_name, human_name
+            )
+    return duplicates_report
 
 
 def attach_approval_status(
