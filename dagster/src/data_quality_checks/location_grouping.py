@@ -374,7 +374,7 @@ def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFram
     """Render flag columns as Yes/No and rename generated columns to human-readable labels."""
     for column in DUPLICATES_REPORT_FLAG_COLUMNS:
         duplicates_report = duplicates_report.withColumn(
-            column, f.when(f.col(column) == 1, "Yes").otherwise("No")
+            column, f.when(f.col(column) == 1, "No").otherwise("Yes")
         )
     names = {
         **_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES,
