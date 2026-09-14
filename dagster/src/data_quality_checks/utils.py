@@ -46,7 +46,7 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
     get_nocodb_table_id_from_name,
 )
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, render_flag
 
 # Silver columns the grouped location checks need to participate in counts
 LOCATION_REFERENCE_COLUMNS = [
@@ -520,12 +520,11 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
             if schema_col is None:
                 continue
             value = f.element_at(f.col("dq_results"), map_key)
-            if is_flag and isinstance(schema_col.dataType, StringType):
-                rescued_columns[target_col] = f.when(value == 1, "Yes").when(
-                    value == 0, "No"
-                )
-            else:
-                rescued_columns[target_col] = value.cast(schema_col.dataType)
+            rescued_columns[target_col] = (
+                render_flag(value, schema_col.dataType)
+                if is_flag
+                else value.cast(schema_col.dataType)
+            )
         if rescued_columns:
             df = df.withColumns(rescued_columns)
 
