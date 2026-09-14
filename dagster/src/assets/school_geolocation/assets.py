@@ -24,6 +24,7 @@ from src.data_quality_checks.location_grouping import (
     MEMBER_IDENTITY_SCHEMA,
     attach_approval_status,
     combine_duplicate_members,
+    finalize_duplicates_report,
 )
 from src.data_quality_checks.utils import (
     build_dq_summary_statistics,
@@ -443,7 +444,9 @@ def geolocation_data_quality_results(
     dq_results.cache()
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    duplicates_report = attach_approval_status(duplicates_report, dq_results).cache()
+    duplicates_report = finalize_duplicates_report(
+        attach_approval_status(duplicates_report, dq_results)
+    ).cache()
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
