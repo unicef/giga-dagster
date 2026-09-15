@@ -70,7 +70,7 @@ from src.utils.school_registrations.common import (
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
-from src.utils.spark import normalize_missing_value_strings, transform_types
+from src.utils.spark import normalize_missing_value_strings
 
 from dagster import (
     AssetOut,
@@ -790,7 +790,31 @@ def geolocation_error_table(
     country_code = config.country_code
     dataset_type = config.dataset_type
 
-    df = transform_types(geolocation_dq_failed_rows, config.metastore_schema, context)
+    with get_db_context() as db:
+        file_upload = db.scalar(select(FileUpload).where(FileUpload.id == file_id))
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{file_id}` was not found",
+            )
+        file_upload = FileUploadConfig.from_orm(file_upload)
+    uploaded_columns = set(file_upload.column_to_schema_mapping.values())
+    schema_columns = {
+        field.name for field in get_schema_columns(s, config.metastore_schema)
+    }
+
+    # Preserve uploaded values (e.g. latitude/longitude/num_students) verbatim, even
+    # malformed ones -- a numeric/typed cast would silently null out DQ-flagged data.
+    columns_to_stringify = [
+        col_name
+        for col_name in geolocation_dq_failed_rows.columns
+        if col_name in uploaded_columns and col_name in schema_columns
+    ]
+    df = geolocation_dq_failed_rows.withColumns(
+        {
+            col_name: f.col(col_name).cast(StringType())
+            for col_name in columns_to_stringify
+        }
+    )
 
     df = df.withColumn("giga_sync_file_id", f.lit(file_id))
     df = df.withColumn("giga_sync_file_name", f.lit(file_name))
