@@ -24,6 +24,7 @@ from src.data_quality_checks.location_grouping import (
     MEMBER_IDENTITY_SCHEMA,
     attach_approval_status,
     combine_duplicate_members,
+    finalize_duplicates_report,
 )
 from src.data_quality_checks.utils import (
     build_dq_summary_statistics,
@@ -443,7 +444,9 @@ def geolocation_data_quality_results(
     dq_results.cache()
     dq_results.write.format("delta").mode("append").saveAsTable(dq_results_table_name)
 
-    duplicates_report = attach_approval_status(duplicates_report, dq_results).cache()
+    duplicates_report = finalize_duplicates_report(
+        attach_approval_status(duplicates_report, dq_results)
+    ).cache()
 
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -527,12 +530,9 @@ def geolocation_data_quality_results_human_readable(
                 ),
             )
         elif map_key == "duplicate_location_rows_id":
-            df = df.withColumn(
-                human_name,
-                f.when(duplicate_count_col == 1, f.lit(None)).otherwise(
-                    f.col("dq_duplicate_location_rows_id")
-                ),
-            )
+            # Already null unless count > 1 — location_duplicate_columns() gates it
+            # at the source, so no re-gating needed here.
+            df = df.withColumn(human_name, f.col("dq_duplicate_location_rows_id"))
         elif map_key in ("duplicate_group_count_50m", "duplicate_group_id_50m"):
             value = (
                 f.col("dq_duplicate_group_id_50m")
