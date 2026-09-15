@@ -66,36 +66,33 @@ def null_coordinates(df: sql.DataFrame) -> sql.Column:
 
 
 def hash_id_column(source: sql.Column) -> sql.Column:
-    """First 8 hex chars of source's md5.
-
-    ~2.3% of 8-char hex substrings land all-digit, which spreadsheets read as a
-    number and can mangle (leading zeros, scientific notation). When that
-    happens, the first character is swapped for a letter a-f, chosen
-    deterministically from the next hex digit, so the id stays valid text.
+    """First 8 hex chars of source's md5, forced to contain at least 2 letters so
+    spreadsheets can't misread it as a plain number or scientific notation (e.g. "97203e73").
     """
     digest = f.md5(source)
     candidate = f.substring(digest, 1, 8)
-    fallback_letter = f.element_at(
-        f.array(*[f.lit(c) for c in "abcdef"]),
-        (f.conv(f.substring(digest, 9, 1), 16, 10).cast("int") % 6) + 1,
+    letter_count = f.length(f.regexp_replace(candidate, "[^a-f]", ""))
+    fallback_alphabet = f.array(*[f.lit(c) for c in "abcdef"])
+    fallback_char = lambda pos: f.element_at(  # noqa: E731
+        fallback_alphabet,
+        (f.conv(f.substring(digest, pos, 1), 16, 10).cast("int") % 6) + 1,
     )
     return f.when(
-        candidate.rlike("^[0-9]+$"),
-        f.concat(fallback_letter, f.substring(candidate, 2, 7)),
+        letter_count < 2,
+        f.concat(fallback_char(9), fallback_char(10), f.substring(candidate, 3, 6)),
     ).otherwise(candidate)
 
 
 def hash_id_str(digest_hex: str) -> str:
     """Python-side counterpart to ``hash_id_column`` for a precomputed md5 hexdigest.
-
-    Used by callers (like ``assign_proximity_groups``) that already have a
-    ``hashlib`` digest rather than a Spark column to hash.
+    Used by callers (like ``assign_proximity_groups``) that already have a hashlib digest.
     """
     candidate = digest_hex[:8]
-    if not candidate.isdigit():
+    if sum(c in "abcdef" for c in candidate) >= 2:
         return candidate
-    fallback_letter = "abcdef"[int(digest_hex[8], 16) % 6]
-    return fallback_letter + candidate[1:]
+    fallback_1 = "abcdef"[int(digest_hex[8], 16) % 6]
+    fallback_2 = "abcdef"[int(digest_hex[9], 16) % 6]
+    return fallback_1 + fallback_2 + candidate[2:]
 
 
 def location_id_column() -> sql.Column:
