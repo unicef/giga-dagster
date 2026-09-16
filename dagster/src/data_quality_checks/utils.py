@@ -76,6 +76,8 @@ CRITICAL_CHECK_TYPE = "critical_checks"
 
 def normalize_check_category(value: object) -> str:
     return re.sub(r"\s+", "_", str(value).strip().lower())
+
+
 # dq_results map keys to rescue back onto the passed-rows frame when the
 # metaschema registers a matching column. Every int-valued dq_ column is folded
 # into dq_results and dropped upstream (see geolocation_data_quality_results), so
