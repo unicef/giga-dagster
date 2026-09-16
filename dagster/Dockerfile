@@ -12,7 +12,15 @@ ENV SPARK_HOME /opt/spark
 WORKDIR /tmp
 
 # Update packages & install JDK, Spark, Hadoop
-RUN apt-get update && \
+# bullseye is EOL: deb.debian.org's live bullseye-security index and pool have drifted out of
+# sync (index lists package builds the pool no longer serves, causing spurious 404s on e.g.
+# openjdk-11-jdk-headless), and some libs here (libheif-dev, libaom-dev) only resolve against
+# security's point-release build. Pin security to a fixed snapshot.debian.org timestamp for an
+# index+pool that are guaranteed consistent with each other, and skip the validity check since
+# a pinned snapshot is always "expired" by design. Revisit when bumping off this bullseye-based
+# base image.
+RUN sed -i 's|^deb http://deb.debian.org/debian-security|deb http://snapshot.debian.org/archive/debian-security/20250721T000000Z|' /etc/apt/sources.list && \
+    apt-get update -o Acquire::Check-Valid-Until=false && \
     apt-get install -y curl wget openjdk-11-jdk-headless gdal-bin libgdal-dev libgeos-dev g++ && \
     wget https://saunigigashare.blob.core.windows.net/sparkinstaller/spark-3.5.0-bin-hadoop3.tgz && \
     tar --extract --gzip --file spark-3.5.0-bin-hadoop3.tgz && \

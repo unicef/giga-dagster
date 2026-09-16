@@ -13,7 +13,7 @@ from pyspark.sql import (
     Window,
     functions as f,
 )
-from pyspark.sql.types import IntegerType, StringType, StructField, StructType
+from pyspark.sql.types import DataType, StringType, StructField, StructType
 
 from src.data_quality_checks.geospatial import (
     PROXIMITY_DUPLICATE_THRESHOLD_M,
@@ -28,10 +28,22 @@ from src.data_quality_checks.location_grouping import (
     to_spark_safe,
 )
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.schema import get_schema_columns_by_name, render_flag
 
-PROXIMITY_INT_COLUMNS = ["dq_duplicate_group_flag_50m", "dq_duplicate_group_count_50m"]
-PROXIMITY_STRING_COLUMNS = ["dq_duplicate_group_id_50m"]
-PROXIMITY_COLUMNS = PROXIMITY_INT_COLUMNS + PROXIMITY_STRING_COLUMNS
+# Same metaschema table dq_split_passed_rows reads for its dq_results rescue.
+GEOLOCATION_SCHEMA_NAME = "school_geolocation"
+
+PROXIMITY_COLUMNS = [
+    "dq_duplicate_group_flag_50m",
+    "dq_duplicate_group_count_50m",
+    "dq_duplicate_group_id_50m",
+]
+
+EXACT_LOCATION_COLUMNS = [
+    "dq_duplicate_location_rows_flag",
+    "dq_duplicate_location_rows_count",
+    "dq_duplicate_location_rows_id",
+]
 
 # A row already in a group, or with a neighbour, is one whose merge can shift a
 # count for a school outside the upload.
@@ -40,11 +52,23 @@ GROUPED_ROW_COLUMNS = (
     "dq_duplicate_group_count_50m",
 )
 
-PROXIMITY_SCHEMA = StructType(
-    [StructField("school_id_giga", StringType(), True)]
-    + [StructField(column, IntegerType(), True) for column in PROXIMITY_INT_COLUMNS]
-    + [StructField(column, StringType(), True) for column in PROXIMITY_STRING_COLUMNS]
-)
+
+def _registered_types(
+    schema_columns_by_name: dict[str, StructField], columns: list[str]
+) -> dict[str, DataType]:
+    """Registered metaschema type for each of ``columns``.
+
+    Unlike dq_split_passed_rows, which just skips a column that isn't registered,
+    these columns are this function's whole output — guessing a type for one that
+    isn't registered would silently reintroduce the exact drift this refresh exists
+    to fix. Fail loudly instead.
+    """
+    missing = [c for c in columns if c not in schema_columns_by_name]
+    if missing:
+        raise ValueError(
+            f"Columns not registered in {GEOLOCATION_SCHEMA_NAME} metaschema: {missing}"
+        )
+    return {column: schema_columns_by_name[column].dataType for column in columns}
 
 
 def _is_grouped(frame: sql.DataFrame) -> sql.Column:
@@ -90,9 +114,25 @@ def refresh_location_duplicates(
 ) -> sql.DataFrame:
     """Recompute the exact-location and 50m duplicate columns over all of ``df``."""
     logger = get_context_with_fallback_logger(context)
+    schema_columns_by_name = get_schema_columns_by_name(
+        df.sparkSession, GEOLOCATION_SCHEMA_NAME
+    )
+
+    exact_dtypes = _registered_types(schema_columns_by_name, EXACT_LOCATION_COLUMNS)
 
     count = f.count("*").over(Window.partitionBy(location_id_column()))
-    df = df.withColumns(location_duplicate_columns(count, null_coordinates(df)))
+    exact_columns = location_duplicate_columns(count, null_coordinates(df))
+    exact_columns["dq_duplicate_location_rows_flag"] = render_flag(
+        exact_columns["dq_duplicate_location_rows_flag"],
+        exact_dtypes["dq_duplicate_location_rows_flag"],
+    )
+    exact_columns["dq_duplicate_location_rows_count"] = exact_columns[
+        "dq_duplicate_location_rows_count"
+    ].cast(exact_dtypes["dq_duplicate_location_rows_count"])
+    exact_columns["dq_duplicate_location_rows_id"] = exact_columns[
+        "dq_duplicate_location_rows_id"
+    ].cast(exact_dtypes["dq_duplicate_location_rows_id"])
+    df = df.withColumns(exact_columns)
 
     points = df.select("school_id_giga", "latitude", "longitude").toPandas()
     graph = build_proximity_graph(
@@ -110,16 +150,43 @@ def refresh_location_duplicates(
     if groups.empty:
         return df
 
+    # Name-keyed, not positional — assign_proximity_groups returns flag/group_id/
+    # count in that order, which does not match PROXIMITY_COLUMNS' order.
     groups = groups.rename(
-        columns=dict(zip(["flag", "group_id", "count"], PROXIMITY_COLUMNS, strict=True))
+        columns={
+            "flag": "dq_duplicate_group_flag_50m",
+            "group_id": "dq_duplicate_group_id_50m",
+            "count": "dq_duplicate_group_count_50m",
+        }
     )
     groups["school_id_giga"] = groups["school_id_giga"].astype(str)
+
+    group_dtypes = _registered_types(schema_columns_by_name, PROXIMITY_COLUMNS)
+    if isinstance(group_dtypes["dq_duplicate_group_flag_50m"], StringType):
+        groups["dq_duplicate_group_flag_50m"] = groups[
+            "dq_duplicate_group_flag_50m"
+        ].map({1: "Yes", 0: "No"})
+
+    string_columns = [
+        column
+        for column in PROXIMITY_COLUMNS
+        if isinstance(group_dtypes[column], StringType)
+    ]
+    int_columns = [c for c in PROXIMITY_COLUMNS if c not in string_columns]
+
+    proximity_schema = StructType(
+        [StructField("school_id_giga", StringType(), True)]
+        + [
+            StructField(column, group_dtypes[column], True)
+            for column in PROXIMITY_COLUMNS
+        ]
+    )
 
     # Schools outside the graph keep NULL rather than 0 — "not evaluated" has to
     # stay distinguishable from "evaluated, no neighbour".
     return join_pandas_result_to_spark(
         df.drop(*PROXIMITY_COLUMNS),
-        to_spark_safe(groups, PROXIMITY_INT_COLUMNS, PROXIMITY_STRING_COLUMNS),
+        to_spark_safe(groups, int_columns, string_columns),
         PROXIMITY_COLUMNS,
-        schema=PROXIMITY_SCHEMA,
+        schema=proximity_schema,
     )

@@ -47,7 +47,7 @@ from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
     get_nocodb_table_id_from_name,
 )
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, render_flag
 
 # Silver columns the grouped location checks need to participate in counts
 LOCATION_REFERENCE_COLUMNS = [
@@ -76,6 +76,24 @@ CRITICAL_CHECK_TYPE = "critical_checks"
 
 def normalize_check_category(value: object) -> str:
     return re.sub(r"\s+", "_", str(value).strip().lower())
+# dq_results map keys to rescue back onto the passed-rows frame when the
+# metaschema registers a matching column. Every int-valued dq_ column is folded
+# into dq_results and dropped upstream (see geolocation_data_quality_results), so
+# without this they're lost before dq_split_passed_rows' dq_ filter even runs.
+# Extend as more checks need to reach staging this way.
+#
+# Each entry is (map_key, is_flag). Flags carry a pass/fail signal and become
+# Yes/No when the metaschema registers them as STRING (matching how DQ checks are
+# represented elsewhere); counts are never Yes/No, so they're always cast
+# straight to the registered type, string or not.
+DQ_RESULTS_MASTER_COLUMNS = {
+    "dq_is_in_uninhabited_area": ("is_in_uninhabited_area", True),
+    "dq_is_suspect_location": ("is_suspect_location", True),
+    "dq_duplicate_group_flag_50m": ("duplicate_group_flag_50m", True),
+    "dq_duplicate_group_count_50m": ("duplicate_group_count_50m", False),
+    "dq_duplicate_location_rows_flag": ("duplicate_location_rows_flag", True),
+    "dq_duplicate_location_rows_count": ("duplicate_location_rows_count", False),
+}
 
 
 def aggregate_report_spark_df(
@@ -557,15 +575,35 @@ def aggregate_report_json(
 
 
 def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
+    schema_name = f"school_{dataset_type}"
+    schema_columns = get_schema_columns(df.sparkSession, schema_name)
+    schema_columns_by_name = {col.name: col for col in schema_columns}
+
+    # Pull registered checks back out of dq_results before the dq_ filter below
+    # drops it. See DQ_RESULTS_MASTER_COLUMNS for the flag-vs-count distinction.
+    if "dq_results" in df.columns:
+        rescued_columns = {}
+        for target_col, (map_key, is_flag) in DQ_RESULTS_MASTER_COLUMNS.items():
+            schema_col = schema_columns_by_name.get(target_col)
+            if schema_col is None:
+                continue
+            value = f.element_at(f.col("dq_results"), map_key)
+            rescued_columns[target_col] = (
+                render_flag(value, schema_col.dataType)
+                if is_flag
+                else value.cast(schema_col.dataType)
+            )
+        if rescued_columns:
+            df = df.withColumns(rescued_columns)
+
     if dataset_type in ["master", "reference"]:
-        schema_name = f"school_{dataset_type}"
-        schema_columns = get_schema_columns(df.sparkSession, schema_name)
         columns = [col.name for col in schema_columns]
     else:
         columns = [
             col
             for col in df.columns
-            if not (col.startswith("dq_") or col == "failure_reason")
+            if col in schema_columns_by_name
+            or not (col.startswith("dq_") or col == "failure_reason")
         ]
 
     df = df.filter(df.dq_has_critical_error == 0)
