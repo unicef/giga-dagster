@@ -115,7 +115,7 @@ def school_master_geolocation__raw_file_uploads_sensor(
                 "geolocation_error_table": OpDestinationMapping(
                     source_filepath=f"{constants.dq_results_folder}/{DOMAIN_DATASET_TYPE}/dq-failed-rows/{country_code}/{stem}.parquet",
                     destination_filepath="",
-                    metastore_schema="school_geolocation_error_table",
+                    metastore_schema=METASTORE_SCHEMA,
                     tier=DataTier.DATA_QUALITY_CHECKS,
                 ),
                 "geolocation_staging": OpDestinationMapping(
