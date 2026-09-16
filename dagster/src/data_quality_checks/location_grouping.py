@@ -15,6 +15,10 @@ from pyspark.sql import functions as f
 from pyspark.sql.types import StructType
 
 from src.utils.logger import get_context_with_fallback_logger
+from src.utils.nocodb.get_nocodb_data import (
+    get_nocodb_table_as_pandas_dataframe,
+    get_nocodb_table_id_from_name,
+)
 
 # Spark equi-joins drop null keys, whereas Window.partitionBy groups them
 # together; the sentinel keeps the union-based grouping equivalent.
@@ -62,36 +66,33 @@ def null_coordinates(df: sql.DataFrame) -> sql.Column:
 
 
 def hash_id_column(source: sql.Column) -> sql.Column:
-    """First 8 hex chars of source's md5.
-
-    ~2.3% of 8-char hex substrings land all-digit, which spreadsheets read as a
-    number and can mangle (leading zeros, scientific notation). When that
-    happens, the first character is swapped for a letter a-f, chosen
-    deterministically from the next hex digit, so the id stays valid text.
+    """First 8 hex chars of source's md5, forced to contain at least 2 letters so
+    spreadsheets can't misread it as a plain number or scientific notation (e.g. "97203e73").
     """
     digest = f.md5(source)
     candidate = f.substring(digest, 1, 8)
-    fallback_letter = f.element_at(
-        f.array(*[f.lit(c) for c in "abcdef"]),
-        (f.conv(f.substring(digest, 9, 1), 16, 10).cast("int") % 6) + 1,
+    letter_count = f.length(f.regexp_replace(candidate, "[^a-f]", ""))
+    fallback_alphabet = f.array(*[f.lit(c) for c in "abcdef"])
+    fallback_char = lambda pos: f.element_at(  # noqa: E731
+        fallback_alphabet,
+        (f.conv(f.substring(digest, pos, 1), 16, 10).cast("int") % 6) + 1,
     )
     return f.when(
-        candidate.rlike("^[0-9]+$"),
-        f.concat(fallback_letter, f.substring(candidate, 2, 7)),
+        letter_count < 2,
+        f.concat(fallback_char(9), fallback_char(10), f.substring(candidate, 3, 6)),
     ).otherwise(candidate)
 
 
 def hash_id_str(digest_hex: str) -> str:
     """Python-side counterpart to ``hash_id_column`` for a precomputed md5 hexdigest.
-
-    Used by callers (like ``assign_proximity_groups``) that already have a
-    ``hashlib`` digest rather than a Spark column to hash.
+    Used by callers (like ``assign_proximity_groups``) that already have a hashlib digest.
     """
     candidate = digest_hex[:8]
-    if not candidate.isdigit():
+    if sum(c in "abcdef" for c in candidate) >= 2:
         return candidate
-    fallback_letter = "abcdef"[int(digest_hex[8], 16) % 6]
-    return fallback_letter + candidate[1:]
+    fallback_1 = "abcdef"[int(digest_hex[8], 16) % 6]
+    fallback_2 = "abcdef"[int(digest_hex[9], 16) % 6]
+    return fallback_1 + fallback_2 + candidate[2:]
 
 
 def location_id_column() -> sql.Column:
@@ -114,28 +115,46 @@ def location_duplicate_columns(
 
     Shared by the DQ run and the post-merge refresh so the two cannot drift — the
     ID has to hash identically on both sides.
+
+    ``_count`` and ``_id`` are null unless the row actually shares its coordinate
+    with another row (``count_col > 1``), matching ``dq_duplicate_group_count_50m``/
+    ``dq_duplicate_group_id_50m``'s null-when-not-grouped behaviour — a unique
+    coordinate has no duplicate group to size or identify.
     """
+    is_duplicate = ~null_coords & (count_col > 1)
     return {
         "dq_duplicate_location_rows_flag": f.when(null_coords, f.lit(None).cast("int"))
         .when(count_col > 1, 1)
         .otherwise(0),
-        "dq_duplicate_location_rows_count": f.when(
-            null_coords, f.lit(None).cast("int")
-        ).otherwise(count_col.cast("int")),
-        "dq_duplicate_location_rows_id": f.when(null_coords, f.lit(None)).otherwise(
-            hash_id_column(location_id_column())
-        ),
+        "dq_duplicate_location_rows_count": f.when(is_duplicate, count_col.cast("int")),
+        "dq_duplicate_location_rows_id": f.when(
+            is_duplicate, hash_id_column(location_id_column())
+        ).otherwise(f.lit(None).cast("string")),
     }
 
 
 def to_spark_safe(
     pdf: pd.DataFrame, int_columns: list[str], string_columns: list[str] = ()
 ) -> pd.DataFrame:
-    """Convert nullable pandas dtypes to object columns Spark can infer from."""
+    """Convert nullable pandas dtypes to object columns Spark can infer from.
+
+    dtype=object on assignment is required, not cosmetic: a plain list mixing
+    ``int`` and ``None`` gets silently upcast back to float64 by pandas (turning
+    2 into 2.0) the moment it's assigned into a column, which IntegerType()
+    then rejects outright.
+    """
     for column in int_columns:
-        pdf[column] = [None if pd.isna(v) else int(v) for v in pdf[column]]
+        pdf[column] = pd.Series(
+            [None if pd.isna(v) else int(v) for v in pdf[column]],
+            index=pdf.index,
+            dtype=object,
+        )
     for column in string_columns:
-        pdf[column] = [None if pd.isna(v) else str(v) for v in pdf[column]]
+        pdf[column] = pd.Series(
+            [None if pd.isna(v) else str(v) for v in pdf[column]],
+            index=pdf.index,
+            dtype=object,
+        )
     return pdf
 
 
@@ -307,11 +326,63 @@ def combine_duplicate_members(
             f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
             for c in DUPLICATE_REPORT_DISPLAY_COLUMNS
         ],
+        f.col("duplicate_location_rows_id")
+        .isNotNull()
+        .cast("int")
+        .alias("duplicate_location_rows_flag"),
         "duplicate_location_rows_id",
         "duplicate_location_rows_count",
+        f.col("duplicate_group_id_50m")
+        .isNotNull()
+        .cast("int")
+        .alias("duplicate_group_flag_50m"),
         "duplicate_group_id_50m",
         "duplicate_group_count_50m",
     )
+
+
+DUPLICATES_REPORT_FLAG_COLUMNS = [
+    "duplicate_location_rows_flag",
+    "duplicate_group_flag_50m",
+]
+
+# Structural report columns with no backing dq_ check, so NocoDB has no row for them.
+_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES = {
+    "source": "Source",
+    "approval_status": "Approval Status",
+}
+
+
+def _human_readable_column_names() -> dict[str, str]:
+    """dq_ check column (sans prefix) -> NocoDB "Human Readable Name"."""
+    table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
+    names = table.set_index("DQ Table Column Name")["Human Readable Name"].to_dict()
+    return {
+        col.replace("dq_", "", 1): name
+        for col, name in names.items()
+        if isinstance(col, str) and col.startswith("dq_")
+    }
+
+
+def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFrame:
+    """Render flag columns as Yes/No and rename generated columns to human-readable labels."""
+    for column in DUPLICATES_REPORT_FLAG_COLUMNS:
+        duplicates_report = duplicates_report.withColumn(
+            column, f.when(f.col(column) == 1, "No").otherwise("Yes")
+        )
+    names = {
+        **_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES,
+        **_human_readable_column_names(),
+    }
+    for raw_name, human_name in names.items():
+        if raw_name in duplicates_report.columns:
+            duplicates_report = duplicates_report.withColumnRenamed(
+                raw_name, human_name
+            )
+    return duplicates_report
 
 
 def attach_approval_status(
@@ -389,12 +460,13 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
             duplicate_map[node] = group_id
 
     nodes = list(graph.nodes())
+    # +1 so count includes the row itself, matching dq_duplicate_location_rows_count. Only displayed when count > 1
+    counts = [graph.degree(node) + 1 for node in nodes]
     return pd.DataFrame(
         {
             "school_id_giga": nodes,
             "flag": [1 if node in duplicate_map else 0 for node in nodes],
             "group_id": [duplicate_map.get(node) for node in nodes],
-            # +1 so count includes the row itself, matching dq_duplicate_location_rows_count.
-            "count": [graph.degree(node) + 1 for node in nodes],
+            "count": [c if c > 1 else None for c in counts],
         }
     )

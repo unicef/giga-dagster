@@ -1,9 +1,9 @@
 from delta import DeltaTable
 from models import Schema
 from pyspark import sql
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
-from pyspark.sql.types import StructField
+from pyspark.sql import Column, SparkSession
+from pyspark.sql.functions import col, when
+from pyspark.sql.types import DataType, StringType, StructField
 
 from dagster import (
     AssetExecutionContext,
@@ -66,6 +66,23 @@ def get_schema_columns(spark: SparkSession, schema_name: str) -> list[StructFiel
                 )
 
     return existing_columns
+
+
+def get_schema_columns_by_name(
+    spark: SparkSession, schema_name: str
+) -> dict[str, StructField]:
+    return {field.name: field for field in get_schema_columns(spark, schema_name)}
+
+
+def render_flag(value: Column, dtype: DataType) -> Column:
+    """Render a 0/1 flag per its registered schema type.
+
+    Yes/No when the schema registers the column as a string (the convention DQ
+    checks use elsewhere); a straight cast otherwise.
+    """
+    if isinstance(dtype, StringType):
+        return when(value == 1, "Yes").when(value == 0, "No")
+    return value.cast(dtype)
 
 
 def get_schema_column_descriptions(

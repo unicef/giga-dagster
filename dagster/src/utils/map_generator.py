@@ -435,9 +435,11 @@ def generate_school_map_html(
     failed_filtered = _filter_rows_with_valid_coordinates(failed_df)
 
     if passed_filtered.empty and failed_filtered.empty:
-        message = "No valid latitude/longitude data available for map generation"
-        context.log.warning(message)
-        raise ValueError(message)
+        context.log.warning(
+            f"No valid latitude/longitude data available for map generation "
+            f"(country: {country_code}); skipping map."
+        )
+        return ""
 
     bounds_df = pd.concat([passed_filtered, failed_filtered], ignore_index=True)[
         ["latitude", "longitude"]
