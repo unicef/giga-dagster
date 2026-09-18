@@ -1,6 +1,6 @@
 -- Appends new rows into default.superset_activity_logs from Superset logs.
--- Takes events from the last hour and inserts an id only if it is not already stored in the existing table,
--- with user, dashboard, and chart context.
+-- Inserts every source id that is not already stored, with user, dashboard,
+-- and chart context.
 
 
 -----superset activity logs------------
@@ -95,7 +95,9 @@ SELECT
             THEN 'n.a.'
 
         ELSE 'unknown'
-    END AS dashboard_status
+    END AS dashboard_status,
+
+    CAST(l.dttm AS DATE) AS log_date
 
 FROM superset.public.logs l
 
@@ -116,10 +118,8 @@ LEFT JOIN superset.public.dashboards dd
 LEFT JOIN superset.public.ab_user ud
     ON COALESCE(d.created_by_fk, dd.created_by_fk) = ud.id
 
--- Last hour of source logs; insert only ids not already stored
--- (existence is checked against the whole destination, not this hour).
-WHERE l.dttm >= current_timestamp - INTERVAL '1' HOUR
-  AND NOT EXISTS (
+-- Insert any source id that is not already in the destination table.
+WHERE NOT EXISTS (
       SELECT 1
       FROM default.superset_activity_logs existing
       WHERE existing.id = l.id
