@@ -1,8 +1,9 @@
--- If this table doesn't already exist then this script will create it from superset logs 
 
------superset activity logs------------
-
-CREATE TABLE IF NOT EXISTS default.superset_activity_logs as 
+CREATE TABLE delta_lake.default.superset_activity_logs
+WITH (
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/superset_activity_logs'
+)
+AS
 
 SELECT
     l.id,
@@ -92,7 +93,9 @@ SELECT
             THEN 'n.a.'
 
         ELSE 'unknown'
-    END AS dashboard_status
+    END AS dashboard_status,
+
+    CAST(l.dttm AS DATE) AS log_date
 
 FROM superset.public.logs l
 
@@ -111,6 +114,5 @@ LEFT JOIN superset.public.dashboards dd
    AND l.dashboard_id IS NULL
 
 LEFT JOIN superset.public.ab_user ud
-    ON COALESCE(d.created_by_fk, dd.created_by_fk) = ud.id
+    ON COALESCE(d.created_by_fk, dd.created_by_fk) = ud.id;
 
-ORDER BY l.dttm DESC;
