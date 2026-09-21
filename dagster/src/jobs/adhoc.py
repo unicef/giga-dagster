@@ -67,3 +67,9 @@ hms_migrate_table_locations_to_abfss_job = define_asset_job(
     selection="adhoc__migrate_hms_table_locations_to_abfss",
     tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )
+
+hms_rollback_table_locations_to_wasbs_job = define_asset_job(
+    name="hms_rollback_table_locations_to_wasbs_job",
+    selection="adhoc__rollback_hms_table_locations_to_wasbs",
+    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
+)
