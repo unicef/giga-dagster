@@ -262,11 +262,11 @@ def add_connectivity_type_columns(
     table_id = get_nocodb_table_id_from_name("ConnectivityTypeMapping")
     mappings = get_nocodb_table_as_multi_value_mapping(
         table_id=table_id,
-        key_column="connectivity_type_govt",
-        value_columns=["connectivity_type", "connectivity_type_root"],
+        key_column="Govt",
+        value_columns=["Giga", "Root"],
     )
-    type_mapping = mappings["connectivity_type"]
-    root_mapping = mappings["connectivity_type_root"]
+    type_mapping = mappings["Giga"]
+    root_mapping = mappings["Root"]
     if not (type_mapping and root_mapping):
         return df.withColumn(
             "connectivity_type", f.lit(None).cast(StringType())
