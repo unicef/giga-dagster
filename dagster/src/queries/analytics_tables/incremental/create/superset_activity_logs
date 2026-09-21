@@ -115,4 +115,3 @@ LEFT JOIN superset.public.dashboards dd
 
 LEFT JOIN superset.public.ab_user ud
     ON COALESCE(d.created_by_fk, dd.created_by_fk) = ud.id;
-

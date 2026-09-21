@@ -122,6 +122,3 @@ SELECT
     ROUND(session_seconds / 60.0, 1) AS session_minutes
 FROM spans
 ORDER BY session_start;
-
-
-
