@@ -12,7 +12,7 @@ from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
-TABLES_TO_MIGRATE = ["school_geolocation_silver", "school_master"]
+TABLES_TO_MIGRATE = ["school_master"]
 
 
 @asset
@@ -79,6 +79,7 @@ def adhoc__migrate_connectivity_type_mapping(
 
             context.log.info(f"  {full_name}: update applied")
             updated_tables.append(full_name)
+            s.catalog.clearCache()
 
     if errors:
         context.log.error(f"Tables with errors: {[e['table'] for e in errors]}")
