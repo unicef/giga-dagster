@@ -58,5 +58,5 @@ variables:
   gigameterApiBaseUrl: $(GIGAMETER_API_BASE_URL)
   gigameterApiToken: $(GIGAMETER_API_TOKEN)
   vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
-  mlabBigqueryServiceAccountJson: $(MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON)
+  mlabBigqueryServiceAccountJsonB64: $(MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
   system.debug: true

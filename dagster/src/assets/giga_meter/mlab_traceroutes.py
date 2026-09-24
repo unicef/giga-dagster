@@ -1,3 +1,4 @@
+import base64
 import json
 import math
 from datetime import UTC, date, datetime, timedelta
@@ -98,7 +99,8 @@ TABLE_SCHEMA: list[StructField] = [
 
 
 def _get_bigquery_client() -> bigquery.Client:
-    credentials_info = json.loads(settings.MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON)
+    key_json = base64.b64decode(settings.MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
+    credentials_info = json.loads(key_json)
     credentials = service_account.Credentials.from_service_account_info(
         credentials_info
     )

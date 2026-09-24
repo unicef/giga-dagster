@@ -92,7 +92,7 @@ jobs:
                     GIGAMETER_API_BASE_URL: "$(gigameterApiBaseUrl)"
                     GIGAMETER_API_TOKEN: "$(gigameterApiToken)"
                     VCT_MERAKI_API_KEY: "$(vctMerakiApiKey)"
-                    MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON: "$(mlabBigqueryServiceAccountJson)"
+                    MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: "$(mlabBigqueryServiceAccountJsonB64)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets

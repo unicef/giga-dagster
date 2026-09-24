@@ -77,7 +77,9 @@ class Settings(BaseSettings):
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
     VCT_MERAKI_API_KEY: str = ""
-    MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON: str = ""
+    # base64-encoded service-account JSON: avoids the raw JSON's embedded quotes
+    # breaking the "$(var)" macro substitution into azure/templates/create-config.yaml
+    MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: str = ""
 
     # giga-spatial ADLSDataStore settings (scoped to giga-spatial usage only)
     GIGASPATIAL_ADLS_CONTAINER: str = ""
