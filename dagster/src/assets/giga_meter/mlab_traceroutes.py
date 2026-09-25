@@ -1,14 +1,10 @@
-import base64
-import json
-import math
-from datetime import UTC, date, datetime, timedelta
-
-import numpy as np
-import pandas as pd
 from dagster_pyspark import PySparkResource
-from google.cloud import bigquery
-from google.oauth2 import service_account
-from pyspark.sql import SparkSession
+from delta.tables import DeltaTable
+from pyspark.sql import (
+    DataFrame,
+    SparkSession,
+    functions as f,
+)
 from pyspark.sql.types import (
     BooleanType,
     DateType,
@@ -16,9 +12,9 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     StructField,
-    StructType,
     TimestampType,
 )
+from src.partitions.mlab_traceroutes import mlab_traceroutes_partitions_def
 from src.settings import settings
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 
@@ -33,42 +29,13 @@ FULL_TABLE_NAME = f"{SCHEMA_NAME}.{TABLE_NAME}"
 BQ_PROJECT = "measurement-lab"
 SOURCE_TABLE = "mlab-collaboration.hermes_union.giga_meter_measurements"
 
-# First run has no watermark; bootstrap from here.
-BOOTSTRAP_START_DATE = date(2025, 12, 2)
-# Each BigQuery query covers at most this many days, so a large backlog is
-# caught up over several windows within a single run rather than trickling
-# in one day per scheduled run.
-WINDOW_DAYS = 20
+# Target column name -> source column name, only where they differ.
+_SOURCE_COLUMN_ALIASES = {"client_ip": "src"}
+# BigQuery RECORD REPEATED columns, flattened to JSON strings for storage.
+_JSON_ENCODE_COLUMNS = {"forward_updated_node_details", "reverse_updated_node_details"}
 
 # Kept in sync with the M-Lab archiver's column projection
 # (scripts/archive_giga_traceroutes.py in m-lab/2026-04-giga-traceroute).
-_SELECT_COLUMNS = """\
-  id,
-  partition_date,
-  window_start,
-  src AS client_ip,
-  src_country,
-  src_state,
-  src_lat,
-  src_lon,
-  src_city,
-  src_asn,
-  src_asn_name,
-  dst_country,
-  dst_lat,
-  dst_lon,
-  dst_city,
-  dst_site,
-  dst_asn,
-  ndt_rtt,
-  ndt_throughput,
-  ndt_loss_rate,
-  forward_updated_node_details,
-  reverse_updated_node_details,
-  forward_distance,
-  reverse_distance,
-  is_reaching_dst_asn"""
-
 TABLE_SCHEMA: list[StructField] = [
     StructField("id", StringType(), True),
     StructField("partition_date", DateType(), False),
@@ -98,154 +65,70 @@ TABLE_SCHEMA: list[StructField] = [
 ]
 
 
-def _get_bigquery_client() -> bigquery.Client:
-    key_json = base64.b64decode(settings.MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
-    credentials_info = json.loads(key_json)
-    credentials = service_account.Credentials.from_service_account_info(
-        credentials_info
-    )
-    return bigquery.Client(project=BQ_PROJECT, credentials=credentials)
-
-
-def _build_query() -> str:
-    return (
-        f"SELECT\n{_SELECT_COLUMNS}\n"  # nosec B608
-        f"FROM `{SOURCE_TABLE}`\n"
-        "WHERE partition_date > @lower_exclusive\n"
-        "  AND partition_date <= @upper_inclusive\n"
+def _build_source_df(spark: SparkSession, day: str) -> DataFrame:
+    table_ref = SOURCE_TABLE.replace(".", ":", 1)  # project:dataset.table
+    raw_df = (
+        spark.read.format("bigquery")
+        .option("table", table_ref)
+        .option("parentProject", BQ_PROJECT)
+        .option("credentials", settings.MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
+        .load()
+        .where(f.col("partition_date") == day)
     )
 
+    select_exprs = []
+    for field in TABLE_SCHEMA:
+        source_name = _SOURCE_COLUMN_ALIASES.get(field.name, field.name)
+        column = (
+            f.to_json(source_name)
+            if field.name in _JSON_ENCODE_COLUMNS
+            else f.col(source_name)
+        )
+        select_exprs.append(column.cast(field.dataType).alias(field.name))
 
-def _fetch_window(
-    client: bigquery.Client, lower_exclusive: date, upper_inclusive: date, log
-) -> pd.DataFrame:
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("lower_exclusive", "DATE", lower_exclusive),
-            bigquery.ScalarQueryParameter("upper_inclusive", "DATE", upper_inclusive),
-        ]
-    )
-    query_job = client.query(_build_query(), job_config=job_config)
-    log.info(f"Submitted BigQuery job {query_job.job_id}")
-    result = query_job.result()
-    log.info(
-        f"BigQuery job {query_job.job_id} finished: {result.total_rows} rows, "
-        f"{query_job.total_bytes_processed} bytes processed. Downloading to pandas..."
-    )
-    pdf = result.to_dataframe(create_bqstorage_client=False)
-    log.info(
-        f"Downloaded {len(pdf)} rows to pandas for window ending {upper_inclusive}"
-    )
-    return pdf
+    return raw_df.select(*select_exprs)
 
 
-def _json_safe(value):
-    """Recursively convert numpy/datetime values from a BigQuery RECORD field
-    into plain JSON-serializable Python types (json.dumps does not recurse into
-    numpy arrays on its own — it just stringifies the whole thing via `default`)."""
-    if isinstance(value, dict):
-        return {k: _json_safe(v) for k, v in value.items()}
-    if isinstance(value, list | tuple | np.ndarray):
-        return [_json_safe(v) for v in value]
-    if isinstance(value, datetime | date):
-        return value.isoformat()
-    if isinstance(value, float) and math.isnan(value):
-        return None
-    return value
-
-
-def _to_json_string(value) -> str | None:
-    """Flatten a possibly-nested BigQuery RECORD/REPEATED value to a JSON string."""
-    if value is None:
-        return None
-    if isinstance(value, float) and math.isnan(value):
-        return None
-    if isinstance(value, str):
-        return value
-    return json.dumps(_json_safe(value), default=str)
-
-
-def _prepare_window_df(window_pdf: pd.DataFrame) -> pd.DataFrame:
-    window_pdf = window_pdf[[field.name for field in TABLE_SCHEMA]].copy()
-    window_pdf["forward_updated_node_details"] = window_pdf[
-        "forward_updated_node_details"
-    ].map(_to_json_string)
-    window_pdf["reverse_updated_node_details"] = window_pdf[
-        "reverse_updated_node_details"
-    ].map(_to_json_string)
-    # Normalize BigQuery's extension dtypes (dbdate, nullable Int64/boolean) to plain
-    # Python objects so Spark's createDataFrame can apply TABLE_SCHEMA directly.
-    return window_pdf.astype(object).where(window_pdf.notna(), None)
-
-
-@asset
+@asset(partitions_def=mlab_traceroutes_partitions_def)
 def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Output:
     s: SparkSession = spark.spark_session
+    day = context.partition_key
 
-    table_exists = check_table_exists(s, SCHEMA_NAME, TABLE_NAME, None)
+    context.log.info(f"Pulling partition_date = {day} via Spark BigQuery connector")
+    source_df = _build_source_df(s, day)
 
-    if table_exists:
-        lower_exclusive = s.sql(
-            f"SELECT MAX(partition_date) AS last_date FROM {FULL_TABLE_NAME}"  # nosec B608
-        ).collect()[0]["last_date"]
-        context.log.info(f"Resuming from watermark {lower_exclusive}")
-    else:
-        lower_exclusive = BOOTSTRAP_START_DATE - timedelta(days=1)
-        context.log.info(
-            f"No existing table; bootstrapping from {BOOTSTRAP_START_DATE}"
+    if not check_table_exists(s, SCHEMA_NAME, TABLE_NAME, None):
+        context.log.info(f"Creating {FULL_TABLE_NAME}")
+        create_schema(s, SCHEMA_NAME)
+        create_delta_table(
+            s,
+            SCHEMA_NAME,
+            TABLE_NAME,
+            TABLE_SCHEMA,
+            context,
+            if_not_exists=True,
+            partition_by=["partition_date"],
         )
 
-    yesterday = datetime.now(UTC).date() - timedelta(days=1)
-    context.log.info("Authenticating BigQuery client...")
-    client = _get_bigquery_client()
-    context.log.info(f"BigQuery client ready, billing project {client.project}")
-
-    total_rows = 0
-    windows_pulled = 0
-    current_lower = lower_exclusive
-
-    while current_lower < yesterday:
-        window_upper = min(current_lower + timedelta(days=WINDOW_DAYS), yesterday)
-        context.log.info(f"Pulling partition_date in ({current_lower}, {window_upper}]")
-        window_pdf = _fetch_window(client, current_lower, window_upper, context.log)
-
-        if not window_pdf.empty:
-            window_pdf = _prepare_window_df(window_pdf)
-            context.log.info("Converting pandas DataFrame to Spark...")
-            window_sdf = s.createDataFrame(window_pdf, schema=StructType(TABLE_SCHEMA))
-
-            if not table_exists:
-                context.log.info(f"Creating {FULL_TABLE_NAME}")
-                create_schema(s, SCHEMA_NAME)
-                create_delta_table(
-                    s,
-                    SCHEMA_NAME,
-                    TABLE_NAME,
-                    TABLE_SCHEMA,
-                    context,
-                    if_not_exists=True,
-                    partition_by=["partition_date"],
-                )
-                table_exists = True
-
-            context.log.info(f"Writing to {FULL_TABLE_NAME}...")
-            window_sdf.write.format("delta").mode("append").saveAsTable(FULL_TABLE_NAME)
-            total_rows += len(window_pdf)
-            windows_pulled += 1
-            context.log.info(
-                f"Wrote {len(window_pdf)} rows for window ending {window_upper}"
-            )
-        else:
-            context.log.info("No rows in this window")
-
-        current_lower = window_upper
-
-    context.add_output_metadata(
-        {
-            "rows_pulled": total_rows,
-            "windows_pulled": windows_pulled,
-            "final_watermark": str(current_lower),
-        }
+    context.log.info(
+        f"Writing to {FULL_TABLE_NAME} (replaceWhere partition_date = '{day}')"
     )
+    (
+        source_df.write.format("delta")
+        .mode("overwrite")
+        .option("replaceWhere", f"partition_date = '{day}'")
+        .saveAsTable(FULL_TABLE_NAME)
+    )
+
+    metrics = (
+        DeltaTable.forName(s, FULL_TABLE_NAME)
+        .history(1)
+        .select("operationMetrics")
+        .collect()[0]["operationMetrics"]
+    )
+    rows_written = metrics.get("numOutputRows")
+    context.log.info(f"Wrote {rows_written} rows for partition {day}")
+
+    context.add_output_metadata({"partition": day, "rows_written": rows_written})
 
     return Output(None)

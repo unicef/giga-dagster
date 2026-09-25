@@ -23,8 +23,6 @@ folium = "^0.20.0"
 meraki = "3.1.0"
 pandas = "<3.0"
 sqlparse = "^0.5.5"
-google-cloud-bigquery = "^3.45.2"
-db-dtypes = "^1.7.1"
 
 [tool.poetry.group.dagster.dependencies]
 dagster-webserver = "^1.6.0"

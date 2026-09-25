@@ -39,6 +39,7 @@ RUN wget --tries=3 \
     https://repo1.maven.org/maven2/org/eclipse/jetty/jetty-util-ajax/11.0.14/jetty-util-ajax-11.0.14.jar \
     https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.0.0/delta-spark_2.12-3.0.0.jar \
     https://repo1.maven.org/maven2/io/delta/delta-storage/3.0.0/delta-storage-3.0.0.jar \
+    https://repo1.maven.org/maven2/com/google/cloud/spark/spark-bigquery-with-dependencies_2.12/0.45.0/spark-bigquery-with-dependencies_2.12-0.45.0.jar \
     && unzip -t hadoop-azure-3.3.4.jar > /dev/null
 
 # Compile FixedSASTokenProvider (not included in the standard hadoop-azure JAR)
