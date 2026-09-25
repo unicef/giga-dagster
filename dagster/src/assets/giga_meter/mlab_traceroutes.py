@@ -117,7 +117,7 @@ def _build_query() -> str:
 
 
 def _fetch_window(
-    client: bigquery.Client, lower_exclusive: date, upper_inclusive: date
+    client: bigquery.Client, lower_exclusive: date, upper_inclusive: date, log
 ) -> pd.DataFrame:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
@@ -126,7 +126,17 @@ def _fetch_window(
         ]
     )
     query_job = client.query(_build_query(), job_config=job_config)
-    return query_job.result().to_dataframe(create_bqstorage_client=False)
+    log.info(f"Submitted BigQuery job {query_job.job_id}")
+    result = query_job.result()
+    log.info(
+        f"BigQuery job {query_job.job_id} finished: {result.total_rows} rows, "
+        f"{query_job.total_bytes_processed} bytes processed. Downloading to pandas..."
+    )
+    pdf = result.to_dataframe(create_bqstorage_client=False)
+    log.info(
+        f"Downloaded {len(pdf)} rows to pandas for window ending {upper_inclusive}"
+    )
+    return pdf
 
 
 def _json_safe(value):
@@ -186,7 +196,9 @@ def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Out
         )
 
     yesterday = datetime.now(UTC).date() - timedelta(days=1)
+    context.log.info("Authenticating BigQuery client...")
     client = _get_bigquery_client()
+    context.log.info(f"BigQuery client ready, billing project {client.project}")
 
     total_rows = 0
     windows_pulled = 0
@@ -195,10 +207,11 @@ def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Out
     while current_lower < yesterday:
         window_upper = min(current_lower + timedelta(days=WINDOW_DAYS), yesterday)
         context.log.info(f"Pulling partition_date in ({current_lower}, {window_upper}]")
-        window_pdf = _fetch_window(client, current_lower, window_upper)
+        window_pdf = _fetch_window(client, current_lower, window_upper, context.log)
 
         if not window_pdf.empty:
             window_pdf = _prepare_window_df(window_pdf)
+            context.log.info("Converting pandas DataFrame to Spark...")
             window_sdf = s.createDataFrame(window_pdf, schema=StructType(TABLE_SCHEMA))
 
             if not table_exists:
@@ -215,6 +228,7 @@ def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Out
                 )
                 table_exists = True
 
+            context.log.info(f"Writing to {FULL_TABLE_NAME}...")
             window_sdf.write.format("delta").mode("append").saveAsTable(FULL_TABLE_NAME)
             total_rows += len(window_pdf)
             windows_pulled += 1
