@@ -9,6 +9,7 @@ from dagster_pyspark import PySparkResource
 from google.cloud import bigquery
 from google.oauth2 import service_account
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import col
 from pyspark.sql.types import (
     BooleanType,
     DateType,
@@ -16,14 +17,16 @@ from pyspark.sql.types import (
     LongType,
     StringType,
     StructField,
-    StructType,
     TimestampType,
 )
 from src.partitions.mlab_traceroutes import mlab_traceroutes_partitions_def
 from src.settings import settings
+from src.utils.adls import ADLSFileClient
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
 
 from dagster import OpExecutionContext, Output, asset
+
+adls_client = ADLSFileClient()
 
 SCHEMA_NAME = "giga_meter"
 TABLE_NAME = "mlab_traceroutes"
@@ -160,7 +163,7 @@ def _prepare_day_df(day_pdf: pd.DataFrame) -> pd.DataFrame:
         "reverse_updated_node_details"
     ].map(_to_json_string)
     # Normalize BigQuery's extension dtypes (dbdate, nullable Int64/boolean) to plain
-    # Python objects so Spark's createDataFrame can apply TABLE_SCHEMA directly.
+    # Python objects so pandas' parquet writer infers sane Arrow types.
     return day_pdf.astype(object).where(day_pdf.notna(), None)
 
 
@@ -179,34 +182,48 @@ def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Out
     rows_written = 0
     if not day_pdf.empty:
         day_pdf = _prepare_day_df(day_pdf)
-        context.log.info("Converting pandas DataFrame to Spark...")
-        # Repartition: Arrow's default batching yields huge tasks that can OOM the driver.
-        day_sdf = s.createDataFrame(
-            day_pdf, schema=StructType(TABLE_SCHEMA)
-        ).repartition(32)
-
-        if not check_table_exists(s, SCHEMA_NAME, TABLE_NAME, None):
-            context.log.info(f"Creating {FULL_TABLE_NAME}")
-            create_schema(s, SCHEMA_NAME)
-            create_delta_table(
-                s,
-                SCHEMA_NAME,
-                TABLE_NAME,
-                TABLE_SCHEMA,
-                context,
-                if_not_exists=True,
-                partition_by=["partition_date"],
+        context.log.info(
+            "Converting pandas DataFrame to Spark via ADLS parquet round-trip..."
+        )
+        # createDataFrame() from a local pandas df embeds the data directly in Spark
+        # task payloads, which OOMs the driver on large partitions. Routing through a
+        # parquet file on ADLS lets executors read it as a distributed source instead.
+        tmp_path = f"tmp/mlab_traceroutes/{day_str}.parquet"
+        adls_client.upload_pandas_dataframe_as_file(
+            context=context,
+            data=day_pdf,
+            filepath=tmp_path,
+        )
+        try:
+            day_sdf = adls_client.download_parquet_as_spark_dataframe(tmp_path, s)
+            day_sdf = day_sdf.select(
+                [col(field.name).cast(field.dataType) for field in TABLE_SCHEMA]
             )
 
-        context.log.info(
-            f"Writing to {FULL_TABLE_NAME} (replaceWhere partition_date = '{day_str}')"
-        )
-        (
-            day_sdf.write.format("delta")
-            .mode("overwrite")
-            .option("replaceWhere", f"partition_date = '{day_str}'")
-            .saveAsTable(FULL_TABLE_NAME)
-        )
+            if not check_table_exists(s, SCHEMA_NAME, TABLE_NAME, None):
+                context.log.info(f"Creating {FULL_TABLE_NAME}")
+                create_schema(s, SCHEMA_NAME)
+                create_delta_table(
+                    s,
+                    SCHEMA_NAME,
+                    TABLE_NAME,
+                    TABLE_SCHEMA,
+                    context,
+                    if_not_exists=True,
+                    partition_by=["partition_date"],
+                )
+
+            context.log.info(
+                f"Writing to {FULL_TABLE_NAME} (replaceWhere partition_date = '{day_str}')"
+            )
+            (
+                day_sdf.write.format("delta")
+                .mode("overwrite")
+                .option("replaceWhere", f"partition_date = '{day_str}'")
+                .saveAsTable(FULL_TABLE_NAME)
+            )
+        finally:
+            adls_client.delete(tmp_path)
         rows_written = len(day_pdf)
     else:
         context.log.info(f"No rows for partition {day_str}; nothing to write")
