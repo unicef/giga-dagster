@@ -180,7 +180,10 @@ def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Out
     if not day_pdf.empty:
         day_pdf = _prepare_day_df(day_pdf)
         context.log.info("Converting pandas DataFrame to Spark...")
-        day_sdf = s.createDataFrame(day_pdf, schema=StructType(TABLE_SCHEMA))
+        # Repartition: Arrow's default batching yields huge tasks that can OOM the driver.
+        day_sdf = s.createDataFrame(
+            day_pdf, schema=StructType(TABLE_SCHEMA)
+        ).repartition(32)
 
         if not check_table_exists(s, SCHEMA_NAME, TABLE_NAME, None):
             context.log.info(f"Creating {FULL_TABLE_NAME}")
