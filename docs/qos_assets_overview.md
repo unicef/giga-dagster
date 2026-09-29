@@ -112,6 +112,51 @@ mapping now comes from `school_master.mng` instead of the VM's
 - `custom/qos/zabbix_client.py` - the JSON-RPC client Isizwe and Mawingu
   share.
 
+## Secrets
+
+Added to `src/settings.py`, wired through `azure/templates/variables.yaml` and
+`azure/templates/create-config.yaml` into the `giga-dagster-secrets`
+Kubernetes Secret, the same way `MONGOLIA_API_URL` already is. Values still
+need to be set as pipeline variables in the Azure DevOps variable group for
+each environment (dev/stg/prd) - nothing in this repo can provision them.
+
+| Variable | Used by | Source (from qos_scripts on the VM) |
+|---|---|---|
+| `BRAZIL_API_URL` | `bra_qos` | `bra_scripts/get_qos_brazil.py`'s `url` |
+| `ISIZWE_ZABBIX_API_URL` | `isizwe_qos` | `isizwe_scripts/process_isizwe_raw.py`'s `ZABBIX_API_URL` |
+| `ISIZWE_ZABBIX_TOKEN` | `isizwe_qos` | `isizwe_scripts/process_isizwe_raw.py`'s `token` |
+| `MAWINGU_ZABBIX_API_URL` | `mawingu_qos` | `mawingu_scripts/process_mawingu_raw.py`'s `ZABBIX_API_URL` |
+| `MAWINGU_ZABBIX_TOKEN` | `mawingu_qos` | `mawingu_scripts/process_mawingu_raw.py`'s `token` |
+| `MONGOLIA_DEVICE_BEARER_TOKEN` | `mongolia_qos_raw_json` | `mng_scripts/get_bandwidth_utilization.py`'s `headers["Authorization"]` bearer token |
+
+Isizwe and Mawingu use different Zabbix instances/tokens today (confirm this
+is still true rather than assuming one shared Zabbix deployment) - each gets
+its own pair of variables rather than a shared one. `bra_qos_raw_republish`
+and `mongolia_qos_gold` need no secret of their own; they only read data
+their sibling asset already landed.
+
+## Reference data on ADLS
+
+Two assets need device/school reference data that has no Spark table
+equivalent and must be uploaded to ADLS as a CSV at the paths below. These
+already exist on the VM; they need to be copied over and then kept in sync
+going forward (nothing in this repo does that automatically).
+
+| ADLS path | Used by | Source file on the VM | Maps |
+|---|---|---|---|
+| `reference/qos/KEN/mawingu_schools.csv` | `mawingu_qos` | `/home/azureuser/mawingu/mawingu_schools.csv` | `host_id` → `school_id_giga`/`school_id_govt` |
+| `reference/qos/MNG/whitelisted_devices.csv` | `mongolia_qos_raw_json`, `mongolia_qos_gold` | `/home/azureuser/mongolia/whitelisted_devices.csv` | `device_id` → `fetch_url` (raw_json) and → `school_id_govt` + device metadata (gold) |
+
+Isizwe needs no reference file - Zabbix's `host.get` response already carries
+`school_id_govt` as a host tag, so `isizwe_qos` only needs `school_master.zaf`.
+
+Mongolia's old `MNG_school_geolocation_coverage_master.csv`
+(`school_id_govt` → `school_id_giga`) was **not** ported as a reference file -
+`mongolia_qos_gold` reads `school_master.mng` directly instead, since that
+mapping already exists as a Spark table. Confirm that table has full coverage
+before the first real run; if it's missing rows the VM's CSV had, those
+schools will silently drop out at the `school_id_giga` null-filter step.
+
 ## Backfilling
 
 Each partitioned asset takes its target date from `context.partition_key`
