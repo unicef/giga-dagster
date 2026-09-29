@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     USE_AZURITE: bool = False
     AZURE_STORAGE_ACCOUNT_KEY: str = ""
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
-    SENTRY_DSN: str = ""
+    DAGSTER_SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
     COMMIT_SHA: str = ""

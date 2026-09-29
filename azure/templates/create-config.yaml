@@ -62,7 +62,7 @@ jobs:
                     SLACK_WEBHOOK: "$(slackWebHook)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
-                    SENTRY_DSN: "$(sentryDsn)"
+                    DAGSTER_SENTRY_DSN: "$(sentryDsn)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
