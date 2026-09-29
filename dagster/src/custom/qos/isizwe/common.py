@@ -3,7 +3,7 @@ aggregate_isizwe.py's prod path."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date
 
 import pandas as pd
 from pyspark.sql import SparkSession, functions as F
@@ -42,7 +42,7 @@ def _load_school_lookup(
 
 
 def fetch_silver_dataframe(
-    spark_session: SparkSession, context: OpExecutionContext
+    target_date: date, spark_session: SparkSession, context: OpExecutionContext
 ) -> pd.DataFrame:
     api_url = settings.ISIZWE_ZABBIX_API_URL
     token = settings.ISIZWE_ZABBIX_TOKEN
@@ -67,17 +67,8 @@ def fetch_silver_dataframe(
     for item in items:
         items_by_host.setdefault(item["hostid"], []).append(item)
 
-    yesterday = datetime.now() - timedelta(days=1)
-    start_date = timestamp_to_unix(
-        yesterday.replace(hour=0, minute=0, second=0, microsecond=0).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    )
-    end_date = timestamp_to_unix(
-        yesterday.replace(hour=23, minute=59, second=59, microsecond=0).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    )
+    start_date = timestamp_to_unix(f"{target_date.isoformat()} 00:00:00")
+    end_date = timestamp_to_unix(f"{target_date.isoformat()} 23:59:59")
 
     all_history_data = []
     for hostid in items_by_host:

@@ -8,14 +8,22 @@ from src.custom.qos.bra.schema import BRA_QOS_SCHEMA
 from src.custom.qos.schema_utils import enforce_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
+
+# Adjust to BRA's actual go-live date before relying on backfills before this.
+BRA_QOS_START_DATE = "2024-01-01"
 
 
-@asset
+@asset(partitions_def=DailyPartitionsDefinition(start_date=BRA_QOS_START_DATE))
 def bra_qos(context: OpExecutionContext, spark: PySparkResource) -> Output:
+    """The partition key is the day being queried (dayofyear), not a completed
+    day - a live run targets today's own partition, since the API returns
+    however much of that day has landed so far and the schedule re-runs the
+    same partition six times to pick up late-arriving records. A backfill run
+    targets a past, now-complete partition the same way."""
     s: SparkSession = spark.spark_session
+    query_date = context.partition_key
     run_timestamp = dt.datetime.utcnow()
-    query_date = run_timestamp.strftime("%Y-%m-%d")
     stamp = run_timestamp.strftime("%Y-%m-%d_%H-%M-%S")
 
     raw_bytes, silver_df, gold_df, error_df = fetch_and_build_dataframes(

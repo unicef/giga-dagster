@@ -3,7 +3,7 @@ aggregate_mawingu.py's prod path."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date
 
 import pandas as pd
 from src.custom.qos.mawingu.constants import ITEM_KEY_MAP, REFERENCE_SCHOOLS_FILEPATH
@@ -23,7 +23,7 @@ def _custom_replace(value: str) -> str:
 
 
 def fetch_silver_dataframe(
-    adls_file_client: ADLSFileClient, context: OpExecutionContext
+    target_date: date, adls_file_client: ADLSFileClient, context: OpExecutionContext
 ) -> pd.DataFrame:
     api_url = settings.MAWINGU_ZABBIX_API_URL
     token = settings.MAWINGU_ZABBIX_TOKEN
@@ -46,17 +46,8 @@ def fetch_silver_dataframe(
     for item in items:
         items_by_host.setdefault(item["hostid"], []).append(item)
 
-    yesterday = datetime.now() - timedelta(days=1)
-    start_date = timestamp_to_unix(
-        yesterday.replace(hour=0, minute=0, second=0, microsecond=0).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    )
-    end_date = timestamp_to_unix(
-        yesterday.replace(hour=23, minute=59, second=59, microsecond=0).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
-    )
+    start_date = timestamp_to_unix(f"{target_date.isoformat()} 00:00:00")
+    end_date = timestamp_to_unix(f"{target_date.isoformat()} 23:59:59")
 
     all_history_data = []
     for school in filtered_host:

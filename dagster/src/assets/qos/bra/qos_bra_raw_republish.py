@@ -7,21 +7,27 @@ from src.custom.qos.bra.constants import COUNTRY_CODE
 from src.custom.qos.schema_utils import to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
 
 # published by the generic school_qos__gold_csv_to_deltatable_sensor once bra_qos's
 # gold/qos/BRA output lands and is ingested - see src/sensors/adhoc.py
 GOLD_TABLE_NAME = "qos.bra"
 
+# Adjust to BRA's actual go-live date before relying on backfills before this.
+BRA_QOS_RAW_REPUBLISH_START_DATE = "2024-01-01"
 
-@asset
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date=BRA_QOS_RAW_REPUBLISH_START_DATE)
+)
 def bra_qos_raw_republish(context: OpExecutionContext, spark: PySparkResource) -> Output:
-    """Republishes yesterday's gold.qos.BRA rows to gold/qos-raw/BRA/, matching the
+    """Republishes one day's gold.qos.BRA rows to gold/qos-raw/BRA/, matching the
     dummy device-level columns a genuine raw table would have but BRA never produces
     (BRA ingests pre-aggregated speed-test data, not per-device polling). Ports
-    update_qos_brazil.py."""
+    update_qos_brazil.py. The partition key is the completed day being republished
+    - a live run targets yesterday, a backfill run targets whichever past day."""
     s: SparkSession = spark.spark_session
-    report_day = dt.date.today() - dt.timedelta(days=1)
+    report_day = dt.datetime.strptime(context.partition_key, "%Y-%m-%d").date()
 
     sdf = s.read.table(GOLD_TABLE_NAME).where(F.col("date") == report_day.isoformat())
     df = sdf.toPandas()

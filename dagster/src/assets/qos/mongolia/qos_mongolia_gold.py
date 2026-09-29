@@ -7,23 +7,34 @@ from src.custom.qos.mongolia.schema import MONGOLIA_GOLD_SCHEMA, MONGOLIA_RAW_CL
 from src.custom.qos.schema_utils import enforce_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
-from dagster import OpExecutionContext, Output, asset
+from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
+
+# Mongolia's device poller (mongolia_qos_raw_json) has landed data since roughly
+# late 2024 - adjust to the actual go-live date before relying on backfills before
+# this, and note that any date with no raw snapshots under raw/qos/MNG/<date>/
+# will just produce zero rows, same as backfill_mongolia_raw.py's WARNING-and-skip.
+MONGOLIA_QOS_GOLD_START_DATE = "2024-11-01"
 
 
-@asset
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date=MONGOLIA_QOS_GOLD_START_DATE)
+)
 def mongolia_qos_gold(
     context: OpExecutionContext,
     spark: PySparkResource,
     adls_file_client: ADLSFileClient,
 ) -> Output:
-    """Cleans yesterday's raw device snapshots and aggregates them hourly, publishing
+    """Cleans one day's raw device snapshots and aggregates them hourly, publishing
     both gold/qos-raw/MNG and gold/qos/MNG. Combines process_mongolia_raw.py +
     process_mongolia_clean.py into a single in-memory run - the original two-hour gap
     between them existed only to let a file land on blob storage before the next cron
     fired, which Dagster doesn't need. process_bandwidth_utilization.py's independent
-    staging-only pipeline is intentionally not ported (see schema.py)."""
+    staging-only pipeline is intentionally not ported (see schema.py). The partition
+    key is the completed day being cleaned - a live run targets yesterday, a backfill
+    run targets whichever past day (needs mongolia_qos_raw_json to have actually
+    polled that day - see module docstring)."""
     s: SparkSession = spark.spark_session
-    query_date = dt.datetime.utcnow().date() - dt.timedelta(days=1)
+    query_date = dt.datetime.strptime(context.partition_key, "%Y-%m-%d").date()
 
     raw_clean_df = build_raw_clean_dataframe(query_date, adls_file_client, s, context)
     if len(raw_clean_df) == 0:
