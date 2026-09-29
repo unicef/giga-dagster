@@ -17,6 +17,7 @@ distributed compute.
 3. [Development](development.md)
 4. [Deployment](deployment.md)
 5. [Support](support.md)
+6. [QoS Migration Setup](qos_migration_setup.md)
 
 ## Jump to other platform services
 
