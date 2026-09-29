@@ -299,7 +299,7 @@ SELECT
     -- -------------------------------------------------------------------------
     -- Building Information
     -- -------------------------------------------------------------------------
-    CAST(master.building_id_govt AS DOUBLE) AS building_id_govt,                  -- Government building identifier
+    CAST(master.building_id_govt AS VARCHAR) AS building_id_govt,                  -- Government building identifier
     CAST(master.num_schools_per_building AS DOUBLE) AS num_schools_per_building,   -- Number of schools sharing building
 
     -- -------------------------------------------------------------------------
