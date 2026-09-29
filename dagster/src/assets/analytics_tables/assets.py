@@ -329,6 +329,11 @@ def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> N
     _run_daily(context)
 
 
+@asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+def superset_session_lengths(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
 # =============================================================================
 # Incremental assets
 # =============================================================================
@@ -385,4 +390,9 @@ def all_ping_hourly(context: OpExecutionContext) -> None:
     compute_kind="trino",
 )
 def all_ping_daily(context: OpExecutionContext) -> None:
+    _run_incremental(context)
+
+
+@asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+def superset_activity_logs(context: OpExecutionContext) -> None:
     _run_incremental(context)

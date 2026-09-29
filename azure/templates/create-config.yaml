@@ -92,6 +92,7 @@ jobs:
                     GIGAMETER_API_BASE_URL: "$(gigameterApiBaseUrl)"
                     GIGAMETER_API_TOKEN: "$(gigameterApiToken)"
                     VCT_MERAKI_API_KEY: "$(vctMerakiApiKey)"
+                    MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: "$(mlabBigqueryServiceAccountJsonB64)"
 
             - task: Kubernetes@1
               displayName: Create authproxy secrets
@@ -157,7 +158,7 @@ jobs:
                       app.kubernetes.io/part-of: giga-dataops-platform
                       app.kubernetes.io/component: dagster
                   stringData:
-                      METASTORE_WAREHOUSE_DIR: "wasbs://$(azureBlobContainerName)@$(azureStorageAccountName).blob.core.windows.net/warehouse"
+                      METASTORE_WAREHOUSE_DIR: "abfss://$(azureBlobContainerName)@$(azureStorageAccountName).dfs.core.windows.net/warehouse"
                       AZURE_SAS_TOKEN: '$(azureSasTokenEscaped)'
                       STORAGE_ACCOUNT_NAME: "$(azureStorageAccountName)"
                       STORAGE_CONTAINER_NAME: "$(azureBlobContainerName)"
