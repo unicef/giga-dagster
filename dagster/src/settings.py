@@ -77,6 +77,14 @@ class Settings(BaseSettings):
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
     VCT_MERAKI_API_KEY: str = ""
+
+    # QoS ingestion - Brazil (nic.br), Isizwe (South Africa), Mawingu (Kenya), Mongolia
+    BRAZIL_API_URL: str = ""
+    ISIZWE_ZABBIX_API_URL: str = ""
+    ISIZWE_ZABBIX_TOKEN: str = ""
+    MAWINGU_ZABBIX_API_URL: str = ""
+    MAWINGU_ZABBIX_TOKEN: str = ""
+    MONGOLIA_DEVICE_BEARER_TOKEN: str = ""
     # base64-encoded service-account JSON: avoids the raw JSON's embedded quotes
     # breaking the "$(var)" macro substitution into azure/templates/create-config.yaml
     MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: str = ""
