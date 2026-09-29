@@ -4,7 +4,7 @@ from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
 from src.custom.qos.mongolia.common import aggregate_gold_dataframe, build_raw_clean_dataframe
 from src.custom.qos.mongolia.schema import MONGOLIA_GOLD_SCHEMA, MONGOLIA_RAW_CLEAN_SCHEMA
-from src.custom.qos.schema_utils import enforce_schema, to_parquet_bytes
+from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
@@ -40,13 +40,13 @@ def mongolia_qos_gold(
     if len(raw_clean_df) == 0:
         return Output(None, metadata={"rows": 0})
 
-    raw_clean_df = enforce_schema(raw_clean_df, MONGOLIA_RAW_CLEAN_SCHEMA)
+    raw_clean_df = enforce_prd_schema(raw_clean_df, MONGOLIA_RAW_CLEAN_SCHEMA)
     raw_clean_filepath = f"gold/qos-raw/MNG/qos_mongolia_{query_date.isoformat()}.parquet"
     ADLSFileClient.upload_raw(None, to_parquet_bytes(raw_clean_df), raw_clean_filepath)
     context.log.info(f"{len(raw_clean_df)} raw_clean rows -> {raw_clean_filepath}")
 
     gold_df = aggregate_gold_dataframe(raw_clean_df, s, context)
-    gold_df = enforce_schema(gold_df, MONGOLIA_GOLD_SCHEMA)
+    gold_df = enforce_prd_schema(gold_df, MONGOLIA_GOLD_SCHEMA)
     gold_filepath = f"gold/qos/MNG/qos_mongolia_{query_date.isoformat()}.parquet"
     ADLSFileClient.upload_raw(None, to_parquet_bytes(gold_df), gold_filepath)
 

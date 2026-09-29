@@ -33,6 +33,10 @@ def fetch_device_snapshots(
             response = requests.get(url, headers=headers, timeout=30)
             payload = json.loads(response.text)
             port = payload["port"]
+            if "device_id" in port and port["device_id"] != device_id:
+                raise ValueError(
+                    f"response device_id {port['device_id']!r} does not match requested {device_id!r}"
+                )
             port["source_device_id"] = device_id
             port["api_fetch_timestamp"] = stamp
 

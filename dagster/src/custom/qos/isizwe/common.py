@@ -122,7 +122,10 @@ def fetch_silver_dataframe(
     wide_df["provider"] = "Isizwe"
 
     giga_master = _load_school_lookup(spark_session, context)
-    wide_df = wide_df.merge(giga_master, on="school_id_govt")
+    # left join, not the default inner: if school_master.zaf is unavailable,
+    # _load_school_lookup returns an empty frame and an inner join would silently
+    # drop every row, making the run "succeed" with zero rows uploaded.
+    wide_df = wide_df.merge(giga_master, on="school_id_govt", how="left")
     return wide_df
 
 

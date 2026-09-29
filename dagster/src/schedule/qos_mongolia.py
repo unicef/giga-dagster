@@ -8,5 +8,5 @@ mongolia_qos_raw_json_schedule = ScheduleDefinition(
 )
 
 mongolia_qos_gold_schedule = build_schedule_from_partitioned_job(
-    mongolia_qos_gold_job, cron_schedule="55 15 * * *"
+    mongolia_qos_gold_job, hour_of_day=15, minute_of_hour=55
 )

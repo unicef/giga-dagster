@@ -3,7 +3,7 @@ import datetime as dt
 from src.custom.qos.mawingu.common import aggregate_gold_dataframe, fetch_silver_dataframe
 from src.custom.qos.mawingu.constants import COUNTRY_CODE
 from src.custom.qos.mawingu.schema import MAWINGU_GOLD_SCHEMA
-from src.custom.qos.schema_utils import enforce_schema, to_parquet_bytes
+from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
@@ -32,7 +32,7 @@ def mawingu_qos(context: OpExecutionContext, adls_file_client: ADLSFileClient) -
     context.log.info(f"{len(silver_df)} silver rows")
 
     gold_df = aggregate_gold_dataframe(silver_df)
-    gold_df = enforce_schema(gold_df, MAWINGU_GOLD_SCHEMA)
+    gold_df = enforce_prd_schema(gold_df, MAWINGU_GOLD_SCHEMA)
     gold_parquet = to_parquet_bytes(gold_df)
     gold_filepath = f"gold/qos/{COUNTRY_CODE}/mawingu_{target_date.isoformat()}.parquet"
     ADLSFileClient.upload_raw(None, gold_parquet, gold_filepath)

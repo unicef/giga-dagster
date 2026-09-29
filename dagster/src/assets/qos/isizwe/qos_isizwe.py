@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 from src.custom.qos.isizwe.common import aggregate_gold_dataframe, fetch_silver_dataframe
 from src.custom.qos.isizwe.constants import COUNTRY_CODE
 from src.custom.qos.isizwe.schema import ISIZWE_GOLD_SCHEMA
-from src.custom.qos.schema_utils import enforce_schema, to_parquet_bytes
+from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
@@ -35,7 +35,7 @@ def isizwe_qos(context: OpExecutionContext, spark: PySparkResource) -> Output:
     context.log.info(f"{len(silver_df)} silver rows")
 
     gold_df = aggregate_gold_dataframe(silver_df)
-    gold_df = enforce_schema(gold_df, ISIZWE_GOLD_SCHEMA)
+    gold_df = enforce_prd_schema(gold_df, ISIZWE_GOLD_SCHEMA)
     gold_parquet = to_parquet_bytes(gold_df)
     gold_filepath = f"gold/qos/{COUNTRY_CODE}/isizwe_{target_date.isoformat()}.parquet"
     ADLSFileClient.upload_raw(None, gold_parquet, gold_filepath)

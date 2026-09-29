@@ -13,5 +13,5 @@ def bra_qos_schedule(context: ScheduleEvaluationContext):
 
 
 bra_qos_raw_republish_schedule = build_schedule_from_partitioned_job(
-    bra_qos_raw_republish_job, cron_schedule="45 1 * * *"
+    bra_qos_raw_republish_job, hour_of_day=1, minute_of_hour=45
 )
