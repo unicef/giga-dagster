@@ -2,7 +2,10 @@ import datetime as dt
 
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
-from src.custom.qos.isizwe.common import aggregate_gold_dataframe, fetch_silver_dataframe
+from src.custom.qos.isizwe.common import (
+    aggregate_gold_dataframe,
+    fetch_silver_dataframe,
+)
 from src.custom.qos.isizwe.constants import COUNTRY_CODE
 from src.custom.qos.isizwe.schema import ISIZWE_GOLD_SCHEMA
 from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
@@ -27,6 +30,10 @@ def isizwe_qos(context: OpExecutionContext, spark: PySparkResource) -> Output:
     target_date = dt.datetime.strptime(context.partition_key, "%Y-%m-%d").date()
 
     silver_df = fetch_silver_dataframe(target_date, s, context)
+    if len(silver_df) == 0:
+        context.log.warning(f"No Isizwe data for {target_date}")
+        return Output(None, metadata={"rows": 0})
+
     ADLSFileClient.upload_raw(
         None,
         to_parquet_bytes(silver_df),

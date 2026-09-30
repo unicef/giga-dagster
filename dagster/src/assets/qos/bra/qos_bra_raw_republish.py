@@ -2,7 +2,10 @@ import datetime as dt
 
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import (
+    SparkSession,
+    functions as F,
+)
 from src.custom.qos.bra.constants import COUNTRY_CODE
 from src.custom.qos.schema_utils import to_parquet_bytes
 from src.utils.adls import ADLSFileClient
@@ -18,9 +21,13 @@ BRA_QOS_RAW_REPUBLISH_START_DATE = "2024-01-01"
 
 
 @asset(
-    partitions_def=DailyPartitionsDefinition(start_date=BRA_QOS_RAW_REPUBLISH_START_DATE)
+    partitions_def=DailyPartitionsDefinition(
+        start_date=BRA_QOS_RAW_REPUBLISH_START_DATE
+    )
 )
-def bra_qos_raw_republish(context: OpExecutionContext, spark: PySparkResource) -> Output:
+def bra_qos_raw_republish(
+    context: OpExecutionContext, spark: PySparkResource
+) -> Output:
     """Republishes one day's gold.qos.BRA rows to gold/qos-raw/BRA/, matching the
     dummy device-level columns a genuine raw table would have but BRA never produces
     (BRA ingests pre-aggregated speed-test data, not per-device polling). Ports

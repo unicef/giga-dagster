@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import requests
@@ -24,10 +24,12 @@ def make_api_call(
 
     if "result" in response_data:
         return response_data["result"]
-    raise Exception(f"Zabbix API call failed: {response_data.get('error', 'Unknown error')}")
+    raise Exception(
+        f"Zabbix API call failed: {response_data.get('error', 'Unknown error')}"
+    )
 
 
 def timestamp_to_unix(timestamp: str) -> int:
     dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-    dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.replace(tzinfo=UTC)
     return int(dt.timestamp())

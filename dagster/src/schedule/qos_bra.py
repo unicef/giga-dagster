@@ -1,6 +1,10 @@
+from dagster import (
+    RunRequest,
+    ScheduleEvaluationContext,
+    build_schedule_from_partitioned_job,
+    schedule,
+)
 from src.jobs.qos_bra import bra_qos_job, bra_qos_raw_republish_job
-
-from dagster import RunRequest, ScheduleEvaluationContext, build_schedule_from_partitioned_job, schedule
 
 
 @schedule(cron_schedule="10 3,7,11,15,19,23 * * *", job=bra_qos_job)

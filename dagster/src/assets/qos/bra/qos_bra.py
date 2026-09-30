@@ -38,7 +38,9 @@ def bra_qos(context: OpExecutionContext, spark: PySparkResource) -> Output:
         query_date, s, context
     )
 
-    ADLSFileClient.upload_raw(None, raw_bytes, f"bronze/qos/{COUNTRY_CODE}/{stamp}.json")
+    ADLSFileClient.upload_raw(
+        None, raw_bytes, f"bronze/qos/{COUNTRY_CODE}/{stamp}.json"
+    )
 
     silver_df = enforce_prd_schema(silver_df, BRA_QOS_SCHEMA)
     ADLSFileClient.upload_raw(
@@ -62,5 +64,9 @@ def bra_qos(context: OpExecutionContext, spark: PySparkResource) -> Output:
     context.log.info(f"{len(gold_df)} gold rows -> {gold_filepath}")
     return Output(
         None,
-        metadata={"rows": len(gold_df), "error_rows": len(error_df), "filepath": gold_filepath},
+        metadata={
+            "rows": len(gold_df),
+            "error_rows": len(error_df),
+            "filepath": gold_filepath,
+        },
     )

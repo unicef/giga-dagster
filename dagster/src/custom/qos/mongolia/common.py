@@ -10,8 +10,14 @@ from datetime import date
 
 import pandas as pd
 import requests
-from pyspark.sql import SparkSession, functions as F
-from src.custom.qos.mongolia.constants import CONVERSION_FACTORS, REFERENCE_DEVICES_FILEPATH
+from pyspark.sql import (
+    SparkSession,
+    functions as F,
+)
+from src.custom.qos.mongolia.constants import (
+    CONVERSION_FACTORS,
+    REFERENCE_DEVICES_FILEPATH,
+)
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 
@@ -23,12 +29,16 @@ def fetch_device_snapshots(
 ) -> None:
     """Polls every whitelisted device and uploads its raw JSON response to ADLS.
     Ports get_bandwidth_utilization.py - runs every 5 minutes."""
-    devices_df = adls_file_client.download_csv_as_pandas_dataframe(REFERENCE_DEVICES_FILEPATH)
+    devices_df = adls_file_client.download_csv_as_pandas_dataframe(
+        REFERENCE_DEVICES_FILEPATH
+    )
     headers = {"Authorization": f"Bearer {settings.MONGOLIA_DEVICE_BEARER_TOKEN}"}
     stamp = run_timestamp.strftime("%Y-%m-%d_%H-%M-%S")
     date_prefix = run_timestamp.date().isoformat()
 
-    for device_id, url in zip(devices_df["device_id"], devices_df["fetch_url"]):
+    for device_id, url in zip(
+        devices_df["device_id"], devices_df["fetch_url"], strict=False
+    ):
         try:
             response = requests.get(url, headers=headers, timeout=30)
             payload = json.loads(response.text)
@@ -40,7 +50,9 @@ def fetch_device_snapshots(
             port["source_device_id"] = device_id
             port["api_fetch_timestamp"] = stamp
 
-            filepath = f"raw/qos/MNG/{date_prefix}/qos_mongolia_{device_id}_{stamp}.json"
+            filepath = (
+                f"raw/qos/MNG/{date_prefix}/qos_mongolia_{device_id}_{stamp}.json"
+            )
             ADLSFileClient.upload_raw(None, response.content, filepath)
         except Exception as exc:
             context.log.error(f"Error getting data for device {device_id}: {exc}")
@@ -102,16 +114,31 @@ def build_raw_clean_dataframe(
     ddf = ddf[~ddf["device_id"].isnull()]
     ddf["device_id"] = ddf["device_id"].astype(int)
 
-    devices_df = adls_file_client.download_csv_as_pandas_dataframe(REFERENCE_DEVICES_FILEPATH)
-    devices_df = devices_df[[
-        "device_id", "purpose", "inserted", "hostname", "sysName", "sysContact",
-        "version", "hardware", "location", "lat", "lng", "network_tech",
-    ]]
+    devices_df = adls_file_client.download_csv_as_pandas_dataframe(
+        REFERENCE_DEVICES_FILEPATH
+    )
+    devices_df = devices_df[
+        [
+            "device_id",
+            "purpose",
+            "inserted",
+            "hostname",
+            "sysName",
+            "sysContact",
+            "version",
+            "hardware",
+            "location",
+            "lat",
+            "lng",
+            "network_tech",
+        ]
+    ]
     ddf = pd.merge(devices_df, ddf, on="device_id", how="inner")
     ddf["poll_time"] = pd.to_datetime(ddf["poll_time"], unit="s")
     ddf["purpose"] = ddf["purpose"].astype(int)
     ddf["ifVlan"] = ddf["ifVlan"].replace("", float("nan"))
     ddf = ddf.rename(columns={"purpose": "school_id_govt"})
+    ddf["school_id_govt"] = ddf["school_id_govt"].astype(str)
 
     giga_master = _load_school_lookup(spark_session, context)
     merged_df = pd.merge(ddf, giga_master, on="school_id_govt", how="left")
@@ -123,27 +150,39 @@ def build_raw_clean_dataframe(
         merged_df[units_col] = merged_df[direction].str.extract(r"(\d+) (\w+)")[1]
         merged_df[value_col] = pd.to_numeric(merged_df[value_col])
         merged_df[direction] = merged_df.apply(
-            lambda row, d=direction: row[f"{d}_value"] * CONVERSION_FACTORS[row[f"{d}_units"]],
+            lambda row, d=direction: row[f"{d}_value"]
+            * CONVERSION_FACTORS[row[f"{d}_units"]],
             axis=1,
         )
 
     merged_df["ifInOctets"] = merged_df["ifInOctets"] / 1048576
     merged_df["ifOutOctets"] = merged_df["ifOutOctets"] / 1048576
 
-    merged_df = merged_df.rename(columns={
-        "poll_time": "timestamp",
-        "in_rate": "speed_download",
-        "out_rate": "speed_upload",
-        "ifInOctets": "inbound_traffic",
-        "ifOutOctets": "outbound_traffic",
-    })
+    merged_df = merged_df.rename(
+        columns={
+            "poll_time": "timestamp",
+            "in_rate": "speed_download",
+            "out_rate": "speed_upload",
+            "ifInOctets": "inbound_traffic",
+            "ifOutOctets": "outbound_traffic",
+        }
+    )
     merged_df["country_id"] = "MNG"
     merged_df["measurement_id"] = "MNG001"
 
     columns = [
-        "timestamp", "school_id_govt", "school_id_giga", "speed_download", "speed_upload",
-        "inbound_traffic", "outbound_traffic", "in_perc", "out_perc", "device_id",
-        "country_id", "measurement_id",
+        "timestamp",
+        "school_id_govt",
+        "school_id_giga",
+        "speed_download",
+        "speed_upload",
+        "inbound_traffic",
+        "outbound_traffic",
+        "in_perc",
+        "out_perc",
+        "device_id",
+        "country_id",
+        "measurement_id",
     ]
     raw_clean_df = merged_df[columns]
     raw_clean_df = raw_clean_df[~raw_clean_df["school_id_giga"].isnull()]
@@ -161,21 +200,35 @@ def aggregate_gold_dataframe(
     ddf["timestamp"] = ddf["timestamp"].dt.floor("H")
     ddf["count_dummy"] = 1
 
-    ddf = ddf.groupby(["timestamp", "device_id", "school_id_govt"]).agg({
-        "speed_download": ["min", "mean", "max"],
-        "speed_upload": ["min", "mean", "max"],
-        "inbound_traffic": "sum",
-        "outbound_traffic": "sum",
-        "count_dummy": "sum",
-    }).reset_index()
+    ddf = (
+        ddf.groupby(["timestamp", "device_id", "school_id_govt"])
+        .agg(
+            {
+                "speed_download": ["min", "mean", "max"],
+                "speed_upload": ["min", "mean", "max"],
+                "inbound_traffic": "sum",
+                "outbound_traffic": "sum",
+                "count_dummy": "sum",
+            }
+        )
+        .reset_index()
+    )
 
     ddf.columns = [
-        "timestamp", "device_id", "school_id_govt",
-        "speed_download_min", "speed_download_mean", "speed_download_max",
-        "speed_upload_min", "speed_upload_mean", "speed_upload_max",
-        "inbound_traffic_sum", "outbound_traffic_sum",
+        "timestamp",
+        "device_id",
+        "school_id_govt",
+        "speed_download_min",
+        "speed_download_mean",
+        "speed_download_max",
+        "speed_upload_min",
+        "speed_upload_mean",
+        "speed_upload_max",
+        "inbound_traffic_sum",
+        "outbound_traffic_sum",
         "count",
     ]
+    ddf["school_id_govt"] = ddf["school_id_govt"].astype(str)
 
     giga_master = _load_school_lookup(spark_session, context)
     merged_df = pd.merge(ddf, giga_master, on="school_id_govt", how="left")
@@ -184,11 +237,23 @@ def aggregate_gold_dataframe(
     merged_df["provider"] = "Mongolia"
     merged_df["measurement_type"] = "usage"
 
-    gold_df = merged_df[[
-        "timestamp", "country_id", "school_id_giga", "school_id_govt",
-        "provider", "measurement_type", "count",
-        "speed_download_min", "speed_download_mean", "speed_download_max",
-        "speed_upload_min", "speed_upload_mean", "speed_upload_max",
-        "inbound_traffic_sum", "outbound_traffic_sum",
-    ]]
+    gold_df = merged_df[
+        [
+            "timestamp",
+            "country_id",
+            "school_id_giga",
+            "school_id_govt",
+            "provider",
+            "measurement_type",
+            "count",
+            "speed_download_min",
+            "speed_download_mean",
+            "speed_download_max",
+            "speed_upload_min",
+            "speed_upload_mean",
+            "speed_upload_max",
+            "inbound_traffic_sum",
+            "outbound_traffic_sum",
+        ]
+    ]
     return gold_df

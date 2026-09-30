@@ -6,7 +6,10 @@ import json
 
 import pandas as pd
 import requests
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import (
+    SparkSession,
+    functions as F,
+)
 from src.settings import settings
 
 from dagster import OpExecutionContext
@@ -22,10 +25,21 @@ RENAME_COLUMNS = {
 }
 
 GOLD_COLUMNS = [
-    "timestamp", "country_id", "school_id_govt", "school_id_giga",
-    "speed_download", "speed_upload", "roundtrip_time",
-    "jitter_download", "jitter_upload", "rtt_packet_loss_pct",
-    "latency", "provider", "ip_family", "report_id", "agent_id",
+    "timestamp",
+    "country_id",
+    "school_id_govt",
+    "school_id_giga",
+    "speed_download",
+    "speed_upload",
+    "roundtrip_time",
+    "jitter_download",
+    "jitter_upload",
+    "rtt_packet_loss_pct",
+    "latency",
+    "provider",
+    "ip_family",
+    "report_id",
+    "agent_id",
 ]
 
 
@@ -66,11 +80,24 @@ def fetch_and_build_dataframes(
     df["latency"] = None
 
     df = df.sort_values(["school_id_govt", "timestamp"])
-    df = df[[
-        "timestamp", "country_id", "school_id_govt", "speed_download", "speed_upload",
-        "roundtrip_time", "jitter_download", "jitter_upload", "rtt_packet_loss_pct",
-        "latency", "provider", "ip_family", "report_id", "agent_id",
-    ]]
+    df = df[
+        [
+            "timestamp",
+            "country_id",
+            "school_id_govt",
+            "speed_download",
+            "speed_upload",
+            "roundtrip_time",
+            "jitter_download",
+            "jitter_upload",
+            "rtt_packet_loss_pct",
+            "latency",
+            "provider",
+            "ip_family",
+            "report_id",
+            "agent_id",
+        ]
+    ]
 
     error_df = df[df["school_id_govt"].isna()].copy()
     df = df[~df["school_id_govt"].isna()].copy()
@@ -92,12 +119,13 @@ def fetch_and_build_dataframes(
     no_match_df["error"] = "no_school_match"
     error_df = pd.concat([error_df, no_match_df])
 
-    if silver_df["ip_family"].dtype == int:
-        gold_df = silver_df[silver_df["ip_family"] == 4]
-    else:
+    ip_family_numeric = pd.to_numeric(silver_df["ip_family"], errors="coerce")
+    if ip_family_numeric.isna().any():
         context.log.warning(
-            "ip_family column is not integer-typed; skipping IPv4 filter for gold"
+            "ip_family column contains non-numeric values; skipping IPv4 filter for gold"
         )
         gold_df = silver_df
+    else:
+        gold_df = silver_df[ip_family_numeric == 4]
 
     return raw_bytes, silver_df, gold_df, error_df

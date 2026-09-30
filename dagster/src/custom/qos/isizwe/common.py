@@ -6,7 +6,10 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import (
+    SparkSession,
+    functions as F,
+)
 from src.custom.qos.isizwe.constants import ITEM_KEY_MAP
 from src.custom.qos.zabbix_client import make_api_call, timestamp_to_unix
 from src.settings import settings
@@ -56,7 +59,15 @@ def fetch_silver_dataframe(
     host = host[host["school_id_govt"] != "N/A"]
 
     item_params = {
-        "output": ["itemid", "name", "key_", "hostid", "snmp_oid", "value_type", "status"],
+        "output": [
+            "itemid",
+            "name",
+            "key_",
+            "hostid",
+            "snmp_oid",
+            "value_type",
+            "status",
+        ],
         "hostids": list(host.hostid.unique()),
         "filter": {"key_": list(ITEM_KEY_MAP.keys())},
         "sortfield": "name",
@@ -82,16 +93,27 @@ def fetch_silver_dataframe(
             "sortorder": "ASC",
         }
         context.log.info(f"getting data for {hostid}")
-        history_data = pd.DataFrame(make_api_call(api_url, token, "history.get", history_params))
+        history_data = pd.DataFrame(
+            make_api_call(api_url, token, "history.get", history_params)
+        )
         history_data["hostid"] = hostid
         all_history_data.append(history_data)
 
-    data = pd.concat(all_history_data, ignore_index=True) if all_history_data else pd.DataFrame()
+    data = (
+        pd.concat(all_history_data, ignore_index=True)
+        if all_history_data
+        else pd.DataFrame()
+    )
+    if data.empty:
+        context.log.warning(f"No Zabbix history data for {target_date}")
+        return pd.DataFrame()
 
     items_df = pd.DataFrame(items).rename(columns={"key_": "key"})
     items_df = items_df[["itemid", "hostid", "key", "name", "value_type"]]
     data = data.merge(items_df, on=["itemid", "hostid"])
-    data = data[["hostid", "itemid", "name", "key", "value", "value_type", "clock", "ns"]]
+    data = data[
+        ["hostid", "itemid", "name", "key", "value", "value_type", "clock", "ns"]
+    ]
 
     data["value"] = pd.to_numeric(data["value"])
     data["clock"] = pd.to_numeric(data["clock"])
@@ -116,7 +138,9 @@ def fetch_silver_dataframe(
 
     host = host[["hostid", "school_id_govt"]].rename(columns={"hostid": "host_id"})
     wide_df = wide_df.merge(host, on="host_id")
-    wide_df = wide_df.sort_values(by=["school_id_govt", "host_id", "timestamp"], ascending=False)
+    wide_df = wide_df.sort_values(
+        by=["school_id_govt", "host_id", "timestamp"], ascending=False
+    )
 
     wide_df["country_id"] = "ZAF"
     wide_df["provider"] = "Isizwe"
@@ -134,20 +158,34 @@ def aggregate_gold_dataframe(silver_df: pd.DataFrame) -> pd.DataFrame:
     df["timestamp"] = pd.to_datetime(df["timestamp"])
     df["timestamp"] = df["timestamp"].dt.floor("H")
 
-    ddf = df.groupby(["timestamp", "school_id_giga", "school_id_govt", "host_id"]).agg({
-        "speed_download": ["min", "mean", "max"],
-        "speed_upload": ["min", "mean", "max"],
-        "ping_status": [
-            lambda x: x.notna().sum(),
-            lambda x: (x == 1.0).sum(),
-        ],
-    }).reset_index()
+    ddf = (
+        df.groupby(["timestamp", "school_id_giga", "school_id_govt", "host_id"])
+        .agg(
+            {
+                "speed_download": ["min", "mean", "max"],
+                "speed_upload": ["min", "mean", "max"],
+                "ping_status": [
+                    lambda x: x.notna().sum(),
+                    lambda x: (x == 1.0).sum(),
+                ],
+            }
+        )
+        .reset_index()
+    )
 
     ddf.columns = [
-        "timestamp", "school_id_giga", "school_id_govt", "host_id",
-        "speed_download_min", "speed_download_mean", "speed_download_max",
-        "speed_upload_min", "speed_upload_mean", "speed_upload_max",
-        "is_connected_all", "is_connected_true",
+        "timestamp",
+        "school_id_giga",
+        "school_id_govt",
+        "host_id",
+        "speed_download_min",
+        "speed_download_mean",
+        "speed_download_max",
+        "speed_upload_min",
+        "speed_upload_mean",
+        "speed_upload_max",
+        "is_connected_all",
+        "is_connected_true",
     ]
 
     ddf["country_id"] = "ZAF"
