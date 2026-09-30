@@ -25,7 +25,7 @@ def setup_sentry() -> None:
             sample_rate=1.0,
             traces_sample_rate=1.0,
             environment=settings.DEPLOY_ENV.name.lower(),
-            release=f"github.com/unicef/giga-dagster:{settings.COMMIT_SHA}",
+            release=f"giga-dagster@{settings.COMMIT_SHA}",
             server_name=f"dagster-dagster-{settings.DEPLOY_ENV.name}@{socket.gethostname()}",
             default_integrations=False,
             integrations=[

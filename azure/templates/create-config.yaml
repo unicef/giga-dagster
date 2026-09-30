@@ -25,6 +25,13 @@ jobs:
                 configuration: infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
+              displayName: Delete existing Dagster secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: delete
+                arguments: secret giga-dagster-secrets --ignore-not-found
+
+            - task: Kubernetes@1
               displayName: Create Dagster secrets
               inputs:
                 namespace: $(kubernetesNamespace)
