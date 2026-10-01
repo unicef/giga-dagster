@@ -7,13 +7,6 @@ from datahub.metadata.schema_classes import FabricTypeClass
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Environment(StrEnum):
-    LOCAL = "local"
-    DEVELOPMENT = "development"
-    STAGING = "staging"
-    PRODUCTION = "production"
-
-
 class DeploymentEnvironment(StrEnum):
     LOCAL = "local"
     DEVELOPMENT = "dev"
@@ -37,7 +30,7 @@ class Settings(BaseSettings):
     INGESTION_POSTGRESQL_DATABASE: str
 
     # Settings with a default are not required to be in .env
-    PYTHON_ENV: Environment = Environment.PRODUCTION
+    PYTHON_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DAGSTER_INGRESS_HOST: str = ""
 
@@ -45,7 +38,7 @@ class Settings(BaseSettings):
     USE_AZURITE: bool = False
     AZURE_STORAGE_ACCOUNT_KEY: str = ""
     BASE_DIR: Path = Path(__file__).resolve().parent.parent
-    SENTRY_DSN: str = ""
+    DAGSTER_SENTRY_DSN: str = ""
     DATAHUB_ACCESS_TOKEN: str = ""
     SPARK_MASTER_HOST: str = "spark-master"
     COMMIT_SHA: str = ""
@@ -97,7 +90,7 @@ class Settings(BaseSettings):
     # Derived settings
     @property
     def IN_PRODUCTION(self) -> bool:
-        return self.PYTHON_ENV != Environment.LOCAL
+        return self.PYTHON_ENV != DeploymentEnvironment.LOCAL
 
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
@@ -169,7 +162,7 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
-        if self.PYTHON_ENV == Environment.LOCAL:
+        if self.PYTHON_ENV == DeploymentEnvironment.LOCAL:
             if self.WAREHOUSE_USERNAME:
                 return f"warehouse-local-{self.WAREHOUSE_USERNAME}"
             return "warehouse-local"

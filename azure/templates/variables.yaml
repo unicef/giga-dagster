@@ -49,7 +49,7 @@ variables:
   mawinguZabbixToken: $(MAWINGU_ZABBIX_TOKEN)
   mongoliaDeviceBearerToken: $(MONGOLIA_DEVICE_BEARER_TOKEN)
   deployEnv: $(DEPLOY_ENV)
-  sentryDsn: $(SENTRY_DSN)
+  dagsterSentryDsn: $(DAGSTER_SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
   sparkDriverCores: $(SPARK_DRIVER_CORES)
   sparkDriverMemoryMB: $(SPARK_DRIVER_MEMORY_MB)

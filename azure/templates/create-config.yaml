@@ -25,6 +25,13 @@ jobs:
                 configuration: infra/k8s/configmap.yaml
 
             - task: Kubernetes@1
+              displayName: Delete existing Dagster secrets
+              inputs:
+                namespace: $(kubernetesNamespace)
+                command: delete
+                arguments: secret giga-dagster-secrets --ignore-not-found
+
+            - task: Kubernetes@1
               displayName: Create Dagster secrets
               inputs:
                 namespace: $(kubernetesNamespace)
@@ -62,7 +69,8 @@ jobs:
                     SLACK_WEBHOOK: "$(slackWebHook)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
-                    SENTRY_DSN: "$(sentryDsn)"
+                    PYTHON_ENV: "$(deployEnv)"
+                    DAGSTER_SENTRY_DSN: "$(dagsterSentryDsn)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
                     INGESTION_POSTGRESQL_USERNAME: "$(ingestionPortalPostgresqlUsername)"
