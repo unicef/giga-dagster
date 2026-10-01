@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     INGESTION_POSTGRESQL_DATABASE: str
 
     # Settings with a default are not required to be in .env
-    PYTHON_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DAGSTER_INGRESS_HOST: str = ""
 
@@ -90,7 +89,7 @@ class Settings(BaseSettings):
     # Derived settings
     @property
     def IN_PRODUCTION(self) -> bool:
-        return self.PYTHON_ENV != DeploymentEnvironment.LOCAL
+        return self.DEPLOY_ENV != DeploymentEnvironment.LOCAL
 
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
@@ -162,7 +161,7 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
-        if self.PYTHON_ENV == DeploymentEnvironment.LOCAL:
+        if self.DEPLOY_ENV == DeploymentEnvironment.LOCAL:
             if self.WAREHOUSE_USERNAME:
                 return f"warehouse-local-{self.WAREHOUSE_USERNAME}"
             return "warehouse-local"

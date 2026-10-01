@@ -69,7 +69,6 @@ jobs:
                     SLACK_WEBHOOK: "$(slackWebHook)"
                     COMMIT_SHA: "$(Build.SourceVersion)"
                     DEPLOY_ENV: "$(deployEnv)"
-                    PYTHON_ENV: "$(deployEnv)"
                     DAGSTER_SENTRY_DSN: "$(dagsterSentryDsn)"
                     EMAIL_RENDERER_BEARER_TOKEN: "$(emailRendererBearerToken)"
                     EMAIL_RENDERER_SERVICE_URL: "$(emailRendererServiceUrl)"
