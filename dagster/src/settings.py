@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     INGESTION_POSTGRESQL_DATABASE: str
 
     # Settings with a default are not required to be in .env
-    PYTHON_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DEPLOY_ENV: DeploymentEnvironment = DeploymentEnvironment.LOCAL
     DAGSTER_INGRESS_HOST: str = ""
 
@@ -70,6 +69,14 @@ class Settings(BaseSettings):
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
     VCT_MERAKI_API_KEY: str = ""
+
+    # QoS ingestion - Brazil (nic.br), Isizwe (South Africa), Mawingu (Kenya), Mongolia
+    BRAZIL_API_URL: str = ""
+    ISIZWE_ZABBIX_API_URL: str = ""
+    ISIZWE_ZABBIX_TOKEN: str = ""
+    MAWINGU_ZABBIX_API_URL: str = ""
+    MAWINGU_ZABBIX_TOKEN: str = ""
+    MONGOLIA_DEVICE_BEARER_TOKEN: str = ""
     # base64-encoded service-account JSON: avoids the raw JSON's embedded quotes
     # breaking the "$(var)" macro substitution into azure/templates/create-config.yaml
     MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: str = ""
@@ -82,7 +89,7 @@ class Settings(BaseSettings):
     # Derived settings
     @property
     def IN_PRODUCTION(self) -> bool:
-        return self.PYTHON_ENV != DeploymentEnvironment.LOCAL
+        return self.DEPLOY_ENV != DeploymentEnvironment.LOCAL
 
     @property
     def DATAHUB_METADATA_SERVER_URL(self) -> str:
@@ -154,7 +161,7 @@ class Settings(BaseSettings):
 
     @property
     def SPARK_WAREHOUSE_PATH(self) -> str:
-        if self.PYTHON_ENV == DeploymentEnvironment.LOCAL:
+        if self.DEPLOY_ENV == DeploymentEnvironment.LOCAL:
             if self.WAREHOUSE_USERNAME:
                 return f"warehouse-local-{self.WAREHOUSE_USERNAME}"
             return "warehouse-local"
