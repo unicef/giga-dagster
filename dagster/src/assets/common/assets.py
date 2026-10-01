@@ -398,14 +398,21 @@ def _cascade_deletes_to_coverage_silver(
         spark, "school_coverage", country_code, DataTier.STAGING
     )
     if coverage_staging_table is not None:
-        DeltaTable.forName(spark, coverage_staging_table).update(
-            condition=delete_condition & (f.col("status") == StagingStatus.PENDING),
-            set={"status": f.lit(StagingStatus.REJECTED)},
-        )
-        context.log.info(
-            f"Rejected pending coverage staging rows for {len(delete_ids)} "
-            f"deleted schools in {country_code}."
-        )
+        delta_staging = DeltaTable.forName(spark, coverage_staging_table)
+        if "status" not in delta_staging.toDF().columns:
+            context.log.warning(
+                f"Skipping coverage staging reject for {country_code}: "
+                f"{coverage_staging_table} is missing the 'status' column."
+            )
+        else:
+            delta_staging.update(
+                condition=delete_condition & (f.col("status") == StagingStatus.PENDING),
+                set={"status": f.lit(StagingStatus.REJECTED)},
+            )
+            context.log.info(
+                f"Rejected pending coverage staging rows for {len(delete_ids)} "
+                f"deleted schools in {country_code}."
+            )
 
 
 def _refresh_duplicate_columns(
