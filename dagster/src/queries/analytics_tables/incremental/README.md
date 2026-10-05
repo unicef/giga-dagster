@@ -62,7 +62,7 @@ so those live in the incremental accumulator `all_gigameter_school_measurement_s
 final table is then rebuilt every hour by a cheap join — `create/` once, `update/` with
 `CREATE OR REPLACE TABLE`, which swaps the new version in atomically (no window where the table
 is missing, Delta history kept). The two scripts' SELECTs must stay identical. The map columns
-are the exact top 5 of the stored counts, most-frequent first.
+are the exact top 10 of the stored counts, most-frequent first.
 
 ### Chunked bootstrap
 

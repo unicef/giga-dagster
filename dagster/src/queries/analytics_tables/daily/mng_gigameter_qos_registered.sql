@@ -101,7 +101,7 @@ libre AS (
 -- Source:  default.all_gigameter_registered_schools
 -- Filter:  country = 'Mongolia' AND registered_gigameter = 'Yes'
 -- Note:    primary/secondary server/isp/asn derived from the detected_*_nested
---          map columns (exact top 5 by measurement count, keys ordered
+--          map columns (exact top 10 by measurement count, keys ordered
 --          most-frequent-first, ties by key ascending -- previously
 --          approx_most_frequent output) via the same element_at(map_keys(...), N)
 --          pattern all_gigameter_registered_tb_physical.sql used internally.

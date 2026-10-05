@@ -23,7 +23,7 @@
 --                    EXACT per-value counts (histogram ignores NULLs) of
 --                    rt_source / isp_name / isp_asn / detected_server -- exact
 --                    counts combine across runs, approx_most_frequent output
---                    does not. Top 5 is picked when registered_schools is built.
+--                    does not. Top 10 is picked when registered_schools is built.
 --   max_measurement_id
 --                    highest measurement_id folded into the row; the table
 --                    watermark is MAX(max_measurement_id)

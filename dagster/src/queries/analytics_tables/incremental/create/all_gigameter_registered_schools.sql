@@ -43,7 +43,7 @@
 --   (local_created_timestamp). Until 2026-10 last_measurement_date was UTC
 --   (created_timestamp); days_since_last_measurement and install_status follow it.
 --   measurements_per_source / detected_isp_nested / detected_isp_asn_nested /
---   detected_server_nested are the EXACT top 5 values by measurement count
+--   detected_server_nested are the EXACT top 10 values by measurement count
 --   (ties broken by key ascending), keys ordered most-frequent first -- replaced
 --   approx_most_frequent(5, x, 5) in 2026-10. mng_gigameter_qos_registered reads
 --   element_at(map_keys(...), 1/2) and relies on that order.
@@ -116,10 +116,10 @@ SELECT
   CAST(st.first_measurement_date AS TIMESTAMP) AS first_measurement_date,
   CAST(st.last_measurement_date AS TIMESTAMP) AS last_measurement_date,
   CAST(EXTRACT(DAY FROM CURRENT_DATE - st.last_measurement_date) AS DOUBLE) AS days_since_last_measurement,
-  -- rt sources: exact top 5 by count, most frequent first
+  -- rt sources: exact top 10 by count, most frequent first
   map_from_entries(slice(array_sort(map_entries(st.source_counts),
       (x, y) -> CASE WHEN x[2] > y[2] THEN -1 WHEN x[2] < y[2] THEN 1
-                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 5)) AS measurements_per_source,
+                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 10)) AS measurements_per_source,
   -- devices
   CAST(r.num_devices_registered AS BIGINT) AS num_devices_registered,
   CAST(r.devices_still_logged_in AS BIGINT) AS devices_still_logged_in,
@@ -127,16 +127,16 @@ SELECT
   CAST(st.max_app_version_gigameter AS VARCHAR) AS max_app_version_gigameter,
   CAST(dev.last_device_installed_id AS VARCHAR) AS last_device_installed_id,
   CAST(dev.last_device_installed_date AS TIMESTAMP) AS last_device_installed_date,
-  -- provider info: exact top 5 by count, most frequent first
+  -- provider info: exact top 10 by count, most frequent first
   map_from_entries(slice(array_sort(map_entries(st.isp_counts),
       (x, y) -> CASE WHEN x[2] > y[2] THEN -1 WHEN x[2] < y[2] THEN 1
-                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 5)) AS detected_isp_nested,
+                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 10)) AS detected_isp_nested,
   map_from_entries(slice(array_sort(map_entries(st.isp_asn_counts),
       (x, y) -> CASE WHEN x[2] > y[2] THEN -1 WHEN x[2] < y[2] THEN 1
-                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 5)) AS detected_isp_asn_nested,
+                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 10)) AS detected_isp_asn_nested,
   map_from_entries(slice(array_sort(map_entries(st.server_counts),
       (x, y) -> CASE WHEN x[2] > y[2] THEN -1 WHEN x[2] < y[2] THEN 1
-                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 5)) AS detected_server_nested,
+                     WHEN x[1] < y[1] THEN -1 WHEN x[1] > y[1] THEN 1 ELSE 0 END), 1, 10)) AS detected_server_nested,
   -- additional geography
   CAST(master.admin1 AS VARCHAR) AS admin1,
   CAST(master.admin2 AS VARCHAR) AS admin2,
