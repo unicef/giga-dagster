@@ -24,6 +24,10 @@ from src.utils.schema import (
 adls_client = ADLSFileClient()
 
 
+def _is_qos_schema(schema_name: str) -> bool:
+    return schema_name == "qos" or schema_name.startswith("qos_")
+
+
 class ADLSDeltaIOManager(BaseConfigurableIOManager):
     pyspark: PySparkResource
 
@@ -127,7 +131,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             **context.step_context.op_config
         ).metastore_schema
 
-        if schema_name_for_tier in ["qos", "qos_raw", "qos_availability"]:
+        if _is_qos_schema(schema_name_for_tier):
             columns = data.schema.fields
             partition_columns = ["date"]
         elif schema_name_for_tier == "custom_dataset":
@@ -147,7 +151,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             query.partitionedBy(*partition_columns)
 
         query = query.property("delta.enableChangeDataFeed", "true")
-        if schema_name_for_tier in ["qos", "qos_raw", "qos_availability"]:
+        if _is_qos_schema(schema_name_for_tier):
             query = query.property(
                 "delta.logRetentionDuration", constants.qos_retention_period
             )
@@ -168,7 +172,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         context: OutputContext = None,
     ):
         spark = self._get_spark_session()
-        is_qos = schema_name in ["qos", "qos_raw", "qos_availability"]
+        is_qos = _is_qos_schema(schema_name)
 
         if is_qos:
             gold_schema = DeltaTable.forName(spark, full_table_name).toDF().schema
