@@ -1,9 +1,10 @@
 # Incremental Model Scripts
 
-Scripts executed via Dagster using an incremental insert pattern. Rather than recreating the
-full table on each run, these scripts append only new records — making them efficient for
-large, fast-growing tables. Cadence varies by script — most run **hourly**, but
-`all_ping_daily_incremental` runs **daily** (see [Scripts](#scripts) below).
+Scripts executed via Dagster using incremental patterns. Rather than re-scanning full history on
+each run, these scripts process only new records — making them efficient for large, fast-growing
+tables. Every asset here is in the `incremental` Dagster group, which runs **hourly** (at :15,
+`dagster/src/schedule/analytics_tables.py`). `all_ping_daily` runs hourly too but only ever
+appends complete past days (`< CURRENT_DATE`), so repeated runs within a day are no-ops.
 
 Scripts are maintained in [`unicef/giga-data-analytics`](https://github.com/unicef/giga-data-analytics/tree/main/analytics-tables/incremental) (itself sourced from the **Incremental Models** NocoDB table, `ma6e34qsc3t11ah`, with the exception of the two `all_ping_*_incremental` scripts, which don't yet have a NocoDB source record) and ported here via PR once validated there.
 
@@ -39,6 +40,32 @@ bucket if a ping arrives late. It uses `MERGE INTO` instead of `INSERT INTO` —
 block at the top of `update/all_ping_hourly_incremental.sql` for the full reasoning (4-hour grace
 period + `connectivity_ids`-based reconciliation).
 
+### Delta-combine MERGE (aggregates over the measurement table)
+
+`all_gigameter_school_daily_troubleshooting` (one row per school+country+UTC date) and
+`all_gigameter_school_measurement_stats` (one row per school) are aggregates of
+`all_gigameter_measurement_data` in which **every column can be combined exactly** (counts and
+sums add, min/max compare, `min_by`/`max_by` follow the numeric version, arrays union, count maps
+add per key). Each stores `max_measurement_id`; the `update/` script aggregates only rows with
+`measurement_id > MAX(max_measurement_id)` of its own table to the target grain and `MERGE`s them
+in, combining old and new values. A run never re-reads history, late/back-dated measurements
+update the right existing row, and the watermark commits atomically with the data. No batch cap —
+capping rows before a `GROUP BY` would split groups across runs. Merge keys that can be NULL
+(unmatched MLab rows) are matched with `IS NOT DISTINCT FROM`.
+
+### Accumulator + cheap full rebuild (`all_gigameter_registered_schools`)
+
+`all_gigameter_registered_schools` is a snapshot of every school in `all_school_master` whose
+columns change for reasons other than new measurements (master attributes, registrations,
+lookups, `CURRENT_DATE`-relative status). Only the lifetime measurement aggregates grow forever,
+so those live in the incremental accumulator `all_gigameter_school_measurement_stats` (above); the
+final table is then rebuilt every hour by a cheap join — `create/` once, `update/` with
+`CREATE OR REPLACE TABLE`, which swaps the new version in atomically (no window where the table
+is missing, Delta history kept). The two scripts' SELECTs must stay identical. The map columns
+are the exact top 5 of the stored counts, most-frequent first.
+
+### Chunked bootstrap
+
 `create/all_ping_hourly_incremental.sql` (the one-time bootstrap) is also non-standard: unlike
 every other `create/` script here, which is a single unbounded statement, it's a sequence of
 one `CREATE TABLE` plus several `INSERT`s, each bounded to a disjoint, hour-aligned local-time
@@ -57,7 +84,10 @@ sizing and stop-point reasoning.
 | `all_gigameter_valid_test_checker.sql` | Hourly | `default.all_gigameter_valid_test_checker` | Per-measurement quality validation — incremental Step 3 | Steps 1 & 2 incremental |
 | `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4 | Steps 1, 2, & 3 incremental |
 | `all_ping_hourly.sql` | Hourly | `default.all_ping_hourly` | Hourly ping/uptime aggregation per device-school (`MERGE`, not `INSERT` — see above) | `gigameter_production_db.connectivity_ping_checks` |
-| `all_ping_daily.sql` | Daily | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
+| `all_ping_daily.sql` | Hourly (appends complete past days only) | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
+| `all_gigameter_school_daily_troubleshooting.sql` | Hourly | `default.all_gigameter_school_daily_troubleshooting` | School+day summary for Superset T0 troubleshooting (`MERGE`, delta-combine) | Step 4 |
+| `all_gigameter_school_measurement_stats.sql` | Hourly | `default.all_gigameter_school_measurement_stats` | **Internal** lifetime measurement aggregates per school (`MERGE`, delta-combine) — not for dashboards | Step 4 |
+| `all_gigameter_registered_schools.sql` | Hourly | `default.all_gigameter_registered_schools` | School-level registration & activity summary (full rebuild via `CREATE OR REPLACE`) | `all_gigameter_school_measurement_stats`, `all_school_master` (daily), `dailycheckapp_school`, `lstringer.*` lookups |
 
 Script filenames and their `@asset` function names dropped the `_incremental` suffix as part of
 the dev→prod cutover (mirrors `unicef/giga-data-analytics#25`) — each now writes directly to the
@@ -78,10 +108,13 @@ Step 1:  all_gmeter_only_measurements
 Step 2:  all_mlab_only_measurements
 Step 3:  all_gigameter_valid_test_checker
 Step 4:  all_gigameter_measurement_data
+Step 5a: all_gigameter_school_daily_troubleshooting   ← Step 4
+Step 5b: all_gigameter_school_measurement_stats       ← Step 4
+Step 6:  all_gigameter_registered_schools             ← Step 5b (+ daily all_school_master)
 
-Ping chain (mixed cadence):
-Step 1:  all_ping_hourly   (hourly)
-Step 2:  all_ping_daily    (daily — must run after that day's hourly buckets have settled)
+Ping chain (hourly):
+Step 1:  all_ping_hourly
+Step 2:  all_ping_daily    (appends only complete past days, so hourly re-runs are no-ops)
 ```
 
 ---
@@ -96,4 +129,9 @@ other script in `../daily/` that reads one of these tables is unaffected — it 
 same table name via an updated `deps=[AssetKey(["incremental", ...])]`, now populated
 hourly/daily by the scripts here instead of being dropped and recreated once a day.
 
-Next up for conversion: `mng_gigameter_qos_measurements` and `bra_nicbr_daily` (daily aggregations, same pattern as the ping chain), then `all_gigameter_registered_schools` and `all_gigameter_registered_devices` — those two are full school/device-state snapshots rather than append-only event aggregations, so they'll need a different conversion approach, not a direct copy of this pattern.
+`all_gigameter_school_daily_troubleshooting` and `all_gigameter_registered_schools` have also
+moved here from `../daily/` (same table names; the daily scripts and assets are retired). The
+daily `mng_gigameter_qos_registered` now depends on
+`AssetKey(["incremental", "all_gigameter_registered_schools"])`.
+
+Next up for conversion: `mng_gigameter_qos_measurements` and `bra_nicbr_daily` (daily aggregations), then `all_gigameter_registered_devices` — a full device-state snapshot, which can follow the accumulator + rebuild split used for `all_gigameter_registered_schools`.

@@ -1,6 +1,6 @@
 # Daily Scripts
 
-Production scripts executed **once per day** via Dagster (5:15 AM). All scripts use a drop-and-recreate pattern — the full table is rebuilt on each run.
+Production scripts executed **once per day** via Dagster (03:45, cron `45 3 * * *` in `dagster/src/schedule/analytics_tables.py`). All scripts use a drop-and-recreate pattern — the full table is rebuilt on each run.
 
 Scripts are maintained in [`unicef/giga-data-analytics`](https://github.com/unicef/giga-data-analytics/tree/main/analytics-tables/daily) (itself sourced from the **Physical Tables** NocoDB table, `mzq6hlnsicq1r0v`, `Integrated in pipeline = True`) and ported here via PR once validated there.
 
@@ -12,7 +12,7 @@ Python functions — are now produced by the hourly/daily incremental pipeline i
 them have been retired. Every other script below that reads one of these tables
 (`isp_asn_country_mapping`, `all_gigameter_measurement_data_tb_physical`,
 `all_gigameter_measurement_data_daily`/`_weekly`, `all_gigameter_appversion_funnel`,
-`all_gigameter_registered_schools`/`_devices`, `all_gigameter_school_consistency_history`,
+`all_gigameter_registered_devices`, `all_gigameter_school_consistency_history`,
 `all_gigameter_funnelsummary`, `mng_gigameter_qos_*`, `all_gigameter_inc_ping_daily`) is unchanged
 and keeps reading the same table names via `deps=[AssetKey(["incremental", ...])]` — only who
 populates them changed. Mirrors `unicef/giga-data-analytics#25`.
@@ -33,16 +33,14 @@ populates them changed. Mirrors `unicef/giga-data-analytics#25`.
 | `all_gigamaps_realtimeconnectivity.sql` | `default.all_gigamaps_realtimeconnectivity` | Daily school connectivity status by country | `gigamaps_production_db` | |
 | `all_gigameter_appversion_funnel.sql` | `default.all_gigameter_appversion_funnel` | Device registration → data sent → version upgrade funnel | `gigameter_production_db`, `all_school_master` | |
 | `all_gigameter_registered_tb_physical.sql` | `default.all_gigameter_registered_tb_physical` | Registered schools/devices combined physical table | `gigameter_production_db`, `all_school_master` | |
-| `all_gigameter_registered_schools.sql` | `default.all_gigameter_registered_schools` | School-level registration & activity summary | measurement data, `all_school_master` | Planned (2nd iteration) |
 | `all_gigameter_registered_devices.sql` | `default.all_gigameter_registered_devices` | Device-level registration & activity summary | measurement data, appversion funnel | Planned (2nd iteration) |
 | `all_gigameter_school_consistency_history.sql` | `default.all_gigameter_school_consistency_history` | Weekly 30-day rolling consistency score per school | measurement data | |
 | `all_gigameter_funnelsummary.sql` | `default.all_gigameter_funnelsummary` | Country-level adoption funnel & QoS source summary | measurement data, `all_school_master`, QoS tables | |
 | `bra_nicbr_registered_schools.sql` | `default.bra_nicbr_registered_schools` | Brazil school NIC.BR registration summary | `school_master.bra`, `qos.bra`, FUST | Planned (2nd iteration) |
 | `bra_nicbr_daily.sql` | `default.bra_nicbr_daily` | Daily Brazil NIC.BR speed data with benchmark flags | `qos.bra`, `school_master.bra`, FUST | Planned (2nd iteration) |
 | `bra_benchmarkstatus_wow.sql` | `default.bra_benchmarkstatus_wow` | Brazil weekly benchmark status with WoW changes | `bra_nicbr_daily` | |
-| `mng_gigameter_qos_registered.sql` | `default.mng_gigameter_qos_registered` | Mongolia school registration (GigaMeter + LibreRouter) | `qos_raw.mng`, `school_master.mng` | Planned (2nd iteration) |
+| `mng_gigameter_qos_registered.sql` | `default.mng_gigameter_qos_registered` | Mongolia school registration (GigaMeter + LibreRouter) | `qos_raw.mng`, `school_master.mng`, `all_gigameter_registered_schools` (incremental pipeline) | Planned (2nd iteration) |
 | `mng_gigameter_qos_measurements.sql` | `default.mng_gigameter_qos_measurements` | Mongolia daily measurements (GigaMeter + LibreRouter) | `qos.mng`, `school_master.mng` | Planned (2nd iteration) |
-| `all_gigameter_school_daily_troubleshooting.sql` | `default.all_gigameter_school_daily_troubleshooting` | Pre-aggregated school+day summary for Superset T0 troubleshooting | `all_gigameter_measurement_data` (incremental pipeline) | |
 
 ---
 
@@ -59,21 +57,19 @@ Scripts are executed in dependency order via the `deps=[AssetKey(...)]` declarat
  6. all_gigameter_measurement_data_weekly      ← incremental pipeline (all_gigameter_measurement_data)
  7. all_gigameter_appversion_funnel            ← #2, incremental pipeline (all_gigameter_measurement_data)
  8. all_gigameter_registered_tb_physical       ← #2, #4, #7
- 9. all_gigameter_registered_schools           ← #2, incremental pipeline (all_gigameter_measurement_data)
-10. bra_nicbr_daily
-11. bra_nicbr_registered_schools
-12. all_gigameter_funnelsummary                ← #2, incremental pipeline (all_gmeter_only_measurements, all_mlab_only_measurements)
-13. bra_benchmarkstatus_wow                    ← #10
-14. all_gigamaps_realtimeconnectivity
-15. mng_gigameter_qos_measurements             ← incremental pipeline (all_gigameter_measurement_data)
-16. mng_gigameter_qos_registered               ← incremental pipeline (all_gigameter_measurement_data), #7, #9
-17. all_gigameter_registered_devices           ← #2, incremental pipeline (all_gigameter_measurement_data), #7
-18. all_gigameter_inc_ping_daily               ← incremental pipeline (all_gigameter_measurement_data, all_ping_daily), #7
-19. all_gigameter_school_consistency_history   ← incremental pipeline (all_gmeter_only_measurements, all_gigameter_measurement_data)
-20. all_gigameter_school_daily_troubleshooting ← incremental pipeline (all_gigameter_measurement_data), not part of this daily chain
+ 9. bra_nicbr_daily
+10. bra_nicbr_registered_schools
+11. all_gigameter_funnelsummary                ← #2, incremental pipeline (all_gmeter_only_measurements, all_mlab_only_measurements)
+12. bra_benchmarkstatus_wow                    ← #9
+13. all_gigamaps_realtimeconnectivity
+14. mng_gigameter_qos_measurements             ← incremental pipeline (all_gigameter_measurement_data)
+15. mng_gigameter_qos_registered               ← incremental pipeline (all_gigameter_measurement_data, all_gigameter_registered_schools), #7
+16. all_gigameter_registered_devices           ← #2, incremental pipeline (all_gigameter_measurement_data), #7
+17. all_gigameter_inc_ping_daily               ← incremental pipeline (all_gigameter_measurement_data, all_ping_daily), #7
+18. all_gigameter_school_consistency_history   ← incremental pipeline (all_gmeter_only_measurements, all_gigameter_measurement_data)
 ```
 
-Steps 3–4, 7, 9, 12, 15–19 depend on tables produced by the incremental pipeline
+Steps 3–5, 7, 11, 14–18 depend on tables produced by the incremental pipeline
 (`../incremental/`) rather than by another step in this chain — those dependencies are satisfied
 by the incremental Dagster assets, not by execution order here.
 
@@ -97,4 +93,8 @@ scripts and `@asset` functions that used to produce `all_gmeter_only_measurement
 `all_mlab_only_measurements`, `all_gigameter_valid_test_checker`, `all_gigameter_measurement_data`,
 `all_ping_hourly`, and `all_ping_daily` have been retired from this directory.
 
-A second iteration will convert the registration and regional scripts (`all_gigameter_registered_schools`, `all_gigameter_registered_devices`, `bra_nicbr_*`, `mng_gigameter_*`) to the incremental model.
+`all_gigameter_school_daily_troubleshooting` and `all_gigameter_registered_schools` have also moved
+to the incremental pipeline (hourly; same table names) and their daily scripts and assets are
+retired.
+
+A further iteration will convert the remaining registration and regional scripts (`all_gigameter_registered_devices`, `bra_nicbr_*`, `mng_gigameter_*`) to the incremental model.
