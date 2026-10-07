@@ -44,6 +44,7 @@ QOS_60MIN_SCHEMA: dict[str, str] = {
     "networkName": "string",
     "organization": "string",
     "meraki_name_room": "string",
+    "status": "string",
     "downstream_total_packet": "integer",
     "downstream_packet_lost": "integer",
     "downstream_loss_pct": "float",
