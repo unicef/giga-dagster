@@ -9,12 +9,12 @@ Scripts are organised into three folders based on their execution model:
 ## Folders
 
 ### [`daily/`](daily/README.md)
-Production scripts executed once per day via Dagster. This is the main pipeline — 20 scripts covering the full measurement, registration, aggregation, and regional reporting layers. (Steps 1–4 of the measurement pipeline and the ping tables have already moved to the incremental model below.)
+Production scripts executed once per day via Dagster. This is the main pipeline — 19 scripts covering the full measurement, registration, aggregation, and regional reporting layers. (Steps 1–4 of the measurement pipeline, the ping tables, `all_gigameter_school_daily_troubleshooting` and `all_gigameter_registered_schools` have already moved to the incremental model below.)
 
 Some of the remaining scripts are planned for conversion to the incremental model (hourly cadence) in a future sprint. See the daily README for details.
 
 ### [`incremental/`](incremental/README.md)
-Scripts that run on an **hourly cadence** using an incremental insert pattern — new records are appended rather than the full table being recreated. Currently covers the 4 core measurement pipeline steps (Steps 1–4) plus the ping tables. Additional scripts (registration, regional) will be added in future iterations.
+Scripts that run on an **hourly cadence** using incremental patterns — only new records are processed rather than the full history being re-scanned (id-watermark appends, `MERGE`s, and for `all_gigameter_registered_schools` a cheap hourly rebuild on top of an incremental accumulator). Currently covers the 4 core measurement pipeline steps (Steps 1–4), the ping tables, `all_gigameter_school_daily_troubleshooting`, `all_gigameter_school_measurement_stats` and `all_gigameter_registered_schools`. Additional scripts (registration, regional) will be added in future iterations.
 
 ### [`testing/`](testing/README.md)
 Non-production scripts not integrated into the Dagster pipeline. Used for one-off analysis or validating new logic before promoting to `daily/` or `incremental/`.
