@@ -42,6 +42,7 @@ SNAPSHOT_COLUMNS = [
     "networkName",
     "organization",
     "meraki_name_room",
+    "status",
     "downstream_total_packet",
     "downstream_packet_lost",
     "downstream_loss_pct",
@@ -110,6 +111,30 @@ def _normalize_changes(raw_rows: Optional[list]) -> pd.DataFrame:
     df = df.dropna(subset=["serial", "occurredAt"])
     df = df[df["previousStatus"] != df["newStatus"]].copy()
     return df.sort_values(["serial", "occurredAt"]).reset_index(drop=True)
+
+
+def _fetch_availabilities_for_org(
+    db: meraki.DashboardAPI, org_id: str, network_ids: list[str]
+) -> pd.DataFrame:
+    """Current device status from getOrganizationDevicesAvailabilities."""
+    cols = ["serial", "status"]
+    raw = call(
+        db.organizations.getOrganizationDevicesAvailabilities,
+        org_id,
+        networkIds=network_ids,
+        productTypes=["wireless"],
+        total_pages="all",
+    )
+    rows = [
+        {"serial": row.get("serial"), "status": row.get("status")}
+        for row in raw or []
+        if row.get("serial")
+    ]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    return pd.DataFrame(rows, columns=cols).drop_duplicates(
+        subset=["serial"], keep="first"
+    )
 
 
 def _fetch_change_history_for_org(
@@ -330,6 +355,19 @@ def build_snapshot_dataframe(
 
     org_items = list(NETWORK_DICT.items())
 
+    availability_frames: list[pd.DataFrame] = []
+    for org_id, network_ids in org_items:
+        availability_frames.append(
+            _fetch_availabilities_for_org(db, org_id, network_ids)
+        )
+    availability_df = (
+        pd.concat(availability_frames, ignore_index=True).drop_duplicates(
+            subset=["serial"], keep="first"
+        )
+        if availability_frames
+        else pd.DataFrame(columns=["serial", "status"])
+    )
+
     changes_frames: list[pd.DataFrame] = []
     for org_id, network_ids in org_items:
         raw = _fetch_change_history_for_org(db, org_id, network_ids, TIMESPAN_SECONDS)
@@ -367,7 +405,8 @@ def build_snapshot_dataframe(
     uptime_df = _compute_uptime_metrics(changes_df, t0, t1)
     collected_at = dt.datetime.now(dt.UTC)
 
-    out = inventory.merge(uptime_df, on="serial", how="left", validate="1:1")
+    out = inventory.merge(availability_df, on="serial", how="left", validate="1:1")
+    out = out.merge(uptime_df, on="serial", how="left", validate="1:1")
     out = out.merge(packet_loss_df, on="serial", how="left", validate="1:1")
     out = out.merge(latency_hist_df, on="serial", how="left", validate="1:1")
     out = out.merge(data_rate_df, on="serial", how="left", validate="1:1")
