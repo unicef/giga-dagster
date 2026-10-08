@@ -487,7 +487,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
         properties = adls_file_client.get_file_metadata(filepath=adls_filepath)
         metadata = properties.metadata
         size = properties.size
-        metastore_schema = "qos"
+        metastore_schema = f"qos_{country_code.lower()}"
 
         ops_destination_mapping = {
             "adhoc__load_qos_csv": OpDestinationMapping(
@@ -504,7 +504,7 @@ def school_qos__gold_csv_to_deltatable_sensor(
             ),
             "adhoc__publish_qos_to_gold": OpDestinationMapping(
                 source_filepath=f"{constants.gold_folder}/dq-results/qos/transforms/{country_code}/{stem}.parquet",
-                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/{metastore_schema}.db/{country_code}",
+                destination_filepath=f"{settings.SPARK_WAREHOUSE_PATH}/qos.db/{country_code}",
                 metastore_schema=metastore_schema,
                 tier=DataTier.GOLD,
             ),
