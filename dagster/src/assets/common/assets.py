@@ -2,6 +2,7 @@ from dagster_pyspark import PySparkResource
 from datahub.specific.dataset import DatasetPatchBuilder
 from delta.tables import DeltaTable
 from models.approval_requests import ApprovalRequest
+from models.deletion_requests import DeletionRequest
 from pyspark import sql
 from pyspark.sql import (
     Column,
@@ -398,14 +399,21 @@ def _cascade_deletes_to_coverage_silver(
         spark, "school_coverage", country_code, DataTier.STAGING
     )
     if coverage_staging_table is not None:
-        DeltaTable.forName(spark, coverage_staging_table).update(
-            condition=delete_condition & (f.col("status") == StagingStatus.PENDING),
-            set={"status": f.lit(StagingStatus.REJECTED)},
-        )
-        context.log.info(
-            f"Rejected pending coverage staging rows for {len(delete_ids)} "
-            f"deleted schools in {country_code}."
-        )
+        delta_staging = DeltaTable.forName(spark, coverage_staging_table)
+        if "status" not in delta_staging.toDF().columns:
+            context.log.warning(
+                f"Skipping coverage staging reject for {country_code}: "
+                f"{coverage_staging_table} is missing the 'status' column."
+            )
+        else:
+            delta_staging.update(
+                condition=delete_condition & (f.col("status") == StagingStatus.PENDING),
+                set={"status": f.lit(StagingStatus.REJECTED)},
+            )
+            context.log.info(
+                f"Rejected pending coverage staging rows for {len(delete_ids)} "
+                f"deleted schools in {country_code}."
+            )
 
 
 def _refresh_duplicate_columns(
@@ -909,6 +917,16 @@ def dq_kit_post_approval(
         )
 
     with get_db_context() as db:
+        is_deletion = db.scalar(
+            select(DeletionRequest.id).where(DeletionRequest.id == upload_id)
+        )
+        if is_deletion:
+            context.log.info(
+                f"Upload `{upload_id}` is a deletion request; skipping DQ kit regeneration"
+            )
+            return Output(
+                None, metadata={**get_output_metadata(config), "skipped": True}
+            )
         file_upload = db.scalar(select(FileUpload).where(FileUpload.id == upload_id))
         if file_upload is None:
             raise FileNotFoundError(
