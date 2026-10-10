@@ -4,9 +4,26 @@ from pyspark import sql
 from pyspark.sql import functions as f
 
 from dagster import OpExecutionContext
+from src.spark.aggregate_derivations import (
+    aggregate_relation_check_name,
+    aggregate_rules,
+)
 from src.spark.config_expectations import Config
 from src.utils.adls import ADLSFileClient
 from src.utils.op_config import FileConfig
+
+
+def _aggregate_relation_descriptions(dataset_type: str) -> dict[str, str]:
+    """Descriptions for the configured aggregate relation checks."""
+    descriptions = {}
+    for target, parts, is_availability in aggregate_rules(dataset_type):
+        joined = ", ".join(parts)
+        descriptions[aggregate_relation_check_name(target, parts)] = (
+            f"Does {target} match whether [{joined}] add up to more than zero"
+            if is_availability
+            else f"Does {target} match the sum of [{joined}]"
+        )
+    return descriptions
 
 
 def human_readable_standard_checks(columns: list[str]) -> dict[str, str]:
@@ -117,6 +134,8 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         "dq_column_relation_checks-connectivity_govt_download_speed_contracted": "Are the column relationship between the following columns [connectivity_govt, download_speed_contracted] as excpected",
     }
 
+    aggregate_relation_checks_desc = _aggregate_relation_descriptions("geolocation")
+
     critical_error_checks_desc = {
         "dq_is_null_mandatory-school_id_govt": "Is the Non-nullable column school_id_govt null",
         "dq_duplicate-school_id_govt": "Does the check pass with no duplicates in the school_id_govt column",
@@ -145,6 +164,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
         **duplicate_location_origin_desc,
         **duplicate_name_level_110_check_desc,
         **column_relation_checks_desc,
+        **aggregate_relation_checks_desc,
         **critical_error_checks_desc,
         **geospatial_checks_desc,
     }
