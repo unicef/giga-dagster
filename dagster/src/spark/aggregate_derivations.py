@@ -46,34 +46,16 @@ def aggregate_rules(dataset_type: str) -> list[tuple[str, list[str], bool]]:
     ]
 
 
-def present_parts(df: sql.DataFrame, parts: list[str]) -> list[str]:
-    """Keep only the component columns that actually exist on the dataframe."""
-    return [part for part in parts if part in df.columns]
-
-
-def sum_of_parts(df: sql.DataFrame, parts: list[str]) -> sql.Column:
+def sum_of_parts(parts: list[str]) -> sql.Column:
     """Null-safe sum of the component columns.
 
-    Returns NULL when every present component is NULL, so that "no information"
-    is never conflated with a genuine zero. Components are cast to INT because
-    the bronze dataframe carries every uploaded value as a string.
+    Returns NULL when every component is NULL, so that "no information" is never
+    conflated with a genuine zero. Components are cast to INT because the bronze
+    dataframe carries every uploaded value as a string.
     """
-    available = present_parts(df, parts)
-    if not available:
-        return f.lit(None).cast(IntegerType())
-
-    casted = [f.col(part).cast(IntegerType()) for part in available]
-    any_not_null = f.lit(False)
-    for part in casted:
-        any_not_null = any_not_null | part.isNotNull()
-
-    total = casted[0]
-    for part in casted[1:]:
-        total = f.coalesce(total, f.lit(0)) + f.coalesce(part, f.lit(0))
-
-    return f.when(any_not_null, f.coalesce(total, f.lit(0))).otherwise(
-        f.lit(None).cast(IntegerType())
-    )
+    casted = [f.col(part).cast(IntegerType()) for part in parts]
+    total = sum(f.coalesce(part, f.lit(0)) for part in casted)
+    return f.when(f.coalesce(*casted).isNotNull(), total)
 
 
 # Countries do not agree on how to spell a yes/no answer, so the comparison
@@ -105,10 +87,6 @@ def availability_from_count(count_col: sql.Column) -> sql.Column:
     )
 
 
-def _target_type(df: sql.DataFrame, target: str):
-    return df.schema[target].dataType
-
-
 def derive_aggregate_columns(
     df: sql.DataFrame,
     dataset_type: str,
@@ -128,15 +106,15 @@ def derive_aggregate_columns(
         # column outside it, so deriving one would be silently discarded.
         if target not in df.columns:
             continue
-        available = present_parts(df, parts)
+        available = [part for part in parts if part in df.columns]
         if not available:
             continue
 
-        total = sum_of_parts(df, available)
+        total = sum_of_parts(available)
         derived = availability_from_count(total) if is_availability else total
 
         column_actions[target] = f.when(
-            f.col(target).isNull(), derived.cast(_target_type(df, target))
+            f.col(target).isNull(), derived.cast(df.schema[target].dataType)
         ).otherwise(f.col(target))
         logger.info(f"Deriving {target} from {available} where null...")
 

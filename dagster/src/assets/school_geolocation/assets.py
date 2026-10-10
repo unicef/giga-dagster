@@ -516,7 +516,7 @@ def geolocation_data_quality_results_human_readable(
     context.log.info("Create a new dataframe with only the relevant columns")
 
     df, human_readable_mappings = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, context
+        geolocation_data_quality_results, uploaded_columns
     )
 
     # duplicate_location_rows_count/_id carry values (not pass/fail flags) and are
@@ -636,7 +636,7 @@ async def geolocation_data_quality_results_summary(
     geolocation_data_quality_results = geolocation_data_quality_results.cache()
 
     dq_results, _ = dq_geolocation_extract_relevant_columns(
-        geolocation_data_quality_results, uploaded_columns, context
+        geolocation_data_quality_results, uploaded_columns
     )
 
     dq_summary_statistics = build_dq_summary_statistics(

@@ -6,7 +6,6 @@ from src.spark.aggregate_derivations import (
     aggregate_relation_check_name,
     aggregate_rules,
     availability_as_boolean,
-    present_parts,
     sum_of_parts,
 )
 from src.utils.logger import get_context_with_fallback_logger
@@ -32,12 +31,12 @@ def _aggregate_relation_transforms(
     transforms = {}
     for target, parts, is_availability in aggregate_rules(dataset_type):
         check_name = aggregate_relation_check_name(target, parts)
-        available = present_parts(df, parts)
+        available = [part for part in parts if part in df.columns]
         if target not in df.columns or not available:
             transforms[check_name] = f.lit(0)
             continue
 
-        total = sum_of_parts(df, available)
+        total = sum_of_parts(available)
         if is_availability:
             actual = availability_as_boolean(f.col(target))
             expected = total > 0

@@ -12,7 +12,6 @@ from src.spark.aggregate_derivations import (
     aggregate_rules,
     availability_from_count,
     derive_aggregate_columns,
-    present_parts,
     sum_of_parts,
 )
 
@@ -150,19 +149,20 @@ class TestGuards:
 
 
 class TestExpressionHelpers:
-    def test_present_parts_filters_absent_columns(self, spark):
-        df = _df(spark, ["num_computers"], [("1",)])
-        assert present_parts(df, ["num_computers", "num_tablets"]) == ["num_computers"]
+    def test_sum_of_parts_is_null_when_every_component_is_null(self, spark):
+        df = _df(spark, ["num_computers", "num_tablets"], [(None, None)])
+        result = df.select(sum_of_parts(["num_computers", "num_tablets"]).alias("t"))
+        assert _single(result, "t") is None
 
-    def test_sum_of_parts_is_null_without_any_component(self, spark):
-        df = _df(spark, ["school_id_govt"], [("abc",)])
-        result = df.select(sum_of_parts(df, ["num_computers"]).alias("total"))
-        assert _single(result, "total") is None
+    def test_sum_of_parts_treats_a_null_component_as_zero(self, spark):
+        df = _df(spark, ["num_computers", "num_tablets"], [("3", None)])
+        result = df.select(sum_of_parts(["num_computers", "num_tablets"]).alias("t"))
+        assert _single(result, "t") == 3
 
     def test_availability_from_count_preserves_null(self, spark):
         df = _df(spark, ["num_computers"], [(None,)])
         result = df.select(
-            availability_from_count(sum_of_parts(df, ["num_computers"])).alias("a")
+            availability_from_count(sum_of_parts(["num_computers"])).alias("a")
         )
         assert _single(result, "a") is None
 
