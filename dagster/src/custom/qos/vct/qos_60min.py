@@ -41,14 +41,14 @@ SNAPSHOT_COLUMNS = [
     "networkId",
     "networkName",
     "organization",
-    "meraki_name_room",
+    "room_name",
     "status",
     "downstream_total_packet",
     "downstream_packet_lost",
     "downstream_loss_pct",
     "avg_latency_ms",
-    "download_mbps",
-    "upload_mbps",
+    "speed_download",
+    "speed_upload",
     "avg_mbps",
     "downtime_s",
     "uptime_percentage",
@@ -170,15 +170,15 @@ def _normalize_data_rate_history(
 ) -> dict[str, Any]:
     out: dict[str, Any] = {
         "serial": serial,
-        "download_mbps": None,
-        "upload_mbps": None,
+        "speed_download": None,
+        "speed_upload": None,
         "avg_mbps": None,
     }
     if not buckets:
         return out
     row = buckets[0]
-    out["download_mbps"] = _kbps_to_mbps(row.get("downloadKbps"))
-    out["upload_mbps"] = _kbps_to_mbps(row.get("uploadKbps"))
+    out["speed_download"] = _kbps_to_mbps(row.get("downloadKbps"))
+    out["speed_upload"] = _kbps_to_mbps(row.get("uploadKbps"))
     out["avg_mbps"] = _kbps_to_mbps(row.get("averageKbps"))
     return out
 
@@ -244,7 +244,7 @@ def _fetch_data_rate_df(
     inventory: pd.DataFrame,
     context: OpExecutionContext,
 ) -> pd.DataFrame:
-    cols = ["serial", "download_mbps", "upload_mbps", "avg_mbps"]
+    cols = ["serial", "speed_download", "speed_upload", "avg_mbps"]
     if len(inventory) == 0:
         return pd.DataFrame(columns=cols)
 
