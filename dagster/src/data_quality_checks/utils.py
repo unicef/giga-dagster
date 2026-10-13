@@ -69,8 +69,6 @@ METADATA_CHECK_KEYS = frozenset(
     }
 )
 
-# NocoDB's free-text category becomes a top-level key of dq-summary.json, so
-# "location checks" and "location_checks" would ship as two separate sections.
 CRITICAL_CHECK_TYPE = "critical_checks"
 
 
@@ -384,30 +382,32 @@ def _count_duplicate_groups(
     count_key: str,
     min_size: int,
 ) -> int | None:
-    """Distinct duplicate groups of at least ``min_size`` members, approved rows only.
+    """Distinct ``id_column`` values with at least ``min_size`` members, approved only.
 
-    Group size comes from the stored ``count_key``; the coalesce falls back to the
-    approved-only member count when map_filter dropped that key from dq_results.
+    The ID is null unless the row belongs to a group, so counting distinct non-null
+    IDs counts groups. Size is the stored member count, which covers the whole group
+    including rejected rows.
     """
+    count_column = f"dq_{count_key}"
     if id_column not in df.columns:
         return None
+    if "dq_results" in df.columns:
+        size_expr = f.element_at(f.col("dq_results"), f.lit(count_key))
+    elif count_column in df.columns:
+        size_expr = f.col(count_column)
+    else:
+        return None
 
-    size_expr = (
-        f.element_at(f.col("dq_results"), f.lit(count_key))
-        if "dq_results" in df.columns
-        else f.lit(None).cast("int")
-    )
-    grouped = (
-        df.filter((f.col("dq_has_critical_error") == 0) & f.col(id_column).isNotNull())
-        .groupBy(id_column)
-        .agg(
-            f.max(size_expr).alias("group_size"),
-            f.count("*").alias("approved_members"),
+    return (
+        df.filter(
+            (f.col("dq_has_critical_error") == 0)
+            & f.col(id_column).isNotNull()
+            & (size_expr >= min_size)
         )
+        .select(id_column)
+        .distinct()
+        .count()
     )
-    return grouped.filter(
-        f.coalesce(f.col("group_size"), f.col("approved_members")) >= min_size
-    ).count()
 
 
 def build_dq_summary_statistics(
@@ -533,7 +533,7 @@ def aggregate_report_json(
             "duplicate_location_group_min_size",
             "dq_duplicate_location_rows_id",
             "duplicate_location_rows_count",
-            config.DUPLICATE_LOCATION_GROUP_MIN_SIZE,
+            config.EXACT_DUPLICATE_LOCATION_GROUP_MIN_SIZE,
         ),
         (
             "count_proximity_50m_groups",
