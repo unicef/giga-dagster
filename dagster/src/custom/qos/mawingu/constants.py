@@ -8,7 +8,7 @@ COUNTRY_CODE = "KEN"
 # equivalent (unlike VCT's custom_dataset.device_matched or Isizwe's Zabbix host
 # tags) - it must be uploaded to ADLS ahead of time and kept in sync manually,
 # same as mawingu_schools.csv is today on the VM.
-REFERENCE_SCHOOLS_FILEPATH = "reference/qos/KEN/mawingu_schools.csv"
+REFERENCE_SCHOOLS_FILEPATH = "raw/qos/reference/KEN/mawingu_schools.csv"
 
 # Zabbix history item key -> our column name
 ITEM_KEY_MAP: dict[str, str] = {

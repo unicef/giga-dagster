@@ -7,7 +7,7 @@ COUNTRY_CODE = "MNG"
 # device_id -> fetch_url + device metadata reference data has no Spark table
 # equivalent - it must be uploaded to ADLS ahead of time and kept in sync
 # manually, same as whitelisted_devices.csv is today on the VM.
-REFERENCE_DEVICES_FILEPATH = "reference/qos/MNG/whitelisted_devices.csv"
+REFERENCE_DEVICES_FILEPATH = "raw/qos/reference/MNG/whitelisted_devices.csv"
 
 RAW_JSON_PREFIX = f"raw/qos/{COUNTRY_CODE}"
 
