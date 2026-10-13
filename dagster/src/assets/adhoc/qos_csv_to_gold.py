@@ -62,6 +62,7 @@ def adhoc__qos_transforms(
     }
     sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
     context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
+    sdf = transform_types(sdf, config.metastore_schema, context)
 
     df_pandas = sdf.toPandas()
     return Output(
