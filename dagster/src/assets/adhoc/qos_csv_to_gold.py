@@ -62,7 +62,7 @@ def adhoc__qos_transforms(
     }
     sdf = sdf.withColumns(column_actions).dropDuplicates(["gigasync_id"])
     context.log.info(f"Calculated SHA256 signature for {sdf.count()} rows")
-    sdf = transform_types(sdf, config.metastore_schema, context)
+    sdf = transform_types(sdf, f"qos_{config.country_code.lower()}", context)
 
     df_pandas = sdf.toPandas()
     return Output(
@@ -84,13 +84,13 @@ def adhoc__publish_qos_to_gold(
 ) -> Output[sql.DataFrame]:
     df_transformed = transform_types(
         adhoc__qos_transforms,
-        config.metastore_schema,
+        f"qos_{config.country_code.lower()}",
         context,
     )
 
     schema_reference = get_schema_columns_datahub(
         spark.spark_session,
-        config.metastore_schema,
+        f"qos_{config.country_code.lower()}",
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context, config=config, spark=spark, schema_reference=schema_reference
