@@ -244,6 +244,19 @@ def all_gigameter_school_consistency_history(context: OpExecutionContext) -> Non
     key_prefix=["daily"],
     group_name="daily",
     deps=[
+        AssetKey(["incremental", "all_gigameter_measurement_data"]),
+        AssetKey(["daily", "all_school_master"]),
+    ],
+    compute_kind="trino",
+)
+def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[
         AssetKey(["daily", "all_gigameter_appversion_funnel"]),
         AssetKey(["incremental", "all_gigameter_measurement_data"]),
         AssetKey(["daily", "all_school_master"]),
@@ -296,13 +309,23 @@ def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
     key_prefix=["daily"],
     group_name="daily",
     deps=[
-        AssetKey(["incremental", "all_gigameter_registered_schools"]),
+        AssetKey(["daily", "all_gigameter_registered_schools"]),
         AssetKey(["daily", "all_gigameter_appversion_funnel"]),
         AssetKey(["incremental", "all_gigameter_measurement_data"]),
     ],
     compute_kind="trino",
 )
 def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
+    _run_daily(context)
+
+
+@asset(
+    key_prefix=["daily"],
+    group_name="daily",
+    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
+    compute_kind="trino",
+)
+def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> None:
     _run_daily(context)
 
 
@@ -352,39 +375,6 @@ def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
     compute_kind="trino",
 )
 def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
-    _run_incremental(context)
-
-
-@asset(
-    key_prefix=["incremental"],
-    group_name="incremental",
-    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
-    compute_kind="trino",
-)
-def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> None:
-    _run_incremental(context)
-
-
-@asset(
-    key_prefix=["incremental"],
-    group_name="incremental",
-    deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
-    compute_kind="trino",
-)
-def all_gigameter_school_measurement_stats(context: OpExecutionContext) -> None:
-    _run_incremental(context)
-
-
-@asset(
-    key_prefix=["incremental"],
-    group_name="incremental",
-    deps=[
-        AssetKey(["incremental", "all_gigameter_school_measurement_stats"]),
-        AssetKey(["daily", "all_school_master"]),
-    ],
-    compute_kind="trino",
-)
-def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
