@@ -59,7 +59,7 @@
 -- Last Updated:    2026-10-05 / Luke Stringer
 -- ==============================================================================
 
-CREATE OR REPLACE TABLE delta_lake.default.all_gigameter_registered_schools
+CREATE TABLE delta_lake.default.all_gigameter_registered_schools
 WITH (
     location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_schools',
     partitioned_by = ARRAY['country']
