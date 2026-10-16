@@ -1,7 +1,7 @@
 from enum import Enum
 from pathlib import Path
 
-from sqlalchemy import JSON, VARCHAR, DateTime, String, func
+from sqlalchemy import JSON, VARCHAR, DateTime, Integer, String, func
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 from src.constants import constants
@@ -41,6 +41,10 @@ class FileUpload(BaseModel):
     country: Mapped[str] = mapped_column(VARCHAR(3), nullable=False)
     dataset: Mapped[str] = mapped_column(nullable=False)
     source: Mapped[str] = mapped_column(nullable=True)
+    schema_key: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
+    schema_version: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    core_schema_key: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
+    core_schema_version: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     original_filename: Mapped[str] = mapped_column(nullable=False)
     column_to_schema_mapping: Mapped[dict] = mapped_column(
         JSON,

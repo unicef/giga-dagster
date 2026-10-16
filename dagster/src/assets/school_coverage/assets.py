@@ -53,8 +53,9 @@ from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_schema_columns,
-    get_schema_columns_datahub,
+    get_schema_columns_datahub_for_config,
+    get_schema_columns_for_config,
+    get_schema_columns_for_upload,
 )
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.sentry import capture_op_exceptions
@@ -117,7 +118,7 @@ def coverage_data_quality_results(
         df_raw,
         file_upload.column_to_schema_mapping,
     )
-    columns = get_schema_columns(s, f"coverage_{source}")
+    columns = get_schema_columns_for_upload(s, f"coverage_{source}", file_upload)
     df = add_missing_columns(df, columns)
     dq_results = row_level_checks(
         df=df,
@@ -241,9 +242,10 @@ def coverage_dq_passed_rows(
 ) -> Output[pd.DataFrame]:
     df_passed = dq_split_passed_rows(coverage_data_quality_results, config.dataset_type)
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -273,9 +275,10 @@ def coverage_dq_failed_rows(
 ) -> Output[pd.DataFrame]:
     df_failed = dq_split_failed_rows(coverage_data_quality_results, config.dataset_type)
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -315,7 +318,7 @@ def coverage_bronze(
     elif source == "itu":  # source == "itu"
         df = itu_transforms(coverage_dq_passed_rows)
     else:
-        columns = get_schema_columns(s, config.metastore_schema)
+        columns = get_schema_columns_for_config(s, config.metastore_schema, config)
         df = add_missing_columns(coverage_dq_passed_rows, columns)
         df = df.select(*[c.name for c in columns])
 
@@ -327,9 +330,10 @@ def coverage_bronze(
         elif source == "itu":
             df = itu_coverage_merge(df, silver)
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         s,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -366,9 +370,10 @@ def coverage_staging(
         context.log.warning("Skipping staging as there are no passing bronze rows")
         return Output(None)
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,

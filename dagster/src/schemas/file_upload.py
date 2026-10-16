@@ -17,6 +17,10 @@ class FileUploadConfig(Config):
     country: str
     dataset: str
     source: str | None = Field(None)
+    schema_key: str | None = Field(None)
+    schema_version: int | None = Field(None)
+    core_schema_key: str | None = Field(None)
+    core_schema_version: int | None = Field(None)
     original_filename: str
     column_to_schema_mapping: dict[str, str]
     column_license: dict[str, str]

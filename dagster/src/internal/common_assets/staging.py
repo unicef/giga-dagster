@@ -34,8 +34,8 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_primary_key,
-    get_schema_columns,
+    get_primary_key_for_config,
+    get_schema_columns_for_config,
 )
 from src.utils.spark import compute_row_hash, is_missing_value, transform_types
 
@@ -80,8 +80,10 @@ class StagingStep:
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
-        self.schema_columns = get_schema_columns(spark, self.schema_name)
-        self.primary_key = get_primary_key(spark, self.schema_name)
+        self.schema_columns = get_schema_columns_for_config(
+            spark, self.schema_name, config
+        )
+        self.primary_key = get_primary_key_for_config(spark, self.schema_name, config)
         # Key used to locate the existing silver row. Defaults to the primary key
         self.match_key = match_key or self.primary_key
         self.silver_tier_schema_name = construct_schema_name_for_tier(

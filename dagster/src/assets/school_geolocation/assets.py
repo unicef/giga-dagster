@@ -63,7 +63,8 @@ from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
     get_schema_columns,
-    get_schema_columns_datahub,
+    get_schema_columns_datahub_for_config,
+    get_schema_columns_for_upload,
 )
 from src.utils.school_registrations.common import (
     process_school_registration_dq_result,
@@ -341,10 +342,17 @@ def geolocation_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     dataset_type = "geolocation"
+    with get_db_context() as db:
+        file_upload = db.scalar(select(FileUpload).where(FileUpload.id == id))
+        if file_upload is None:
+            raise FileNotFoundError(
+                f"Database entry for FileUpload with id `{id}` was not found"
+            )
+        file_upload = FileUploadConfig.from_orm(file_upload)
 
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    columns = get_schema_columns(s, schema_name)
+    columns = get_schema_columns_for_upload(s, schema_name, file_upload)
     schema = StructType(columns)
 
     if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
@@ -700,9 +708,10 @@ def geolocation_dq_passed_rows(
         config.dataset_type,
     )
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -746,9 +755,10 @@ def geolocation_dq_failed_rows(
         config.dataset_type,
     )
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
@@ -799,7 +809,10 @@ def geolocation_error_table(
         file_upload = FileUploadConfig.from_orm(file_upload)
     uploaded_columns = set(file_upload.column_to_schema_mapping.values())
     schema_columns = {
-        field.name for field in get_schema_columns(s, config.metastore_schema)
+        field.name
+        for field in get_schema_columns_for_upload(
+            s, config.metastore_schema, file_upload
+        )
     }
 
     # Preserve uploaded values (e.g. latitude/longitude/num_students) verbatim, even
@@ -877,9 +890,10 @@ def geolocation_staging(
         context.log.warning("Skipping staging as there are no rows passing DQ checks")
         return Output(None)
 
-    schema_reference = get_schema_columns_datahub(
+    schema_reference = get_schema_columns_datahub_for_config(
         spark.spark_session,
         config.metastore_schema,
+        config,
     )
     datahub_emit_metadata_with_exception_catcher(
         context=context,
