@@ -142,7 +142,7 @@ def _build_ap_inventory(
                         "networkId": net_id,
                         "networkName": net_name,
                         "organization": org_label,
-                        "meraki_name_room": _parse_meraki_name_room(device_name),
+                        "room_name": _parse_meraki_name_room(device_name),
                     }
                 )
     df = pd.DataFrame(rows)
