@@ -72,6 +72,11 @@ def deconstruct_school_master_filename_components(filepath: str):
         )
 
 
+def deconstruct_facility_filename_components(filepath: str) -> FilenameComponents:
+    """Parse the shared facility upload, approval, and deletion filename contract."""
+    return deconstruct_school_master_filename_components(filepath)
+
+
 def deconstruct_qos_filename_components(filepath: str):
     """Deconstruct and validate filename components for APIs uploaded through the Ingestion Portal"""
     path = Path(filepath)

@@ -1,9 +1,7 @@
 import enum
 
+from dagster import OpExecutionContext
 from delta import DeltaTable
-from models.approval_requests import ApprovalRequest
-from models.deletion_requests import DeletionRequest
-from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -18,7 +16,9 @@ from pyspark.sql.types import (
 )
 from sqlalchemy import select, update
 
-from dagster import OpExecutionContext
+from models.approval_requests import ApprovalRequest
+from models.deletion_requests import DeletionRequest
+from models.file_upload import FileUpload
 from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
@@ -98,6 +98,14 @@ class StagingStep:
         self.staging_table_name = construct_full_table_name(
             self.staging_tier_schema_name,
             self.country_code,
+        )
+
+    @property
+    def approval_dataset_label(self) -> str:
+        """Portal-facing approval label, configurable for non-school domains."""
+        return self.config.metadata.get(
+            "approval_dataset_label",
+            f"School {self.config.dataset_type.capitalize()}",
         )
 
     def __call__(
@@ -386,7 +394,7 @@ class StagingStep:
             )
             return
 
-        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        formatted_dataset = self.approval_dataset_label
         with get_db_context() as db:
             try:
                 with db.begin():
@@ -439,7 +447,7 @@ class StagingStep:
     def _stamp_file_upload_staging_complete(self) -> None:
         """Set is_processed_in_staging=True and approval_status='PENDING' when enabled."""
         upload_id = self.config.filename_components.id
-        formatted_dataset = f"School {self.config.dataset_type.capitalize()}"
+        formatted_dataset = self.approval_dataset_label
         try:
             with get_db_context() as db:
                 with db.begin():

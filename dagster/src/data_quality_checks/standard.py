@@ -1,12 +1,12 @@
 from typing import Any
 
+from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import (
     Window,
     functions as f,
 )
 
-from dagster import OpExecutionContext
 from src.data_quality_checks.config import (
     CONFIG_NONEMPTY_COLUMNS,
     CONFIG_UNIQUE_COLUMNS,
@@ -221,15 +221,33 @@ def standard_checks(
     range_=True,
     format_=True,
     string_length=True,
+    values_domain: dict | None = None,
+    values_range: dict | None = None,
 ):
     if duplicate:
         df = duplicate_checks(df, CONFIG_UNIQUE_COLUMNS[dataset_type], context)
     if completeness:
         df = completeness_checks(df, CONFIG_NONEMPTY_COLUMNS[dataset_type], context)
     if domain:
-        df = domain_checks(df, CONFIG_VALUES_DOMAIN.get(dataset_type, []), context)
+        df = domain_checks(
+            df,
+            (
+                CONFIG_VALUES_DOMAIN.get(dataset_type, [])
+                if values_domain is None
+                else values_domain
+            ),
+            context,
+        )
     if range_:
-        df = range_checks(df, CONFIG_VALUES_RANGE.get(dataset_type, []), context)
+        df = range_checks(
+            df,
+            (
+                CONFIG_VALUES_RANGE.get(dataset_type, [])
+                if values_range is None
+                else values_range
+            ),
+            context,
+        )
     if format_:
         df = format_validation_checks(df, context)
     if string_length:

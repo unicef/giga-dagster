@@ -12,9 +12,8 @@ import json
 
 import folium
 import pandas as pd
-from jinja2 import BaseLoader, Environment
-
 from dagster import OpExecutionContext
+from jinja2 import BaseLoader, Environment
 
 PASSED_COLOR = "#1e7e34"
 WARNING_COLOR = "#fd7e14"
@@ -133,8 +132,12 @@ def _render_school_popup_html(
     row: dict,
     status: str,
     include_failure_reason: bool,
+    name_column: str = "school_name",
+    giga_id_column: str = "school_id_giga",
+    govt_id_column: str = "school_id_govt",
+    level_column: str = "education_level",
 ) -> str:
-    """Render the HTML popup content for a school marker."""
+    """Render popup content using configurable facility identity columns."""
     admin1 = _format_popup_value(row.get("admin1"))
     admin1_id = _format_popup_value(row.get("admin1_id_giga"))
     admin2 = _format_popup_value(row.get("admin2"))
@@ -144,12 +147,12 @@ def _render_school_popup_html(
     fifty_m_flag = _format_dq_flag(row.get("dq_duplicate_group_flag_50m"))
 
     fields = [
-        ("school_name", _format_popup_value(row.get("school_name"))),
-        ("school_id_giga", _format_popup_value(row.get("school_id_giga"))),
-        ("school_id_govt", _format_popup_value(row.get("school_id_govt"))),
+        (name_column, _format_popup_value(row.get(name_column))),
+        (giga_id_column, _format_popup_value(row.get(giga_id_column))),
+        (govt_id_column, _format_popup_value(row.get(govt_id_column))),
         ("latitude", _format_popup_value(row.get("latitude"))),
         ("longitude", _format_popup_value(row.get("longitude"))),
-        ("education_level", _format_popup_value(row.get("education_level"))),
+        (level_column, _format_popup_value(row.get(level_column))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
         ("rurban", _format_popup_value(row.get("rurban_detected"))),
@@ -270,6 +273,10 @@ def _add_school_markers(
     status_label: str,
     main_layer: folium.FeatureGroup,
     include_failure_reason: bool,
+    name_column: str = "school_name",
+    giga_id_column: str = "school_id_giga",
+    govt_id_column: str = "school_id_govt",
+    level_column: str = "education_level",
 ) -> None:
     """Add one tagged school marker per row to the shared layer."""
     for row in df.to_dict("records"):
@@ -277,6 +284,10 @@ def _add_school_markers(
             row,
             status=status_label,
             include_failure_reason=include_failure_reason,
+            name_column=name_column,
+            giga_id_column=giga_id_column,
+            govt_id_column=govt_id_column,
+            level_column=level_column,
         )
         row_status_tag, row_color = _status_tag_and_color(row, status_tag, base_color)
 
@@ -425,6 +436,11 @@ def generate_school_map_html(
     passed_df: pd.DataFrame,
     failed_df: pd.DataFrame,
     context: OpExecutionContext,
+    entity_label: str = "Schools",
+    name_column: str = "school_name",
+    giga_id_column: str = "school_id_giga",
+    govt_id_column: str = "school_id_govt",
+    level_column: str = "education_level",
 ) -> str:
     """Generate an optimized interactive HTML map with grouped checkbox filters."""
     context.log.info(
@@ -455,13 +471,31 @@ def generate_school_map_html(
     )
     m.fit_bounds(bounds, padding=[50, 50])
 
-    main_layer = folium.FeatureGroup(name="Schools", show=True)
+    main_layer = folium.FeatureGroup(name=entity_label, show=True)
 
     _add_school_markers(
-        passed_filtered, PASSED_COLOR, "passed", "Approved", main_layer, False
+        passed_filtered,
+        PASSED_COLOR,
+        "passed",
+        "Approved",
+        main_layer,
+        False,
+        name_column,
+        giga_id_column,
+        govt_id_column,
+        level_column,
     )
     _add_school_markers(
-        failed_filtered, FAILED_COLOR, "failed", "Rejected", main_layer, True
+        failed_filtered,
+        FAILED_COLOR,
+        "failed",
+        "Rejected",
+        main_layer,
+        True,
+        name_column,
+        giga_id_column,
+        govt_id_column,
+        level_column,
     )
     main_layer.add_to(m)
 

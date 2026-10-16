@@ -7,6 +7,7 @@ import io
 import zipfile
 
 from dagster import OpExecutionContext
+
 from src.constants import constants
 from src.utils.adls import ADLSFileClient
 from src.utils.filename import deconstruct_school_master_filename_components
@@ -89,6 +90,10 @@ def generate_dq_kit_zip_bytes(
     stem: str,
     adls_client: ADLSFileClient,
     context: OpExecutionContext,
+    dataset_prefix: str | None = None,
+    entity_plural: str = "Schools",
+    map_filename_prefix: str = "school_map",
+    include_master_export: bool = True,
 ) -> tuple[bytes, str]:
     """
     Generate ZIP bundle containing all DQ artifacts using convention-based paths.
@@ -100,7 +105,7 @@ def generate_dq_kit_zip_bytes(
     - Map HTML
     - README describing the actual ZIP contents
     """
-    dataset_prefix = f"school-{dataset}"
+    dataset_prefix = dataset_prefix or f"school-{dataset}"
     dq_root = f"{constants.dq_results_folder}/{dataset_prefix}"
 
     # Convention-based paths matching the existing sensor mappings
@@ -109,7 +114,7 @@ def generate_dq_kit_zip_bytes(
         "dq_summary_json": f"{dq_root}/dq-summary/{country_code}/{stem}.json",
         "passed_rows": f"{dq_root}/dq-passed-rows-human-readable/{country_code}/{stem}.csv",
         "failed_rows": f"{dq_root}/dq-failed-rows-human-readable/{country_code}/{stem}.csv",
-        "map_html": f"{dq_root}/dq-map/{country_code}/school_map_{country_code}_{stem}.html",
+        "map_html": f"{dq_root}/dq-map/{country_code}/{map_filename_prefix}_{country_code}_{stem}.html",
         "master_export": f"{dq_root}/master-export/{country_code}/{stem}.csv",
         "duplicates_report": f"{dq_root}/dq-duplicates-report/{country_code}/{stem}.csv",
     }
@@ -142,7 +147,7 @@ def generate_dq_kit_zip_bytes(
         "approved",
         "3_approved_data",
         row_csv_stem,
-        "Schools APPROVED by all data quality checks",
+        f"{entity_plural} APPROVED by all data quality checks",
         entries,
         sections,
         context,
@@ -153,7 +158,7 @@ def generate_dq_kit_zip_bytes(
         "rejected",
         "4_rejected_data",
         row_csv_stem,
-        "Schools REJECTED by data quality checks, with reasons",
+        f"{entity_plural} REJECTED by data quality checks, with reasons",
         entries,
         sections,
         context,
@@ -161,7 +166,9 @@ def generate_dq_kit_zip_bytes(
 
     # Map HTML
     if data := _safe_download(adls_client, paths["map_html"], context):
-        entries.append((f"5_map_visualization/school_map_{country_code}.html", data))
+        entries.append(
+            (f"5_map_visualization/{map_filename_prefix}_{country_code}.html", data)
+        )
         sections.append(
             (
                 "5_map_visualization/",
@@ -180,14 +187,17 @@ def generate_dq_kit_zip_bytes(
         "duplicates",
         "6_duplicates_report",
         row_csv_stem,
-        "All schools in a duplicate group (exact-location or within 50m), file and master",
+        f"All {entity_plural.lower()} in a duplicate group "
+        "(exact-location or within 50m), file and existing dataset",
         entries,
         sections,
         context,
     )
 
     # School master snapshot (only present after the post-approval run has exported it)
-    if data := _safe_download(adls_client, paths["master_export"], context):
+    if include_master_export and (
+        data := _safe_download(adls_client, paths["master_export"], context)
+    ):
         entries.append((f"7_school_master/school_master_{country_code}.csv", data))
         sections.append(
             (

@@ -353,10 +353,12 @@ _DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES = {
 }
 
 
-def _human_readable_column_names() -> dict[str, str]:
+def _human_readable_column_names(
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+) -> dict[str, str]:
     """dq_ check column (sans prefix) -> NocoDB "Human Readable Name"."""
     table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
+        table_name=dq_config_table
     )
     table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
     names = table.set_index("DQ Table Column Name")["Human Readable Name"].to_dict()
@@ -367,7 +369,10 @@ def _human_readable_column_names() -> dict[str, str]:
     }
 
 
-def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFrame:
+def finalize_duplicates_report(
+    duplicates_report: sql.DataFrame,
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+) -> sql.DataFrame:
     """Render flag columns as Yes/No and rename generated columns to human-readable labels."""
     for column in DUPLICATES_REPORT_FLAG_COLUMNS:
         duplicates_report = duplicates_report.withColumn(
@@ -375,7 +380,7 @@ def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFram
         )
     names = {
         **_DUPLICATES_REPORT_STRUCTURAL_COLUMN_NAMES,
-        **_human_readable_column_names(),
+        **_human_readable_column_names(dq_config_table),
     }
     for raw_name, human_name in names.items():
         if raw_name in duplicates_report.columns:
@@ -386,13 +391,20 @@ def finalize_duplicates_report(duplicates_report: sql.DataFrame) -> sql.DataFram
 
 
 def attach_approval_status(
-    duplicates_report: sql.DataFrame, dq_results: sql.DataFrame
+    duplicates_report: sql.DataFrame,
+    dq_results: sql.DataFrame,
+    dq_id_column: str = "school_id_govt",
 ) -> sql.DataFrame:
     """approval_status is only meaningful for "file" rows — master rows have no DQ
     run of their own for this upload, so they stay NULL."""
     relevant_ids = duplicates_report.select("school_id_govt").distinct()
+    approval_source = dq_results
+    if dq_id_column != "school_id_govt":
+        approval_source = approval_source.withColumn(
+            "school_id_govt", f.col(dq_id_column)
+        )
     approval = (
-        dq_results.join(relevant_ids, on="school_id_govt", how="inner")
+        approval_source.join(relevant_ids, on="school_id_govt", how="inner")
         .select("school_id_govt", "dq_has_critical_error")
         .dropDuplicates(["school_id_govt"])
         .withColumn(

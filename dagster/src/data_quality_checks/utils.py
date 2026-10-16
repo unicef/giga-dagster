@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
+from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import (
     Column,
@@ -11,7 +12,6 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import IntegerType, MapType, StringType
 
-from dagster import OpExecutionContext
 from src.data_quality_checks.column_relation import column_relation_checks
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
@@ -91,6 +91,7 @@ DQ_RESULTS_MASTER_COLUMNS = {
 def aggregate_report_spark_df(
     spark: SparkSession,
     df: sql.DataFrame,
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ) -> tuple[sql.DataFrame, sql.DataFrame]:
     """Aggregate per-check pass/fail counts.
 
@@ -200,7 +201,7 @@ def aggregate_report_spark_df(
 
     # get data descriptions from nocodb
     dq_column_name_table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
+        table_name=dq_config_table
     )
     dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
         table_id=dq_column_name_table_id
@@ -258,11 +259,13 @@ def aggregate_report_spark_df(
 _DQR_WARNINGS_COLUMN = "DQR Warnings"
 
 
-def get_warning_check_labels() -> dict[str, str]:
+def get_warning_check_labels(
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+) -> dict[str, str]:
     """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes),
     mapped to their "UI Error Description" label."""
     table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
+        table_name=dq_config_table
     )
     table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
     is_warning = (
@@ -280,14 +283,17 @@ def get_warning_check_labels() -> dict[str, str]:
     return labels
 
 
-def _warning_expr(df: sql.DataFrame) -> Column:
+def _warning_expr(
+    df: sql.DataFrame,
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+) -> Column:
     """Boolean column: True where the row fails at least one report-level warning.
 
     The set of warning checks comes from NocoDB (see get_warning_check_labels), so a
     missing optional column does not flag every approved school as "with warnings".
     element_at/coalesce handle keys absent from a given row's dq_results map.
     """
-    warning_keys = set(get_warning_check_labels())
+    warning_keys = set(get_warning_check_labels(dq_config_table))
     if not warning_keys:
         return f.lit(False)
 
@@ -309,14 +315,17 @@ def _warning_expr(df: sql.DataFrame) -> Column:
     return f.greatest(*exprs) == 1
 
 
-def build_dq_warning_columns(df: sql.DataFrame) -> sql.DataFrame:
+def build_dq_warning_columns(
+    df: sql.DataFrame,
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+) -> sql.DataFrame:
     """Add dq_has_warning (int 0/1) and warning_reason (comma-joined labels).
 
     warning_reason only lists the labels for checks that actually fired on a given
     row (same pattern as failure_reason in critical.py), so it stays short even
     though dozens of warning checks may be configured in NocoDB.
     """
-    warning_labels = get_warning_check_labels()
+    warning_labels = get_warning_check_labels(dq_config_table)
     if not warning_labels or "dq_results" not in df.columns:
         return df.withColumns(
             {"dq_has_warning": f.lit(0).cast("int"), "warning_reason": f.lit("")}
@@ -369,6 +378,10 @@ def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
     df_bronze: sql.DataFrame,
+    is_new_column: str = "is_new_school",
+    entity_plural: str = "schools",
+    govt_id_column: str = "school_id_govt",
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ) -> dict:
     """DQ summary with warning counts limited to approved (non-critical) rows."""
     df_data_quality_checks = df_data_quality_checks.cache()
@@ -376,12 +389,17 @@ def build_dq_summary_statistics(
         df_aggregated, df_aggregated_approved_only = aggregate_report_spark_df(
             spark,
             df_data_quality_checks,
+            dq_config_table=dq_config_table,
         )
         return aggregate_report_json(
             df_aggregated=df_aggregated,
             df_bronze=df_bronze,
             df_data_quality_checks=df_data_quality_checks,
             df_aggregated_approved_only=df_aggregated_approved_only,
+            is_new_column=is_new_column,
+            entity_plural=entity_plural,
+            govt_id_column=govt_id_column,
+            dq_config_table=dq_config_table,
         )
     finally:
         df_data_quality_checks.unpersist()
@@ -392,6 +410,10 @@ def aggregate_report_json(
     df_bronze: sql.DataFrame,
     df_data_quality_checks: sql.DataFrame,
     df_aggregated_approved_only: sql.DataFrame | None = None,
+    is_new_column: str = "is_new_school",
+    entity_plural: str = "schools",
+    govt_id_column: str = "school_id_govt",
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ):
     """Build the dq-summary.json dict from aggregated + row-level DQ results.
 
@@ -402,9 +424,9 @@ def aggregate_report_json(
     df_bronze: pre-DQ dataframe, used only for columns_count.
     """
     is_approved = f.col("dq_has_critical_error") == 0
-    warning_expr = _warning_expr(df_data_quality_checks)
+    warning_expr = _warning_expr(df_data_quality_checks, dq_config_table)
     low_precision_expr = _low_precision_expr(df_data_quality_checks)
-    has_is_new_school = "is_new_school" in df_data_quality_checks.columns
+    has_is_new_entity = is_new_column in df_data_quality_checks.columns
 
     agg_exprs = [
         f.count("*").alias("rows_count"),
@@ -417,13 +439,13 @@ def aggregate_report_json(
             "count_schools_low_precision_coordinates"
         ),
     ]
-    if has_is_new_school:
+    if has_is_new_entity:
         agg_exprs += [
-            f.count(f.when(is_approved & f.col("is_new_school"), 1)).alias(
-                "schools_created"
+            f.count(f.when(is_approved & f.col(is_new_column), 1)).alias(
+                "entities_created"
             ),
-            f.count(f.when(is_approved & ~f.col("is_new_school"), 1)).alias(
-                "schools_updated"
+            f.count(f.when(is_approved & ~f.col(is_new_column), 1)).alias(
+                "entities_updated"
             ),
         ]
     stats = df_data_quality_checks.select(*agg_exprs).first()
@@ -439,12 +461,12 @@ def aggregate_report_json(
 
     # duplicate-school_id_govt is a critical check, so its count_failed is already
     # one of the critical_checks_summary records above — no extra Spark pass needed.
-    count_duplicate_school_id = next(
+    count_duplicate_entity_id = next(
         (
             record["count_failed"]
             for record in critical_checks_summary
             if record.get("assertion") == "duplicate"
-            and record.get("column") == "school_id_govt"
+            and record.get("column") == govt_id_column
         ),
         0,
     )
@@ -466,19 +488,19 @@ def aggregate_report_json(
         "rows_passed": stats.rows_passed,
         "rows_failed": stats.rows_failed,
         "rows_passed_with_warnings": stats.rows_passed_with_warnings,
-        "count_schools_low_precision_coordinates": (
+        f"count_{entity_plural}_low_precision_coordinates": (
             stats.count_schools_low_precision_coordinates
         ),
-        "count_duplicate_school_id": count_duplicate_school_id,
+        f"count_duplicate_{entity_plural.rstrip('s')}_id": count_duplicate_entity_id,
         "columns": columns_count,
         "timestamp": timestamp,
     }
 
     # Count created/updated schools among rows that passed the critical checks.
     # is_new_school is carried through dq_results so we can count on it directly.
-    if has_is_new_school:
-        summary["schools_created"] = stats.schools_created
-        summary["schools_updated"] = stats.schools_updated
+    if has_is_new_entity:
+        summary[f"{entity_plural}_created"] = stats.entities_created
+        summary[f"{entity_plural}_updated"] = stats.entities_updated
 
     warn_source = df_aggregated_approved_only or df_aggregated
     warn_source = warn_source.withColumn(
@@ -571,12 +593,15 @@ def normalize_dq_results_map(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def dq_geolocation_extract_relevant_columns(
-    df: sql.DataFrame, uploaded_columns: list[str]
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+    is_new_column: str = "is_new_school",
 ):
     df = normalize_dq_results_map(df)
 
     dq_column_name_table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
+        table_name=dq_config_table
     )
     dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
         table_id=dq_column_name_table_id
@@ -635,7 +660,7 @@ def dq_geolocation_extract_relevant_columns(
             "dq_has_critical_error",
             "failure_reason",
             "dq_results",
-            "is_new_school",
+            is_new_column,
             "dq_duplicate_location_rows_id",
             "dq_duplicate_group_id_50m",
         ]
@@ -675,14 +700,43 @@ def run_master_checks(
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
     df = school_density_check(df, context)
-    df = standard_checks(df, dq_context.dataset_type, context)
+    df = standard_checks(
+        df,
+        dq_context.dataset_type,
+        context,
+        values_domain=(
+            None
+            if dq_context.values_domain is None
+            else dict(dq_context.values_domain)
+        ),
+        values_range=(
+            None
+            if dq_context.values_range is None
+            else {
+                column: {"min": minimum, "max": maximum}
+                for column, minimum, maximum in dq_context.values_range
+            }
+        ),
+    )
     df = duplicate_all_except_checks(
         df,
-        CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type],
+        (
+            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type]
+            if dq_context.duplicate_all_except_columns is None
+            else list(dq_context.duplicate_all_except_columns)
+        ),
         context,
     )
     df = precision_check(df, config.PRECISION, context)
-    df = duplicate_set_checks(df, config.UNIQUE_SET_COLUMNS, context)
+    df = duplicate_set_checks(
+        df,
+        (
+            config.UNIQUE_SET_COLUMNS
+            if dq_context.unique_set_columns is None
+            else [list(columns) for columns in dq_context.unique_set_columns]
+        ),
+        context,
+    )
     df = duplicate_name_level_110_check(df, context)
     df = run_geospatial_checks(df, dq_context.country_code_iso3, context)
     df = column_relation_checks(df, dq_context.dataset_type, context)
@@ -690,7 +744,10 @@ def run_master_checks(
         df,
         dq_context.dataset_type,
         CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
-        context,
+        context=context,
+        dq_config_table=dq_context.dq_config_table,
+        is_new_column=dq_context.is_new_column,
+        check_column_aliases=dict(dq_context.check_column_aliases),
     )
     return df
 
@@ -724,15 +781,43 @@ def run_geolocation_checks(
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
     df = school_density_check(df, context, reference=reference)
-    df = standard_checks(df, dq_context.dataset_type, context)
+    df = standard_checks(
+        df,
+        dq_context.dataset_type,
+        context,
+        values_domain=(
+            None
+            if dq_context.values_domain is None
+            else dict(dq_context.values_domain)
+        ),
+        values_range=(
+            None
+            if dq_context.values_range is None
+            else {
+                column: {"min": minimum, "max": maximum}
+                for column, minimum, maximum in dq_context.values_range
+            }
+        ),
+    )
     df = duplicate_all_except_checks(
         df,
-        CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type],
+        (
+            CONFIG_COLUMNS_EXCEPT_SCHOOL_ID[dq_context.dataset_type]
+            if dq_context.duplicate_all_except_columns is None
+            else list(dq_context.duplicate_all_except_columns)
+        ),
         context,
     )
     df = precision_check(df, config.PRECISION, context)
     df = duplicate_set_checks(
-        df, config.UNIQUE_SET_COLUMNS, context, reference=reference
+        df,
+        (
+            config.UNIQUE_SET_COLUMNS
+            if dq_context.unique_set_columns is None
+            else [list(columns) for columns in dq_context.unique_set_columns]
+        ),
+        context,
+        reference=reference,
     )
     if extra_outputs is not None:
         extra_outputs["duplicate_location_members"] = (
@@ -753,7 +838,10 @@ def run_geolocation_checks(
         df,
         dq_context.dataset_type,
         CONFIG_NONEMPTY_COLUMNS[dq_context.dataset_type],
-        context,
+        context=context,
+        dq_config_table=dq_context.dq_config_table,
+        is_new_column=dq_context.is_new_column,
+        check_column_aliases=dict(dq_context.check_column_aliases),
     )
     df = column_relation_checks(df, dq_context.dataset_type, context)
 
@@ -831,7 +919,7 @@ def run_qos_checks(
 
 def row_level_checks_internal(
     df: sql.DataFrame,
-    dq_context: Optional[DQContext] = None,
+    dq_context: DQContext | None = None,
     silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
     extra_outputs: dict = None,

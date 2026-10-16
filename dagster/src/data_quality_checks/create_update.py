@@ -1,10 +1,33 @@
-import uuid
-
+from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import functions as f
 
-from dagster import OpExecutionContext
 from src.utils.logger import get_context_with_fallback_logger
+
+
+def add_is_new_entity(
+    bronze: sql.DataFrame,
+    silver: sql.DataFrame,
+    govt_id_column: str,
+    output_column: str,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    """Mark rows whose government identifier is absent from the current dataset."""
+    logger = get_context_with_fallback_logger(context)
+    logger.info(f"Deriving {output_column} from current dataset join...")
+
+    existing_id = f"_existing_{govt_id_column}"
+    silver_ids = silver.select(
+        f.col(govt_id_column).alias(existing_id)
+    ).dropDuplicates([existing_id])
+    joined = bronze.alias("bronze").join(
+        silver_ids,
+        f.col(f"bronze.{govt_id_column}") == f.col(existing_id),
+        how="left",
+    )
+    return joined.withColumn(output_column, f.col(existing_id).isNull()).select(
+        "bronze.*", output_column
+    )
 
 
 def add_is_new_school(
@@ -12,50 +35,62 @@ def add_is_new_school(
     silver: sql.DataFrame,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
-    """Add is_new_school boolean column to bronze df.
-
-    True  → school_id_govt not found in silver (new school to be created)
-    False → school_id_govt already exists in silver (existing school to be updated)
-    """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Deriving is_new_school from silver join...")
-
-    silver_ids = silver.select("school_id_govt")
-    joined = bronze.alias("bronze").join(
-        silver_ids.alias("silver"), on="school_id_govt", how="left"
+    """Backward-compatible school wrapper around ``add_is_new_entity``."""
+    return add_is_new_entity(
+        bronze,
+        silver,
+        govt_id_column="school_id_govt",
+        output_column="is_new_school",
+        context=context,
     )
-    return joined.withColumn(
-        "is_new_school",
-        f.col("silver.school_id_govt").isNull(),
-    ).select("bronze.*", "is_new_school")
 
 
-def _rename_silver_columns(
-    silver: sql.DataFrame,
-) -> tuple[sql.DataFrame, dict[str, str]]:
-    """Rename silver columns to avoid conflicts after join.
+def enrich_with_current_values(
+    incoming: sql.DataFrame,
+    current: sql.DataFrame,
+    govt_id_column: str,
+    giga_id_column: str,
+    is_new_column: str,
+    context: OpExecutionContext = None,
+) -> sql.DataFrame:
+    """Fill incoming gaps from the current row while preserving its Giga identifier."""
+    logger = get_context_with_fallback_logger(context)
+    logger.info("Enriching incoming rows with current values...")
 
-    Keeps school_id_govt and school_id_giga with original names for join/prioritization.
-    Other columns get prefixed with 'silver_'.
-    """
-    silver_renamed = silver
-    silver_columns = silver.columns
-    renamed_columns_map = {}
+    current_columns = [
+        column
+        for column in incoming.columns
+        if column in current.columns and column not in {govt_id_column, is_new_column}
+    ]
+    current_selected = current.select(
+        f.col(govt_id_column).alias("_current_match_id"),
+        *[f.col(column).alias(f"_current_{column}") for column in current_columns],
+    )
+    joined = incoming.alias("incoming").join(
+        current_selected,
+        f.col(f"incoming.{govt_id_column}") == f.col("_current_match_id"),
+        "left",
+    )
 
-    for col_name in silver_columns:
-        if col_name not in ["school_id_govt", "school_id_giga"]:
-            new_name = f"silver_{col_name}"
-            if new_name not in silver_renamed.columns:
-                silver_renamed = silver_renamed.withColumnRenamed(col_name, new_name)
-                renamed_columns_map[col_name] = new_name
-            else:
-                temp_name = f"silver_{col_name}_{uuid.uuid4().hex[:4]}"
-                silver_renamed = silver_renamed.withColumnRenamed(col_name, temp_name)
-                renamed_columns_map[col_name] = temp_name
-        elif col_name == "school_id_giga":
-            renamed_columns_map[col_name] = col_name
-
-    return silver_renamed, renamed_columns_map
+    selections = []
+    for column in incoming.columns:
+        if column == giga_id_column and column in current_columns:
+            selections.append(
+                f.coalesce(
+                    f.col(f"_current_{column}"),
+                    f.col(f"incoming.{column}"),
+                ).alias(column)
+            )
+        elif column in current_columns:
+            selections.append(
+                f.coalesce(
+                    f.col(f"incoming.{column}"),
+                    f.col(f"_current_{column}"),
+                ).alias(column)
+            )
+        else:
+            selections.append(f.col(f"incoming.{column}").alias(column))
+    return joined.select(*selections)
 
 
 def enrich_with_silver_values(
@@ -72,75 +107,11 @@ def enrich_with_silver_values(
     New schools (no silver match) are returned unchanged.
     Does not produce any DQ flags.
     """
-    logger = get_context_with_fallback_logger(context)
-    logger.info("Enriching bronze with silver values for existing schools...")
-
-    silver_cols_to_select = ["school_id_govt"]
-    if "school_id_giga" in silver.columns:
-        silver_cols_to_select.append("school_id_giga")
-
-    common_cols_for_coalesce = [
-        col
-        for col in bronze.columns
-        if col in silver.columns
-        and col not in ["school_id_govt", "school_id_giga", "is_new_school"]
-    ]
-    silver_cols_to_select.extend(common_cols_for_coalesce)
-    silver_cols_to_select = list(dict.fromkeys(silver_cols_to_select))
-
-    silver_minimal = silver.select(*[f.col(c) for c in silver_cols_to_select])
-    silver_renamed, renamed_columns_map = _rename_silver_columns(silver_minimal)
-
-    joined_df = bronze.alias("bronze").join(
-        silver_renamed.alias("silver"),
-        on="school_id_govt",
-        how="left",
+    return enrich_with_current_values(
+        bronze,
+        silver,
+        govt_id_column="school_id_govt",
+        giga_id_column="school_id_giga",
+        is_new_column="is_new_school",
+        context=context,
     )
-
-    final_select_expr = []
-
-    # school_id_giga: prefer silver's value for existing schools
-    bronze_has_giga = "school_id_giga" in bronze.columns
-    silver_has_giga = "school_id_giga" in silver_renamed.columns
-
-    if bronze_has_giga and silver_has_giga:
-        final_select_expr.append(
-            f.when(
-                f.col("silver.school_id_govt").isNotNull()
-                & f.col("silver.school_id_giga").isNotNull(),
-                f.col("silver.school_id_giga"),
-            )
-            .otherwise(f.col("bronze.school_id_giga"))
-            .alias("school_id_giga")
-        )
-    elif bronze_has_giga:
-        final_select_expr.append(f.col("bronze.school_id_giga").alias("school_id_giga"))
-    elif silver_has_giga:
-        final_select_expr.append(
-            f.when(
-                f.col("silver.school_id_govt").isNotNull(),
-                f.col("silver.school_id_giga"),
-            )
-            .otherwise(f.lit(None).cast(silver.schema["school_id_giga"].dataType))
-            .alias("school_id_giga")
-        )
-
-    for col_name in bronze.columns:
-        if col_name == "school_id_giga":
-            continue
-        elif col_name == "school_id_govt":
-            final_select_expr.append(
-                f.col("bronze.school_id_govt").alias("school_id_govt")
-            )
-        elif col_name in renamed_columns_map:
-            silver_col_name = renamed_columns_map[col_name]
-            final_select_expr.append(
-                f.coalesce(
-                    f.col(f"bronze.{col_name}"), f.col(f"silver.{silver_col_name}")
-                ).alias(col_name)
-            )
-        else:
-            final_select_expr.append(f.col(f"bronze.{col_name}").alias(col_name))
-
-    logger.info("Silver enrichment complete.")
-    return joined_df.select(*final_select_expr)

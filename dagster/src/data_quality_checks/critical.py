@@ -1,7 +1,7 @@
+from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import functions as f
 
-from dagster import OpExecutionContext
 from src.utils.data_quality_descriptions import (
     handle_rename_dq_has_critical_error_column,
 )
@@ -15,10 +15,13 @@ from src.utils.nocodb.get_nocodb_data import (
 def _build_geolocation_critical_exprs(
     df: sql.DataFrame,
     full_human_readable_mapping: dict,
+    dq_config_table: str,
+    is_new_column: str,
+    check_column_aliases: dict[str, str],
 ) -> tuple[list, list]:
     """Build critical error expressions for geolocation/master datasets from NocoDB config."""
     noco_table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
+        table_name=dq_config_table
     )
     noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
 
@@ -36,26 +39,36 @@ def _build_geolocation_critical_exprs(
     failure_exprs = []
 
     for c in always_checks:
-        if c not in df.columns:
+        dataframe_column = check_column_aliases.get(c, c)
+        if dataframe_column not in df.columns:
             continue
         critical_exprs.append(
-            f.when(f.isnan(f.col(c)) | f.col(c).isNull(), f.lit(0)).otherwise(f.col(c))
-        )
-        failure_exprs.append(
-            f.when(f.col(c) == 1, f.lit(full_human_readable_mapping.get(c, c[3:])))
-        )
-
-    for c in create_only_checks:
-        if c not in df.columns:
-            continue
-        critical_exprs.append(
-            f.when(f.col("is_new_school") & (f.col(c) == 1), f.lit(1)).otherwise(
-                f.lit(0)
-            )
+            f.when(
+                f.isnan(f.col(dataframe_column))
+                | f.col(dataframe_column).isNull(),
+                f.lit(0),
+            ).otherwise(f.col(dataframe_column))
         )
         failure_exprs.append(
             f.when(
-                f.col("is_new_school") & (f.col(c) == 1),
+                f.col(dataframe_column) == 1,
+                f.lit(full_human_readable_mapping.get(c, c[3:])),
+            )
+        )
+
+    for c in create_only_checks:
+        dataframe_column = check_column_aliases.get(c, c)
+        if dataframe_column not in df.columns:
+            continue
+        critical_exprs.append(
+            f.when(
+                f.col(is_new_column) & (f.col(dataframe_column) == 1),
+                f.lit(1),
+            ).otherwise(f.lit(0))
+        )
+        failure_exprs.append(
+            f.when(
+                f.col(is_new_column) & (f.col(dataframe_column) == 1),
                 f.lit(full_human_readable_mapping.get(c, c[3:])),
             )
         )
@@ -117,6 +130,9 @@ def critical_error_checks(
     dataset_type: str,
     config_column_list: list[str],
     context: OpExecutionContext = None,
+    dq_config_table: str = "SchoolGeolocationMasterDQChecks",
+    is_new_column: str = "is_new_school",
+    check_column_aliases: dict[str, str] | None = None,
 ):
     logger = get_context_with_fallback_logger(context)
     logger.info("Running critical error checks...")
@@ -127,11 +143,15 @@ def critical_error_checks(
 
     if dataset_type in ["master", "geolocation"]:
         critical_exprs, failure_exprs = _build_geolocation_critical_exprs(
-            df, full_human_readable_mapping
+            df,
+            full_human_readable_mapping,
+            dq_config_table,
+            is_new_column,
+            check_column_aliases or {},
         )
         if dataset_type == "master":
             noco_table_id = get_nocodb_table_id_from_name(
-                table_name="SchoolGeolocationMasterDQChecks"
+                table_name=dq_config_table
             )
             noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
             critical_rows = noco_table[

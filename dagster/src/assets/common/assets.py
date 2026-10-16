@@ -60,6 +60,13 @@ from dagster import DagsterExecutionInterruptedError, OpExecutionContext, Output
 _APPROVE_ALL = "__all__"
 
 
+def _approval_dataset_label(config: FileConfig) -> str:
+    return config.metadata.get(
+        "approval_dataset_label",
+        f"School {config.dataset_type.capitalize()}",
+    )
+
+
 def _parse_approval_file(approval_data: dict) -> tuple[str, list, list, str | None]:
     return (
         approval_data.get("upload_id", ""),
@@ -581,7 +588,7 @@ def silver(  # noqa: C901
 
     new_silver = compute_row_hash(new_silver)
 
-    formatted_dataset = f"School {config.dataset_type.capitalize()}"
+    formatted_dataset = _approval_dataset_label(config)
 
     # PROCESSED stamp + full reset deferred to master, once its write is confirmed.
     _update_approval_request(
@@ -677,7 +684,7 @@ def master(
         upload_id, approved_ids, _, approval_log_id = _parse_approval_file(
             approval_data
         )
-        formatted_dataset = f"School {config.dataset_type.capitalize()}"
+        formatted_dataset = _approval_dataset_label(config)
         _stamp_processed_and_reset_approval(
             context,
             s,

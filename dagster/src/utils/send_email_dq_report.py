@@ -5,11 +5,11 @@ from typing import Any
 
 import requests
 import sentry_sdk
-from models.file_upload import FileUpload
+from dagster import OpExecutionContext
 from requests import JSONDecodeError
 from sqlalchemy import select
 
-from dagster import OpExecutionContext
+from models.file_upload import FileUpload
 from src.constants.constants_class import constants
 from src.internal.groups import GroupsApi
 from src.schemas.file_upload import FileUploadConfig
@@ -22,12 +22,15 @@ from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
 
 
-def _entity_for_dataset(dataset: str) -> dict[str, str]:
-    if dataset in {"health", "health-master"}:
+def _entity_for_dataset(
+    dataset: str,
+    facility_type: str | None = None,
+) -> dict[str, str]:
+    if facility_type == "health" or dataset in {"health", "health-master"}:
         return {
-            "plural": "Health Centers",
-            "lowerPlural": "health centers",
-            "lowerSingular": "health center",
+            "plural": "Health Facilities",
+            "lowerPlural": "health facilities",
+            "lowerSingular": "health facility",
         }
     return {
         "plural": "Schools",
@@ -205,6 +208,7 @@ async def send_email_dq_report(
     country_code: str = None,
     file_upload: FileUploadConfig | None = None,
     value_maps: dict[str, Any] | None = None,
+    facility_type: str | None = None,
     context: OpExecutionContext = None,
 ) -> None:
     # Prepare metadata for email renderer
@@ -254,7 +258,10 @@ async def send_email_dq_report(
     if file_upload is not None:
         if file_upload.original_filename:
             metadata["uploadedFileName"] = file_upload.original_filename
-        metadata["entity"] = _entity_for_dataset(file_upload.dataset)
+        metadata["entity"] = _entity_for_dataset(
+            file_upload.dataset,
+            facility_type,
+        )
         try:
             upload_meta = ADLSFileClient().fetch_metadata_for_blob(
                 file_upload.upload_path
@@ -338,6 +345,7 @@ async def send_email_dq_report_with_config(
             country_code=country_code,
             file_upload=file_upload,
             value_maps=value_maps,
+            facility_type=config.metadata.get("facility_type"),
             context=context,
         )
     except Exception as error:
