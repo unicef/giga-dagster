@@ -100,6 +100,35 @@ is independent of the measurement chain (Steps 1–4) — neither depends on the
 
 ---
 
+## Partitioning
+
+7 of 10 incremental tables are partitioned, all by `country`. Partitioning is declared only in
+`create/<name>.sql`. `update/` scripts that `INSERT` or `MERGE` write into the existing table and
+inherit its layout, so changing `partitioned_by` in `create/` only affects a table once it is
+dropped and re-bootstrapped. The exception is `all_gigameter_registered_schools`, whose
+`update/` script runs `CREATE OR REPLACE TABLE` and declares `partitioned_by` again, so the two
+scripts must match. See [the root README](../README.md#partitioning) for the convention.
+
+| Table (`delta_lake.default.`) | `create/` | `update/` | Partitioned | Partitioned by |
+|---|---|---|---|---|
+| `all_gigameter_measurement_data` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_gigameter_registered_schools` | `CREATE TABLE … AS` | `CREATE OR REPLACE TABLE` | **Yes** | `country` |
+| `all_gigameter_school_daily_troubleshooting` | `CREATE TABLE … AS` | `MERGE INTO` | **Yes** | `country` |
+| `all_gigameter_school_measurement_stats` | `CREATE TABLE … AS` | `MERGE INTO` | No | — |
+| `all_gigameter_valid_test_checker` | `CREATE TABLE … AS` | `INSERT INTO` | No | — |
+| `all_gmeter_only_measurements` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_mlab_only_measurements` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_ping_daily` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_ping_hourly` | `CREATE TABLE … AS` + chunked `INSERT`s | `MERGE INTO` | **Yes** | `country` |
+| `superset_activity_logs` | `CREATE TABLE … AS` | `INSERT INTO` | No in `create/` ¹ | — |
+
+¹ The live table is partitioned by `log_date`. It was created with a `partitioned_by` that
+`create/superset_activity_logs.sql` doesn't have (checked 2026-10-16 from the data file paths).
+`INSERT INTO` keeps the live layout, but a re-bootstrap from `create/` would drop it. Add
+`partitioned_by = ARRAY['log_date']` to `create/` if the partitioning should be kept.
+
+---
+
 ## Execution Order
 
 ```

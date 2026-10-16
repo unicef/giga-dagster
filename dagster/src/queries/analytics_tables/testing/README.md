@@ -14,6 +14,21 @@ Scripts are sourced from the **Physical Tables** NocoDB table (`mzq6hlnsicq1r0v`
 
 ---
 
+## Partitioning
+
+No testing tables are partitioned.
+
+| Script | Output Table | Partitioned | Partitioned by |
+|---|---|---|---|
+| `superset_session_lengths.sql` | `public.superset_session_lengths` | No | — |
+
+The script has no `WITH (...)` clause, so it sets neither `partitioned_by` nor `location`. When
+promoting a testing script to `daily/` or `incremental/`, add the `WITH (location = …)` clause
+(and `partitioned_by = ARRAY['country']` if the table has a `country` column and is large). See
+[the root README](../README.md#partitioning).
+
+---
+
 ## How to Run
 
 Testing scripts run in the same Trino environment as production but write to separate tables. They are not executed by Dagster — run manually via the Trino CLI or a notebook.
