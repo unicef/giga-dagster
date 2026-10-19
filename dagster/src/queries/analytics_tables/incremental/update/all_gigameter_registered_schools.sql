@@ -3,11 +3,6 @@
 -- all_school_master as is_deleted (rows are never removed).
 -- Keep the SELECT identical to ../create/.
 
-ALTER TABLE delta_lake.default.all_gigameter_registered_schools ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN;
-
-ALTER TABLE delta_lake.default.all_gigameter_registered_schools ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-
-
 MERGE INTO delta_lake.default.all_gigameter_registered_schools AS t
 USING (
 

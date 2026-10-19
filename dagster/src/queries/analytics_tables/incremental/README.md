@@ -62,8 +62,7 @@ live in the incremental accumulator `all_gigameter_school_measurement_stats` (ab
 state is then computed every hour by a cheap join and applied as a `MERGE`:
 
 - `create/` builds the table once from that SELECT (`CREATE TABLE … AS`).
-- `update/` runs four statements: two `ALTER TABLE … ADD COLUMN IF NOT EXISTS` (no-ops once the
-  columns exist), a `MERGE` on `(school_id_giga, country)` that inserts new schools and updates
+- `update/` runs a `MERGE` on `(school_id_giga, country)` that inserts new schools and updates
   only rows where some column `IS DISTINCT FROM` the new value, and a second `MERGE` that flags
   schools no longer in `all_school_master` with `is_deleted = TRUE` / `deleted_at`. Rows are never
   deleted; a school that returns to the master is un-flagged by the next run.
