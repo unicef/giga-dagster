@@ -17,7 +17,8 @@
 --
 -- Dependencies:
 --   - qos_raw.mng (raw LibreRouter data for Mongolia)
---   - default.all_gigameter_registered_schools (GigaMeter registered schools --
+--   - default.all_gigameter_registered_schools (GigaMeter registered schools,
+--     rebuilt hourly by the incremental pipeline --
 --     replaces all_gigameter_registered_tb_physical; primary/secondary server/isp/asn
 --     are derived here from its detected_*_nested map columns since it doesn't
 --     expose them as scalars)
@@ -100,9 +101,11 @@ libre AS (
 -- Source:  default.all_gigameter_registered_schools
 -- Filter:  country = 'Mongolia' AND registered_gigameter = 'Yes'
 -- Note:    primary/secondary server/isp/asn derived from the detected_*_nested
---          map columns (approx_most_frequent output, most-frequent-first) via
---          the same element_at(map_keys(...), N) pattern
---          all_gigameter_registered_tb_physical.sql used internally.
+--          map columns (exact top 10 by measurement count, keys ordered
+--          most-frequent-first, ties by key ascending -- previously
+--          approx_most_frequent output) via the same element_at(map_keys(...), N)
+--          pattern all_gigameter_registered_tb_physical.sql used internally.
+--          last_measurement_date is school-local time (was UTC until 2026-10).
 -- ==============================================================================
 gigameter_base AS (
     SELECT
