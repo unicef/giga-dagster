@@ -109,8 +109,8 @@ SELECT
     ELSE 'Unknown'
     END AS VARCHAR) AS install_status,
   ROW_NUMBER() OVER (
-    PARTITION BY master.country, master.school_id_giga
-    -- dedupe: MERGE source must be unique per key
+    -- dedupe on the merge key: giga id, else govt id (always with country)
+    PARTITION BY master.country, COALESCE(CAST(master.school_id_giga AS VARCHAR), 'govt:' || CAST(master.school_id_govt AS VARCHAR))
     ORDER BY master.school_id_govt, master.school_name, gmconn.connectivity_gigamaps,
              master.connectivity, master.connectivity_type_govt, master.admin1, master.admin2,
              master.latitude, master.longitude, master.education_level, master.school_area_type,
@@ -204,5 +204,6 @@ FROM
   registered
 WHERE
   rn = 1
+  AND (school_id_giga IS NOT NULL OR school_id_govt IS NOT NULL)  -- no usable key: excluded
 
 )

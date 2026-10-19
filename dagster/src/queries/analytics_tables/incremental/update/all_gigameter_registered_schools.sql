@@ -106,8 +106,8 @@ USING (
         ELSE 'Unknown'
         END AS VARCHAR) AS install_status,
       ROW_NUMBER() OVER (
-        PARTITION BY master.country, master.school_id_giga
-        -- dedupe: MERGE source must be unique per key
+        -- dedupe on the merge key: giga id, else govt id (always with country)
+        PARTITION BY master.country, COALESCE(CAST(master.school_id_giga AS VARCHAR), 'govt:' || CAST(master.school_id_govt AS VARCHAR))
         ORDER BY master.school_id_govt, master.school_name, gmconn.connectivity_gigamaps,
                  master.connectivity, master.connectivity_type_govt, master.admin1, master.admin2,
                  master.latitude, master.longitude, master.education_level, master.school_area_type,
@@ -201,10 +201,11 @@ USING (
       registered
     WHERE
       rn = 1
+      AND (school_id_giga IS NOT NULL OR school_id_govt IS NOT NULL)  -- no usable key: excluded
 
 ) AS s
-ON t.school_id_giga = s.school_id_giga
-AND t.country = s.country
+ON t.country IS NOT DISTINCT FROM s.country
+AND COALESCE(CAST(t.school_id_giga AS VARCHAR), 'govt:' || CAST(t.school_id_govt AS VARCHAR)) = COALESCE(CAST(s.school_id_giga AS VARCHAR), 'govt:' || CAST(s.school_id_govt AS VARCHAR))
 
 WHEN MATCHED AND (
     t.country IS DISTINCT FROM s.country
@@ -381,17 +382,21 @@ WHEN NOT MATCHED THEN INSERT (
 MERGE INTO delta_lake.default.all_gigameter_registered_schools AS t
 USING (
     SELECT DISTINCT
-        r.school_id_giga,
-        r.country
+        r.country,
+        COALESCE(CAST(r.school_id_giga AS VARCHAR), 'govt:' || CAST(r.school_id_govt AS VARCHAR)) AS merge_key
     FROM delta_lake.default.all_gigameter_registered_schools r
-    LEFT JOIN delta_lake.default.all_school_master m
-        ON m.school_id_giga = r.school_id_giga
-       AND m.country = r.country
-    WHERE m.school_id_giga IS NULL
+    LEFT JOIN (
+        SELECT DISTINCT country, COALESCE(CAST(m.school_id_giga AS VARCHAR), 'govt:' || CAST(m.school_id_govt AS VARCHAR)) AS merge_key
+        FROM delta_lake.default.all_school_master m
+    ) m
+        ON m.country IS NOT DISTINCT FROM r.country
+       AND m.merge_key = COALESCE(CAST(r.school_id_giga AS VARCHAR), 'govt:' || CAST(r.school_id_govt AS VARCHAR))
+    WHERE m.merge_key IS NULL
+      AND COALESCE(CAST(r.school_id_giga AS VARCHAR), 'govt:' || CAST(r.school_id_govt AS VARCHAR)) IS NOT NULL
       AND COALESCE(r.is_deleted, FALSE) = FALSE
 ) AS s
-ON t.school_id_giga = s.school_id_giga
-AND t.country = s.country
+ON t.country IS NOT DISTINCT FROM s.country
+AND COALESCE(CAST(t.school_id_giga AS VARCHAR), 'govt:' || CAST(t.school_id_govt AS VARCHAR)) = s.merge_key
 
 WHEN MATCHED THEN UPDATE SET
     is_deleted = TRUE,
