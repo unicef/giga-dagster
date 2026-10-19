@@ -2,9 +2,9 @@
 -- Script Name:     all_gigameter_registered_schools.sql (incremental/create)
 -- Table Created:   default.all_gigameter_registered_schools
 --
--- !! KEEP IN SYNC: the SELECT below must stay IDENTICAL to the one in
--- !! ../update/all_gigameter_registered_schools.sql -- the two files differ
--- !! only in CREATE TABLE (create/) vs CREATE OR REPLACE TABLE (update/).
+-- !! KEEP IN SYNC: the SELECT below must stay IDENTICAL to the MERGE source in
+-- !! ../update/all_gigameter_registered_schools.sql -- create/ wraps it in CREATE TABLE AS,
+-- !! update/ uses it as the USING (...) source of the first MERGE.
 --
 -- Purpose:
 --   School-level summary of GigaMeter registration and measurement activity.
@@ -13,15 +13,11 @@
 --   (live / at-risk / drop-off), and the most frequently observed ISP / ASN /
 --   server / source.
 --
--- Pattern:         Full rebuild every HOUR, but cheap: lifetime measurement
---   aggregates come pre-computed from the incremental accumulator
---   default.all_gigameter_school_measurement_stats instead of scanning
---   all_gigameter_measurement_data. Whole-table rebuild rather than a row-level
---   MERGE because master attributes, registrations, lookups and the
---   CURRENT_DATE-relative columns change for reasons that can't be detected
---   without building the full join anyway. create/ runs once (table missing);
---   update/ swaps in the new version atomically with CREATE OR REPLACE TABLE
---   (no window where the table is missing, Delta history kept).
+-- Pattern:         Runs once, when the table does not exist (first deploy or
+--   after a manual DROP). Every later hourly run uses ../update/, which
+--   MERGEs this same SELECT in (insert new, update changed, flag departed).
+--   Lifetime measurement aggregates come pre-computed from the incremental
+--   accumulator default.all_gigameter_school_measurement_stats.
 --
 -- Dependencies:
 --   - default.all_school_master (school metadata and geography; one row each)
@@ -32,9 +28,11 @@
 --   - lstringer.bih_school_canton_mapping_vw, lstringer.connectivity_credit_pilot_schools,
 --     lstringer.zaf_province_mapping, lstringer.lka_school_education_zones (lookups)
 --
--- Output Columns:  39 (unchanged names, order and types)
--- Primary Key:     school_id_giga
--- Granularity:     One row per school in all_school_master
+-- Output Columns:  41 -- the original 39 (unchanged names, order and types)
+--                  + is_deleted BOOLEAN, deleted_at TIMESTAMP (added 2026-10)
+-- Primary Key:     (country, school_id_giga) -- deduplicated, see Run Notes
+-- Granularity:     One row per school ever seen in all_school_master; schools
+--                  that have left the master stay, flagged is_deleted = TRUE
 --
 -- Run Notes:
 --   Connectivity status thresholds: live <=21 days since last measurement,
@@ -51,12 +49,20 @@
 --   dailycheckapp_school row per school -- only ~31% populated at source,
 --   NULL is expected/common, not a bug. last_device_installed_date is
 --   separately ~75% populated.
+--   Dedupe: all_school_master holds ~58 duplicate school_id_giga and the
+--   lookups / school_connectivity_status_vw can repeat a school, which used to
+--   emit ~174 duplicate rows. The SELECT keeps exactly one row per
+--   (country, school_id_giga), chosen deterministically (ROW_NUMBER ORDER BY
+--   master/lookup columns) -- required for the MERGE source, and keeps
+--   create/ and update/ output identical.
+--   Departed schools: downstream counts of "schools" should filter
+--   COALESCE(is_deleted, FALSE) = FALSE.
 --
 -- Partitioned by: country (12 Superset datasets on dashboard 21 filter this
 -- table by a single country each -- unpartitioned, every one of them scanned
 -- the full table)
 --
--- Last Updated:    2026-10-05 / Luke Stringer
+-- Last Updated:    2026-10-19 / Luke Stringer
 -- ==============================================================================
 
 CREATE TABLE delta_lake.default.all_gigameter_registered_schools
@@ -103,7 +109,8 @@ registration_attempts AS (
 )
 
 
--- final query
+-- one row per school, before dedupe
+, registered AS (
 SELECT
   CAST(master.country AS VARCHAR) AS country,
   CAST(master.iso3_code AS VARCHAR) AS iso3_code,
@@ -172,7 +179,16 @@ SELECT
     WHEN EXTRACT(DAY FROM CURRENT_DATE - st.last_measurement_date) BETWEEN 21 AND 30 THEN 'at-risk'
     WHEN EXTRACT(DAY FROM CURRENT_DATE - st.last_measurement_date) >= 30 THEN 'drop-off'
     ELSE 'Unknown'
-    END AS VARCHAR) AS install_status
+    END AS VARCHAR) AS install_status,
+  ROW_NUMBER() OVER (
+    PARTITION BY master.country, master.school_id_giga
+    -- deterministic pick when all_school_master or a lookup holds duplicate
+    -- rows for the same school (a MERGE source must be unique per key)
+    ORDER BY master.school_id_govt, master.school_name, gmconn.connectivity_gigamaps,
+             master.connectivity, master.connectivity_type_govt, master.admin1, master.admin2,
+             master.latitude, master.longitude, master.education_level, master.school_area_type,
+             c.canton_name, cc.status, p.zaf_province, l.zone   -- Trino default: ASC NULLS LAST
+  ) AS rn
 FROM
   delta_lake.default.all_school_master master
 
@@ -211,5 +227,55 @@ ON
 LEFT JOIN lstringer.lka_school_education_zones l
   ON master.school_id_govt = l.school_id_govt
   AND master.iso3_code = l.iso3_code
+)
+
+
+-- final query: one row per (country, school_id_giga)
+SELECT
+  country,
+  iso3_code,
+  school_id_giga,
+  school_name,
+  school_id_govt,
+  registered_gigameter,
+  sending_gigameter_data,
+  first_measurement_date,
+  last_measurement_date,
+  days_since_last_measurement,
+  measurements_per_source,
+  num_devices_registered,
+  devices_still_logged_in,
+  num_devices_measured,
+  max_app_version_gigameter,
+  last_device_installed_id,
+  last_device_installed_date,
+  detected_isp_nested,
+  detected_isp_asn_nested,
+  detected_server_nested,
+  admin1,
+  admin2,
+  unicef_region,
+  latitude,
+  longitude,
+  connectivity,
+  connectivity_gigamaps,
+  connectivity_type_govt,
+  cellular_coverage_type,
+  school_area_type,
+  school_funding_type,
+  education_level,
+  electricity_availability,
+  fiber_node_distance,
+  canton_bih_only,
+  connectivity_credits_school,
+  province_zaf_only,
+  education_zone_lka_only,
+  install_status,
+  CAST(FALSE AS BOOLEAN) AS is_deleted,
+  CAST(NULL AS TIMESTAMP) AS deleted_at
+FROM
+  registered
+WHERE
+  rn = 1
 
 )
