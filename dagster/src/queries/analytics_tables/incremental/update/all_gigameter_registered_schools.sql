@@ -1,90 +1,13 @@
--- ==============================================================================
--- Script Name:     all_gigameter_registered_schools.sql (incremental/update)
--- Table Updated:   default.all_gigameter_registered_schools
---
--- !! KEEP IN SYNC: the SELECT below must stay IDENTICAL to the MERGE source in
--- !! ../create/all_gigameter_registered_schools.sql -- create/ wraps it in CREATE TABLE AS,
--- !! update/ uses it as the USING (...) source of the first MERGE.
---
--- Purpose:
---   School-level summary of GigaMeter registration and measurement activity.
---   Each row represents one school in all_school_master and captures
---   registration status, measurement sending status, connectivity status
---   (live / at-risk / drop-off), and the most frequently observed ISP / ASN /
---   server / source.
---
--- Pattern:         Hourly MERGE + deleted flag (no rows are ever removed).
---   1. ALTER TABLE ... ADD COLUMN IF NOT EXISTS is_deleted / deleted_at
---      (no-op once present; lets a table built before 2026-10 take the MERGE).
---   2. MERGE the full current SELECT (identical to ../create/) on
---      (school_id_giga, country):
---        WHEN MATCHED and any column differs -> UPDATE all columns
---          (also un-flags a school that has come back to the master);
---        WHEN NOT MATCHED                    -> INSERT.
---      The IS DISTINCT FROM guard means unchanged rows are not rewritten.
---      Master attributes, registrations, lookups and the CURRENT_DATE-relative
---      columns change for reasons only the full join can detect, so the
---      SELECT is always rebuilt in full -- cheap, because the lifetime
---      measurement aggregates come from the incremental accumulator
---      default.all_gigameter_school_measurement_stats.
---   3. MERGE flag: rows whose (school_id_giga, country) is no longer in
---      all_school_master get is_deleted = TRUE, deleted_at = run time.
---      Trino MERGE has no WHEN NOT MATCHED BY SOURCE, hence the second MERGE;
---      its source is DISTINCT so duplicate target rows cannot fail it.
---
--- Dependencies:
---   - default.all_school_master (school metadata and geography; one row each)
---   - default.all_gigameter_school_measurement_stats (incremental accumulator)
---   - gigameter_production_db.public.dailycheckapp_school (registration/check-in events)
---   - lstringer.school_connectivity_status_vw (GigaMaps connectivity classification
---     -- see analytics-tables/views/school_connectivity_status_vw.sql)
---   - lstringer.bih_school_canton_mapping_vw, lstringer.connectivity_credit_pilot_schools,
---     lstringer.zaf_province_mapping, lstringer.lka_school_education_zones (lookups)
---
--- Output Columns:  41 -- the original 39 (unchanged names, order and types)
---                  + is_deleted BOOLEAN, deleted_at TIMESTAMP (added 2026-10)
--- Primary Key:     (country, school_id_giga) -- deduplicated, see Run Notes
--- Granularity:     One row per school ever seen in all_school_master; schools
---                  that have left the master stay, flagged is_deleted = TRUE
---
--- Run Notes:
---   Connectivity status thresholds: live <=21 days since last measurement,
---   at-risk 21-30 days, drop-off >30 days.
---   first_measurement_date AND last_measurement_date are both school-local time
---   (local_created_timestamp). Until 2026-10 last_measurement_date was UTC
---   (created_timestamp); days_since_last_measurement and install_status follow it.
---   measurements_per_source / detected_isp_nested / detected_isp_asn_nested /
---   detected_server_nested are the EXACT top 10 values by measurement count
---   (ties broken by key ascending), keys ordered most-frequent first -- replaced
---   approx_most_frequent(5, x, 5) in 2026-10. mng_gigameter_qos_registered reads
---   element_at(map_keys(...), 1/2) and relies on that order.
---   last_device_installed_id is device_hardware_id from the most recent
---   dailycheckapp_school row per school -- only ~31% populated at source,
---   NULL is expected/common, not a bug. last_device_installed_date is
---   separately ~75% populated.
---   Dedupe: all_school_master holds ~58 duplicate school_id_giga and the
---   lookups / school_connectivity_status_vw can repeat a school, which used to
---   emit ~174 duplicate rows. The SELECT keeps exactly one row per
---   (country, school_id_giga), chosen deterministically (ROW_NUMBER ORDER BY
---   master/lookup columns) -- required for the MERGE source, and keeps
---   create/ and update/ output identical.
---   Departed schools: downstream counts of "schools" should filter
---   COALESCE(is_deleted, FALSE) = FALSE.
---
--- Partitioned by: country (12 Superset datasets on dashboard 21 filter this
--- table by a single country each -- unpartitioned, every one of them scanned
--- the full table)
---
--- Last Updated:    2026-10-19 / Luke Stringer
--- ==============================================================================
+-- all_gigameter_registered_schools (incremental/update)
+-- Hourly: MERGE changed/new schools, then flag schools no longer in
+-- all_school_master as is_deleted (rows are never removed).
+-- Keep the SELECT identical to ../create/.
 
--- 1. new columns (no-op once present)
 ALTER TABLE delta_lake.default.all_gigameter_registered_schools ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN;
 
 ALTER TABLE delta_lake.default.all_gigameter_registered_schools ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 
 
--- 2. insert new schools, update changed ones
 MERGE INTO delta_lake.default.all_gigameter_registered_schools AS t
 USING (
 
@@ -104,9 +27,7 @@ USING (
     )
 
 
-    -- most recently installed device per school (by registration/check-in event, not by
-    -- currently-active status -- an install stays "most recent" even if later logged out).
-    -- device_hardware_id is only ~31% populated at source; NULL here is expected.
+    -- most recent install per school (device_hardware_id often NULL at source)
     , last_device_installed AS (
         SELECT
             giga_id_school AS school_id_giga,
@@ -125,7 +46,6 @@ USING (
     )
 
 
-    -- one row per school, before dedupe
     , registered AS (
     SELECT
       CAST(master.country AS VARCHAR) AS country,
@@ -167,13 +87,7 @@ USING (
       CAST(master.latitude AS DOUBLE) AS latitude,
       CAST(master.longitude AS DOUBLE) AS longitude,
       -- connection info
-      -- connectivity: from all_school_master (government-reported, optionally
-      -- overridden by real-time GigaMeter/MLab/QoS measurement presence) --
-      -- unchanged name/values, kept as-is for downstream dashboard compatibility.
-      -- connectivity_gigamaps: from GigaMaps' own weekly connectivity monitoring, a
-      -- separate signal -- see analytics-tables/views/school_connectivity_status_vw.sql.
-      -- These two can and do disagree (investigated 2026-07-31) -- do not assume they
-      -- mean the same thing.
+      -- connectivity (master) and connectivity_gigamaps (GigaMaps) are different signals
       CAST(master.connectivity AS VARCHAR) AS connectivity,
       CAST(gmconn.connectivity_gigamaps AS VARCHAR) AS connectivity_gigamaps,
       CAST(master.connectivity_type_govt AS VARCHAR) AS connectivity_type_govt,
@@ -198,12 +112,11 @@ USING (
         END AS VARCHAR) AS install_status,
       ROW_NUMBER() OVER (
         PARTITION BY master.country, master.school_id_giga
-        -- deterministic pick when all_school_master or a lookup holds duplicate
-        -- rows for the same school (a MERGE source must be unique per key)
+        -- dedupe: MERGE source must be unique per key
         ORDER BY master.school_id_govt, master.school_name, gmconn.connectivity_gigamaps,
                  master.connectivity, master.connectivity_type_govt, master.admin1, master.admin2,
                  master.latitude, master.longitude, master.education_level, master.school_area_type,
-                 c.canton_name, cc.status, p.zaf_province, l.zone   -- Trino default: ASC NULLS LAST
+                 c.canton_name, cc.status, p.zaf_province, l.zone
       ) AS rn
     FROM
       delta_lake.default.all_school_master master
@@ -246,7 +159,7 @@ USING (
     )
 
 
-    -- final query: one row per (country, school_id_giga)
+    -- final query
     SELECT
       country,
       iso3_code,
@@ -469,7 +382,7 @@ WHEN NOT MATCHED THEN INSERT (
 );
 
 
--- 3. flag schools that have left all_school_master (rows are kept, never deleted)
+-- flag schools no longer in all_school_master
 MERGE INTO delta_lake.default.all_gigameter_registered_schools AS t
 USING (
     SELECT DISTINCT
