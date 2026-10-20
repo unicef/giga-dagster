@@ -39,7 +39,8 @@
 
  CREATE TABLE IF NOT EXISTS default.all_gigameter_registered_devices
 WITH (
-    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_devices'
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/all_gigameter_registered_devices',
+    partitioned_by = ARRAY['country']
 )
 as (
 
