@@ -5,6 +5,12 @@ from pydantic_settings import BaseSettings
 
 class Config(BaseSettings):
     SIMILARITY_RATIO_CUTOFF: float = 0.7
+
+    # Smallest duplicate group the DQ report counts. Shipped in dq-summary.json next
+    # to the count because the DQR PDF has to display the threshold it used
+    # ("groups with x or more schools"); overridable by env var.
+    EXACT_DUPLICATE_LOCATION_GROUP_MIN_SIZE: int = 2
+    PROXIMITY_50M_GROUP_MIN_SIZE: int = 3
     date_today: date = date.today()
     current_year: int = date_today.year
 
@@ -474,6 +480,8 @@ class Config(BaseSettings):
         "connectivity",
         "connectivity_govt",
         "cellular_coverage_availability",
+        "computer_availability",
+        "device_availability",
         "electricity_availability",
         "water_availability",
         "school_area_type",
@@ -493,6 +501,21 @@ class Config(BaseSettings):
     PRECISION: dict[str, dict[str, int]] = {
         "latitude": {"min": 5},
         "longitude": {"min": 5},
+    }
+
+    # Aggregate columns derivable from their components. A single declaration
+    # drives the derivation (fill the aggregate when null), the column relation
+    # check (flag when a supplied aggregate contradicts its components) and the
+    # human-readable descriptions.
+    AGGREGATE_SUM_COLUMNS: dict[str, list[str]] = {
+        "num_students": ["num_students_girls", "num_students_boys"],
+        "num_teachers": ["num_teachers_female", "num_teachers_male"],
+    }
+
+    # Yes/No availability columns derivable from the sum of their counters.
+    AVAILABILITY_FROM_COUNT_COLUMNS: dict[str, list[str]] = {
+        "computer_availability": ["num_computers"],
+        "device_availability": ["num_computers", "num_tablets"],
     }
 
     # Coverage Column Configs

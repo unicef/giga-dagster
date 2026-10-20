@@ -38,6 +38,7 @@ from src.data_quality_checks.utils import (
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
+from src.spark.aggregate_derivations import derive_aggregate_columns
 from src.spark.config_expectations import config as config_expectations
 from src.spark.transform_functions import (
     add_missing_columns,
@@ -368,6 +369,12 @@ def geolocation_data_quality_results(
 
     # Enrich bronze with silver values for existing schools (fills gaps via coalesce)
     enriched_bronze = enrich_with_silver_values(renamed_bronze, casted_silver, context)
+
+    # Fill aggregates the file did not carry (e.g. computer_availability from
+    # num_computers). Runs after the silver enrichment so a partial upload can
+    # derive from values already held in silver, and before the checks so the
+    # derived values are validated and reach the DQ report like any other.
+    enriched_bronze = derive_aggregate_columns(enriched_bronze, dataset_type, context)
 
     extra_outputs = {}
     dq_results = row_level_checks(
