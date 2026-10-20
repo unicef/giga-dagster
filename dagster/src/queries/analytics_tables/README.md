@@ -56,11 +56,11 @@ WITH (
 AS ( ... );
 ```
 
-In the scripts, nothing is partitioned by date or by any other column. Current status (9 of 30 tables partitioned in code):
+In the scripts, nothing is partitioned by date or by any other column. Current status (13 of 30 tables partitioned in code):
 
 | Folder | Tables | Partitioned (`country`) | Not partitioned | Detail |
 |---|---|---|---|---|
-| `daily/` | 19 | 2 | 17 | [daily/README.md → Partitioning](daily/README.md#partitioning) |
+| `daily/` | 19 | 6 | 13 | [daily/README.md → Partitioning](daily/README.md#partitioning) |
 | `incremental/` | 10 | 7 (+1 live-only, see note) | 3 | [incremental/README.md → Partitioning](incremental/README.md#partitioning) |
 | `testing/` | 1 | 0 | 1 | [testing/README.md → Partitioning](testing/README.md#partitioning) |
 

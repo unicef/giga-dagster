@@ -46,7 +46,7 @@ populates them changed. Mirrors `unicef/giga-data-analytics#25`.
 
 ## Partitioning
 
-2 of 19 daily tables are partitioned, both by `country`. All the others are written unpartitioned.
+6 of 19 daily tables are partitioned, all by `country`. All the others are written unpartitioned.
 Because every daily script drops and recreates its table, a change to `partitioned_by` takes
 effect on the next run. See [the root README](../README.md#partitioning) for the convention.
 
@@ -55,11 +55,11 @@ effect on the next run. See [the root README](../README.md#partitioning) for the
 | `all_gigamaps_realtimeconnectivity.sql` | `default.all_gigamaps_realtimeconnectivity` | No | — |
 | `all_gigameter_appversion_funnel.sql` | `default.all_gigameter_appversion_funnel` | No | — |
 | `all_gigameter_funnelsummary.sql` | `default.all_gigameter_funnelsummary` | No | — |
-| `all_gigameter_inc_ping_daily.sql` | `default.all_gigameter_inc_ping_daily` | No | — |
-| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | No | — |
+| `all_gigameter_inc_ping_daily.sql` | `default.all_gigameter_inc_ping_daily` | **Yes** | `country` ² |
+| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | **Yes** | `country` |
 | `all_gigameter_measurement_data_tb_physical.sql` | `default.all_gigameter_measurement_data_tb_physical` | No | — |
 | `all_gigameter_measurement_data_weekly.sql` | `default.all_gigameter_measurement_data_weekly` | **Yes** | `country` |
-| `all_gigameter_registered_devices.sql` | `default.all_gigameter_registered_devices` | No | — |
+| `all_gigameter_registered_devices.sql` | `default.all_gigameter_registered_devices` | **Yes** | `country` |
 | `all_gigameter_registered_tb_physical.sql` | `default.all_gigameter_registered_tb_physical` | No | — |
 | `all_gigameter_school_consistency_history.sql` | `default.all_gigameter_school_consistency_history` | No | — |
 | `all_school_master.sql` | `default.all_school_master` | **Yes** | `country` |
@@ -67,13 +67,22 @@ effect on the next run. See [the root README](../README.md#partitioning) for the
 | `bra_nicbr_daily.sql` | `default.bra_nicbr_daily` | No | — |
 | `bra_nicbr_registered_schools.sql` | `default.bra_nicbr_registered_schools` | No | — |
 | `country_versions.sql` | `default.country_versions` | No | — |
-| `isp_asn_country_mapping.sql` | `default.isp_asn_country_mapping` | No | — |
+| `isp_asn_country_mapping.sql` | `default.isp_asn_country_mapping` | **Yes** | `country` ³ |
 | `mng_gigameter_qos_measurements.sql` | `default.mng_gigameter_qos_measurements` | No | — |
 | `mng_gigameter_qos_registered.sql` | `default.mng_gigameter_qos_registered` | No | — |
 | `superset_session_lengths.sql` | `default.superset_session_lengths` | No ¹ | — |
 
 ¹ `superset_session_lengths.sql` has no `WITH (...)` clause at all, so unlike every other script it
 sets no explicit `location` either.
+
+² `country` is a `COALESCE` of the ping and speed-test sides, so rows where both sides lack a
+country land in a single `__HIVE_DEFAULT_PARTITION__` (null) partition.
+
+³ The incremental Step 4 (`all_gigameter_measurement_data`, `create/` and `update/`) joins this
+table on `map.country = m.country` as well as `iso3_code`, so Trino only reads the partitions for
+the countries in each hourly batch. This is safe because `country` and `iso3_code` both come from
+`gigameter_production_db.public.country`, where each ISO3 code has exactly one name (checked
+2026-10-20: 249 rows, 0 clashes).
 
 ---
 
