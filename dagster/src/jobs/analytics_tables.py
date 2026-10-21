@@ -7,7 +7,7 @@ analytics_tables_daily_job = define_asset_job(
     executor_def=multiprocess_executor.configured(
         {
             "tag_concurrency_limits": [
-                {"key": "trino_heavy", "value": "true", "limit": 2},
+                {"key": "trino_heavy", "value": "true", "limit": 1},
             ]
         }
     ),
