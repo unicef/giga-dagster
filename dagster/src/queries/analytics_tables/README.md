@@ -14,7 +14,7 @@ Production scripts executed once per day via Dagster. This is the main pipeline 
 Some of the remaining scripts are planned for conversion to the incremental model (hourly cadence) in a future sprint. See the daily README for details.
 
 ### [`incremental/`](incremental/README.md)
-Scripts that run on an **hourly cadence** using incremental patterns — only new records are processed rather than the full history being re-scanned (id-watermark appends, `MERGE`s, and for `all_gigameter_registered_schools` a cheap hourly rebuild on top of an incremental accumulator). Currently covers the 4 core measurement pipeline steps (Steps 1–4), the ping tables, `all_gigameter_school_daily_troubleshooting`, `all_gigameter_school_measurement_stats` and `all_gigameter_registered_schools`. Additional scripts (registration, regional) will be added in future iterations.
+Scripts that run on an **hourly cadence** using incremental patterns — only new records are processed rather than the full history being re-scanned (id-watermark appends, `MERGE`s, and for `all_gigameter_registered_schools` an hourly `MERGE` of a cheap join on top of an incremental accumulator, flagging departed schools as `is_deleted`). Currently covers the 4 core measurement pipeline steps (Steps 1–4), the ping tables, `all_gigameter_school_daily_troubleshooting`, `all_gigameter_school_measurement_stats` and `all_gigameter_registered_schools`. Additional scripts (registration, regional) will be added in future iterations.
 
 ### [`testing/`](testing/README.md)
 Non-production scripts not integrated into the Dagster pipeline. Used for one-off analysis or validating new logic before promoting to `daily/` or `incremental/`.
