@@ -1,0 +1,53 @@
+# One-off, read-only retest of the Ceibal Zabbix API via the Giga VPN proxy.
+# Credentials come from Secret `ceibal-zabbix-secrets` (DevOps syncs it from Azure Key Vault; never committed).
+#   kubectl create secret generic ceibal-zabbix-secrets -n ictd-ooi-data-analysis-dev \
+#     --from-literal=ZABBIX_USER=app_giga --from-literal=ZABBIX_PASSWORD='<password>'
+#   (add ZABBIX_PROXY_USER / ZABBIX_PROXY_PASS only if the proxy still needs basic auth)
+# Read the result:  kubectl logs job/ury-zabbix-retest -n ictd-ooi-data-analysis-dev
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ury-zabbix-retest
+  namespace: ictd-ooi-data-analysis-dev
+  labels:
+    app: ury-zabbix
+    component: retest
+spec:
+  backoffLimit: 0               # no automatic retries: protects Ceibal's Zabbix server
+  activeDeadlineSeconds: 900    # kill after 15 min
+  ttlSecondsAfterFinished: 86400  # keep the pod (and logs) for 24 h, then clean up
+  template:
+    metadata:
+      labels:
+        app: ury-zabbix
+        component: retest
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: retest
+          image: <registry>/ury-zabbix-retest:<tag>   # set by the Azure pipeline
+          args: ["--codicen"]
+          env:
+            - name: ZABBIX_URL
+              value: http://giga-vpn-proxy.ictd-ooi-giga-devops-dev:8080
+            - name: ZABBIX_USER
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_USER}
+            - name: ZABBIX_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PASSWORD}
+            - name: ZABBIX_PROXY_USER
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PROXY_USER, optional: true}
+            - name: ZABBIX_PROXY_PASS
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PROXY_PASS, optional: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
