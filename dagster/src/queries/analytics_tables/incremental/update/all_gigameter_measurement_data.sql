@@ -306,6 +306,7 @@ on
 -- JOIN: ISP/ASN canonical mapping -- see isp_asn_country_mapping.sql
 LEFT JOIN default.isp_asn_country_mapping map
   ON  map.iso3_code    = m.iso3_code
+  AND map.country      = m.country     -- partition key of the mapping table: lets Trino prune to the batch's countries
   AND map.isp_name_raw = m.detected_isp_raw
   AND map.isp_asn_raw  = m.detected_isp_asn
 -- JOIN: Bosnia canton mapping (country-specific enrichment)

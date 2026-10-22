@@ -42,6 +42,41 @@ Non-production scripts not integrated into the Dagster pipeline. Used for one-of
   Consumed by: Superset dashboards, Giga Maps, country reports
 ```
 
+## Partitioning
+
+Partitioning is declared in the same `WITH (...)` clause as the table location, and every
+partitioned table here uses the same single key:
+
+```sql
+CREATE TABLE default.<table_name>
+WITH (
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/<table_name>',
+    partitioned_by = ARRAY['country']
+)
+AS ( ... );
+```
+
+In the scripts, nothing is partitioned by date or by any other column. Current status (13 of 30 tables partitioned in code):
+
+| Folder | Tables | Partitioned (`country`) | Not partitioned | Detail |
+|---|---|---|---|---|
+| `daily/` | 19 | 6 | 13 | [daily/README.md → Partitioning](daily/README.md#partitioning) |
+| `incremental/` | 10 | 7 (+1 live-only, see note) | 3 | [incremental/README.md → Partitioning](incremental/README.md#partitioning) |
+| `testing/` | 1 | 0 | 1 | [testing/README.md → Partitioning](testing/README.md#partitioning) |
+
+Live check (2026-10-16): every table matches its script except `superset_activity_logs`, which is
+partitioned by `log_date` in prod even though its `create/` script has no `partitioned_by`.
+
+Changing a table's partitioning:
+
+- **Daily:** add or remove `partitioned_by` in the script. The table is dropped and recreated
+  every run, so the change takes effect on the next run.
+- **Incremental:** add or remove `partitioned_by` in `create/<name>.sql`. Delta fixes partitioning
+  when a table is created, and `update/` scripts that `INSERT` or `MERGE` inherit it, so an
+  existing table **keeps its old layout** until it is dropped and re-bootstrapped. Plan that as a
+  one-off rebuild. The exception is `all_gigameter_registered_schools`: its `update/` script runs
+  `CREATE OR REPLACE TABLE` and declares `partitioned_by` itself, so keep the two scripts in sync.
+
 ## Trino Session Configuration
 
 Some scripts require session settings to handle memory pressure or large query stages:
