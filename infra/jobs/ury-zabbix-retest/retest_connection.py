@@ -70,7 +70,7 @@ def check_login_and_group(client):
     print("\n2. Login + host group")
     client.login()
     login_key = "username" if client._version_tuple >= (5, 4) else "user"
-    auth_mode = "Bearer header" if client._version_tuple >= (6, 4) else "body auth"
+    auth_mode = "Bearer header" if client._version_tuple >= (7, 2) else "body auth"
     record("login", True, f'user.login param "{login_key}", {auth_mode}')
 
     groups = call(

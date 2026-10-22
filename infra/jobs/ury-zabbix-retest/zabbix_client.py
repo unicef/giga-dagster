@@ -8,7 +8,8 @@ Version compatibility summary:
   Zabbix < 5.4  : user.login uses {"user": ..., "password": ...}
   Zabbix 5.4+   : user.login uses {"username": ..., "password": ...}
   Zabbix 6.0+   : API tokens can be used directly as the auth field value
-  Zabbix 6.4+   : Authorization: Bearer header (body "auth" field removed in 7.2)
+  Zabbix 6.4+   : Authorization: Bearer header accepted; body "auth" removed in 7.2,
+                  so the token goes in the body below 7.2 and in the header from 7.2
 """
 
 import re
@@ -146,8 +147,8 @@ class ZabbixClient:
             method:        Zabbix API method name (e.g. "host.get").
             params:        Parameters dict for the method.
             authenticated: If True, sends the current auth token — in the body
-                           "auth" field (< 6.4) or an Authorization: Bearer
-                           header (6.4+). Pass False for apiinfo.version and
+                           "auth" field (< 7.2) or an Authorization: Bearer
+                           header (7.2+). Pass False for apiinfo.version and
                            user.login, which must not send any auth.
 
         Returns:
@@ -167,7 +168,14 @@ class ZabbixClient:
         headers = {"Content-Type": "application/json"}
 
         if authenticated and self._auth_token:
-            if self._version_tuple and self._version_tuple >= (6, 4):
+            # Body auth works up to 7.0 and leaves the Authorization header free
+            # for proxy basic auth; 7.2 removed it, so only then use the header.
+            if self._version_tuple and self._version_tuple >= (7, 2):
+                if self.http_auth:
+                    raise RuntimeError(
+                        "Zabbix 7.2+ needs the Authorization header for its token, "
+                        "which clashes with proxy basic auth (http_auth)"
+                    )
                 headers["Authorization"] = f"Bearer {self._auth_token}"
             else:
                 payload["auth"] = self._auth_token
