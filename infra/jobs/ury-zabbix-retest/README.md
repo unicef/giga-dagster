@@ -15,6 +15,7 @@ There is a 2 s pause between calls and every call has a `limit`, because Ceibal'
 |---|---|
 | `Dockerfile` | `python:3.12-slim` image that runs as a non-root user |
 | `job.yaml` | Job in `ictd-ooi-data-analysis-dev`: no retries, 15 min deadline, cleaned up after 24 h |
+| `kustomization.yaml` | Sets the namespace and image (pipeline: `kustomize edit set image …`, then `kubectl apply -k`). Delete the previous Job before re-applying, because Job templates are immutable |
 | `retest_connection.py`, `zabbix_client.py` | The checks and a Zabbix 5.0–7.x JSON-RPC client |
 
 **Credentials:** read from K8s Secret `ceibal-zabbix-secrets`, which DevOps syncs from Azure Key Vault. Keys: `ZABBIX_USER`, `ZABBIX_PASSWORD`, and optionally `ZABBIX_PROXY_USER` / `ZABBIX_PROXY_PASS`.
