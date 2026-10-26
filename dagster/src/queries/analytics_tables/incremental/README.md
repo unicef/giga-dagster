@@ -53,16 +53,25 @@ update the right existing row, and the watermark commits atomically with the dat
 capping rows before a `GROUP BY` would split groups across runs. Merge keys that can be NULL
 (unmatched MLab rows) are matched with `IS NOT DISTINCT FROM`.
 
-### Accumulator + cheap full rebuild (`all_gigameter_registered_schools`)
+### Accumulator + MERGE with deleted flag (`all_gigameter_registered_schools`)
 
-`all_gigameter_registered_schools` is a snapshot of every school in `all_school_master` whose
-columns change for reasons other than new measurements (master attributes, registrations,
-lookups, `CURRENT_DATE`-relative status). Only the lifetime measurement aggregates grow forever,
-so those live in the incremental accumulator `all_gigameter_school_measurement_stats` (above); the
-final table is then rebuilt every hour by a cheap join — `create/` once, `update/` with
-`CREATE OR REPLACE TABLE`, which swaps the new version in atomically (no window where the table
-is missing, Delta history kept). The two scripts' SELECTs must stay identical. The map columns
-are the exact top 10 of the stored counts, most-frequent first.
+`all_gigameter_registered_schools` is one row per school in `all_school_master` whose columns
+change for reasons other than new measurements (master attributes, registrations, lookups,
+`CURRENT_DATE`-relative status). Only the lifetime measurement aggregates grow forever, so those
+live in the incremental accumulator `all_gigameter_school_measurement_stats` (above). The current
+state is then computed every hour by a cheap join and applied as a `MERGE`:
+
+- `create/` builds the table once from that SELECT (`CREATE TABLE … AS`).
+- `update/` runs a `MERGE` on `(school_id_giga, country)` that inserts new schools and updates
+  only rows where some column `IS DISTINCT FROM` the new value, and a second `MERGE` that flags
+  schools no longer in `all_school_master` with `is_deleted = TRUE` / `deleted_at`. Rows are never
+  deleted; a school that returns to the master is un-flagged by the next run.
+
+The two scripts' SELECTs must stay identical. The SELECT keeps exactly one row per
+`(country, school_id_giga)` (deterministic `ROW_NUMBER`), because `all_school_master` and some
+lookups contain duplicates and a `MERGE` source must be unique per key. The map columns are the
+exact top 10 of the stored counts, most-frequent first. Downstream counts of schools should
+filter `COALESCE(is_deleted, FALSE) = FALSE`.
 
 ### Chunked bootstrap
 
@@ -87,7 +96,7 @@ sizing and stop-point reasoning.
 | `all_ping_daily.sql` | Hourly (appends complete past days only) | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
 | `all_gigameter_school_daily_troubleshooting.sql` | Hourly | `default.all_gigameter_school_daily_troubleshooting` | School+day summary for Superset T0 troubleshooting (`MERGE`, delta-combine) | Step 4 |
 | `all_gigameter_school_measurement_stats.sql` | Hourly | `default.all_gigameter_school_measurement_stats` | **Internal** lifetime measurement aggregates per school (`MERGE`, delta-combine) — not for dashboards | Step 4 |
-| `all_gigameter_registered_schools.sql` | Hourly | `default.all_gigameter_registered_schools` | School-level registration & activity summary (full rebuild via `CREATE OR REPLACE`) | `all_gigameter_school_measurement_stats`, `all_school_master` (daily), `dailycheckapp_school`, `lstringer.*` lookups |
+| `all_gigameter_registered_schools.sql` | Hourly | `default.all_gigameter_registered_schools` | School-level registration & activity summary (`MERGE` insert/update + `is_deleted` flag) | `all_gigameter_school_measurement_stats`, `all_school_master` (daily), `dailycheckapp_school`, `lstringer.*` lookups |
 
 Script filenames and their `@asset` function names dropped the `_incremental` suffix as part of
 the dev→prod cutover (mirrors `unicef/giga-data-analytics#25`) — each now writes directly to the
@@ -163,4 +172,4 @@ moved here from `../daily/` (same table names; the daily scripts and assets are 
 daily `mng_gigameter_qos_registered` now depends on
 `AssetKey(["incremental", "all_gigameter_registered_schools"])`.
 
-Next up for conversion: `mng_gigameter_qos_measurements` and `bra_nicbr_daily` (daily aggregations), then `all_gigameter_registered_devices` — a full device-state snapshot, which can follow the accumulator + rebuild split used for `all_gigameter_registered_schools`.
+Next up for conversion: `mng_gigameter_qos_measurements` and `bra_nicbr_daily` (daily aggregations), then `all_gigameter_registered_devices` — a full device-state snapshot, which can follow the accumulator + `MERGE` pattern used for `all_gigameter_registered_schools`.

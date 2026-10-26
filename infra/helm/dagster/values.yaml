@@ -1101,12 +1101,17 @@ dagsterDaemon:
     config:
       queuedRunCoordinator:
         # The maximum number of runs to allow to be running at once. Defaults to no limit.
+        # Overridden per environment via `dagsterMaxConcurrentRuns` in azure/azure-pipelines-*.yaml
         maxConcurrentRuns: 2
         # Tag based concurrency limits. See https://docs.dagster.io/deployment/run-coordinator#usage
         # for examples.
-        #        tagConcurrencyLimits:
-        #          - key: "spark-submit"
-        #            limit: 1
+        tagConcurrencyLimits:
+          - key: "giga/concurrency_group"
+            value: "spark_heavy"
+            limit: 1
+          - key: "giga/concurrency_group"
+            value: "analytics_tables"
+            limit: 1
         # How frequently in seconds to check for new runs to pull from the queue and launch.
         # Defaults to 5.
         dequeueIntervalSeconds: ~

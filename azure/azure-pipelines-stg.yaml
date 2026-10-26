@@ -12,6 +12,8 @@ pool:
 variables:
   - name: environment
     value: stg
+  - name: dagsterMaxConcurrentRuns
+    value: 2
   - template: templates/variables.yaml
 
 stages:

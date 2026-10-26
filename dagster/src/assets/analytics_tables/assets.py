@@ -161,6 +161,7 @@ def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
         AssetKey(["incremental", "all_mlab_only_measurements"]),
     ],
     compute_kind="trino",
+    op_tags={"trino_heavy": "true"},
 )
 def isp_asn_country_mapping(context: OpExecutionContext) -> None:
     _run_daily(context)
@@ -175,6 +176,7 @@ def isp_asn_country_mapping(context: OpExecutionContext) -> None:
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
+    op_tags={"trino_heavy": "true"},
 )
 def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> None:
     _run_daily(context)
@@ -208,6 +210,7 @@ def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
         AssetKey(["daily", "all_school_master"]),
     ],
     compute_kind="trino",
+    op_tags={"trino_heavy": "true", "dagster/priority": "10"},
 )
 def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
     _run_daily(context)
@@ -222,6 +225,7 @@ def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
         AssetKey(["incremental", "all_mlab_only_measurements"]),
     ],
     compute_kind="trino",
+    op_tags={"trino_heavy": "true"},
 )
 def all_gigameter_funnelsummary(context: OpExecutionContext) -> None:
     _run_daily(context)
@@ -301,6 +305,7 @@ def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
         AssetKey(["incremental", "all_gigameter_measurement_data"]),
     ],
     compute_kind="trino",
+    op_tags={"trino_heavy": "true"},
 )
 def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
     _run_daily(context)
