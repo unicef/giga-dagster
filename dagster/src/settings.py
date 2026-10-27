@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     GIGAMETER_API_TOKEN: str = ""
     TRINO_CONNECTION_STRING: str = ""
     SLACK_WEBHOOK: str = ""
+    SLACK_STATUS_WEBHOOK: str = ""
     MONGOLIA_API_USER: str = ""
     MONGOLIA_API_PASSWORD: str = ""
     MONGOLIA_API_URL: str = ""

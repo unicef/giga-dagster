@@ -30,6 +30,7 @@ variables:
   datahubOidcClientSecret: $(DATAHUB_OIDC_CLIENT_SECRET)
   datahubOidcTenantId: $(DATAHUB_OIDC_TENANT_ID)
   slackWebHook: $(SLACK_WEBHOOK)
+  slackStatusWebhook: $(SLACK_STATUS_WEBHOOK)
   sparkRpcAuthSecret: $(SPARK_RPC_AUTHENTICATION_SECRET)
   gigamapsDbConnectionString: $(GIGAMAPS_DB_CONNECTION_STRING)
   gigameterDbConnectionString: $(GIGAMETER_DB_CONNECTION_STRING)
