@@ -1,9 +1,5 @@
 # One-off, read-only retest of the Ceibal Zabbix API via the Giga VPN proxy.
-# Credentials come from Secret `ceibal-zabbix-secrets` (DevOps syncs it from Azure Key Vault; never committed).
-#   kubectl create secret generic ceibal-zabbix-secrets -n ictd-ooi-data-analysis-dev \
-#     --from-literal=ZABBIX_USER=app_giga --from-literal=ZABBIX_PASSWORD='<password>'
-#   (add ZABBIX_PROXY_USER / ZABBIX_PROXY_PASS only if the proxy still needs basic auth)
-# Deploy with kustomize (see kustomization.yaml). Read the result:  kubectl logs job/ury-zabbix-retest -n ictd-ooi-data-analysis-dev
+# Deployed by azure/azure-pipelines-ury-retest.yaml. Credentials: Secret ceibal-zabbix-secrets (from Key Vault).
 apiVersion: batch/v1
 kind: Job
 metadata:

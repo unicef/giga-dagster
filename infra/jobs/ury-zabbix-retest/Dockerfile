@@ -1,5 +1,3 @@
-# URY Zabbix retest image. Build context is this folder:
-#   docker build -t <registry>/ury-zabbix-retest:<tag> infra/jobs/ury-zabbix-retest
 FROM python:3.12-slim
 
 RUN pip install --no-cache-dir requests==2.32.3 \

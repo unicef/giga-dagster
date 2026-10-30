@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
 """
-URY (Ceibal) Zabbix retest: read-only checks to run from a pod in the Giga
-dev cluster (namespace ictd-ooi-data-analysis-dev), where the VPN proxy resolves.
+URY (Ceibal) Zabbix retest: read-only checks, run as a K8s Job in
+ictd-ooi-data-analysis-dev, where the VPN proxy resolves.
 
 Checks:
-  1. API version (Ceibal planned an upgrade ~July 2026; may no longer be 5.0.20)
+  1. API version (was 5.0.20 in Apr 2026)
   2. Login + GIGA host group id (expected 1199)
-  3. Per template: the 4 target items (name, key_, value_type, units, preprocessing)
-  4. history.get on the item ids sent to Ceibal — default vs "history": <value_type>
-     (Facundo, 1 Jul 2026: items are float, so history.get needs "history": 0)
-  5. --codicen (optional): duplicate Codicen count. Prints counts + Codicens only,
-     never full hostnames (Ceibal privacy rule).
+  3. Per template: the 4 target items (key_, value_type, units, preprocessing)
+  4. history.get on the item ids sent to Ceibal, default vs "history": <value_type>
+  5. --codicen: duplicate Codicen counts (counts only, never full hostnames)
 
-Every call has a limit and a pause between calls (Ceibal server is not
-optimised for API queries).
+Every call has a limit and a pause (Ceibal's server is not tuned for API load).
 
-Env:
-  ZABBIX_URL          default http://giga-vpn-proxy.ictd-ooi-giga-devops-dev:8080
-  ZABBIX_USER         default app_giga
-  ZABBIX_PASSWORD     required (type it with `read -s`, don't put it in the pod spec)
-  ZABBIX_PROXY_USER / ZABBIX_PROXY_PASS   optional proxy basic auth
-
-Usage:
-  python retest_connection.py [--codicen]
+Env (from Secret ceibal-zabbix-secrets): ZABBIX_URL, ZABBIX_USER, ZABBIX_PASSWORD,
+optional ZABBIX_PROXY_USER / ZABBIX_PROXY_PASS.
 """
 
 import argparse
@@ -213,19 +204,16 @@ def main():
     )
     args = ap.parse_args()
 
+    user = os.environ.get("ZABBIX_USER", "").strip()
     password = os.environ.get("ZABBIX_PASSWORD", "").strip()
-    if not password:
-        sys.exit(
-            "ZABBIX_PASSWORD is required (use: read -s ZABBIX_PASSWORD; export ZABBIX_PASSWORD)"
-        )
+    if not user or not password:
+        sys.exit("ZABBIX_USER and ZABBIX_PASSWORD are required")
     proxy_user = os.environ.get("ZABBIX_PROXY_USER", "").strip()
     proxy_pass = os.environ.get("ZABBIX_PROXY_PASS", "").strip()
 
     client = ZabbixClient(
-        url=os.environ.get(
-            "ZABBIX_URL", "http://giga-vpn-proxy.ictd-ooi-giga-devops-dev:8080"
-        ).strip(),
-        username=os.environ.get("ZABBIX_USER", "app_giga").strip(),
+        url=os.environ["ZABBIX_URL"].strip(),
+        username=user,
         password=password,
         http_auth=(proxy_user, proxy_pass) if proxy_user else None,
     )

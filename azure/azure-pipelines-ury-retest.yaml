@@ -1,0 +1,58 @@
+# Manual: build the URY Zabbix retest image and run it once as a K8s Job.
+# Pipeline variables: ACR_NAME, ACR_SERVICE_CONNECTION, KUBERNETES_ENVIRONMENT
+# (the environment needs access to ictd-ooi-data-analysis-dev).
+trigger: none
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - name: containerRegistryName
+    value: $(ACR_NAME)
+  - name: kubernetesEnvironment
+    value: $(KUBERNETES_ENVIRONMENT)
+  - name: kubernetesNamespace
+    value: ictd-ooi-data-analysis-dev
+  - name: jobDir
+    value: $(Build.SourcesDirectory)/infra/jobs/ury-zabbix-retest
+
+stages:
+  - stage: Build
+    jobs:
+      - template: templates/build-and-push.yaml
+        parameters:
+          displayName: URY Zabbix retest
+          repository: ury-zabbix-retest
+          dockerfile: $(jobDir)/Dockerfile
+          buildContext: $(jobDir)
+
+  - stage: Run
+    dependsOn: Build
+    jobs:
+      - deployment: Run
+        displayName: Run URY Zabbix retest Job
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
+                  displayName: Set image
+                  workingDirectory: $(jobDir)
+
+                - task: Kubernetes@1
+                  displayName: Delete previous Job
+                  inputs:
+                    command: delete
+                    arguments: job ury-zabbix-retest --ignore-not-found
+                    namespace: $(kubernetesNamespace)
+
+                - task: Kubernetes@1
+                  displayName: Apply Job
+                  inputs:
+                    command: apply
+                    arguments: -k $(jobDir)
+                    namespace: $(kubernetesNamespace)
