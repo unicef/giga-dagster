@@ -12,6 +12,8 @@ variables:
     value: $(ACR_NAME)
   - name: kubernetesEnvironment
     value: $(KUBERNETES_ENVIRONMENT)
+  - name: kubernetesServiceConnection
+    value: $(KUBERNETES_SERVICE_CONNECTION)
   - name: kubernetesNamespace
     value: ictd-ooi-data-analysis-dev
   - name: jobDir
@@ -19,6 +21,7 @@ variables:
 
 stages:
   - stage: Build
+    displayName: URY Zabbix retest build
     jobs:
       - template: templates/build-and-push.yaml
         parameters:
@@ -28,6 +31,7 @@ stages:
           buildContext: $(jobDir)
 
   - stage: Run
+    displayName: URY Zabbix retest run
     dependsOn: Build
     jobs:
       - deployment: Run
@@ -39,13 +43,16 @@ stages:
               steps:
                 - checkout: self
 
-                - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
+                - script: |
+                    kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
                   displayName: Set image
                   workingDirectory: $(jobDir)
 
                 - task: Kubernetes@1
                   displayName: Delete previous Job
                   inputs:
+                    connectionType: Kubernetes Service Connection
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: delete
                     arguments: job ury-zabbix-retest --ignore-not-found
                     namespace: $(kubernetesNamespace)
@@ -53,6 +60,8 @@ stages:
                 - task: Kubernetes@1
                   displayName: Apply Job
                   inputs:
+                    connectionType: Kubernetes Service Connection
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
                     command: apply
                     arguments: -k $(jobDir)
                     namespace: $(kubernetesNamespace)
