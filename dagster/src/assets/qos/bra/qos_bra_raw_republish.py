@@ -9,6 +9,7 @@ from pyspark.sql import (
 from src.custom.qos.bra.constants import COUNTRY_CODE
 from src.custom.qos.schema_utils import to_parquet_bytes
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
 
@@ -25,6 +26,7 @@ BRA_QOS_RAW_REPUBLISH_START_DATE = "2024-01-01"
         start_date=BRA_QOS_RAW_REPUBLISH_START_DATE
     )
 )
+@capture_op_exceptions
 def bra_qos_raw_republish(
     context: OpExecutionContext, spark: PySparkResource
 ) -> Output:

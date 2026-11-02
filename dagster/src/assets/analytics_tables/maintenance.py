@@ -1,6 +1,7 @@
 from dagster_pyspark import PySparkResource
 from pyspark.sql import SparkSession
 from src.assets.analytics_tables import assets as analytics_assets
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import AssetsDefinition, OpExecutionContext, asset
 
@@ -15,6 +16,7 @@ INCREMENTAL_TABLES = sorted(
 
 
 @asset(key_prefix=["maintenance"], group_name="maintenance", compute_kind="spark")
+@capture_op_exceptions
 def optimize_incremental_tables(
     context: OpExecutionContext, spark: PySparkResource
 ) -> None:

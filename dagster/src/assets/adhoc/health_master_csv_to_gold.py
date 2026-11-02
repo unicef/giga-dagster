@@ -34,6 +34,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__load_health_master_csv(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -109,6 +110,7 @@ def adhoc__health_master_data_transforms(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def adhoc__publish_health_master_to_gold(
     context: OpExecutionContext,
     spark: PySparkResource,

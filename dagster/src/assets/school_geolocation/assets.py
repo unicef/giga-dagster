@@ -101,6 +101,7 @@ def geolocation_raw(
 
 
 @asset
+@capture_op_exceptions
 def geolocation_metadata(
     context: OpExecutionContext,
     geolocation_raw: bytes,

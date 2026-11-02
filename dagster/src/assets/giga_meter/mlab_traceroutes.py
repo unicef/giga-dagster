@@ -23,6 +23,7 @@ from src.partitions.mlab_traceroutes import mlab_traceroutes_partitions_def
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
@@ -168,6 +169,7 @@ def _prepare_day_df(day_pdf: pd.DataFrame) -> pd.DataFrame:
 
 
 @asset(partitions_def=mlab_traceroutes_partitions_def)
+@capture_op_exceptions
 def mlab_traceroutes(context: OpExecutionContext, spark: PySparkResource) -> Output:
     s: SparkSession = spark.spark_session
     day_str = context.partition_key
