@@ -46,6 +46,8 @@ stages:
           runOnce:
             deploy:
               steps:
+                - checkout: self
+
                 - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
                   displayName: Set image
                   workingDirectory: $(jobDir)
