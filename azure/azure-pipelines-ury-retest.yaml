@@ -13,7 +13,9 @@ variables:
   - name: containerRegistryName
     value: $(ACR_NAME)
   - name: kubernetesServiceConnection
-    value: $(KUBERNETES_SERVICE_CONNECTION)
+    value: DataAnalysis-OOI-DEV-uni-ooi-giga-aks-dev-ictd-ooi-data-analysis-dev-1793377346827
+  - name: kubernetesEnvironment
+    value: $(KUBERNETES_ENVIRONMENT)
   - name: kubernetesNamespace
     value: ictd-ooi-data-analysis-dev
   - name: jobDir
@@ -37,27 +39,31 @@ stages:
     dependsOn: Build
     displayName: 'URY Zabbix job deploy'
     jobs:
-      - job: Run
+      - deployment: RunJob
         displayName: 'Run URY Zabbix retest Job'
-        steps:
-          - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
-            displayName: Set image
-            workingDirectory: $(jobDir)
+        environment: $(kubernetesEnvironment)
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
+                  displayName: Set image
+                  workingDirectory: $(jobDir)
 
-          - task: Kubernetes@1
-            displayName: Delete previous Job
-            inputs:
-              connectionType: Kubernetes Service Connection
-              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-              namespace: $(kubernetesNamespace)
-              command: delete
-              arguments: job ury-zabbix-retest --ignore-not-found
+                - task: Kubernetes@1
+                  displayName: Delete previous Job
+                  inputs:
+                    connectionType: Kubernetes Service Connection
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(kubernetesNamespace)
+                    command: delete
+                    arguments: job ury-zabbix-retest --ignore-not-found
 
-          - task: Kubernetes@1
-            displayName: Apply Job
-            inputs:
-              connectionType: Kubernetes Service Connection
-              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
-              namespace: $(kubernetesNamespace)
-              command: apply
-              arguments: -k $(jobDir)
+                - task: Kubernetes@1
+                  displayName: Apply Job
+                  inputs:
+                    connectionType: Kubernetes Service Connection
+                    kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+                    namespace: $(kubernetesNamespace)
+                    command: apply
+                    arguments: -k $(jobDir)
