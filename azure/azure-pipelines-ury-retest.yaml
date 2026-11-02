@@ -1,6 +1,8 @@
 # Manual: build the URY Zabbix retest image and run it once as a K8s Job.
 # Pipeline variables: ACR_NAME, ACR_SERVICE_CONNECTION, KUBERNETES_ENVIRONMENT
 # (the environment needs access to ictd-ooi-data-analysis-dev).
+# Manual: build the URY Zabbix retest image and run it once as a K8s Job.
+# Pipeline variables: ACR_NAME, ACR_SERVICE_CONNECTION, K8S_SERVICE_CONNECTION
 trigger: none
 pr: none
 
@@ -10,12 +12,16 @@ pool:
 variables:
   - name: containerRegistryName
     value: $(ACR_NAME)
-  - name: kubernetesEnvironment
-    value: $(KUBERNETES_ENVIRONMENT)
+  - name: kubernetesServiceConnection
+    value: $(KUBERNETES_SERVICE_CONNECTION)
   - name: kubernetesNamespace
     value: ictd-ooi-data-analysis-dev
   - name: jobDir
     value: $(Build.SourcesDirectory)/infra/jobs/ury-zabbix-retest
+  - name: CI
+    value: 'false'
+  - name: system.debug
+    value: 'true'
 
 stages:
   - stage: Build
@@ -29,30 +35,29 @@ stages:
 
   - stage: Run
     dependsOn: Build
+    displayName: 'URY Zabbix job deploy'
     jobs:
-      - deployment: Run
-        displayName: Run URY Zabbix retest Job
-        environment: $(kubernetesEnvironment)
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
+      - job: Run
+        displayName: 'Run URY Zabbix retest Job'
+        steps:
+          - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
+            displayName: Set image
+            workingDirectory: $(jobDir)
 
-                - script: kustomize edit set image ury-zabbix-retest=$(containerRegistryName).azurecr.io/ury-zabbix-retest:$(Build.SourceVersion)
-                  displayName: Set image
-                  workingDirectory: $(jobDir)
+          - task: Kubernetes@1
+            displayName: Delete previous Job
+            inputs:
+              connectionType: Kubernetes Service Connection
+              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+              namespace: $(kubernetesNamespace)
+              command: delete
+              arguments: job ury-zabbix-retest --ignore-not-found
 
-                - task: Kubernetes@1
-                  displayName: Delete previous Job
-                  inputs:
-                    command: delete
-                    arguments: job ury-zabbix-retest --ignore-not-found
-                    namespace: $(kubernetesNamespace)
-
-                - task: Kubernetes@1
-                  displayName: Apply Job
-                  inputs:
-                    command: apply
-                    arguments: -k $(jobDir)
-                    namespace: $(kubernetesNamespace)
+          - task: Kubernetes@1
+            displayName: Apply Job
+            inputs:
+              connectionType: Kubernetes Service Connection
+              kubernetesServiceEndpoint: $(kubernetesServiceConnection)
+              namespace: $(kubernetesNamespace)
+              command: apply
+              arguments: -k $(jobDir)
