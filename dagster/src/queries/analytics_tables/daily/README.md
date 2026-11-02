@@ -24,7 +24,7 @@ populates them changed. Mirrors `unicef/giga-data-analytics#25`.
 | Script | Creates Table | Purpose | Key Dependencies | Incremental planned |
 |---|---|---|---|---|
 | `country_versions.sql` | `default.country_versions` | Latest delta version per country | `delta_lake.school_master.*` | |
-| `all_school_master.sql` | `default.all_school_master` | Master school reference (~2.1M schools, 69 columns) | `country_versions` | |
+| `all_school_master.sql` | `default.all_school_master` | Master school reference (~2.1M schools, 69 columns) | `country_versions`, `custom_dataset.school_master_all` (Spark asset `daily/school_master_all`, union of `school_master.*`) | |
 | `isp_asn_country_mapping.sql` | `default.isp_asn_country_mapping` | Canonical ISP name/ASN lookup, resolves ASN-truncation variants per country | `all_gmeter_only_measurements`, `all_mlab_only_measurements` (incremental pipeline) | |
 | `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | Daily aggregation per school+device — p5/p50/p95 speed metrics, summed data volume, JSON categorical breakdowns, school attributes | `all_gigameter_measurement_data` (incremental pipeline) | |
 | `all_gigameter_measurement_data_weekly.sql` | `default.all_gigameter_measurement_data_weekly` | Weekly aggregation per school+device (weekdays only) — identical column structure to daily table | `all_gigameter_measurement_data` (incremental pipeline) | |
