@@ -171,6 +171,42 @@ def check_history(client):
         )
 
 
+def check_retention(client):
+    print("\n4b. Retention: item settings and oldest stored value")
+    items = call(
+        client,
+        "item.get",
+        {
+            "output": ["itemid", "name", "value_type", "history", "trends"],
+            "itemids": CEIBAL_ITEMIDS,
+            "limit": len(CEIBAL_ITEMIDS),
+        },
+    )
+    for i in items:
+        oldest = call(
+            client,
+            "history.get",
+            {
+                "output": ["clock"],
+                "itemids": [i["itemid"]],
+                "history": int(i["value_type"]),
+                "sortfield": "clock",
+                "sortorder": "ASC",
+                "limit": 1,
+            },
+        )
+        first = (
+            time.strftime("%Y-%m-%d", time.gmtime(int(oldest[0]["clock"])))
+            if oldest
+            else "-"
+        )
+        record(
+            f"retention {i['itemid']} ({i['name']})",
+            bool(oldest),
+            f"history={i['history']}, trends={i['trends']}, oldest value={first}",
+        )
+
+
 def check_codicen(client, gid):
     print("\n5. Codicen duplicates (counts only)")
     hosts = call(
@@ -189,11 +225,15 @@ def check_codicen(client, gid):
     record(
         "hosts", True, f"{len(hosts)} monitored hosts, {len(codicens)} unique Codicens"
     )
-    record("non-numeric Codicens", not non_numeric, f"{len(non_numeric)}")
+    record(
+        "non-numeric Codicens",
+        not non_numeric,
+        f"{len(non_numeric)}: {sorted(non_numeric)}",
+    )
     record(
         "Codicens with >1 host",
         True,
-        f"{len(dupes)}; examples: {dict(list(dupes.items())[:10])}",
+        f"{len(dupes)}: {dict(sorted(dupes.items()))}",
     )
 
 
@@ -222,7 +262,7 @@ def main():
     try:
         check_version(client)
         gid = check_login_and_group(client)
-        for step in (check_templates, check_history):
+        for step in (check_templates, check_history, check_retention):
             try:
                 step(client)
             except Exception as e:
