@@ -14,6 +14,7 @@ from src.utils.giga_meter_helpers import (
     _read_parquet_best_effort,
     _sanitize_schema_by_category,
 )
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
 
 from dagster import Config, OpExecutionContext, Output, asset
@@ -44,6 +45,7 @@ class ParquetToDeltaConfig(Config):
     ),
     io_manager_key=ResourceKey.GIGA_METER_DELTA_IO_MANAGER.value,
 )
+@capture_op_exceptions
 def connectivity_ping_checks(
     context: OpExecutionContext,
     config: ParquetToDeltaConfig,

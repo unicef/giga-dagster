@@ -8,6 +8,7 @@ from src.custom.qos.mawingu.constants import COUNTRY_CODE
 from src.custom.qos.mawingu.schema import MAWINGU_GOLD_SCHEMA
 from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
 
@@ -16,6 +17,7 @@ MAWINGU_QOS_START_DATE = "2024-01-01"
 
 
 @asset(partitions_def=DailyPartitionsDefinition(start_date=MAWINGU_QOS_START_DATE))
+@capture_op_exceptions
 def mawingu_qos(
     context: OpExecutionContext, adls_file_client: ADLSFileClient
 ) -> Output:

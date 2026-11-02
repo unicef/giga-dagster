@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.db.trino import get_db_context
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import AssetKey, OpExecutionContext, asset
 
@@ -114,21 +115,25 @@ def _run_incremental(context: OpExecutionContext) -> None:
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+@capture_op_exceptions
 def country_versions(context: OpExecutionContext) -> None:
     _run_daily(context)
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+@capture_op_exceptions
 def bra_nicbr_daily(context: OpExecutionContext) -> None:
     _run_daily(context)
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+@capture_op_exceptions
 def bra_nicbr_registered_schools(context: OpExecutionContext) -> None:
     _run_daily(context)
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+@capture_op_exceptions
 def all_gigamaps_realtimeconnectivity(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -139,6 +144,7 @@ def all_gigamaps_realtimeconnectivity(context: OpExecutionContext) -> None:
     deps=[AssetKey(["daily", "country_versions"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_school_master(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -149,6 +155,7 @@ def all_school_master(context: OpExecutionContext) -> None:
     deps=[AssetKey(["daily", "bra_nicbr_daily"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -163,6 +170,7 @@ def bra_benchmarkstatus_wow(context: OpExecutionContext) -> None:
     compute_kind="trino",
     op_tags={"trino_heavy": "true"},
 )
+@capture_op_exceptions
 def isp_asn_country_mapping(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -178,6 +186,7 @@ def isp_asn_country_mapping(context: OpExecutionContext) -> None:
     compute_kind="trino",
     op_tags={"trino_heavy": "true"},
 )
+@capture_op_exceptions
 def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -188,6 +197,7 @@ def all_gigameter_measurement_data_tb_physical(context: OpExecutionContext) -> N
     deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -198,6 +208,7 @@ def all_gigameter_measurement_data_daily(context: OpExecutionContext) -> None:
     deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -212,6 +223,7 @@ def all_gigameter_measurement_data_weekly(context: OpExecutionContext) -> None:
     compute_kind="trino",
     op_tags={"trino_heavy": "true", "dagster/priority": "10"},
 )
+@capture_op_exceptions
 def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -227,6 +239,7 @@ def all_gigameter_appversion_funnel(context: OpExecutionContext) -> None:
     compute_kind="trino",
     op_tags={"trino_heavy": "true"},
 )
+@capture_op_exceptions
 def all_gigameter_funnelsummary(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -240,6 +253,7 @@ def all_gigameter_funnelsummary(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_school_consistency_history(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -254,6 +268,7 @@ def all_gigameter_school_consistency_history(context: OpExecutionContext) -> Non
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_registered_devices(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -268,6 +283,7 @@ def all_gigameter_registered_devices(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_registered_tb_physical(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -282,6 +298,7 @@ def all_gigameter_registered_tb_physical(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_inc_ping_daily(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -292,6 +309,7 @@ def all_gigameter_inc_ping_daily(context: OpExecutionContext) -> None:
     deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -307,11 +325,13 @@ def mng_gigameter_qos_measurements(context: OpExecutionContext) -> None:
     compute_kind="trino",
     op_tags={"trino_heavy": "true"},
 )
+@capture_op_exceptions
 def mng_gigameter_qos_registered(context: OpExecutionContext) -> None:
     _run_daily(context)
 
 
 @asset(key_prefix=["daily"], group_name="daily", compute_kind="trino")
+@capture_op_exceptions
 def superset_session_lengths(context: OpExecutionContext) -> None:
     _run_daily(context)
 
@@ -322,11 +342,13 @@ def superset_session_lengths(context: OpExecutionContext) -> None:
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+@capture_op_exceptions
 def all_gmeter_only_measurements(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+@capture_op_exceptions
 def all_mlab_only_measurements(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -340,6 +362,7 @@ def all_mlab_only_measurements(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -356,6 +379,7 @@ def all_gigameter_valid_test_checker(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -366,6 +390,7 @@ def all_gigameter_measurement_data(context: OpExecutionContext) -> None:
     deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -376,6 +401,7 @@ def all_gigameter_school_daily_troubleshooting(context: OpExecutionContext) -> N
     deps=[AssetKey(["incremental", "all_gigameter_measurement_data"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_school_measurement_stats(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -389,11 +415,13 @@ def all_gigameter_school_measurement_stats(context: OpExecutionContext) -> None:
     ],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_gigameter_registered_schools(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+@capture_op_exceptions
 def all_ping_hourly(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
@@ -404,10 +432,12 @@ def all_ping_hourly(context: OpExecutionContext) -> None:
     deps=[AssetKey(["incremental", "all_ping_hourly"])],
     compute_kind="trino",
 )
+@capture_op_exceptions
 def all_ping_daily(context: OpExecutionContext) -> None:
     _run_incremental(context)
 
 
 @asset(key_prefix=["incremental"], group_name="incremental", compute_kind="trino")
+@capture_op_exceptions
 def superset_activity_logs(context: OpExecutionContext) -> None:
     _run_incremental(context)

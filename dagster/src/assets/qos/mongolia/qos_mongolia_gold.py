@@ -12,6 +12,7 @@ from src.custom.qos.mongolia.schema import (
 )
 from src.custom.qos.schema_utils import enforce_prd_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import DailyPartitionsDefinition, OpExecutionContext, Output, asset
 
@@ -25,6 +26,7 @@ MONGOLIA_QOS_GOLD_START_DATE = "2024-11-01"
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date=MONGOLIA_QOS_GOLD_START_DATE)
 )
+@capture_op_exceptions
 def mongolia_qos_gold(
     context: OpExecutionContext,
     spark: PySparkResource,

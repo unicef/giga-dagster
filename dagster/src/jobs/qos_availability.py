@@ -7,9 +7,11 @@ from pyspark.sql import (
 )
 
 from dagster import OpExecutionContext, job, op
+from src.utils.sentry import capture_op_exceptions
 
 
 @op
+@capture_op_exceptions
 def process_availability(context: OpExecutionContext, spark: PySparkResource):
     s: SparkSession = spark.spark_session
     QOS_VCT = "qos_hourly.vct"
