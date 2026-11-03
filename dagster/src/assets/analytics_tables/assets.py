@@ -141,7 +141,10 @@ def all_gigamaps_realtimeconnectivity(context: OpExecutionContext) -> None:
 @asset(
     key_prefix=["daily"],
     group_name="daily",
-    deps=[AssetKey(["daily", "country_versions"])],
+    deps=[
+        AssetKey(["daily", "country_versions"]),
+        AssetKey(["daily", "school_master_all"]),
+    ],
     compute_kind="trino",
 )
 @capture_op_exceptions
