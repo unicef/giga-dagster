@@ -65,4 +65,5 @@ variables:
   gigameterApiToken: $(GIGAMETER_API_TOKEN)
   vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
   mlabBigqueryServiceAccountJsonB64: $(MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
+  cartoBasemapApiKey: $(CARTO_BASEMAP_API_KEY)
   system.debug: true
