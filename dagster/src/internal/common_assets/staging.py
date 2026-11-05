@@ -533,7 +533,9 @@ class StagingStep:
     def _prepare_df(self, df: sql.DataFrame) -> sql.DataFrame:
         """Add missing columns and cast types — does NOT compute row hash."""
         df = add_missing_columns(df, self.schema_columns)
-        return transform_types(df, self.schema_name, self.context)
+        return transform_types(
+            df, self.schema_name, self.context, columns=self.schema_columns
+        )
 
     def _fill_not_null_columns(self, df: sql.DataFrame) -> sql.DataFrame:
         """Fill nulls in NOT NULL STRING schema columns with "Unknown" so that
