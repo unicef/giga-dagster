@@ -21,6 +21,7 @@ from src.spark.transform_functions import (
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     get_schema_columns,
 )
@@ -57,8 +58,8 @@ def adhoc__health_master_data_transforms(
 
     schema_columns = get_schema_columns(s, config.metastore_schema)
     with BytesIO(adhoc__load_health_master_csv) as buffer:
-        buffer.seek(0)
-        df = pd.read_csv(buffer).fillna(np.nan).replace([np.nan], [None])
+        df = pandas_loader(buffer, config.filepath, context=context)
+        df = df.fillna(np.nan).replace([np.nan], [None])
 
     context.log.info(f"columns: {df.columns.tolist()}")
     context.log.info(f"row count: {len(df)}")
