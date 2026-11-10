@@ -9,10 +9,13 @@
 --   ASN) ever observed across GigaMeter and MLab measurements. Resolves
 --   ASN-truncation variants (e.g. a name reported under both a full ASN and
 --   a truncated prefix of it) to a single canonical ASN and display name per
---   (country, ASN), and flags ASNs seen across >=3 countries as likely
---   shared infrastructure (CDN/hosting) rather than a genuine local ISP.
+--   (country, ASN), and flags an ASN as likely shared infrastructure
+--   (CDN/hosting) when it is seen in >=3 countries and no single country
+--   holds more than 90% of its rows.
 --   Joined back onto default.all_gigameter_measurement_data to produce
 --   isp_name_clean / isp_asn_clean / isp_key / is_likely_shared_infra.
+--   isp_key is country + canonical name + canonical ASN. Charts that
+--   group an ISP use canonical_isp_name / isp_name_clean, not isp_key.
 --
 -- Dependencies:
 --   - default.all_gmeter_only_measurements (GigaMeter raw ISP/ASN strings)
@@ -34,12 +37,20 @@
 --   - name_display_norm's legal-suffix stripping list is deliberately
 --     generic (ltd/llc/inc/gmbh/... legal-form tokens only), not
 --     brand/company-specific -- extend it over time as needed.
---   - is_likely_shared_infra is a heuristic (canonical_asn seen in >=3
---     countries), not a maintained provider allowlist/blocklist.
+--     Multi-word forms are listed before the single tokens. Trino's
+--     regex alternation is first-match, so an earlier "limited" would
+--     swallow "limited liability company" and leave the other words.
+--   - Rows with no canonical ASN (null or non-numeric raw ASN) take
+--     name_norm_display, then name_norm_light. They do not fall through
+--     to the unsuffixed light name while a display name exists.
+--   - is_likely_shared_infra is a heuristic (>=3 countries AND the top
+--     country has <=90% of row_count), not a provider allowlist.
+--   - isp_key stays country + canonical name + canonical ASN. Same name
+--     under two ASNs is two keys on purpose; group charts by name.
 --   - built_at reflects when this table was last rebuilt, not when a given
 --     ISP/ASN combination was first observed.
 --
--- Last Updated:    2026-07-30 / Luke Stringer
+-- Last Updated:    2026-11-09 / Luke Stringer
 -- ==============================================================================
 
 DROP TABLE IF EXISTS default.isp_asn_country_mapping;
@@ -190,11 +201,13 @@ rows_with_canon_asn AS (
 name_display_norm AS (
     SELECT *,
         TRIM(REGEXP_REPLACE(REGEXP_REPLACE(name_norm_light,
-            '(?i)\b(ltd|limited|llc|lcc|inc|incorporated|corp|corporation|plc|' ||
+            '(?i)\b(liability limited company|limited liability company|' ||
+            'limited liability partnership|private limited company|' ||
+            'public limited company|closed joint stock company|' ||
+            'open joint stock company|joint stock company|private limited|' ||
+            'ltd|limited|llc|lcc|inc|incorporated|corp|corporation|plc|' ||
             'gmbh|jsc|cjsc|ojsc|pjsc|pte|pty|sa|sas|ag|srl|bv|oy|ooo|doo|' ||
-            'd o o|d d|a d|b v|s a|s a s|' ||
-            'joint stock company|closed joint stock company|' ||
-            'open joint stock company|limited liability company)\b',
+            'd o o|d d|a d|b v|s a|s a s)\b',
             ''), '\s+', ' ')) AS name_norm_display
     FROM rows_with_canon_asn
 ),
@@ -220,13 +233,25 @@ canonical_names_final AS (
 
 -- -----------------------------------------------------------------------
 -- STAGE 3: shared-infrastructure signal, computed GLOBALLY (not per
--- country) - distinct country count per resolved canonical_asn.
+-- country). An ASN is shared infrastructure when it is seen in >=3
+-- countries and no single country holds more than 90% of its rows.
 -- Fully dynamic; no hardcoded hosting/CDN provider list.
+-- Top-country share uses the same row_count the rest of this script
+-- aggregates. Integer compare avoids a float edge on the 90% cut.
 -- -----------------------------------------------------------------------
-asn_country_spread AS (
-    SELECT canonical_asn, COUNT(DISTINCT iso3_code) AS asn_distinct_country_count
+asn_country_rows AS (
+    SELECT canonical_asn, iso3_code, SUM(row_count) AS country_rows
     FROM rows_with_canon_asn
     WHERE canonical_asn IS NOT NULL
+      AND iso3_code IS NOT NULL
+    GROUP BY canonical_asn, iso3_code
+),
+asn_country_spread AS (
+    SELECT canonical_asn,
+           COUNT(*) AS asn_distinct_country_count,
+           MAX(country_rows) AS top_country_rows,
+           SUM(country_rows) AS asn_total_rows
+    FROM asn_country_rows
     GROUP BY canonical_asn
 )
 
@@ -242,18 +267,20 @@ SELECT
     r.row_count,
     r.asn_norm,
     r.canonical_asn,
-    COALESCE(cn.canonical_isp_name, r.name_norm_light, '(unknown)') AS canonical_isp_name,
+    COALESCE(cn.canonical_isp_name, r.name_norm_display, r.name_norm_light, '(unknown)') AS canonical_isp_name,
     TO_HEX(MD5(TO_UTF8(
         r.iso3_code || '|' ||
-        COALESCE(cn.canonical_isp_name, r.name_norm_light, '(unknown)') || '|' ||
+        COALESCE(cn.canonical_isp_name, r.name_norm_display, r.name_norm_light, '(unknown)') || '|' ||
         COALESCE(r.canonical_asn, 'NULL')
     ))) AS isp_key,
     (r.asn_norm IS NOT NULL AND r.canonical_asn IS NOT NULL
         AND r.asn_norm <> r.canonical_asn) AS is_asn_truncation_merge,
     COALESCE(acs.asn_distinct_country_count, 0) AS asn_distinct_country_count,
-    (COALESCE(acs.asn_distinct_country_count, 0) >= 3) AS is_likely_shared_infra,
+    (COALESCE(acs.asn_distinct_country_count, 0) >= 3
+        AND COALESCE(acs.top_country_rows * 100 <= acs.asn_total_rows * 90, FALSE)
+    ) AS is_likely_shared_infra,
     CURRENT_TIMESTAMP AS built_at
-FROM rows_with_canon_asn r
+FROM name_display_norm r
 LEFT JOIN canonical_names_final cn
   ON cn.iso3_code = r.iso3_code AND cn.canonical_asn = r.canonical_asn
 LEFT JOIN asn_country_spread acs
