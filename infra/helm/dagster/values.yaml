@@ -1153,7 +1153,7 @@ dagsterDaemon:
 
   runRetries:
     enabled: true
-    maxRetries: 0
+    maxRetries: 1
 
   sensors:
     # Whether to evaluate sensors using an asynchronous thread pool, allowing sensors
