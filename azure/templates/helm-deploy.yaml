@@ -8,6 +8,11 @@ jobs:
           steps:
             - checkout: self
 
+            - task: HelmInstaller@1
+              displayName: Install Helm 3
+              inputs:
+                helmVersionToInstall: 3.16.4
+
             - task: HelmDeploy@0
               displayName: Add Dagster Helm Repo
               inputs:
