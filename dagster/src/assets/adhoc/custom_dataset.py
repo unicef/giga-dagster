@@ -13,6 +13,7 @@ from src.resources import ResourceKey
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import (
     OpExecutionContext,
@@ -22,6 +23,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def custom_dataset_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -32,6 +34,7 @@ def custom_dataset_raw(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def custom_dataset_bronze(
     context: OpExecutionContext,
     spark: PySparkResource,

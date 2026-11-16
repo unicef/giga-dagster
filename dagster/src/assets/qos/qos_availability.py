@@ -11,6 +11,7 @@ from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
 from src.utils.pandas import read_df_from_bytes
+from src.utils.sentry import capture_op_exceptions
 from src.utils.spark import transform_types
 
 from dagster import (
@@ -21,6 +22,7 @@ from dagster import (
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PASSTHROUGH_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_availability_raw(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,
@@ -31,6 +33,7 @@ def qos_availability_raw(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_PANDAS_IO_MANAGER.value)
+@capture_op_exceptions
 def qos_availability_transforms(
     context: OpExecutionContext,
     spark: PySparkResource,
@@ -68,6 +71,7 @@ def qos_availability_transforms(
 
 
 @asset(io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value)
+@capture_op_exceptions
 def publish_qos_availability_to_gold(
     context: OpExecutionContext,
     spark: PySparkResource,
