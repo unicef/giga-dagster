@@ -1,6 +1,6 @@
 # Daily Scripts
 
-Production scripts executed **once per day** via Dagster (03:45, cron `45 3 * * *` in `dagster/src/schedule/analytics_tables.py`). All scripts use a drop-and-recreate pattern — the full table is rebuilt on each run.
+Production scripts executed **once per day** via Dagster (04:00, cron `0 4 * * *` in `dagster/src/schedule/analytics_tables.py`). All scripts use a drop-and-recreate pattern — the full table is rebuilt on each run.
 
 Scripts are maintained in [`unicef/giga-data-analytics`](https://github.com/unicef/giga-data-analytics/tree/main/analytics-tables/daily) (itself sourced from the **Physical Tables** NocoDB table, `mzq6hlnsicq1r0v`, `Integrated in pipeline = True`) and ported here via PR once validated there.
 
@@ -26,8 +26,8 @@ populates them changed. Mirrors `unicef/giga-data-analytics#25`.
 | `country_versions.sql` | `default.country_versions` | Latest delta version per country | `delta_lake.school_master.*` | |
 | `all_school_master.sql` | `default.all_school_master` | Master school reference (~2.1M schools, 69 columns) | `country_versions`, `custom_dataset.school_master_all` (Spark asset `daily/school_master_all`, union of `school_master.*`) | |
 | `isp_asn_country_mapping.sql` | `default.isp_asn_country_mapping` | Canonical ISP name/ASN lookup, resolves ASN-truncation variants per country | `all_gmeter_only_measurements`, `all_mlab_only_measurements` (incremental pipeline) | |
-| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | Daily aggregation per school+device — p5/p50/p95 speed metrics, summed data volume, JSON categorical breakdowns, school attributes | `all_gigameter_measurement_data` (incremental pipeline) | |
-| `all_gigameter_measurement_data_weekly.sql` | `default.all_gigameter_measurement_data_weekly` | Weekly aggregation per school+device (weekdays only) — identical column structure to daily table | `all_gigameter_measurement_data` (incremental pipeline) | |
+| `all_gigameter_measurement_data_daily.sql` | `default.all_gigameter_measurement_data_daily` | Daily aggregation per school+device — `COUNT(*)` as `measurement_count` and `MAX(app_version)` as `latest_app_version` only (the p5/p50/p95 speed, latency and packet-loss percentiles live on the weekly table, not here) | `all_gigameter_measurement_data` (incremental pipeline) | |
+| `all_gigameter_measurement_data_weekly.sql` | `default.all_gigameter_measurement_data_weekly` | Weekly aggregation per school+device (weekdays only) — p5/p50/p95 download, upload, latency and packet-loss | `all_gigameter_measurement_data` (incremental pipeline) | |
 | `all_gigameter_measurement_data_tb_physical.sql` | `default.all_gigameter_measurement_data_tb_physical` | Backwards-compatible measurement data variant | `all_gmeter_only_measurements`, `all_mlab_only_measurements` (incremental pipeline) | |
 | `all_gigameter_inc_ping_daily.sql` | `default.all_gigameter_inc_ping_daily` | Daily roll-up combining ping + speed test data | `all_ping_daily` (incremental pipeline), measurement data | |
 | `all_gigamaps_realtimeconnectivity.sql` | `default.all_gigamaps_realtimeconnectivity` | Daily school connectivity status by country | `gigamaps_production_db` | |
