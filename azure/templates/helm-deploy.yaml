@@ -74,6 +74,7 @@ jobs:
                   --set dagster-user-deployments.deployments[0].image.tag=$(Build.SourceVersion)
                   --set pipelineRun.image.repository="$(containerRegistryName).azurecr.io/giga-dagster"
                   --set pipelineRun.image.tag=$(Build.SourceVersion)
+                  --set dagsterDaemon.runCoordinator.config.queuedRunCoordinator.maxConcurrentRuns=$(dagsterMaxConcurrentRuns)
                   --set postgresql.postgresqlUsername=$(postgresqlUsername)
                   --set postgresql.postgresqlPassword=$(postgresqlPassword)
                   --skip-schema-validation

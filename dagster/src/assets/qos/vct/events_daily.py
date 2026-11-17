@@ -10,11 +10,13 @@ from src.custom.qos.vct.schema import (
     to_parquet_bytes,
 )
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def vct_qos_availability(context: OpExecutionContext, spark: PySparkResource) -> Output:
     report_day = dt.date.today() - dt.timedelta(days=1)
     s: SparkSession = spark.spark_session

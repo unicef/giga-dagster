@@ -18,6 +18,7 @@ from src.utils.geolocation_apis.data_updates import (
     upload_data_and_create_db_entry,
 )
 from src.utils.schema import construct_full_table_name, get_schema_columns
+from src.utils.sentry import capture_op_exceptions
 from tenacity import (
     retry,
     retry_if_exception,
@@ -144,6 +145,7 @@ def _push_to_portal(
 
 
 @asset
+@capture_op_exceptions
 def school_geolocation_emis_api_mng(
     context: OpExecutionContext,
     adls_file_client: ADLSFileClient,

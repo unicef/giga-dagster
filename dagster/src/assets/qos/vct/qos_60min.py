@@ -4,11 +4,13 @@ from src.custom.qos.vct.constants import COUNTRY_CODE
 from src.custom.qos.vct.qos_60min import build_snapshot_dataframe
 from src.custom.qos.vct.schema import QOS_60MIN_SCHEMA, enforce_schema, to_parquet_bytes
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def vct_qos_raw(context: OpExecutionContext, spark: PySparkResource) -> Output:
     s: SparkSession = spark.spark_session
 
