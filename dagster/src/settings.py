@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     API_AUTOMATION_USER_ID: str = "305f7203-c97e-46bb-b2da-352379fa1c4e"
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
     VCT_MERAKI_API_KEY: str = ""
+    CARTO_BASEMAP_API_KEY: str = ""
 
     # QoS ingestion - Brazil (nic.br), Isizwe (South Africa), Mawingu (Kenya), Mongolia
     BRAZIL_API_URL: str = ""
