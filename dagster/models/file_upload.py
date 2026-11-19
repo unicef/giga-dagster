@@ -71,12 +71,30 @@ class FileUpload(BaseModel):
 
     @hybrid_property
     def upload_path(self) -> str:
-        filename_parts = [
-            constants.UPLOAD_PATH_PREFIX,
-            self.dataset
-            if self.dataset == "unstructured"
-            else f"school-{self.dataset}",
-            self.country,
-            self.filename,
-        ]
-        return "/".join(filename_parts)
+        country_path = "$NA" if self.country == "N/A" else self.country
+
+        # Facility geolocation: raw/uploads/facility-geolocation/<ISO3>/<schema_key>/<file>
+        if self.dataset == "geolocation" and self.schema_key:
+            return "/".join(
+                [
+                    constants.UPLOAD_PATH_PREFIX,
+                    "facility-geolocation",
+                    country_path,
+                    self.schema_key,
+                    self.filename,
+                ]
+            )
+
+        if self.dataset == "unstructured":
+            dataset_path = "unstructured"
+        else:
+            dataset_path = f"school-{self.dataset}"
+
+        return "/".join(
+            [
+                constants.UPLOAD_PATH_PREFIX,
+                dataset_path,
+                country_path,
+                self.filename,
+            ]
+        )

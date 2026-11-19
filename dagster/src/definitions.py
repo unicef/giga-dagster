@@ -1,5 +1,4 @@
 from dagster import Definitions, load_assets_from_package_module
-
 from src import jobs, schedule, sensors
 from src.assets import (
     adhoc,
@@ -13,12 +12,11 @@ from src.assets import (
     qos,
     school_connectivity,
     school_coverage,
-    school_geolocation,
     school_geolocation_api,
     school_list,
     unstructured,
 )
-from src.assets.facility_geolocation.assets import HEALTH_FACILITY_GEOLOCATION_ASSETS
+from src.assets.facility_geolocation.assets import FACILITY_GEOLOCATION_ASSETS
 from src.resources import RESOURCE_DEFINITIONS
 from src.utils.load_module import (
     load_jobs_from_package_module,
@@ -31,11 +29,7 @@ setup_sentry()
 
 defs = Definitions(
     assets=[
-        *HEALTH_FACILITY_GEOLOCATION_ASSETS,
-        *load_assets_from_package_module(
-            package_module=school_geolocation,
-            group_name=school_geolocation.GROUP_NAME,
-        ),
+        *FACILITY_GEOLOCATION_ASSETS,
         *load_assets_from_package_module(
             package_module=school_geolocation_api,
             group_name=school_geolocation_api.GROUP_NAME,

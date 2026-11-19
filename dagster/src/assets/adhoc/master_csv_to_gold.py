@@ -410,6 +410,7 @@ def adhoc__master_dq_checks_summary(
         spark.spark_session,
         adhoc__master_data_quality_checks,
         adhoc__master_data_quality_checks,
+        govt_id_column="school_id_govt",
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))

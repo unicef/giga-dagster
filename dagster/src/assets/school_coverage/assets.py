@@ -203,6 +203,8 @@ async def coverage_data_quality_results_summary(
         s,
         coverage_data_quality_results,
         df_raw,
+        # Coverage checks still use school_* column names in assertions.
+        govt_id_column="school_id_govt",
     )
 
     value_maps = aggregate_value_maps_for_pdf(

@@ -652,6 +652,8 @@ async def geolocation_data_quality_results_summary(
         spark.spark_session,
         dq_results,
         geolocation_bronze,
+        # Legacy school geolocation path (pre-facility rename).
+        govt_id_column="school_id_govt",
     )
 
     value_maps = aggregate_value_maps_for_pdf(

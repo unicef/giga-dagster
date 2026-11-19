@@ -70,16 +70,30 @@ class FacilityPathNames:
     dq_directory: str
     approval_directory: str
     delete_directory: str
+    schema_keys: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        for field_name in self.__dataclass_fields__:
+        for field_name in (
+            "upload_directory",
+            "dq_directory",
+            "approval_directory",
+            "delete_directory",
+        ):
             value = getattr(self, field_name)
             _validate_name(value, field_name)
             if value.startswith("/") or value.endswith("/"):
                 raise ValueError(f"{field_name} must be an ADLS-relative directory")
+        if not self.schema_keys:
+            raise ValueError("schema_keys must contain at least one key")
+        for key in self.schema_keys:
+            _validate_name(key, "schema_keys entry")
+        _validate_unique(self.schema_keys, "schema_keys")
 
     def upload_path(self, upload_prefix: str = "raw/uploads") -> str:
         return f"{upload_prefix.rstrip('/')}/{self.upload_directory}"
+
+    def matches_schema_key(self, schema_key: str | None) -> bool:
+        return schema_key is not None and schema_key in self.schema_keys
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,10 +260,11 @@ SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
         rejected_schema="school_geolocation_rejected",
     ),
     paths=FacilityPathNames(
-        upload_directory="school-geolocation",
+        upload_directory="facility-geolocation",
         dq_directory="school-geolocation",
         approval_directory="approved-row-ids/school-geolocation",
-        delete_directory="delete-row-ids",
+        delete_directory="delete-row-ids/school-geolocation",
+        schema_keys=("schools",),
     ),
     jobs=FacilityJobNames(
         automated_checks="school_master_geolocation__automated_data_checks_job",
@@ -261,11 +276,12 @@ SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
         bronze="geolocation_bronze",
         dq_results="geolocation_data_quality_results",
         staging="geolocation_staging",
-        approved_rows="manual_review_passed_rows",
-        silver="silver",
+        # Unique keys so these do not collide with coverage's common assets.
+        approved_rows="school_facility_manual_review_passed_rows",
+        silver="school_geolocation_silver",
         core="school_facility_core",
         extension="school_facility_details",
-        rejected_rows="manual_review_failed_rows",
+        rejected_rows="school_facility_manual_review_failed_rows",
     ),
     dq_config_table="SchoolGeolocationMasterDQChecks",
     approval_label="School Geolocation",
@@ -321,10 +337,11 @@ HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
         rejected_schema="health_facility_geolocation_rejected",
     ),
     paths=FacilityPathNames(
-        upload_directory="health-facility-geolocation",
+        upload_directory="facility-geolocation",
         dq_directory="health-facility-geolocation",
         approval_directory="approved-row-ids/health-facility-geolocation",
         delete_directory="delete-row-ids/health-facility-geolocation",
+        schema_keys=("health_facilities",),
     ),
     jobs=FacilityJobNames(
         automated_checks="health_facility_geolocation__automated_data_checks_job",

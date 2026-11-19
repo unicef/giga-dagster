@@ -415,13 +415,30 @@ def _count_duplicate_groups(
     )
 
 
+def _entity_singular_from_plural(
+    entity_plural: str, entity_singular: str | None = None
+) -> str:
+    """Derive a singular noun for summary keys.
+
+    Do not use ``str.rstrip("s")`` — that breaks plurals like ``facilities``.
+    """
+    if entity_singular:
+        return entity_singular
+    if entity_plural.endswith("ies"):
+        return f"{entity_plural[:-3]}y"
+    if entity_plural.endswith("s"):
+        return entity_plural[:-1]
+    return entity_plural
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
     df_bronze: sql.DataFrame,
     is_new_column: str = "is_new_school",
-    entity_plural: str = "schools",
-    govt_id_column: str = "school_id_govt",
+    entity_plural: str = "facilities",
+    entity_singular: str | None = "facility",
+    govt_id_column: str = "facility_id_govt",
     dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ) -> dict:
     """DQ summary with warning counts limited to approved (non-critical) rows."""
@@ -439,6 +456,7 @@ def build_dq_summary_statistics(
             df_aggregated_approved_only=df_aggregated_approved_only,
             is_new_column=is_new_column,
             entity_plural=entity_plural,
+            entity_singular=entity_singular,
             govt_id_column=govt_id_column,
             dq_config_table=dq_config_table,
         )
@@ -452,8 +470,9 @@ def aggregate_report_json(
     df_data_quality_checks: sql.DataFrame,
     df_aggregated_approved_only: sql.DataFrame | None = None,
     is_new_column: str = "is_new_school",
-    entity_plural: str = "schools",
-    govt_id_column: str = "school_id_govt",
+    entity_plural: str = "facilities",
+    entity_singular: str | None = "facility",
+    govt_id_column: str = "facility_id_govt",
     dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ):
     """Build the dq-summary.json dict from aggregated + row-level DQ results.
@@ -523,6 +542,8 @@ def aggregate_report_json(
     )
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%f%z")
 
+    singular = _entity_singular_from_plural(entity_plural, entity_singular)
+
     # Summary Dictionary
     summary = {
         "rows": stats.rows_count,
@@ -532,7 +553,7 @@ def aggregate_report_json(
         f"count_{entity_plural}_low_precision_coordinates": (
             stats.count_schools_low_precision_coordinates
         ),
-        f"count_duplicate_{entity_plural.rstrip('s')}_id": count_duplicate_entity_id,
+        f"count_duplicate_{singular}_id": count_duplicate_entity_id,
         "columns": columns_count,
         "timestamp": timestamp,
     }

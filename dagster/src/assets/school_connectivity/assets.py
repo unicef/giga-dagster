@@ -278,6 +278,7 @@ def qos_school_connectivity_data_quality_results_summary(
         spark.spark_session,
         qos_school_connectivity_data_quality_results,
         qos_school_connectivity_raw,
+        govt_id_column="school_id_govt",
     )
 
     return Output(dq_summary_statistics, metadata=get_output_metadata(config))

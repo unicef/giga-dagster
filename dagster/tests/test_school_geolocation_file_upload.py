@@ -13,6 +13,7 @@ def test_geolocation_upload_filename_and_path_are_stable():
         country="UGA",
         dataset="geolocation",
         source="portal-source",
+        schema_key="schools",
         original_filename="schools.final.csv",
         column_to_schema_mapping={},
         column_license={},
@@ -20,15 +21,53 @@ def test_geolocation_upload_filename_and_path_are_stable():
 
     assert upload.filename == "upload-123_UGA_geolocation_20261007-150405.csv"
     assert (
-        upload.upload_path
-        == "raw/uploads/school-geolocation/UGA/"
+        upload.upload_path == "raw/uploads/facility-geolocation/UGA/schools/"
         "upload-123_UGA_geolocation_20261007-150405.csv"
+    )
+
+
+def test_geolocation_upload_without_schema_key_keeps_legacy_school_path():
+    upload = FileUpload(
+        id="upload-123",
+        created=datetime(2026, 10, 7, 15, 4, 5, tzinfo=UTC),
+        uploader_id="user-123",
+        uploader_email="user@example.com",
+        country="UGA",
+        dataset="geolocation",
+        original_filename="schools.final.csv",
+        column_to_schema_mapping={},
+        column_license={},
+    )
+
+    assert (
+        upload.upload_path == "raw/uploads/school-geolocation/UGA/"
+        "upload-123_UGA_geolocation_20261007-150405.csv"
+    )
+
+
+def test_health_geolocation_upload_path_uses_health_schema_key():
+    upload = FileUpload(
+        id="upload-456",
+        created=datetime(2026, 10, 7, 15, 4, 5, tzinfo=UTC),
+        uploader_id="user-123",
+        uploader_email="user@example.com",
+        country="BRA",
+        dataset="geolocation",
+        schema_key="health_facilities",
+        original_filename="clinics.csv",
+        column_to_schema_mapping={},
+        column_license={},
+    )
+
+    assert (
+        upload.upload_path == "raw/uploads/facility-geolocation/BRA/health_facilities/"
+        "upload-456_BRA_geolocation_20261007-150405.csv"
     )
 
 
 def test_geolocation_filename_parser_uses_final_components_and_omits_source():
     components = deconstruct_school_master_filename_components(
-        "raw/uploads/school-geolocation/UGA/"
+        "raw/uploads/facility-geolocation/UGA/schools/"
         "prefixed_value_upload-123_UGA_geolocation_20261007-150405.csv"
     )
 

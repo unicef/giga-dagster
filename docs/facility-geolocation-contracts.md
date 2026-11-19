@@ -1,6 +1,8 @@
 # Facility geolocation contracts
 
-These are the external contracts for the health-facility pilot. A combined upload remains one record through DQ, staging, and approval; only approved records are projected into the shared core and facility-specific extension.
+These are the external contracts for facility geolocation (school and health). A combined upload remains one record through DQ, staging, and approval; only approved records are projected into the shared core and facility-specific extension. Raw uploads land under `raw/uploads/facility-geolocation/<ISO3>/<schema_key>/` and are routed by `schema_key`.
+
+See also [facility-cutover-school-master-and-connectivity.md](./facility-cutover-school-master-and-connectivity.md) for what still writes `school_master`, connectivity RT hard-wiring, and bronze steps dropped in the factory cutover.
 
 ## Metaschema
 
@@ -64,12 +66,15 @@ Health configuration must use facility-facing names such as `dq_duplicate-facili
 
 ## Ingestion portal contract
 
-- Domain: `health-facility`; dataset: `geolocation`; approval label: `Health Facility Geolocation`.
-- Upload path: `raw/uploads/health-facility-geolocation/<ISO3>/<upload_id>_<ISO3>_geolocation_<YYYYMMDD-HHMMSS>.<ext>`.
-- `<upload_id>` is the `FileUpload.id`; ISO3 is uppercase; timestamp is UTC; supported tabular extensions follow the existing geolocation loader.
-- `column_to_schema_mapping` maps uploaded headings to the combined core-plus-health schema. It must include mappings for `facility_id_govt`, `facility_name`, `latitude`, and `longitude`. Mapping targets must be unique.
+School and health facility geolocation share one raw upload root. Sensors route by `schema_key`:
 
-The portal-created `FileUpload` row must set `id`, `created`, `uploader_id`, `uploader_email`, `country`, `dataset="geolocation"`, `source` (nullable), `original_filename`, `column_to_schema_mapping`, `column_license`, `metadata_json_path`, `dq_status`, `is_processed_in_staging=false`, and `approval_status`. Generated `filename` and `upload_path` must exactly match the blob above. Row counts, DQ paths, bronze path, and later status fields are pipeline-owned.
+- Upload path: `raw/uploads/facility-geolocation/<ISO3>/<schema_key>/<upload_id>_<ISO3>_geolocation_<YYYYMMDD-HHMMSS>.<ext>`.
+- School `schema_key`: `schools` (approval label: `School Geolocation`).
+- Health `schema_key`: `health_facilities` (domain: `health-facility`; approval label: `Health Facility Geolocation`).
+- Dataset stays `geolocation` for both. `<upload_id>` is the `FileUpload.id`; ISO3 is uppercase; timestamp is UTC; supported tabular extensions follow the existing geolocation loader.
+- `column_to_schema_mapping` maps uploaded headings to the combined core-plus-member schema. School mappings must include `school_id_govt` / identity fields required by `SCHOOL_SPEC`; health mappings must include `facility_id_govt`, `facility_name`, `latitude`, and `longitude`. Mapping targets must be unique.
+
+The portal-created `FileUpload` row must set `id`, `created`, `uploader_id`, `uploader_email`, `country`, `dataset="geolocation"`, `schema_key`, schema version pins, `source` (nullable), `original_filename`, `column_to_schema_mapping`, `column_license`, `metadata_json_path`, `dq_status`, `is_processed_in_staging=false`, and `approval_status`. Generated `filename` and `upload_path` must exactly match the blob above. Row counts, DQ paths, bronze path, and later status fields are pipeline-owned.
 
 Approval JSON is written at the agreed approval-sensor path and has this shape:
 
@@ -86,10 +91,12 @@ Approval JSON is written at the agreed approval-sensor path and has this shape:
 
 ## Publishing and reconciliation
 
-For each approval, merge `facility_core` first, then `health_facility_details`, using `facility_id_giga` and the table-specific signature. Both merges and deletes must be deterministic and idempotent. Mark staging changes `PROCESSED` and reset approval state only after both writes succeed. `FileUpload.is_processed_in_staging` retains its existing meaning: the upload has successfully entered staging, not that approval publishing is complete.
+For each approval, merge `facility_core` first, then the facility-specific extension (`school_facility_details` or `health_facility_details`), using `facility_id_giga` and the table-specific signature. Both merges and deletes must be deterministic and idempotent. Mark staging changes `PROCESSED` and reset approval state only after both writes succeed. `FileUpload.is_processed_in_staging` retains its existing meaning: the upload has successfully entered staging, not that approval publishing is complete.
 
 Because the writes are not transactional, retries must complete a missing extension write without duplicating or rewriting an unchanged core row. Reconciliation must detect and fail on orphan extensions, missing required extensions, facility-type mismatches, duplicate IDs, signature mismatches, and staging rows marked processed before both projections exist. No foreign-key cascade is assumed; the publish-complete asset is the boundary after which both projections are guaranteed to agree.
 
+School geolocation uploads no longer publish to `school_master` / `school_reference`; gold is `facility_core` + `school_facility_details`. Coverage and other pipelines that still target `school_master` are unchanged.
+
 ## Out of scope
 
-Migration, backfill, replacement, or cut-over of `school_master` (and its current school geolocation paths, assets, jobs, sensors, tables, coverage cascades, or release behavior) is explicitly out of scope.
+Backfill or dual-write from historical `school_master` into `facility_core`, and migrating coverage / connectivity / QoS onto the facility core model, remain out of scope.

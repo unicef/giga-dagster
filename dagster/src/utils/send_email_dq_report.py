@@ -5,11 +5,11 @@ from typing import Any
 
 import requests
 import sentry_sdk
-from dagster import OpExecutionContext
+from models.file_upload import FileUpload
 from requests import JSONDecodeError
 from sqlalchemy import select
 
-from models.file_upload import FileUpload
+from dagster import OpExecutionContext
 from src.constants.constants_class import constants
 from src.internal.groups import GroupsApi
 from src.schemas.file_upload import FileUploadConfig
@@ -21,22 +21,46 @@ from src.utils.logger import get_context_with_fallback_logger
 from src.utils.op_config import FileConfig
 from src.utils.sentry import log_op_context
 
+_ENTITY_BY_FACILITY_TYPE: dict[str, dict[str, str]] = {
+    "school": {
+        "plural": "Schools",
+        "lowerPlural": "schools",
+        "lowerSingular": "school",
+    },
+    "health": {
+        "plural": "Health Facilities",
+        "lowerPlural": "health facilities",
+        "lowerSingular": "health facility",
+    },
+}
+
+
+def _entity_from_facility_type(facility_type: str) -> dict[str, str]:
+    """Build PDF/email entity wording for any facility_type (school, health, …)."""
+    known = _ENTITY_BY_FACILITY_TYPE.get(facility_type)
+    if known is not None:
+        return known
+
+    singular = facility_type.replace("_", " ").strip()
+    if not singular:
+        singular = "facility"
+    plural = singular if singular.endswith("s") else f"{singular}s"
+    return {
+        "plural": plural.title(),
+        "lowerPlural": plural.lower(),
+        "lowerSingular": singular.lower(),
+    }
+
 
 def _entity_for_dataset(
     dataset: str,
     facility_type: str | None = None,
 ) -> dict[str, str]:
-    if facility_type == "health" or dataset in {"health", "health-master"}:
-        return {
-            "plural": "Health Facilities",
-            "lowerPlural": "health facilities",
-            "lowerSingular": "health facility",
-        }
-    return {
-        "plural": "Schools",
-        "lowerPlural": "schools",
-        "lowerSingular": "school",
-    }
+    if facility_type:
+        return _entity_from_facility_type(facility_type)
+    if dataset in {"health", "health-master"}:
+        return _entity_from_facility_type("health")
+    return _entity_from_facility_type("school")
 
 
 def _make_json_safe(obj: Any) -> Any:

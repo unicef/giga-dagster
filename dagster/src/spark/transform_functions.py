@@ -511,6 +511,8 @@ def create_bronze_layer_columns_updated(
 
     # RT connectivity columns: merge from the realtime schools table
     if settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL:
+        if "facility_id_govt" not in df.columns and "school_id_govt" in df.columns:
+            df = df.withColumn("facility_id_govt", f.col("school_id_govt"))
         connectivity = get_country_rt_schools(spark, country_code_iso3)
         df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
 
@@ -779,31 +781,52 @@ def connectivity_rt_dataset(
     return out
 
 
+def _normalize_connectivity_identity_columns(
+    connectivity: sql.DataFrame,
+) -> sql.DataFrame:
+    """Align legacy school RT identity columns to facility-facing names."""
+    renames = {}
+    if (
+        "facility_id_govt" not in connectivity.columns
+        and "school_id_govt" in connectivity.columns
+    ):
+        renames["school_id_govt"] = "facility_id_govt"
+    if (
+        "facility_id_giga" not in connectivity.columns
+        and "school_id_giga" in connectivity.columns
+    ):
+        renames["school_id_giga"] = "facility_id_giga"
+    if renames:
+        connectivity = connectivity.withColumnsRenamed(renames)
+    return connectivity
+
+
 def merge_connectivity_to_master(
     master: sql.DataFrame,
     connectivity: sql.DataFrame,
     uploaded_columns: list[str],
 ):
+    connectivity = _normalize_connectivity_identity_columns(connectivity)
     connectivity_columns = [
         col
         for col in connectivity.columns
-        if col not in ("school_id_giga", "school_id_govt")
+        if col not in ("facility_id_giga", "facility_id_govt")
     ]
     columns_to_drop = [col for col in connectivity_columns if col in master.columns]
     master = master.drop(*columns_to_drop)
 
     connectivity = connectivity.withColumnsRenamed(
         {
-            "school_id_govt": "school_id_govt_connectivity",
-            "school_id_giga": "school_id_giga_connectivity",
+            "facility_id_govt": "facility_id_govt_connectivity",
+            "facility_id_giga": "facility_id_giga_connectivity",
         }
     )
 
     master = master.join(
         connectivity,
         on=[
-            f.lower(master.school_id_govt)
-            == f.lower(connectivity.school_id_govt_connectivity)
+            f.lower(master.facility_id_govt)
+            == f.lower(connectivity.facility_id_govt_connectivity)
         ],
         how="left",
     )
@@ -823,10 +846,15 @@ def merge_connectivity_to_master(
     elif "connectivity_govt" not in master.columns:
         master = master.withColumn("connectivity_govt", f.lit(None).cast(StringType()))
 
+    if "is_new_facility" in master.columns:
+        is_new_column = f.col("is_new_facility")
+    else:
+        is_new_column = f.col("is_new_school")
+
     # determine the value of connectivity
     if {"download_speed_govt", "connectivity_govt"}.issubset(set(uploaded_columns)):
         # this block runs only when both download_speed_govt and connectivity_govt are uploaded;
-        # for new schools without those columns, connectivity defaults to "Unknown"
+        # for new facilities without those columns, connectivity defaults to "Unknown"
 
         master = master.withColumn(
             "connectivity",
@@ -839,9 +867,7 @@ def merge_connectivity_to_master(
                 f.lower(f.col("connectivity_govt")) == "no",
                 "No",
             )
-            .otherwise(
-                f.when(f.col("is_new_school"), f.lit("Unknown")).otherwise(f.lit(None))
-            ),
+            .otherwise(f.when(is_new_column, f.lit("Unknown")).otherwise(f.lit(None))),
         )
     elif "connectivity_govt" in uploaded_columns:
         # this will run during updates if connectivity_govt is in the uploaded file without download_speed_govt
@@ -875,7 +901,7 @@ def merge_connectivity_to_master(
     master_cols_to_drop = [
         col
         for col in master.columns
-        if col in ("school_id_govt_connectivity", "school_id_giga_connectivity")
+        if col in ("facility_id_govt_connectivity", "facility_id_giga_connectivity")
     ]
 
     master = master.drop(*master_cols_to_drop)

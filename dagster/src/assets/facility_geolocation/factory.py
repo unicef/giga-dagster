@@ -1,27 +1,18 @@
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
-from dagster import (
-    AssetIn,
-    AssetKey,
-    AssetOut,
-    OpExecutionContext,
-    Output,
-    asset,
-    multi_asset,
-)
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
+from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
     functions as f,
 )
 from pyspark.sql.types import StringType, StructField, StructType
-from sqlalchemy import select
-
-from models.file_upload import FileUpload
+from sqlalchemy import select, update
 from src.data_quality_checks.facility import (
     collapse_facility_dq_flags,
     prepare_facility_bronze,
@@ -44,13 +35,14 @@ from src.facilities import FacilityGeolocationSpec
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
+from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.aggregate_value_maps_for_pdf import aggregate_value_maps_for_pdf
 from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
-from src.utils.delta import create_schema
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import (
     get_output_metadata,
     get_staging_change_type_metadata,
@@ -58,9 +50,24 @@ from src.utils.metadata import (
 )
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import construct_full_table_name
+from src.utils.schema import construct_full_table_name, get_schema_columns
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.spark import normalize_missing_value_strings
+
+from dagster import (
+    AssetIn,
+    AssetKey,
+    AssetOut,
+    OpExecutionContext,
+    Output,
+    asset,
+    multi_asset,
+)
+
+FACILITY_GEOLOCATION_METADATA_TABLE = "facility_geolocation_metadata"
+FACILITY_GEOLOCATION_METADATA_SCHEMA = "pipeline_tables"
+# Column definitions currently live under the school metadata metaschema name.
+FACILITY_GEOLOCATION_METADATA_SCHEMA_SOURCE = "school_geolocation_metadata"
 
 
 def _asset_key(name: str) -> AssetKey:
@@ -89,7 +96,11 @@ def _load_current_facilities(
 
     # Convert canonical core columns back to the facility's ingestion vocabulary.
     for source, canonical in spec.core_aliases:
-        if source != canonical and canonical in core.columns and source not in core.columns:
+        if (
+            source != canonical
+            and canonical in core.columns
+            and source not in core.columns
+        ):
             core = core.withColumn(source, f.col(canonical))
     return core
 
@@ -121,8 +132,9 @@ def _human_readable_rows(
     for map_key, label in mappings.items():
         selected = selected.withColumn(
             label,
-            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No")
-            .when(f.element_at(f.col("dq_results"), map_key) == 0, "Yes"),
+            f.when(f.element_at(f.col("dq_results"), map_key) == 1, "No").when(
+                f.element_at(f.col("dq_results"), map_key) == 0, "Yes"
+            ),
         )
     return selected.drop("dq_results")
 
@@ -169,13 +181,83 @@ def build_facility_geolocation_assets(  # noqa: C901
         ins={"raw_data": AssetIn(key=_asset_key(spec.assets.raw))},
     )
     def facility_metadata(
+        context: OpExecutionContext,
         raw_data: bytes,
         config: FileConfig,
+        spark: PySparkResource,
     ) -> Output[None]:
-        # FileUpload remains the authoritative metadata record. This asset preserves
-        # graph parity without creating another facility-specific metadata table.
         del raw_data
-        _uploaded_columns(config)
+        session: SparkSession = spark.spark_session
+        metadata = config.metadata
+        data_source = metadata.get("data_source")
+        if not (data_source is None or data_source == "giga_sync"):
+            context.log.info(
+                "Data is not from Giga Sync, skipping facility metadata table update"
+            )
+            return Output(None, metadata=get_output_metadata(config))
+
+        file_path = config.filepath
+        file_name = Path(file_path).name
+        giga_sync_id = file_name.split("_")[0]
+        giga_sync_uploaded_at = datetime.strptime(
+            file_name.split(".")[0].split("_")[-1], "%Y%m%d-%H%M%S"
+        )
+        upload_details = {
+            "giga_sync_id": giga_sync_id,
+            "country_code": config.country_code,
+            "giga_sync_uploaded_at": giga_sync_uploaded_at,
+            "schema_name": config.metastore_schema,
+            "raw_file_path": file_path,
+            "file_size_bytes": config.file_size_bytes,
+        }
+        metadata_pdf = pd.concat(
+            [pd.DataFrame([upload_details]), pd.DataFrame([metadata])],
+            axis="columns",
+        )
+        metadata_pdf["created_at"] = pd.Timestamp.now()
+        metadata_df = session.createDataFrame(metadata_pdf)
+
+        try:
+            table_columns = get_schema_columns(
+                session, FACILITY_GEOLOCATION_METADATA_SCHEMA_SOURCE
+            )
+            metadata_df = add_missing_columns(metadata_df, table_columns)
+            metadata_df = metadata_df.select(*StructType(table_columns).fieldNames())
+        except ValueError as exc:
+            # Local / early environments may not have school_geolocation_metadata
+            # registered yet; fall back to the upload metadata frame schema.
+            context.log.warning(
+                "Metadata schema %s unavailable (%s); using upload frame schema",
+                FACILITY_GEOLOCATION_METADATA_SCHEMA_SOURCE,
+                exc,
+            )
+            table_columns = list(metadata_df.schema)
+
+        create_schema(session, FACILITY_GEOLOCATION_METADATA_SCHEMA)
+        create_delta_table(
+            session,
+            FACILITY_GEOLOCATION_METADATA_SCHEMA,
+            FACILITY_GEOLOCATION_METADATA_TABLE,
+            table_columns,
+            context,
+            if_not_exists=True,
+        )
+        full_table_name = construct_full_table_name(
+            FACILITY_GEOLOCATION_METADATA_SCHEMA,
+            FACILITY_GEOLOCATION_METADATA_TABLE,
+        )
+        session.catalog.refreshTable(full_table_name)
+        current_metadata_table = DeltaTable.forName(session, full_table_name)
+        (
+            current_metadata_table.alias("metadata_current")
+            .merge(
+                metadata_df.alias("metadata_updates"),
+                "metadata_current.giga_sync_id = metadata_updates.giga_sync_id",
+            )
+            .whenMatchedUpdateAll()
+            .whenNotMatchedInsertAll()
+            .execute()
+        )
         return Output(None, metadata=get_output_metadata(config))
 
     @asset(
@@ -193,9 +275,7 @@ def build_facility_geolocation_assets(  # noqa: C901
         session = spark.spark_session
         with get_db_context() as db:
             file_upload = db.scalar(
-                select(FileUpload).where(
-                    FileUpload.id == config.filename_components.id
-                )
+                select(FileUpload).where(FileUpload.id == config.filename_components.id)
             )
             if file_upload is None:
                 raise FileNotFoundError(
@@ -223,6 +303,7 @@ def build_facility_geolocation_assets(  # noqa: C901
             dataframe = dataframe.withColumn(
                 spec.country_column, f.lit(config.country_code)
             )
+        uploaded_columns = list(dataframe.columns)
         current = _load_current_facilities(
             session,
             spec,
@@ -235,6 +316,9 @@ def build_facility_geolocation_assets(  # noqa: C901
             spec,
             config.country_code,
             context,
+            uploaded_columns=uploaded_columns,
+            source=upload.source,
+            spark=session,
         ).cache()
         return Output(
             dataframe,
@@ -388,7 +472,9 @@ def build_facility_geolocation_assets(  # noqa: C901
             bronze,
             is_new_column="is_new_facility",
             entity_plural="facilities",
-            govt_id_column=spec.govt_id_column,
+            entity_singular="facility",
+            # DQ columns are renamed to facility_* before summary aggregation.
+            govt_id_column="facility_id_govt",
             dq_config_table=spec.dq_config_table,
         )
         value_maps = aggregate_value_maps_for_pdf(
@@ -397,6 +483,27 @@ def build_facility_geolocation_assets(  # noqa: C901
         )
         if value_maps:
             summary["valueMaps"] = value_maps
+
+        # Persist row counts to the Ingestion Portal DB (same as school summary).
+        # Don't fail the asset if this write fails.
+        portal_summary = (summary or {}).get("summary", {})
+        try:
+            with get_db_context() as db:
+                db.execute(
+                    update(FileUpload)
+                    .where(FileUpload.id == config.filename_components.id)
+                    .values(
+                        {
+                            FileUpload.rows: portal_summary.get("rows"),
+                            FileUpload.rows_passed: portal_summary.get("rows_passed"),
+                            FileUpload.rows_failed: portal_summary.get("rows_failed"),
+                        }
+                    ),
+                )
+                db.commit()
+        except Exception as e:
+            context.log.error(f"Failed to persist row counts to portal DB: {e}")
+
         await send_email_dq_report_with_config(
             dq_results=summary,
             config=config,
@@ -557,9 +664,7 @@ def build_facility_geolocation_assets(  # noqa: C901
 
         with get_db_context() as db:
             file_upload = db.scalar(
-                select(FileUpload).where(
-                    FileUpload.id == config.filename_components.id
-                )
+                select(FileUpload).where(FileUpload.id == config.filename_components.id)
             )
             if file_upload is None:
                 raise FileNotFoundError(

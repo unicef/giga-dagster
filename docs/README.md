@@ -17,6 +17,8 @@ distributed compute.
 3. [Development](development.md)
 4. [Deployment](deployment.md)
 5. [Support](support.md)
+6. [Facility geolocation contracts](facility-geolocation-contracts.md)
+7. [Facility cutover: school_master and connectivity](facility-cutover-school-master-and-connectivity.md)
 
 ## Jump to other platform services
 

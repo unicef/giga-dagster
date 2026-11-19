@@ -7,20 +7,6 @@ from src.hooks.school_master import (
 )
 from src.settings import settings
 
-school_master_geolocation__automated_data_checks_job = define_asset_job(
-    name="school_master_geolocation__automated_data_checks_job",
-    selection=["geolocation_raw*"],
-    hooks={
-        school_dq_checks_location_db_update_hook,
-        school_dq_overall_location_db_update_hook,
-        school_ingest_error_db_update_hook,
-    },
-    tags={
-        "dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME,
-        "giga/concurrency_group": "spark_heavy",
-    },
-)
-
 school_master_coverage__automated_data_checks_job = define_asset_job(
     name="school_master_coverage__automated_data_checks_job",
     selection=["coverage_raw*"],
@@ -36,16 +22,6 @@ school_master_coverage__automated_data_checks_job = define_asset_job(
 )
 
 
-school_master_geolocation__post_manual_checks_job = define_asset_job(
-    name="school_master_geolocation__post_manual_checks_job",
-    selection=AssetSelection.groups(COMMON_GROUP_NAME),
-    tags={
-        "dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME,
-        "giga/concurrency_group": "spark_heavy",
-    },
-)
-
-
 school_master_coverage__post_manual_checks_job = define_asset_job(
     name="school_master_coverage__post_manual_checks_job",
     selection=AssetSelection.groups(COMMON_GROUP_NAME),
@@ -53,10 +29,4 @@ school_master_coverage__post_manual_checks_job = define_asset_job(
         "dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME,
         "giga/concurrency_group": "spark_heavy",
     },
-)
-
-school_master_geolocation__admin_delete_rows_job = define_asset_job(
-    name="school_master_geolocation__admin_delete_rows_job",
-    selection="geolocation_delete_staging",
-    tags={"dagster/max_runtime": settings.DEFAULT_MAX_RUNTIME},
 )

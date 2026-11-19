@@ -6,8 +6,6 @@ from datetime import date, datetime
 import numpy as np
 import pandas as pd
 from dagster_pyspark import PySparkResource
-from google.cloud import bigquery
-from google.oauth2 import service_account
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.sql.types import (
@@ -96,7 +94,10 @@ TABLE_SCHEMA: list[StructField] = [
 ]
 
 
-def _get_bigquery_client() -> bigquery.Client:
+def _get_bigquery_client():
+    from google.cloud import bigquery
+    from google.oauth2 import service_account
+
     key_json = base64.b64decode(settings.MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
     credentials_info = json.loads(key_json)
     credentials = service_account.Credentials.from_service_account_info(
@@ -113,7 +114,9 @@ def _build_query() -> str:
     )
 
 
-def _fetch_day(client: bigquery.Client, day: date, log) -> pd.DataFrame:
+def _fetch_day(client, day: date, log) -> pd.DataFrame:
+    from google.cloud import bigquery
+
     job_config = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("day", "DATE", day)]
     )
