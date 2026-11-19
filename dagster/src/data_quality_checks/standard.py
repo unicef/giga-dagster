@@ -123,7 +123,7 @@ def domain_checks(
             .when(
                 f.lower(f.col(column)).isin(
                     [
-                        domain_value.lower()
+                        str(domain_value).lower()
                         for domain_value in config_column_list[column]
                     ],
                 ),

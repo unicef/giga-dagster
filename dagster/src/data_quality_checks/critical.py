@@ -98,7 +98,9 @@ def _build_other_dataset_exprs(
     ]
 
     if dataset_type in ["reference", "coverage", "coverage_fb", "coverage_itu"]:
-        critical_column_dq_checks.append("dq_duplicate-school_id_giga")
+        critical_column_dq_checks.extend(
+            ["dq_duplicate-school_id_giga", "dq_school_not_in_school_master"]
+        )
     elif dataset_type == "qos":
         critical_column_dq_checks.extend(["dq_duplicate-school_id_giga"])
 
