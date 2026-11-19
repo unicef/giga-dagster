@@ -386,7 +386,7 @@ def build_facility_geolocation_assets(  # noqa: C901
         report_aliases = {
             "school_id_govt": spec.govt_id_column,
             "school_name": spec.name_column,
-            "education_level_govt": spec.level_column,
+            "education_level_govt": "facility_level_govt",
         }
         for internal, external in report_aliases.items():
             if internal != external and internal in report.columns:
@@ -634,6 +634,13 @@ def build_facility_geolocation_assets(  # noqa: C901
 
         frame = normalize_dq_results_map(dq_results)
         frame = build_dq_warning_columns(frame, spec.dq_config_table)
+        # Map generator still expects latitude/longitude column names.
+        for public_col, map_col in (
+            ("geo_latitude", "latitude"),
+            ("geo_longitude", "longitude"),
+        ):
+            if public_col in frame.columns and map_col not in frame.columns:
+                frame = frame.withColumn(map_col, f.col(public_col))
         passed = frame.filter(f.col("dq_has_critical_error") == 0).toPandas()
         failed = frame.filter(f.col("dq_has_critical_error") == 1).toPandas()
         html = generate_school_map_html(

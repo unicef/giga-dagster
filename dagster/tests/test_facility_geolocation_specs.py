@@ -24,6 +24,13 @@ def test_school_spec_preserves_existing_runtime_contracts():
     )
     assert SCHOOL_SPEC.dq_config_table == "SchoolGeolocationMasterDQChecks"
     assert SCHOOL_SPEC.approval_label == "School Geolocation"
+    assert SCHOOL_SPEC.govt_id_column == "facility_id_govt"
+    assert SCHOOL_SPEC.giga_id_column == "facility_id_giga"
+    assert SCHOOL_SPEC.name_column == "facility_name"
+    assert SCHOOL_SPEC.level_column == "facility_level"
+    assert {"geo_latitude", "geo_longitude"}.issubset(SCHOOL_SPEC.columns.core)
+    assert "computer_lab_availability" in SCHOOL_SPEC.columns.extension
+    assert "students_num" in SCHOOL_SPEC.columns.extension
 
 
 def test_health_spec_uses_shared_core_and_health_extension():
@@ -34,6 +41,10 @@ def test_health_spec_uses_shared_core_and_health_extension():
     assert HEALTH_SPEC.paths.upload_directory == "facility-geolocation"
     assert HEALTH_SPEC.paths.schema_keys == ("health_facilities",)
     assert set(HEALTH_SPEC.columns.core).isdisjoint(HEALTH_SPEC.columns.extension)
+    assert {"geo_latitude", "geo_longitude"}.issubset(HEALTH_SPEC.columns.core)
+    assert "facility_health_type_govt" in HEALTH_SPEC.columns.extension
+    assert "outpatients_avg" in HEALTH_SPEC.columns.extension
+    assert "bed_count" not in HEALTH_SPEC.columns.extension
 
 
 def test_facility_id_is_stable_namespaced_and_requires_identity():

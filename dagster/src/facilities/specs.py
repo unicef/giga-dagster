@@ -2,9 +2,16 @@ from dataclasses import dataclass, field
 
 FACILITY_ID_COLUMN = "facility_id_giga"
 
-SHARED_GEOSPATIAL_COLUMNS = (
-    "latitude",
-    "longitude",
+# Upload/govt geospatial fields from the shared facilities core schema.
+SHARED_GEO_UPLOAD_COLUMNS = (
+    "geo_latitude",
+    "geo_longitude",
+    "geo_admin1_govt",
+    "geo_admin2_govt",
+)
+
+# Pipeline-derived geospatial enrichments stored on facility_core.
+SHARED_GEO_DERIVED_COLUMNS = (
     "admin1",
     "admin1_id_giga",
     "admin2",
@@ -15,6 +22,8 @@ SHARED_GEOSPATIAL_COLUMNS = (
     "admin4_id_giga",
     "disputed_region",
 )
+
+SHARED_GEOSPATIAL_COLUMNS = SHARED_GEO_UPLOAD_COLUMNS + SHARED_GEO_DERIVED_COLUMNS
 
 
 def _validate_name(value: str, field_name: str) -> None:
@@ -174,8 +183,8 @@ class FacilityGeolocationSpec:
             self.name_column,
             self.level_column,
             self.country_column,
-            "latitude",
-            "longitude",
+            "geo_latitude",
+            "geo_longitude",
         }
         missing = required_core.difference(self.columns.core)
         if missing:
@@ -206,45 +215,103 @@ class FacilityGeolocationSpec:
 
 
 COMMON_CORE_COLUMNS = (
-    "school_id_giga",
-    "school_id_govt",
-    "school_name",
-    "education_level",
+    # Pipeline-owned identity / classification
+    "facility_id_giga",
+    "facility_level",
     "country_code",
+    # Shared upload profile
+    "facility_id_govt",
+    "facility_id_type_govt",
+    "facility_id_building_govt",
+    "facility_name",
+    "facility_level_govt",
+    "facility_ownership_type",
+    "facility_area_type_govt",
+    "facility_is_open",
+    "facility_establishment_year",
+    "facility_address",
+    "facility_data_source",
     *SHARED_GEOSPATIAL_COLUMNS,
+    # Connectivity and electricity
+    "connectivity_govt",
+    "connectivity_type_govt",
+    "connectivity_down_speed_contracted",
+    "connectivity_data_cap_contracted",
+    "connectivity_cost_contracted",
+    "connectivity_cost_contracted_ccy",
+    "connectivity_provider",
+    "connectivity_project",
+    "electricity_availability",
+    "electricity_type_govt",
+    "electricity_reliability",
+    "electricity_backup_system",
+    # Buildings & amenities
+    "facility_rooms_num",
+    "facility_area_sqm",
+    "facility_water_availability",
+    # ICT / devices
+    "device_availability",
+    "device_computers_availability",
+    "device_computers_num",
+    "device_tablets_availability",
+    "device_tablets_num",
+    # People
+    "staff_professional_num",
+    "staff_professional_female_num",
+    "staff_professional_male_num",
+    "staff_professional_other_num",
+    "staff_administrative_num",
+    "staff_administrative_female_num",
+    "staff_administrative_male_num",
+    "staff_administrative_other_num",
+    "refugee_camp",
+    "refugee_population",
 )
 
 SCHOOL_EXTENSION_COLUMNS = (
-    "school_id_govt_type",
-    "school_establishment_year",
-    "school_area_type",
-    "school_funding_type",
-    "school_address",
-    "is_school_open",
-    "num_computers",
-    "num_computers_desired",
-    "num_teachers",
-    "num_adm_personnel",
-    "num_students",
-    "num_classrooms",
-    "num_latrines",
-    "computer_lab",
-    "electricity_availability",
-    "electricity_type",
-    "water_availability",
-    "school_data_source",
-    "school_data_collection_year",
-    "school_data_collection_modality",
+    "computer_lab_availability",
+    "students_num",
+    "students_female_num",
+    "students_male_num",
+    "students_other_num",
+)
+
+_SHARED_DQ_DOMAINS = (
+    ("connectivity_govt", ("yes", "no")),
+    (
+        "facility_level",
+        (
+            "Pre-Primary",
+            "Primary",
+            "Secondary",
+            "Post-Secondary",
+            "Pre-Primary and Primary",
+            "Primary and Secondary",
+            "Pre-Primary, Primary and Secondary",
+            "Primary, Secondary and Post-Secondary",
+        ),
+    ),
+    ("electricity_availability", ("yes", "no")),
+    ("facility_water_availability", ("yes", "no")),
+    ("facility_area_type_govt", ("urban", "rural")),
+    ("facility_is_open", ("yes", "no")),
+)
+
+_SHARED_DQ_RANGES = (
+    ("geo_latitude", -90, 90),
+    ("geo_longitude", -180, 180),
+    ("facility_establishment_year", 1000, 9999),
+    ("connectivity_down_speed_contracted", 1, 500),
 )
 
 SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
     facility_type="school",
     domain="school",
     dataset_type="geolocation",
-    govt_id_column="school_id_govt",
-    giga_id_column="school_id_giga",
-    name_column="school_name",
-    level_column="education_level",
+    govt_id_column="facility_id_govt",
+    giga_id_column="facility_id_giga",
+    name_column="facility_name",
+    level_column="facility_level",
     country_column="country_code",
     columns=FacilityColumnOwnership(
         core=COMMON_CORE_COLUMNS,
@@ -288,30 +355,41 @@ SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
     group_name="school_geolocation_data",
     enable_connectivity=True,
     enable_registration_updates=True,
-)
-
-HEALTH_CORE_COLUMNS = (
-    "facility_id_giga",
-    "facility_id_govt",
-    "facility_name",
-    "facility_level",
-    "country_code",
-    *SHARED_GEOSPATIAL_COLUMNS,
+    dq_domains=_SHARED_DQ_DOMAINS
+    + (
+        ("computer_lab_availability", ("yes", "no")),
+        ("device_availability", ("yes", "no")),
+        ("device_computers_availability", ("yes", "no")),
+        (
+            "facility_ownership_type",
+            ("public", "private", "charitable", "others"),
+        ),
+    ),
+    dq_ranges=_SHARED_DQ_RANGES
+    + (
+        ("device_computers_num", 0, 500),
+        ("device_tablets_num", 0, 500),
+        ("students_num", 0, 10_000),
+        ("facility_rooms_num", 0, 2_000),
+        ("facility_area_sqm", 0, 1_000_000),
+    ),
 )
 
 HEALTH_EXTENSION_COLUMNS = (
-    "facility_type_govt",
-    "ownership",
-    "operator",
-    "address",
-    "is_operational",
-    "bed_count",
-    "staff_count",
-    "services",
-    "electricity_availability",
-    "water_availability",
-    "facility_data_source",
-    "facility_data_collection_year",
+    "facility_id_2_govt",
+    "facility_id_2_type_govt",
+    "facility_health_type_govt",
+    "facility_health_care_type",
+    "facility_health_service_type",
+    "system_hmis",
+    "system_hmis_used",
+    "system_emr",
+    "system_emr_used",
+    "outpatients_avg",
+    "outpatients_ref_period",
+    "inpatients_avg",
+    "inpatients_ref_period",
+    "pop_catchment_govt",
 )
 
 HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
@@ -324,7 +402,7 @@ HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
     level_column="facility_level",
     country_column="country_code",
     columns=FacilityColumnOwnership(
-        core=HEALTH_CORE_COLUMNS,
+        core=COMMON_CORE_COLUMNS,
         extension=HEALTH_EXTENSION_COLUMNS,
     ),
     tables=FacilityTableNames(
@@ -363,16 +441,16 @@ HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
     approval_label="Health Facility Geolocation",
     group_name="health_facility_geolocation_data",
     metastore_schema_name="health_facility_geolocation",
-    dq_domains=(
-        ("electricity_availability", ("yes", "no")),
-        ("water_availability", ("yes", "no")),
+    dq_domains=_SHARED_DQ_DOMAINS
+    + (
+        ("system_hmis", ("yes", "no")),
+        ("system_emr", ("yes", "no")),
     ),
-    dq_ranges=(
-        ("latitude", -90, 90),
-        ("longitude", -180, 180),
-        ("bed_count", 0, 1_000_000),
-        ("staff_count", 0, 1_000_000),
-        ("facility_data_collection_year", 1000, 9999),
+    dq_ranges=_SHARED_DQ_RANGES
+    + (
+        ("outpatients_avg", 0, 1_000_000),
+        ("inpatients_avg", 0, 1_000_000),
+        ("pop_catchment_govt", 0, 10_000_000),
     ),
 )
 

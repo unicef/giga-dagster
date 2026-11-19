@@ -90,8 +90,8 @@ def test_prepare_facility_bronze_sets_connectivity_govt_timestamp(monkeypatch):
             T.StructField("facility_name", T.StringType(), True),
             T.StructField("facility_level", T.StringType(), True),
             T.StructField("country_code", T.StringType(), True),
-            T.StructField("latitude", T.StringType(), True),
-            T.StructField("longitude", T.StringType(), True),
+            T.StructField("geo_latitude", T.StringType(), True),
+            T.StructField("geo_longitude", T.StringType(), True),
             T.StructField("connectivity_govt", T.StringType(), True),
         ]
     )
@@ -166,12 +166,12 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
     school_df = spark.createDataFrame(
         [
             Row(
-                school_id_govt="S1",
-                school_name="School",
-                education_level="Primary",
+                facility_id_govt="S1",
+                facility_name="School",
+                facility_level="Primary",
                 country_code="UGA",
-                latitude="0.1",
-                longitude="32.1",
+                geo_latitude="0.1",
+                geo_longitude="32.1",
             )
         ]
     )
@@ -195,8 +195,8 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
                 facility_name="Clinic",
                 facility_level="Primary",
                 country_code="UGA",
-                latitude="0.1",
-                longitude="32.1",
+                geo_latitude="0.1",
+                geo_longitude="32.1",
             )
         ]
     )

@@ -46,19 +46,22 @@ _CHECK_ALIASES = {
 def _column_replacements(
     _spec: FacilityGeolocationSpec,
 ) -> tuple[tuple[str, str], ...]:
-    """Map check-engine school names to canonical facility_* report names.
+    """Map check-engine school names to canonical facility_*/geo_* report names.
 
-    Always target facility_* aliases (not type-specific upload columns) so DQ
-    summaries and the PDF renderer share one contract for every facility_type.
+    Always target the public schema names so DQ summaries and the PDF renderer
+    share one contract for every facility_type. Longer keys are listed first so
+    substring replacements (e.g. education_level_govt) win over shorter ones.
     """
     return (
-        ("education_level_govt", "facility_level"),
+        ("education_level_govt", "facility_level_govt"),
+        ("education_level", "facility_level"),
         ("school_id_govt", "facility_id_govt"),
         ("school_id_giga", "facility_id_giga"),
         ("school_name", "facility_name"),
-        ("education_level", "facility_level"),
         ("school_density", "facility_density"),
         ("school_code", "facility_code"),
+        ("latitude", "geo_latitude"),
+        ("longitude", "geo_longitude"),
     )
 
 
@@ -70,8 +73,17 @@ def _dq_column_aliases(spec: FacilityGeolocationSpec) -> dict[str, str]:
         "dq_is_null_optional-school_name",
         "dq_is_null_optional-education_level",
         "dq_is_null_optional-education_level_govt",
+        "dq_is_null_optional-latitude",
+        "dq_is_null_optional-longitude",
         "dq_is_not_alphanumeric-school_name",
         "dq_is_not_alphanumeric-education_level",
+        "dq_is_not_alphanumeric-education_level_govt",
+        "dq_precision-latitude",
+        "dq_precision-longitude",
+        "dq_is_invalid_range-latitude",
+        "dq_is_invalid_range-longitude",
+        "dq_is_not_numeric-latitude",
+        "dq_is_not_numeric-longitude",
         ("dq_duplicate_set-school_id_govt_school_name_" "education_level_location_id"),
         "dq_duplicate_set-school_name_education_level_location_id",
         "dq_duplicate_set-education_level_location_id",
@@ -114,27 +126,128 @@ def _rename_facility_dq_columns(
     return df
 
 
+_GEO_CHECK_ALIASES = (
+    ("geo_latitude", "latitude"),
+    ("geo_longitude", "longitude"),
+)
+
+
+def _require_alias_column(
+    df: sql.DataFrame,
+    source_column: str,
+    alias_column: str,
+) -> tuple[sql.DataFrame, str | None]:
+    """Copy ``source_column`` to ``alias_column`` when the alias is absent."""
+    if alias_column in df.columns:
+        return df, None
+    if source_column not in df.columns:
+        raise ValueError(
+            f"Facility data is missing `{source_column}` required for `{alias_column}`"
+        )
+    return df.withColumn(alias_column, f.col(source_column)), alias_column
+
+
+def _add_identity_check_aliases(
+    df: sql.DataFrame,
+    spec: FacilityGeolocationSpec,
+) -> tuple[sql.DataFrame, list[str]]:
+    added: list[str] = []
+    for spec_attribute, check_column in _CHECK_ALIASES.items():
+        source_column = getattr(spec, spec_attribute)
+        if source_column == check_column:
+            continue
+        df, alias = _require_alias_column(df, source_column, check_column)
+        if alias:
+            added.append(alias)
+    return df, added
+
+
+def _add_geo_check_aliases(df: sql.DataFrame) -> tuple[sql.DataFrame, list[str]]:
+    """Coordinate checks still hardcode latitude/longitude."""
+    added: list[str] = []
+    for public_col, check_col in _GEO_CHECK_ALIASES:
+        df, alias = _require_alias_column(df, public_col, check_col)
+        if alias:
+            added.append(alias)
+    return df, added
+
+
+def _add_level_govt_check_alias(
+    df: sql.DataFrame,
+    spec: FacilityGeolocationSpec,
+) -> tuple[sql.DataFrame, list[str]]:
+    """Level-govt checks still hardcode education_level_govt."""
+    if "education_level_govt" in df.columns:
+        return df, []
+    if "facility_level_govt" in df.columns:
+        source = "facility_level_govt"
+    elif spec.level_column in df.columns:
+        source = spec.level_column
+    else:
+        raise ValueError(
+            "Facility data is missing `facility_level_govt` required for "
+            "`education_level_govt`"
+        )
+    df, alias = _require_alias_column(df, source, "education_level_govt")
+    return df, [alias] if alias else []
+
+
 def add_check_compatibility_columns(
     df: sql.DataFrame,
     spec: FacilityGeolocationSpec,
 ) -> tuple[sql.DataFrame, tuple[str, ...]]:
     """Add temporary historical aliases required by the geolocation check engine."""
-    added = []
-    for spec_attribute, check_column in _CHECK_ALIASES.items():
-        source_column = getattr(spec, spec_attribute)
-        if source_column == check_column:
-            continue
-        if source_column not in df.columns:
+    df, identity_aliases = _add_identity_check_aliases(df, spec)
+    df, geo_aliases = _add_geo_check_aliases(df)
+    df, level_aliases = _add_level_govt_check_alias(df, spec)
+    return df, tuple(identity_aliases + geo_aliases + level_aliases)
+
+
+def _enrich_admin_from_geo(df: sql.DataFrame, country_code: str) -> sql.DataFrame:
+    """Alias geo_* → lat/lon for admin enrichment, then drop the temporary aliases."""
+    added: list[str] = []
+    for public_col, check_col in _GEO_CHECK_ALIASES:
+        if check_col not in df.columns and public_col in df.columns:
+            df = df.withColumn(check_col, f.col(public_col))
+            added.append(check_col)
+    if {"latitude", "longitude"}.issubset(df.columns):
+        for admin_level in ("admin1", "admin2", "admin3", "admin4"):
+            df = add_admin_columns(df, country_code, admin_level)
+        df = add_disputed_region_column(df)
+    for check_col in added:
+        if check_col in df.columns:
+            df = df.drop(check_col)
+    return df
+
+
+def _maybe_merge_connectivity_rt(
+    df: sql.DataFrame,
+    spec: FacilityGeolocationSpec,
+    country_code: str,
+    uploaded_columns: list[str],
+    spark: SparkSession | None,
+) -> sql.DataFrame:
+    if not (
+        spec.enable_connectivity
+        and settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL
+        and spark is not None
+    ):
+        return df
+
+    added_facility_id_govt = False
+    if "facility_id_govt" not in df.columns:
+        if spec.govt_id_column not in df.columns:
             raise ValueError(
-                f"Facility data is missing `{source_column}` required for `{check_column}`"
+                f"Facility data is missing `{spec.govt_id_column}` required "
+                "for connectivity RT merge"
             )
-        if check_column not in df.columns:
-            df = df.withColumn(check_column, f.col(source_column))
-            added.append(check_column)
-    if "education_level_govt" not in df.columns:
-        df = df.withColumn("education_level_govt", f.col(spec.level_column))
-        added.append("education_level_govt")
-    return df, tuple(added)
+        df = df.withColumn("facility_id_govt", f.col(spec.govt_id_column))
+        added_facility_id_govt = True
+    connectivity = get_country_rt_schools(spark, country_code)
+    df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
+    if added_facility_id_govt and "facility_id_govt" in df.columns:
+        df = df.drop("facility_id_govt")
+    return df
 
 
 def prepare_facility_bronze(
@@ -185,11 +298,7 @@ def prepare_facility_bronze(
         country_column=spec.country_column,
         govt_id_column=spec.govt_id_column,
     )
-
-    if {"latitude", "longitude"}.issubset(df.columns):
-        for admin_level in ("admin1", "admin2", "admin3", "admin4"):
-            df = add_admin_columns(df, country_code, admin_level)
-        df = add_disputed_region_column(df)
+    df = _enrich_admin_from_geo(df, country_code)
 
     if "connectivity_govt" in uploaded_columns:
         df = df.withColumn(
@@ -199,24 +308,7 @@ def prepare_facility_bronze(
             ).otherwise(f.lit(None).cast(TimestampType())),
         )
 
-    if (
-        spec.enable_connectivity
-        and settings.DEPLOY_ENV != DeploymentEnvironment.LOCAL
-        and spark is not None
-    ):
-        added_facility_id_govt = False
-        if "facility_id_govt" not in df.columns:
-            if spec.govt_id_column not in df.columns:
-                raise ValueError(
-                    f"Facility data is missing `{spec.govt_id_column}` required "
-                    "for connectivity RT merge"
-                )
-            df = df.withColumn("facility_id_govt", f.col(spec.govt_id_column))
-            added_facility_id_govt = True
-        connectivity = get_country_rt_schools(spark, country_code)
-        df = merge_connectivity_to_master(df, connectivity, uploaded_columns)
-        if added_facility_id_govt and "facility_id_govt" in df.columns:
-            df = df.drop("facility_id_govt")
+    df = _maybe_merge_connectivity_rt(df, spec, country_code, uploaded_columns, spark)
 
     if (
         spec.enable_registration_updates

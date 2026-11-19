@@ -1,6 +1,5 @@
 import pytest
 from pyspark.sql import SparkSession
-
 from src.constants import StagingChangeType
 from src.facilities import (
     HEALTH_SPEC,
@@ -22,7 +21,7 @@ def spark():
     session.stop()
 
 
-def _approved(spark, *, change_type, name="Clinic A", bed_count="10"):
+def _approved(spark, *, change_type, name="Clinic A", outpatients_avg="10"):
     return spark.createDataFrame(
         [
             {
@@ -31,9 +30,9 @@ def _approved(spark, *, change_type, name="Clinic A", bed_count="10"):
                 "facility_name": name,
                 "facility_level": "primary",
                 "country_code": "UGA",
-                "latitude": "0.31",
-                "longitude": "32.58",
-                "bed_count": bed_count,
+                "geo_latitude": "0.31",
+                "geo_longitude": "32.58",
+                "outpatients_avg": outpatients_avg,
                 "change_type": str(change_type),
             }
         ]
@@ -52,8 +51,8 @@ def test_split_projects_shared_and_specialized_columns(spark):
     assert core["facility_id_giga"] == extension["facility_id_giga"] == "facility-1"
     assert core["facility_type"] == "health"
     assert core["facility_name"] == "Clinic A"
-    assert "bed_count" not in core
-    assert extension["bed_count"] == "10"
+    assert "outpatients_avg" not in core
+    assert extension["outpatients_avg"] == "10"
     assert core["core_signature"]
     assert extension["extension_signature"]
 
@@ -72,7 +71,7 @@ def test_dual_table_merge_handles_insert_update_and_delete(spark):
     )
     validate_facility_frames(inserted.core, inserted.extension, HEALTH_SPEC)
     assert inserted.core.first()["facility_name"] == "Clinic A"
-    assert inserted.extension.first()["bed_count"] == "10"
+    assert inserted.extension.first()["outpatients_avg"] == "10"
 
     updated = merge_approved_facilities(
         inserted.core,
@@ -81,13 +80,13 @@ def test_dual_table_merge_handles_insert_update_and_delete(spark):
             spark,
             change_type=StagingChangeType.UPDATE,
             name="Clinic B",
-            bed_count="20",
+            outpatients_avg="20",
         ),
         HEALTH_SPEC,
     )
     validate_facility_frames(updated.core, updated.extension, HEALTH_SPEC)
     assert updated.core.first()["facility_name"] == "Clinic B"
-    assert updated.extension.first()["bed_count"] == "20"
+    assert updated.extension.first()["outpatients_avg"] == "20"
 
     deleted = merge_approved_facilities(
         updated.core,
