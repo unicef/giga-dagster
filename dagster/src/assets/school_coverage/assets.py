@@ -119,11 +119,21 @@ def coverage_data_quality_results(
     )
     columns = get_schema_columns(s, f"coverage_{source}")
     df = add_missing_columns(df, columns)
+    geolocation_silver_table = construct_full_table_name(
+        construct_schema_name_for_tier("school_geolocation", DataTier.SILVER),
+        country_code,
+    )
+    geolocation_silver = None
+    if s.catalog.tableExists(geolocation_silver_table):
+        s.catalog.refreshTable(geolocation_silver_table)
+        geolocation_silver = DeltaTable.forName(s, geolocation_silver_table).toDF()
+
     dq_results = row_level_checks(
         df=df,
         dataset_type=dataset_type,
         _country_code_iso3=country_code,
         context=context,
+        silver=geolocation_silver,
     )
 
     config.metadata.update({"column_mapping": column_mapping})

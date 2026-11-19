@@ -191,6 +191,7 @@ def human_readable_coverage_coverage_itu_checks() -> dict[str, str]:
 
     critical_error_checks_desc = {
         "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
+        "dq_school_not_in_school_master": "Does the school exist in school master",
     }
 
     for column in CONFIG_NONEMPTY_COLUMNS_COVERAGE_AND_COVERAGE_ITU:
@@ -215,6 +216,7 @@ def human_readable_coverage_fb_checks() -> dict[str, str]:
 
     critical_error_checks_desc = {
         "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
+        "dq_school_not_in_school_master": "Does the school exist in school master",
     }
 
     for column in config_expectations_instance.NONEMPTY_COLUMNS_COVERAGE_FB:
@@ -309,6 +311,7 @@ def handle_rename_dq_has_critical_error_column(
         "dq_is_null_optional-latitude": "latitude is missing",
         "dq_is_null_optional-longitude": "longitude is missing",
         "dq_is_not_within_country": "location is not within the country",
+        "dq_school_not_in_school_master": "school does not exist in school master",
     }
     full_human_readable_mapping = {
         **human_readeable_non_empty_columns,
