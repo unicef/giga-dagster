@@ -12,25 +12,28 @@ from src.utils.nocodb.get_nocodb_data import (
 )
 
 
+def get_critical_check_columns() -> tuple[list[str], list[str]]:
+    """("always", "create_only") critical checks from NocoDB "Critical For", as
+    "DQ Table Column Name" values (dq_-prefixed). create_only checks are critical
+    for new schools only."""
+    noco_table_id = get_nocodb_table_id_from_name(
+        table_name="SchoolGeolocationMasterDQChecks"
+    )
+    noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
+    critical_for = noco_table["Critical For"]
+    column_names = noco_table["DQ Table Column Name"]
+    return (
+        column_names[critical_for == "always"].tolist(),
+        column_names[critical_for == "create_only"].tolist(),
+    )
+
+
 def _build_geolocation_critical_exprs(
     df: sql.DataFrame,
     full_human_readable_mapping: dict,
 ) -> tuple[list, list]:
     """Build critical error expressions for geolocation/master datasets from NocoDB config."""
-    noco_table_id = get_nocodb_table_id_from_name(
-        table_name="SchoolGeolocationMasterDQChecks"
-    )
-    noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
-
-    critical_rows = noco_table[
-        noco_table["Critical For"].isin(["always", "create_only"])
-    ]
-    always_checks = critical_rows[critical_rows["Critical For"] == "always"][
-        "DQ Table Column Name"
-    ].tolist()
-    create_only_checks = critical_rows[critical_rows["Critical For"] == "create_only"][
-        "DQ Table Column Name"
-    ].tolist()
+    always_checks, create_only_checks = get_critical_check_columns()
 
     critical_exprs = []
     failure_exprs = []
@@ -132,14 +135,8 @@ def critical_error_checks(
             df, full_human_readable_mapping
         )
         if dataset_type == "master":
-            noco_table_id = get_nocodb_table_id_from_name(
-                table_name="SchoolGeolocationMasterDQChecks"
-            )
-            noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
-            critical_rows = noco_table[
-                noco_table["Critical For"].isin(["always", "create_only"])
-            ]
-            covered = critical_rows["DQ Table Column Name"].tolist()
+            always_checks, create_only_checks = get_critical_check_columns()
+            covered = always_checks + create_only_checks
             loc_exprs, loc_fail = _build_master_location_exprs(
                 df, full_human_readable_mapping, covered
             )

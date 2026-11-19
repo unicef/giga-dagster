@@ -1,5 +1,7 @@
+import operator
 import re
 from datetime import UTC, datetime
+from functools import reduce
 from typing import Any, Optional
 
 import pandas as pd
@@ -22,7 +24,10 @@ from src.data_quality_checks.coverage import (
     fb_percent_sum_to_100_check,
     school_exists_in_master_check,
 )
-from src.data_quality_checks.critical import critical_error_checks
+from src.data_quality_checks.critical import (
+    critical_error_checks,
+    get_critical_check_columns,
+)
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
@@ -73,6 +78,16 @@ METADATA_CHECK_KEYS = frozenset(
 )
 
 CRITICAL_CHECK_TYPE = "critical_checks"
+
+# dq_results keys without the "<assertion>-<column>" shape. Shared by the dq_summary
+# sections (aggregate_report_spark_df) and column_pass_summary so both read keys
+# the same way.
+# Checks on the coordinates as a pair, not on one column.
+COORDINATE_PAIR_CHECK_KEYS = frozenset(
+    {"is_in_uninhabited_area", "is_suspect_location", "duplicate_group_flag_50m"}
+)
+# Prefix of the exact-location duplicate keys, also used as their assertion.
+LOCATION_DUPLICATE_ASSERTION = "duplicate_location_rows"
 
 
 def normalize_check_category(value: object) -> str:
@@ -190,10 +205,8 @@ def aggregate_report_spark_df(
 
     # Processing for Human Readable Report
     # Most check keys are "<assertion>-<column>"; hyphen-less checks get explicit values.
-    is_location_rows_check = f.col("check_key").startswith("duplicate_location_rows")
-    is_geospatial_check = f.col("check_key").isin(
-        "is_in_uninhabited_area", "is_suspect_location", "duplicate_group_flag_50m"
-    )
+    is_location_rows_check = f.col("check_key").startswith(LOCATION_DUPLICATE_ASSERTION)
+    is_geospatial_check = f.col("check_key").isin(*sorted(COORDINATE_PAIR_CHECK_KEYS))
 
     agg_df = agg_df.withColumn("dq_column", f.col("check_key"))
     agg_df = agg_df.withColumn(
@@ -204,7 +217,7 @@ def aggregate_report_spark_df(
     )
     agg_df = agg_df.withColumn(
         "assertion",
-        f.when(is_location_rows_check, f.lit("duplicate_location_rows"))
+        f.when(is_location_rows_check, f.lit(LOCATION_DUPLICATE_ASSERTION))
         .when(is_geospatial_check, f.col("check_key"))
         .otherwise(f.split(f.col("check_key"), "-").getItem(0)),
     )
@@ -435,6 +448,126 @@ def build_dq_summary_statistics(
         df_data_quality_checks.unpersist()
 
 
+_LOCATION_COLUMNS = ("latitude", "longitude")
+_MULTI_COLUMN_ASSERTIONS = frozenset({"column_relation_checks"})
+
+
+def _check_key_columns(check_key: str) -> tuple[str, list[str]] | None:
+    """(assertion, columns) a dq_results key reports on, or None if it reports on
+    no single uploaded column.
+
+    Uses the same "<assertion>-<column>" split as aggregate_report_spark_df, so the
+    column matches the "column" field of the dq_summary sections. The exact-location
+    duplicate flag is attributed to latitude and longitude, as the UI shows it.
+    """
+    if check_key in METADATA_CHECK_KEYS or check_key in COORDINATE_PAIR_CHECK_KEYS:
+        return None
+    if check_key.startswith(LOCATION_DUPLICATE_ASSERTION):
+        return LOCATION_DUPLICATE_ASSERTION, list(_LOCATION_COLUMNS)
+    if "-" not in check_key:
+        return None
+    parts = check_key.split("-")
+    assertion, column = parts[0], parts[1]
+    if assertion in _MULTI_COLUMN_ASSERTIONS or not column:
+        return None
+    return assertion, [column]
+
+
+def _check_failed_expr(
+    check_key: str, create_only_keys: set[str], has_is_new_school: bool
+) -> Column:
+    failed = f.coalesce(
+        f.element_at(f.col("dq_results"), f.lit(check_key)) == 1, f.lit(False)
+    )
+    if check_key in create_only_keys and has_is_new_school:
+        failed = failed & f.coalesce(f.col("is_new_school"), f.lit(False))
+    return failed
+
+
+def build_column_pass_summary(
+    df: sql.DataFrame, create_only_keys: set[str] | None = None
+) -> dict[str, dict[str, Any]]:
+    """Per uploaded column, how many rows pass every check on that column.
+
+    All counts share one base: every uploaded row, approved or rejected. "passed"
+    rows fail no check of the column, so passed + failed == total. "checks" holds
+    the failed rows per assertion, on the same base. A key missing from a row's
+    dq_results map counts as not failed.
+
+    Only the keys already present in dq_results count, i.e. the checks NocoDB keeps
+    for this upload (see dq_geolocation_extract_relevant_columns). Metadata keys,
+    coordinate-pair checks and multi-column checks are left out.
+    """
+    if "dq_results" not in df.columns:
+        return {}
+    create_only_keys = create_only_keys or set()
+    has_is_new_school = "is_new_school" in df.columns
+
+    check_keys = sorted(
+        row.check_key
+        for row in df.select(
+            f.explode(f.map_keys(f.col("dq_results"))).alias("check_key")
+        )
+        .distinct()
+        .collect()
+    )
+
+    # column -> assertion -> check keys
+    keys_by_column: dict[str, dict[str, list[str]]] = {}
+    for check_key in check_keys:
+        target = _check_key_columns(check_key)
+        if target is None:
+            continue
+        assertion, columns = target
+        for column in columns:
+            if column not in df.columns:
+                continue
+            keys_by_column.setdefault(column, {}).setdefault(assertion, []).append(
+                check_key
+            )
+    if not keys_by_column:
+        return {}
+
+    def any_failed(keys: list[str]) -> Column:
+        return reduce(
+            operator.or_,
+            (
+                _check_failed_expr(key, create_only_keys, has_is_new_school)
+                for key in keys
+            ),
+        )
+
+    agg_exprs = [f.count("*").alias("total")]
+    aliases: dict[str, tuple[str, dict[str, str]]] = {}
+    for col_index, (column, assertions) in enumerate(sorted(keys_by_column.items())):
+        column_alias = f"c{col_index}"
+        all_keys = [key for keys in assertions.values() for key in keys]
+        agg_exprs.append(f.count(f.when(any_failed(all_keys), 1)).alias(column_alias))
+        assertion_aliases = {}
+        for assertion_index, (assertion, keys) in enumerate(sorted(assertions.items())):
+            assertion_alias = f"{column_alias}_a{assertion_index}"
+            agg_exprs.append(
+                f.count(f.when(any_failed(keys), 1)).alias(assertion_alias)
+            )
+            assertion_aliases[assertion] = assertion_alias
+        aliases[column] = (column_alias, assertion_aliases)
+
+    counts = df.select(*agg_exprs).first()
+    total = int(counts["total"])
+    return {
+        column: {
+            "total": total,
+            "passed": total - int(counts[column_alias]),
+            "failed": int(counts[column_alias]),
+            "checks": {
+                assertion: int(counts[alias])
+                for assertion, alias in assertion_aliases.items()
+            },
+        }
+        for column, (column_alias, assertion_aliases) in aliases.items()
+    }
+
+
 def aggregate_report_json(
     df_aggregated: sql.DataFrame,
     df_bronze: sql.DataFrame,
@@ -564,6 +697,21 @@ def aggregate_report_json(
     # Initialize an empty dictionary for the transformed data
     agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary, "critical_checks": critical_checks_summary}
+
+    # Geolocation only (dq_results map). The sections above mix bases (critical
+    # checks over all rows, the rest over approved rows), so per-column pass
+    # counts are reported here on a single base: every uploaded row.
+    # create_only checks only fail new schools, as in critical.py.
+    if "dq_results" in df_data_quality_checks.columns:
+        _, create_only_columns = get_critical_check_columns()
+        create_only_keys = {
+            str(name).removeprefix("dq_") for name in create_only_columns if name
+        }
+        column_pass_summary = build_column_pass_summary(
+            df_data_quality_checks, create_only_keys
+        )
+        if column_pass_summary:
+            transformed_data["column_pass_summary"] = column_pass_summary
 
     # Iterate through each JSON line
     for agg in agg_array:
