@@ -42,6 +42,12 @@ variables:
   mongoliaAPIUser: $(MONGOLIA_API_USER)
   mongoliaAPIPassword: $(MONGOLIA_API_PASSWORD)
   mongoliaAPIUrl: $(MONGOLIA_API_URL)
+  brazilApiUrl: $(BRAZIL_API_URL)
+  isizweZabbixApiUrl: $(ISIZWE_ZABBIX_API_URL)
+  isizweZabbixToken: $(ISIZWE_ZABBIX_TOKEN)
+  mawinguZabbixApiUrl: $(MAWINGU_ZABBIX_API_URL)
+  mawinguZabbixToken: $(MAWINGU_ZABBIX_TOKEN)
+  mongoliaDeviceBearerToken: $(MONGOLIA_DEVICE_BEARER_TOKEN)
   deployEnv: $(DEPLOY_ENV)
   dagsterSentryDsn: $(DAGSTER_SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
@@ -59,4 +65,5 @@ variables:
   gigameterApiToken: $(GIGAMETER_API_TOKEN)
   vctMerakiApiKey: $(VCT_MERAKI_API_KEY)
   mlabBigqueryServiceAccountJsonB64: $(MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64)
+  cartoBasemapApiKey: $(CARTO_BASEMAP_API_KEY)
   system.debug: true

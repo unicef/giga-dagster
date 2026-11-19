@@ -6,12 +6,13 @@ from src.utils.datahub.emit_dataset_metadata import (
 )
 from src.utils.metadata import get_output_metadata
 from src.utils.op_config import FileConfig
-from src.utils.sentry import log_op_context
+from src.utils.sentry import capture_op_exceptions, log_op_context
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def unstructured_raw(context: OpExecutionContext, config: FileConfig):
     country_code = None if config.country_code == "N/A" else config.country_code
 
@@ -45,6 +46,7 @@ def unstructured_raw(context: OpExecutionContext, config: FileConfig):
 
 
 @asset
+@capture_op_exceptions
 def generalized_unstructured_raw(context: OpExecutionContext, config: FileConfig):
     datahub_emitter = get_datahub_emitter()
     if datahub_emitter is None:

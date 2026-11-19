@@ -1,8 +1,8 @@
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
-from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import (
     Column,
@@ -12,6 +12,7 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import IntegerType, MapType, StringType
 
+from dagster import OpExecutionContext
 from src.data_quality_checks.column_relation import column_relation_checks
 from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
@@ -67,6 +68,13 @@ METADATA_CHECK_KEYS = frozenset(
         "duplicate_group_in_dataset_50m",
     }
 )
+
+CRITICAL_CHECK_TYPE = "critical_checks"
+
+
+def normalize_check_category(value: object) -> str:
+    return re.sub(r"\s+", "_", str(value).strip().lower())
+
 
 # dq_results map keys to rescue back onto the passed-rows frame when the
 # metaschema registers a matching column. Every int-valued dq_ column is folded
@@ -200,9 +208,7 @@ def aggregate_report_spark_df(
     )
 
     # get data descriptions from nocodb
-    dq_column_name_table_id = get_nocodb_table_id_from_name(
-        table_name=dq_config_table
-    )
+    dq_column_name_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
     dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
         table_id=dq_column_name_table_id
     )
@@ -212,6 +218,9 @@ def aggregate_report_spark_df(
     ].map(lambda v: v.replace("dq_", ""))
     dq_column_name_table = dq_column_name_table.rename(
         columns={"DQ Check Category": "type", "Human Readable Name": "description"}
+    )
+    dq_column_name_table["type"] = dq_column_name_table["type"].map(
+        normalize_check_category
     )
     dq_column_name_df = spark.createDataFrame(dq_column_name_table)
 
@@ -264,9 +273,7 @@ def get_warning_check_labels(
 ) -> dict[str, str]:
     """dq_results keys flagged as report warnings in NocoDB (DQR Warnings == Yes),
     mapped to their "UI Error Description" label."""
-    table_id = get_nocodb_table_id_from_name(
-        table_name=dq_config_table
-    )
+    table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
     table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
     is_warning = (
         table[_DQR_WARNINGS_COLUMN].astype(str).str.strip().str.lower() == "yes"
@@ -374,6 +381,40 @@ def _low_precision_expr(df: sql.DataFrame) -> Column:
     return f.greatest(*exprs) == 1
 
 
+def _count_duplicate_groups(
+    df: sql.DataFrame,
+    id_column: str,
+    count_key: str,
+    min_size: int,
+) -> int | None:
+    """Distinct ``id_column`` values with at least ``min_size`` members, approved only.
+
+    The ID is null unless the row belongs to a group, so counting distinct non-null
+    IDs counts groups. Size is the stored member count, which covers the whole group
+    including rejected rows.
+    """
+    count_column = f"dq_{count_key}"
+    if id_column not in df.columns:
+        return None
+    if "dq_results" in df.columns:
+        size_expr = f.element_at(f.col("dq_results"), f.lit(count_key))
+    elif count_column in df.columns:
+        size_expr = f.col(count_column)
+    else:
+        return None
+
+    return (
+        df.filter(
+            (f.col("dq_has_critical_error") == 0)
+            & f.col(id_column).isNotNull()
+            & (size_expr >= min_size)
+        )
+        .select(id_column)
+        .distinct()
+        .count()
+    )
+
+
 def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
@@ -452,7 +493,7 @@ def aggregate_report_json(
 
     df_aggregated = df_aggregated.withColumn(
         "is_critical_dq_check",
-        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+        f.when(f.col("type") == CRITICAL_CHECK_TYPE, 1).otherwise(0),
     )
 
     critical_checks_df = df_aggregated[df_aggregated.is_critical_dq_check == 1]
@@ -502,10 +543,35 @@ def aggregate_report_json(
         summary[f"{entity_plural}_created"] = stats.entities_created
         summary[f"{entity_plural}_updated"] = stats.entities_updated
 
+    # Group id/size columns are metadata, not 0/1 checks, so they never reach
+    # df_aggregated (see METADATA_CHECK_KEYS) and are aggregated separately.
+    for count_field, size_field, id_column, count_key, min_size in (
+        (
+            "count_duplicate_location_groups",
+            "duplicate_location_group_min_size",
+            "dq_duplicate_location_rows_id",
+            "duplicate_location_rows_count",
+            config.EXACT_DUPLICATE_LOCATION_GROUP_MIN_SIZE,
+        ),
+        (
+            "count_proximity_50m_groups",
+            "proximity_50m_group_min_size",
+            "dq_duplicate_group_id_50m",
+            "duplicate_group_count_50m",
+            config.PROXIMITY_50M_GROUP_MIN_SIZE,
+        ),
+    ):
+        group_count = _count_duplicate_groups(
+            df_data_quality_checks, id_column, count_key, min_size
+        )
+        if group_count is not None:
+            summary[count_field] = group_count
+            summary[size_field] = min_size
+
     warn_source = df_aggregated_approved_only or df_aggregated
     warn_source = warn_source.withColumn(
         "is_critical_dq_check",
-        f.when(f.col("type") == "critical checks", 1).otherwise(0),
+        f.when(f.col("type") == CRITICAL_CHECK_TYPE, 1).otherwise(0),
     )
     df_aggregated = warn_source[warn_source.is_critical_dq_check != 1]
     df_aggregated = df_aggregated.drop("is_critical_dq_check")
@@ -600,9 +666,7 @@ def dq_geolocation_extract_relevant_columns(
 ):
     df = normalize_dq_results_map(df)
 
-    dq_column_name_table_id = get_nocodb_table_id_from_name(
-        table_name=dq_config_table
-    )
+    dq_column_name_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
     dq_column_name_table = get_nocodb_table_as_pandas_dataframe(
         table_id=dq_column_name_table_id
     )
@@ -705,9 +769,7 @@ def run_master_checks(
         dq_context.dataset_type,
         context,
         values_domain=(
-            None
-            if dq_context.values_domain is None
-            else dict(dq_context.values_domain)
+            None if dq_context.values_domain is None else dict(dq_context.values_domain)
         ),
         values_range=(
             None
@@ -786,9 +848,7 @@ def run_geolocation_checks(
         dq_context.dataset_type,
         context,
         values_domain=(
-            None
-            if dq_context.values_domain is None
-            else dict(dq_context.values_domain)
+            None if dq_context.values_domain is None else dict(dq_context.values_domain)
         ),
         values_range=(
             None
