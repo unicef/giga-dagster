@@ -44,7 +44,7 @@ def human_readable_standard_checks(columns: list[str]) -> dict[str, str]:
     }
 
     domain_desc = {
-        f"dq_is_invalid_domain-{column}": f"Does column {column} have values within [{','.join(values)}]"
+        f"dq_is_invalid_domain-{column}": f"Does column {column} have values within [{','.join(map(str, values))}]"
         for column, values in config_expectations_instance.VALUES_DOMAIN_ALL.items()
     }
 
