@@ -60,7 +60,7 @@ def is_not_within_country(
     logger = get_context_with_fallback_logger(context)
     logger.info("Checking if not within country...")
 
-    required_columns = {"latitude", "longitude"}
+    required_columns = {"geo_latitude", "geo_longitude"}
     if not required_columns.issubset(df.columns):
         logger.info(
             "Skipping is_not_within_country check — missing columns: "
@@ -88,13 +88,17 @@ def is_not_within_country(
 
         df = df.withColumn(
             "dq_is_not_within_country",
-            is_not_within_country_boundaries(f.col("latitude"), f.col("longitude")),
+            is_not_within_country_boundaries(
+                f.col("geo_latitude"), f.col("geo_longitude")
+            ),
         )
 
         df = df.withColumn(
             "dq_is_not_within_country",
             is_not_within_country_check(
-                f.col("latitude"), f.col("longitude"), f.col("dq_is_not_within_country")
+                f.col("geo_latitude"),
+                f.col("geo_longitude"),
+                f.col("dq_is_not_within_country"),
             ),
         )
 
@@ -105,10 +109,10 @@ def is_not_within_country(
     df = df.withColumn(
         "dq_is_not_within_country",
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_is_not_within_country")),
     )
@@ -131,23 +135,23 @@ if __name__ == "__main__":
     spark = get_spark_session()
     master = spark.read.csv(file_url_master, header=True)
     # df = master.filter(master["admin1"] == "São Paulo")
-    # df = master.filter(master["school_id_govt"] == "11000023")
+    # df = master.filter(master["facility_id_govt"] == "11000023")
     df = master.select(
         [
-            "school_id_giga",
-            "school_id_govt",
-            "school_name",
-            "education_level",
-            "latitude",
-            "longitude",
+            "facility_id_giga",
+            "facility_id_govt",
+            "facility_name",
+            "facility_level",
+            "geo_latitude",
+            "geo_longitude",
         ],
     )
     # boundaries = get_country_geometry("BRA")
 
-    # df = df.withColumn("latitude", f.lit(-8.302844))  # outside boundary <= 150km
-    # df = df.withColumn("longitude", f.lit(-1.887341)) # outside boundary <= 150km
-    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # df = df.withColumn("geo_latitude", f.lit(-8.302844))  # outside boundary <= 150km
+    # df = df.withColumn("geo_longitude", f.lit(-1.887341)) # outside boundary <= 150km
+    # df = df.withColumn("geo_latitude", f.col("geo_latitude").cast("double"))
+    # df = df.withColumn("geo_longitude", f.col("geo_longitude").cast("double"))
     # df.show()
 
     dq_test = is_not_within_country(df, "BRA")

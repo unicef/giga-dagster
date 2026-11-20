@@ -28,7 +28,7 @@ from src.data_quality_checks.duplicates import (
 from src.data_quality_checks.geography import is_not_within_country
 from src.data_quality_checks.geometry import (
     duplicate_name_level_110_check,
-    school_density_check,
+    facility_density_check,
     similar_name_level_within_110_check,
 )
 from src.data_quality_checks.geospatial import (
@@ -51,9 +51,9 @@ from src.utils.schema import get_schema_columns, render_flag
 
 # Silver columns the grouped location checks need to participate in counts
 LOCATION_REFERENCE_COLUMNS = [
-    "school_id_giga",
-    "school_id_govt",
-    "education_level",
+    "facility_id_giga",
+    "facility_id_govt",
+    "facility_level",
     *DUPLICATE_REPORT_DISPLAY_COLUMNS,
 ]
 
@@ -197,7 +197,7 @@ def aggregate_report_spark_df(
     agg_df = agg_df.withColumn(
         "column",
         f.when(is_location_rows_check, f.lit("location_id"))
-        .when(is_geospatial_check, f.lit("latitude,longitude"))
+        .when(is_geospatial_check, f.lit("geo_latitude,geo_longitude"))
         .otherwise(f.split(f.col("check_key"), "-").getItem(1)),
     )
     agg_df = agg_df.withColumn(
@@ -354,7 +354,7 @@ def build_dq_warning_columns(
 
 
 # Derived from config.PRECISION so the keys stay in sync with the columns that
-# actually get a precision check (e.g. precision-latitude, precision-longitude).
+# actually get a precision check (e.g. precision-geo_latitude, precision-geo_longitude).
 _LOW_PRECISION_CHECK_KEYS = tuple(f"precision-{column}" for column in config.PRECISION)
 
 
@@ -519,7 +519,7 @@ def aggregate_report_json(
     critical_checks_df = critical_checks_df.drop("is_critical_dq_check", "type")
     critical_checks_summary = critical_checks_df.toPandas().to_dict(orient="records")
 
-    # duplicate-school_id_govt is a critical check, so its count_failed is already
+    # duplicate-facility_id_govt is a critical check, so its count_failed is already
     # one of the critical_checks_summary records above — no extra Spark pass needed.
     count_duplicate_entity_id = next(
         (
@@ -784,7 +784,7 @@ def run_master_checks(
 ) -> sql.DataFrame:
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
-    df = school_density_check(df, context)
+    df = facility_density_check(df, context)
     df = standard_checks(
         df,
         dq_context.dataset_type,
@@ -852,18 +852,18 @@ def run_geolocation_checks(
         # Narrow columns, read by every grouped check below.
         reference = reference.cache()
         reference_points = reference.select(
-            "school_id_giga", "school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS
+            "facility_id_giga", "facility_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS
         ).toPandas()
 
     # Numbered once here, before the location and 50m duplicate-member frames
-    # are built independently below, so the Nth physical row for a school_id_govt
+    # are built independently below, so the Nth physical row for a facility_id_govt
     # gets the same row_num in both — combine_duplicate_members relies on this to
     # pair them up without a cross-product fan-out.
-    df = extract_school_id_govt_duplicates(df).cache()
+    df = extract_facility_id_govt_duplicates(df).cache()
 
     df = is_not_within_country(df, dq_context.country_code_iso3, context)
     df = similar_name_level_within_110_check(df, context)
-    df = school_density_check(df, context, reference=reference)
+    df = facility_density_check(df, context, reference=reference)
     df = standard_checks(
         df,
         dq_context.dataset_type,
@@ -1068,8 +1068,8 @@ def row_level_checks(
         )
 
 
-def extract_school_id_govt_duplicates(df: sql.DataFrame):
-    window = w.Window.partitionBy("school_id_govt").orderBy(f.lit(1))
+def extract_facility_id_govt_duplicates(df: sql.DataFrame):
+    window = w.Window.partitionBy("facility_id_govt").orderBy(f.lit(1))
 
     df = df.withColumn("row_num", f.row_number().over(window))
 
@@ -1095,12 +1095,12 @@ if __name__ == "__main__":
     # master = spark.read.csv(file_url_master, header=True)
     # reference = spark.read.csv(file_url_reference, header=True)
     qos = spark.read.csv(file_url_qos, header=True)
-    # df_bronze = master.join(reference, how="left", on="school_id_giga")
+    # df_bronze = master.join(reference, how="left", on="facility_id_giga")
     # df_bronze = spark.read.csv(file_url, header=True)
     # df_bronze.show()
     # print(df_bronze.count())
-    # df_bronze = df_bronze.sort("school_name").limit(30)
-    # df_bronze = df_bronze.withColumnRenamed("school_id_gov", "school_id_govt")
+    # df_bronze = df_bronze.sort("facility_name").limit(30)
+    # df_bronze = df_bronze.withColumnRenamed("school_id_gov", "facility_id_govt")
     # df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     # df_bronze.show()
     # df = create_giga_school_id(df_bronze)
@@ -1109,7 +1109,7 @@ if __name__ == "__main__":
     # master = master.filter(master["admin1"] == "São Paulo")
     # print(master.count(), len(master.columns))
     # master.show()
-    # master = master.filter(~(f.col("latitude").like("%Sr%")) & ~(f.col("longitude").like("%Sr%")))
+    # master = master.filter(~(f.col("geo_latitude").like("%Sr%")) & ~(f.col("geo_longitude").like("%Sr%")))
     # filtered_df.show()
 
     # # master
@@ -1157,7 +1157,7 @@ if __name__ == "__main__":
     # df_bronze = df_bronze.select(*["electricity_availability", "electricity_type"])
     # df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
-    # df_bronze = df_bronze.withColumn("school_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
+    # df_bronze = df_bronze.withColumn("facility_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
     # df = format_validation_checks(df_bronze)
     # df = column_relation_checks(df_bronze, 'coverage')
     # transforms = {}
@@ -1177,7 +1177,7 @@ if __name__ == "__main__":
     # print(transforms)
     # df = df_bronze.withColumns(transforms)
     # df.show()
-    # df_bronze = df_bronze.withColumn("school_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
+    # df_bronze = df_bronze.withColumn("facility_id_govt", f.lit("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Donec elementum dignissim magna, eu efficitur libero congue sit amet. Morbi posuere, quam ac convallis laoreet, ipsum elit condimentum arcu, nec sollicitudin lorem odio id nunc. Nulla facilisi. Quisque ut efficitur nisi. Vestibulum bibendum posuere elit ac vestibulum. Nullam ultrices magna nec arcu ullamcorper, a luctus eros volutpat. Proin vel libero vitae velit feugiat malesuada nec ut felis. In hac habitasse platea dictumst. Fusce euismod vestibulum lorem, ac venenatis sapien efficitur non. Sed tempor nunc sit amet velit malesuada, quis bibendum odio dictum."))
     # df = standard_checks(df_bronze, 'master')
     # df.distinct().show()
 

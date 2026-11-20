@@ -51,16 +51,16 @@ def adhoc__generate_silver_geolocation_from_gold(
         )
 
     gold = master.alias("master").join(
-        reference.alias("reference"), on="school_id_giga", how="left"
+        reference.alias("reference"), on="facility_id_giga", how="left"
     )
     silver = gold.select([c.name for c in schema_columns if c.name != "signature"])
     silver = silver.withColumns(
         {
-            "education_level_govt": f.coalesce(
-                f.col("education_level_govt"), f.lit("Unknown")
+            "facility_level_govt": f.coalesce(
+                f.col("facility_level_govt"), f.lit("Unknown")
             ),
-            "school_id_govt_type": f.coalesce(
-                f.col("education_level_govt"), f.lit("Unknown")
+            "facility_id_type_govt": f.coalesce(
+                f.col("facility_level_govt"), f.lit("Unknown")
             ),
         }
     )
@@ -91,7 +91,7 @@ def adhoc__generate_silver_geolocation_from_gold(
     (
         DeltaTable.forName(s, out_table_name)
         .alias("source")
-        .merge(silver.alias("new"), "source.school_id_giga = new.school_id_giga")
+        .merge(silver.alias("new"), "source.facility_id_giga = new.facility_id_giga")
         .whenNotMatchedInsertAll()
         .execute()
     )
@@ -139,7 +139,7 @@ def adhoc__generate_silver_coverage_from_gold(
         )
 
     gold = master.alias("master").join(
-        reference.alias("reference"), on="school_id_giga", how="left"
+        reference.alias("reference"), on="facility_id_giga", how="left"
     )
     silver = gold.select([c.name for c in schema_columns if c.name != "signature"])
     silver = silver.withColumns(
@@ -179,7 +179,7 @@ def adhoc__generate_silver_coverage_from_gold(
     (
         DeltaTable.forName(s, out_table_name)
         .alias("source")
-        .merge(silver.alias("new"), "source.school_id_giga = new.school_id_giga")
+        .merge(silver.alias("new"), "source.facility_id_giga = new.facility_id_giga")
         .whenNotMatchedInsertAll()
         .execute()
     )

@@ -17,7 +17,7 @@ from src.data_quality_checks.utils import (
     build_dq_summary_statistics,
     dq_split_failed_rows as extract_dq_failed_rows,
     dq_split_passed_rows as extract_dq_passed_rows,
-    extract_school_id_govt_duplicates,
+    extract_facility_id_govt_duplicates,
     row_level_checks,
 )
 from src.internal.common_assets.master_release_notes import (
@@ -108,7 +108,11 @@ def adhoc__master_data_transforms(
 
     with BytesIO(adhoc__load_master_csv) as buffer:
         buffer.seek(0)
-        dtype_mapping = {"school_id_govt": str, "latitude": str, "longitude": str}
+        dtype_mapping = {
+            "facility_id_govt": str,
+            "geo_latitude": str,
+            "geo_longitude": str,
+        }
         df = (
             pd.read_csv(buffer, dtype=dtype_mapping)
             .fillna(np.nan)
@@ -134,7 +138,7 @@ def adhoc__master_data_transforms(
     sdf = sdf.select([col.name for col in columns])
 
     sdf = logger.passthrough(
-        extract_school_id_govt_duplicates(sdf),
+        extract_facility_id_govt_duplicates(sdf),
         "Added row number transforms",
     )
 
@@ -170,7 +174,7 @@ def adhoc__df_duplicates(
     df_duplicates = adhoc__master_data_transforms.where(f.col("row_num") != 1)
     df_duplicates = df_duplicates.drop("row_num")
 
-    context.log.info(f"Duplicate school_id_govt: {df_duplicates.count()=}")
+    context.log.info(f"Duplicate facility_id_govt: {df_duplicates.count()=}")
 
     df_pandas = df_duplicates.toPandas()
     return Output(
@@ -255,7 +259,7 @@ def adhoc__reference_data_quality_checks(
         if column.name not in sdf.columns:
             columns_to_add[column.name] = f.lit(None).cast(NullType())
 
-    columns_non_nullable = ["school_id_govt_type"]
+    columns_non_nullable = ["facility_id_type_govt"]
     column_actions = {
         c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable
     }
@@ -410,7 +414,7 @@ def adhoc__master_dq_checks_summary(
         spark.spark_session,
         adhoc__master_data_quality_checks,
         adhoc__master_data_quality_checks,
-        govt_id_column="school_id_govt",
+        govt_id_column="facility_id_govt",
     )
 
     yield Output(df_summary, metadata=get_output_metadata(config))
@@ -450,7 +454,10 @@ def adhoc__publish_silver_geolocation(
         columns_to_rename_in_ref = {}  # Stores original_name -> temp_ref_name
 
         for ref_col_name in ref_selected_df.columns:
-            if ref_col_name in master_column_names and ref_col_name != "school_id_giga":
+            if (
+                ref_col_name in master_column_names
+                and ref_col_name != "facility_id_giga"
+            ):
                 temp_ref_name = f"{ref_col_name}_ref_temp"
                 columns_to_rename_in_ref[ref_col_name] = temp_ref_name
                 ref_selected_df = ref_selected_df.withColumnRenamed(
@@ -459,7 +466,7 @@ def adhoc__publish_silver_geolocation(
 
         df_one_gold = df_one_gold.join(
             ref_selected_df,
-            "school_id_giga",
+            "facility_id_giga",
             "left",
         )
 
@@ -474,8 +481,8 @@ def adhoc__publish_silver_geolocation(
 
     df_silver = add_missing_columns(df_one_gold, schema_columns)
     columns_non_nullable = [
-        "school_id_govt_type",
-        "education_level_govt",
+        "facility_id_type_govt",
+        "facility_level_govt",
     ]
     column_actions = {
         c: f.coalesce(f.col(c), f.lit("Unknown")) for c in columns_non_nullable

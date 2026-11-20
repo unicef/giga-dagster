@@ -545,6 +545,8 @@ def add_admin_columns(
     df: sql.DataFrame,
     country_code_iso3: str,
     admin_level: str,
+    latitude_column: str = "latitude",
+    longitude_column: str = "longitude",
 ) -> sql.DataFrame:
     admin_boundaries = get_admin_boundaries(
         country_code_iso3=country_code_iso3,
@@ -590,7 +592,9 @@ def add_admin_columns(
         )
 
     result_col = f"_admin_info_{admin_level}"
-    df = df.withColumn(result_col, get_admin_info(df["latitude"], df["longitude"]))
+    df = df.withColumn(
+        result_col, get_admin_info(df[latitude_column], df[longitude_column])
+    )
 
     coalesce_args = [
         f.col(f"{result_col}.name_en"),

@@ -56,7 +56,7 @@ class Config(BaseSettings):
             "type": "duplicate_rows_checks",
         },
         {
-            "assertion": "duplicate_all_except_school_code",
+            "assertion": "duplicate_all_except_facility_code",
             "description": "Checks if there are duplicates across all columns except School ID",
             "type": "duplicate_rows_checks",
         },
@@ -76,8 +76,8 @@ class Config(BaseSettings):
             "type": "critical_error_check",
         },
         {
-            "assertion": "is_school_density_greater_than_5",
-            "description": "Checks if the the school density within the area is greater than 5.",
+            "assertion": "is_facility_density_greater_than_5",
+            "description": "Checks if the the facility density within the area is greater than 5.",
             "type": "geospatial_checks",
         },
         {
@@ -92,7 +92,7 @@ class Config(BaseSettings):
         },
         {
             "assertion": "is_not_36_character_hash",
-            "description": "Checks if school_id_giga is a 36 character hash.",
+            "description": "Checks if facility_id_giga is a 36 character hash.",
             "type": "format_validation_checks",
         },
         {
@@ -154,13 +154,13 @@ class Config(BaseSettings):
         ("pop_within_3km", "LONG"),
         ("connectivity_govt_collection_year", "INT"),
         ("connectivity_govt", "STRING"),
-        ("school_id_giga", "STRING"),
-        ("school_id_govt", "STRING"),
-        ("school_name", "STRING"),
+        ("facility_id_giga", "STRING"),
+        ("facility_id_govt", "STRING"),
+        ("facility_name", "STRING"),
         ("school_establishment_year", "INT"),
-        ("latitude", "DOUBLE"),
-        ("longitude", "DOUBLE"),
-        ("education_level", "STRING"),
+        ("geo_latitude", "DOUBLE"),
+        ("geo_longitude", "DOUBLE"),
+        ("facility_level", "STRING"),
         ("download_speed_contracted", "DOUBLE"),
         ("connectivity_type_govt", "STRING"),
         ("admin1", "STRING"),
@@ -200,12 +200,11 @@ class Config(BaseSettings):
         ("nearest_LTE_id", "STRING"),
         ("nearest_UMTS_id", "STRING"),
         ("nearest_GSM_id", "STRING"),
-        ("education_level_govt", "STRING"),
+        ("facility_level_govt", "STRING"),
         ("download_speed_govt", "DOUBLE"),
-        ("school_id_govt_type", "STRING"),
+        ("facility_id_type_govt", "STRING"),
         ("school_address", "STRING"),
         ("is_school_open", "STRING"),
-        ("education_level", "STRING"),
         ("percent_2G", "DOUBLE"),
         ("percent_3G", "DOUBLE"),
         ("percent_4G", "DOUBLE"),
@@ -227,49 +226,49 @@ class Config(BaseSettings):
         ("agent_id", "STRING"),
     }
 
-    UNIQUE_COLUMNS_MASTER: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_MASTER: list[str] = ["facility_id_govt", "facility_id_giga"]
 
-    UNIQUE_COLUMNS_REFERENCE: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_REFERENCE: list[str] = ["facility_id_giga"]
 
-    UNIQUE_COLUMNS_GEOLOCATION: list[str] = ["school_id_govt", "school_id_giga"]
+    UNIQUE_COLUMNS_GEOLOCATION: list[str] = ["facility_id_govt", "facility_id_giga"]
 
-    UNIQUE_COLUMNS_COVERAGE: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE: list[str] = ["facility_id_giga"]
 
-    UNIQUE_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE_FB: list[str] = ["facility_id_giga"]
 
-    UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_COVERAGE_ITU: list[str] = ["facility_id_giga"]
 
-    UNIQUE_COLUMNS_QOS: list[str] = ["school_id_giga"]
+    UNIQUE_COLUMNS_QOS: list[str] = ["facility_id_giga"]
 
     NONEMPTY_COLUMNS_MASTER: list[str] = [
-        "school_id_giga",
-        "school_id_govt",
-        "school_name",
-        "longitude",
-        "latitude",
-        "education_level",
+        "facility_id_giga",
+        "facility_id_govt",
+        "facility_name",
+        "geo_longitude",
+        "geo_latitude",
+        "facility_level",
         "admin1",
         "admin2",
     ]
 
     NONEMPTY_COLUMNS_REFERENCE: list[str] = [
-        "school_id_giga",
-        "education_level_govt",
+        "facility_id_giga",
+        "facility_level_govt",
     ]
 
     NONEMPTY_COLUMNS_GEOLOCATION: list[str] = [
-        "school_id_govt",
+        "facility_id_govt",
     ]
 
-    NONEMPTY_COLUMNS_COVERAGE: list[str] = ["school_id_giga"]
+    NONEMPTY_COLUMNS_COVERAGE: list[str] = ["facility_id_giga"]
 
-    NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = ["school_id_giga"]
+    NONEMPTY_COLUMNS_COVERAGE_FB: list[str] = ["facility_id_giga"]
 
-    NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = ["school_id_giga"]
+    NONEMPTY_COLUMNS_COVERAGE_ITU: list[str] = ["facility_id_giga"]
 
     NONEMPTY_COLUMNS_QOS: list[str] = [
-        "school_id_giga",
-        # "school_id_govt",
+        "facility_id_giga",
+        # "facility_id_govt",
         # "timestamp",
         # "country_id",
         # "speed_upload",
@@ -301,7 +300,7 @@ class Config(BaseSettings):
         "cellular_coverage_availability": ["yes", "no"],
         "cellular_coverage_type": ["2G", "3G", "4G", "5G", "no coverage"],
         "connectivity_govt": ["yes", "no"],
-        "education_level": [
+        "facility_level": [
             "Pre-Primary",
             "Primary",
             "Secondary",
@@ -332,7 +331,7 @@ class Config(BaseSettings):
 
     VALUES_DOMAIN_GEOLOCATION: dict[str, list[str]] = {
         "connectivity_govt": ["yes", "no"],
-        "education_level": [
+        "facility_level": [
             "Pre-Primary",
             "Primary",
             "Secondary",
@@ -404,8 +403,8 @@ class Config(BaseSettings):
             "pop_within_5km": {"min": 0, "max": 5000000},
             "pop_within_10km": {"min": 0, "max": 20000000},
             "school_establishment_year": {"min": 1000, "max": self.current_year},
-            "latitude": {"min": -90, "max": 90},
-            "longitude": {"min": -180, "max": 180},
+            "geo_latitude": {"min": -90, "max": 90},
+            "geo_longitude": {"min": -180, "max": 180},
             "download_speed_contracted": {"min": 1, "max": 500},
             "num_computers": {"min": 0, "max": 500},
             "num_computers_desired": {"min": 0, "max": 1000},
@@ -429,8 +428,8 @@ class Config(BaseSettings):
     def VALUES_RANGE_GEOLOCATION(self) -> dict[str, dict[str, int]]:
         return {
             "school_establishment_year": {"min": 1000, "max": self.current_year},
-            "latitude": {"min": -90, "max": 90},
-            "longitude": {"min": -180, "max": 180},
+            "geo_latitude": {"min": -90, "max": 90},
+            "geo_longitude": {"min": -180, "max": 180},
             "download_speed_contracted": {"min": 1, "max": 500},
             "num_computers": {"min": 0, "max": 500},
             "num_computers_desired": {"min": 0, "max": 1000},
@@ -461,8 +460,8 @@ class Config(BaseSettings):
         return self.VALUES_RANGE_COVERAGE
 
     VALUES_RANGE_CRITICAL: dict[str, dict[str, int]] = {
-        "latitude": {"min": -90, "max": 90},
-        "longitude": {"min": -180, "max": 180},
+        "geo_latitude": {"min": -90, "max": 90},
+        "geo_longitude": {"min": -180, "max": 180},
     }
 
     @property
@@ -492,15 +491,15 @@ class Config(BaseSettings):
     ]
 
     UNIQUE_SET_COLUMNS: list[list[str]] = [
-        ["school_id_govt", "school_name", "education_level", "location_id"],
-        ["school_name", "education_level", "location_id"],
-        ["education_level", "location_id"],
+        ["facility_id_govt", "facility_name", "facility_level", "location_id"],
+        ["facility_name", "facility_level", "location_id"],
+        ["facility_level", "location_id"],
         ["location_id"],
     ]
 
     PRECISION: dict[str, dict[str, int]] = {
-        "latitude": {"min": 5},
-        "longitude": {"min": 5},
+        "geo_latitude": {"min": 5},
+        "geo_longitude": {"min": 5},
     }
 
     # Aggregate columns derivable from their components. A single declaration
@@ -530,14 +529,14 @@ class Config(BaseSettings):
 
     # Columns To Keep From Dataset
     FB_COLUMNS: list[str] = [
-        "school_id_giga",
+        "facility_id_giga",
         "2G_coverage",
         "3G_coverage",
         "4G_coverage",
     ]
 
     ITU_COLUMNS: list[str] = [
-        "school_id_giga",
+        "facility_id_giga",
         "2G_coverage",
         "3G_coverage",
         "4G_coverage",
@@ -577,14 +576,14 @@ class Config(BaseSettings):
     ]
 
     COLUMNS_EXCEPT_SCHOOL_ID_GEOLOCATION: list[str] = [
-        # "school_id_giga",
-        # "school_id_govt",
-        "school_name",
+        # "facility_id_giga",
+        # "facility_id_govt",
+        "facility_name",
         "school_establishment_year",
-        "latitude",
-        "longitude",
-        "education_level",
-        "education_level_govt",
+        "geo_latitude",
+        "geo_longitude",
+        "facility_level",
+        "facility_level_govt",
         "connectivity_govt",
         "connectivity_govt_ingestion_timestamp",
         "connectivity_govt_collection_year",
@@ -609,7 +608,7 @@ class Config(BaseSettings):
         "school_data_source",
         "school_data_collection_year",
         "school_data_collection_modality",
-        "school_id_govt_type",
+        "facility_id_type_govt",
         "school_address",
         "is_school_open",
         "school_location_ingestion_timestamp",
@@ -638,13 +637,13 @@ class Config(BaseSettings):
         "rurban_detected",
         "connectivity_govt_collection_year",
         "connectivity_govt",
-        # "school_id_giga",
-        # "school_id_govt",
-        "school_name",
+        # "facility_id_giga",
+        # "facility_id_govt",
+        "facility_name",
         "school_establishment_year",
-        "latitude",
-        "longitude",
-        "education_level",
+        "geo_latitude",
+        "geo_longitude",
+        "facility_level",
         "download_speed_contracted",
         "connectivity_type_govt",
         "admin1",

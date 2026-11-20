@@ -1,9 +1,9 @@
-"""Adapters that run the mature geolocation checks against any facility profile.
+"""Adapters that run the shared geolocation checks against any facility profile.
 
-The current check implementations use the historical school column names internally.
-This module provides those names as temporary aliases and removes them afterwards,
-allowing the check algorithms to be reused while their public input remains facility
-specific.
+The check engines operate directly on the facility/geo column names
+(``facility_id_govt``, ``facility_name``, ``facility_level``, ``geo_latitude``,
+``geo_longitude``, ...) and emit ``dq_*`` flags with those names, so no column or
+flag aliasing is needed here.
 """
 
 from pyspark import sql
@@ -35,188 +35,19 @@ from src.utils.school_registrations.common import (
 )
 from src.utils.spark import normalize_missing_value_strings
 
-_CHECK_ALIASES = {
-    "govt_id_column": "school_id_govt",
-    "giga_id_column": "school_id_giga",
-    "name_column": "school_name",
-    "level_column": "education_level",
-}
-
-
-def _column_replacements(
-    _spec: FacilityGeolocationSpec,
-) -> tuple[tuple[str, str], ...]:
-    """Map check-engine school names to canonical facility_*/geo_* report names.
-
-    Always target the public schema names so DQ summaries and the PDF renderer
-    share one contract for every facility_type. Longer keys are listed first so
-    substring replacements (e.g. education_level_govt) win over shorter ones.
-    """
-    return (
-        ("education_level_govt", "facility_level_govt"),
-        ("education_level", "facility_level"),
-        ("school_id_govt", "facility_id_govt"),
-        ("school_id_giga", "facility_id_giga"),
-        ("school_name", "facility_name"),
-        ("school_density", "facility_density"),
-        ("school_code", "facility_code"),
-        ("latitude", "geo_latitude"),
-        ("longitude", "geo_longitude"),
-    )
-
-
-def _dq_column_aliases(spec: FacilityGeolocationSpec) -> dict[str, str]:
-    internal_columns = (
-        "dq_duplicate-school_id_govt",
-        "dq_duplicate-school_id_giga",
-        "dq_is_null_mandatory-school_id_govt",
-        "dq_is_null_optional-school_name",
-        "dq_is_null_optional-education_level",
-        "dq_is_null_optional-education_level_govt",
-        "dq_is_null_optional-latitude",
-        "dq_is_null_optional-longitude",
-        "dq_is_not_alphanumeric-school_name",
-        "dq_is_not_alphanumeric-education_level",
-        "dq_is_not_alphanumeric-education_level_govt",
-        "dq_precision-latitude",
-        "dq_precision-longitude",
-        "dq_is_invalid_range-latitude",
-        "dq_is_invalid_range-longitude",
-        "dq_is_not_numeric-latitude",
-        "dq_is_not_numeric-longitude",
-        ("dq_duplicate_set-school_id_govt_school_name_" "education_level_location_id"),
-        "dq_duplicate_set-school_name_education_level_location_id",
-        "dq_duplicate_set-education_level_location_id",
-        "dq_duplicate_all_except_school_code",
-        "dq_is_school_density_greater_than_5",
-        "dq_school_density_count",
-        "dq_school_density_group_id",
-    )
-    aliases = {}
-    for internal in internal_columns:
-        external = internal
-        for school_name, facility_name in _column_replacements(spec):
-            external = external.replace(school_name, facility_name)
-        if external != internal:
-            aliases[external] = internal
-    return aliases
-
-
-def _rename_facility_dq_columns(
-    df: sql.DataFrame,
-    spec: FacilityGeolocationSpec,
-    aliases: dict[str, str],
-) -> sql.DataFrame:
-    all_aliases = dict(aliases)
-    for internal in df.columns:
-        if not internal.startswith("dq_"):
-            continue
-        external = internal
-        for school_name, facility_name in _column_replacements(spec):
-            external = external.replace(school_name, facility_name)
-        if external != internal:
-            all_aliases.setdefault(external, internal)
-    for external, internal in all_aliases.items():
-        if internal not in df.columns:
-            continue
-        if external in df.columns:
-            df = df.drop(internal)
-        else:
-            df = df.withColumnRenamed(internal, external)
-    return df
-
-
-_GEO_CHECK_ALIASES = (
-    ("geo_latitude", "latitude"),
-    ("geo_longitude", "longitude"),
-)
-
-
-def _require_alias_column(
-    df: sql.DataFrame,
-    source_column: str,
-    alias_column: str,
-) -> tuple[sql.DataFrame, str | None]:
-    """Copy ``source_column`` to ``alias_column`` when the alias is absent."""
-    if alias_column in df.columns:
-        return df, None
-    if source_column not in df.columns:
-        raise ValueError(
-            f"Facility data is missing `{source_column}` required for `{alias_column}`"
-        )
-    return df.withColumn(alias_column, f.col(source_column)), alias_column
-
-
-def _add_identity_check_aliases(
-    df: sql.DataFrame,
-    spec: FacilityGeolocationSpec,
-) -> tuple[sql.DataFrame, list[str]]:
-    added: list[str] = []
-    for spec_attribute, check_column in _CHECK_ALIASES.items():
-        source_column = getattr(spec, spec_attribute)
-        if source_column == check_column:
-            continue
-        df, alias = _require_alias_column(df, source_column, check_column)
-        if alias:
-            added.append(alias)
-    return df, added
-
-
-def _add_geo_check_aliases(df: sql.DataFrame) -> tuple[sql.DataFrame, list[str]]:
-    """Coordinate checks still hardcode latitude/longitude."""
-    added: list[str] = []
-    for public_col, check_col in _GEO_CHECK_ALIASES:
-        df, alias = _require_alias_column(df, public_col, check_col)
-        if alias:
-            added.append(alias)
-    return df, added
-
-
-def _add_level_govt_check_alias(
-    df: sql.DataFrame,
-    spec: FacilityGeolocationSpec,
-) -> tuple[sql.DataFrame, list[str]]:
-    """Level-govt checks still hardcode education_level_govt."""
-    if "education_level_govt" in df.columns:
-        return df, []
-    if "facility_level_govt" in df.columns:
-        source = "facility_level_govt"
-    elif spec.level_column in df.columns:
-        source = spec.level_column
-    else:
-        raise ValueError(
-            "Facility data is missing `facility_level_govt` required for "
-            "`education_level_govt`"
-        )
-    df, alias = _require_alias_column(df, source, "education_level_govt")
-    return df, [alias] if alias else []
-
-
-def add_check_compatibility_columns(
-    df: sql.DataFrame,
-    spec: FacilityGeolocationSpec,
-) -> tuple[sql.DataFrame, tuple[str, ...]]:
-    """Add temporary historical aliases required by the geolocation check engine."""
-    df, identity_aliases = _add_identity_check_aliases(df, spec)
-    df, geo_aliases = _add_geo_check_aliases(df)
-    df, level_aliases = _add_level_govt_check_alias(df, spec)
-    return df, tuple(identity_aliases + geo_aliases + level_aliases)
-
 
 def _enrich_admin_from_geo(df: sql.DataFrame, country_code: str) -> sql.DataFrame:
-    """Alias geo_* → lat/lon for admin enrichment, then drop the temporary aliases."""
-    added: list[str] = []
-    for public_col, check_col in _GEO_CHECK_ALIASES:
-        if check_col not in df.columns and public_col in df.columns:
-            df = df.withColumn(check_col, f.col(public_col))
-            added.append(check_col)
-    if {"latitude", "longitude"}.issubset(df.columns):
+    """Derive admin1-4 and disputed-region columns from ``geo_latitude``/``geo_longitude``."""
+    if {"geo_latitude", "geo_longitude"}.issubset(df.columns):
         for admin_level in ("admin1", "admin2", "admin3", "admin4"):
-            df = add_admin_columns(df, country_code, admin_level)
+            df = add_admin_columns(
+                df,
+                country_code,
+                admin_level,
+                latitude_column="geo_latitude",
+                longitude_column="geo_longitude",
+            )
         df = add_disputed_region_column(df)
-    for check_col in added:
-        if check_col in df.columns:
-            df = df.drop(check_col)
     return df
 
 
@@ -337,19 +168,15 @@ def run_facility_geolocation_checks(
         is_new_column="is_new_facility",
         context=context,
     )
-    compatible, aliases = add_check_compatibility_columns(enriched, spec)
-    compatible_current, _ = add_check_compatibility_columns(current, spec)
-    dq_aliases = _dq_column_aliases(spec)
-    checked = row_level_checks(
-        compatible,
-        silver=compatible_current,
+    return row_level_checks(
+        enriched,
+        silver=current,
         dq_context=DQContext(
             dq_mode=DQMode.MASTER,
             dataset_type="geolocation",
             country_code_iso3=country_code,
             dq_config_table=spec.dq_config_table,
             is_new_column="is_new_facility",
-            check_column_aliases=tuple(dq_aliases.items()),
             values_domain=spec.dq_domains,
             values_range=spec.dq_ranges,
             duplicate_all_except_columns=tuple(
@@ -359,20 +186,19 @@ def run_facility_geolocation_checks(
             ),
             unique_set_columns=(
                 (
-                    "school_id_govt",
-                    "school_name",
-                    "education_level",
+                    "facility_id_govt",
+                    "facility_name",
+                    "facility_level",
                     "location_id",
                 ),
-                ("school_name", "education_level", "location_id"),
-                ("education_level", "location_id"),
+                ("facility_name", "facility_level", "location_id"),
+                ("facility_level", "location_id"),
                 ("location_id",),
             ),
         ),
         context=context,
         extra_outputs=extra_outputs,
     )
-    return _rename_facility_dq_columns(checked, spec, dq_aliases).drop(*aliases)
 
 
 def split_facility_dq_rows(

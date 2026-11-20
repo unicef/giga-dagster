@@ -134,7 +134,7 @@ def refresh_location_duplicates(
     ].cast(exact_dtypes["dq_duplicate_location_rows_id"])
     df = df.withColumns(exact_columns)
 
-    points = df.select("school_id_giga", "latitude", "longitude").toPandas()
+    points = df.select("facility_id_giga", "geo_latitude", "geo_longitude").toPandas()
     graph = build_proximity_graph(
         points, PROXIMITY_DUPLICATE_THRESHOLD_M, context=context
     )
@@ -159,7 +159,7 @@ def refresh_location_duplicates(
             "count": "dq_duplicate_group_count_50m",
         }
     )
-    groups["school_id_giga"] = groups["school_id_giga"].astype(str)
+    groups["facility_id_giga"] = groups["facility_id_giga"].astype(str)
 
     group_dtypes = _registered_types(schema_columns_by_name, PROXIMITY_COLUMNS)
     if isinstance(group_dtypes["dq_duplicate_group_flag_50m"], StringType):
@@ -175,7 +175,7 @@ def refresh_location_duplicates(
     int_columns = [c for c in PROXIMITY_COLUMNS if c not in string_columns]
 
     proximity_schema = StructType(
-        [StructField("school_id_giga", StringType(), True)]
+        [StructField("facility_id_giga", StringType(), True)]
         + [
             StructField(column, group_dtypes[column], True)
             for column in PROXIMITY_COLUMNS

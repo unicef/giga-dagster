@@ -53,7 +53,7 @@ def adhoc__qos_transforms(
         "gigasync_id": f.sha2(
             f.concat_ws(
                 "_",
-                f.col("school_id_giga"),
+                f.col("facility_id_giga"),
                 f.col("timestamp"),
             ),
             256,

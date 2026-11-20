@@ -383,14 +383,6 @@ def build_facility_geolocation_assets(  # noqa: C901
             ),
             spec.dq_config_table,
         )
-        report_aliases = {
-            "school_id_govt": spec.govt_id_column,
-            "school_name": spec.name_column,
-            "education_level_govt": "facility_level_govt",
-        }
-        for internal, external in report_aliases.items():
-            if internal != external and internal in report.columns:
-                report = report.withColumnRenamed(internal, external)
         checked = collapse_facility_dq_flags(checked).cache()
         yield Output(
             checked,

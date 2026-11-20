@@ -96,15 +96,15 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     }
 
     similar_name_level_within_110_desc = {
-        "dq_duplicate_similar_name_same_level_within_110m_radius": "Does the school have no similar name, education_level, lat, and long within a 110m radius",
+        "dq_duplicate_similar_name_same_level_within_110m_radius": "Does the school have no similar name, facility_level, lat, and long within a 110m radius",
     }
 
-    school_density_desc = {
-        "dq_is_school_density_greater_than_5": "Is the school density within the area less than 5.",
+    facility_density_desc = {
+        "dq_is_facility_density_greater_than_5": "Is the facility density within the area less than 5.",
     }
 
     duplicate_all_except_checks_desc = {
-        "dq_duplicate_all_except_school_code": "Does the check pass with no duplicates across all columns except for School ID",
+        "dq_duplicate_all_except_facility_code": "Does the check pass with no duplicates across all columns except for School ID",
     }
 
     precision_check_desc = {
@@ -137,11 +137,11 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     aggregate_relation_checks_desc = _aggregate_relation_descriptions("geolocation")
 
     critical_error_checks_desc = {
-        "dq_is_null_mandatory-school_id_govt": "Is the Non-nullable column school_id_govt null",
-        "dq_duplicate-school_id_govt": "Does the check pass with no duplicates in the school_id_govt column",
-        "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
-        "dq_is_invalid_range-latitude": "Is the school's latitude between -90 and 90",
-        "dq_is_invalid_range-longitude": "Is the school's longitude between -180 and 180",
+        "dq_is_null_mandatory-facility_id_govt": "Is the Non-nullable column facility_id_govt null",
+        "dq_duplicate-facility_id_govt": "Does the check pass with no duplicates in the facility_id_govt column",
+        "dq_duplicate-facility_id_giga": "Does the check pass with no duplicates in the column facility_id_giga column",
+        "dq_is_invalid_range-geo_latitude": "Is the school's geo_latitude between -90 and 90",
+        "dq_is_invalid_range-geo_longitude": "Is the school's geo_longitude between -180 and 180",
         "dq_is_not_within_country": "Are the coordinates within the country",
     }
 
@@ -157,7 +157,7 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     geolocation_checks = {
         **is_not_within_country_desc,
         **similar_name_level_within_110_desc,
-        **school_density_desc,
+        **facility_density_desc,
         **duplicate_all_except_checks_desc,
         **precision_check_desc,
         **duplicate_set_checks_desc,
@@ -190,7 +190,9 @@ def human_readable_coverage_coverage_itu_checks() -> dict[str, str]:
     )
 
     critical_error_checks_desc = {
-        "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
+        "dq_duplicate-facility_id_giga": (
+            "Does the check pass with no duplicates in the facility_id_giga column"
+        ),
     }
 
     for column in CONFIG_NONEMPTY_COLUMNS_COVERAGE_AND_COVERAGE_ITU:
@@ -214,7 +216,9 @@ def human_readable_coverage_fb_checks() -> dict[str, str]:
     }
 
     critical_error_checks_desc = {
-        "dq_duplicate-school_id_giga": "Does the check pass with no duplicates in the column school_id_giga column",
+        "dq_duplicate-facility_id_giga": (
+            "Does the check pass with no duplicates in the facility_id_giga column"
+        ),
     }
 
     for column in config_expectations_instance.NONEMPTY_COLUMNS_COVERAGE_FB:
@@ -302,12 +306,12 @@ def handle_rename_dq_has_critical_error_column(
         )
 
     human_readeable_extended_master_geolocation_columns_mapping = {
-        "dq_duplicate-school_id_govt": "school_id_govt has a duplicate",
-        "dq_duplicate-school_id_giga": "school_id_giga has a duplicate",
-        "dq_is_invalid_range-latitude": "latitude is not between -90 and 90",
-        "dq_is_invalid_range-longitude": "longitude is not between -180 and 180",
-        "dq_is_null_optional-latitude": "latitude is missing",
-        "dq_is_null_optional-longitude": "longitude is missing",
+        "dq_duplicate-facility_id_govt": "facility_id_govt has a duplicate",
+        "dq_duplicate-facility_id_giga": "facility_id_giga has a duplicate",
+        "dq_is_invalid_range-geo_latitude": "geo_latitude is not between -90 and 90",
+        "dq_is_invalid_range-geo_longitude": "geo_longitude is not between -180 and 180",
+        "dq_is_null_optional-geo_latitude": "geo_latitude is missing",
+        "dq_is_null_optional-geo_longitude": "geo_longitude is missing",
         "dq_is_not_within_country": "location is not within the country",
     }
     full_human_readable_mapping = {

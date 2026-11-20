@@ -48,10 +48,10 @@ def _get_data_store() -> ADLSDataStore:
 
 
 def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
-    """Extract school_id_giga, school_id_govt, DUPLICATE_REPORT_DISPLAY_COLUMNS,
+    """Extract facility_id_giga, facility_id_govt, DUPLICATE_REPORT_DISPLAY_COLUMNS,
     and the out-of-country flag when present, from Spark DF to Pandas."""
-    columns = ["school_id_giga"]
-    for column in ["school_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS]:
+    columns = ["facility_id_giga"]
+    for column in ["facility_id_govt", *DUPLICATE_REPORT_DISPLAY_COLUMNS]:
         if column in df.columns:
             columns.append(column)
     if "dq_is_not_within_country" in df.columns:
@@ -59,8 +59,8 @@ def _spark_to_pandas_coords(df: sql.DataFrame) -> pd.DataFrame:
     if "row_num" in df.columns:
         columns.append("row_num")
     pdf = df.select(*columns).toPandas()
-    pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
-    pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
+    pdf["geo_latitude"] = pd.to_numeric(pdf["geo_latitude"], errors="coerce")
+    pdf["geo_longitude"] = pd.to_numeric(pdf["geo_longitude"], errors="coerce")
     return pdf
 
 
@@ -81,10 +81,10 @@ def _drop_out_of_country(pdf: pd.DataFrame, logger, check_name: str) -> pd.DataF
 def _get_valid_coords_mask(pdf: pd.DataFrame) -> pd.Series:
     """Return a boolean mask for rows with valid (non-null, non-NaN) coordinates."""
     return (
-        pdf["latitude"].notna()
-        & pdf["longitude"].notna()
-        & pdf["latitude"].between(-90, 90)
-        & pdf["longitude"].between(-180, 180)
+        pdf["geo_latitude"].notna()
+        & pdf["geo_longitude"].notna()
+        & pdf["geo_latitude"].between(-90, 90)
+        & pdf["geo_longitude"].between(-180, 180)
     )
 
 
@@ -114,8 +114,8 @@ def _log_coord_finiteness(
     ``pdf`` is expected to already be coordinate-masked, so any non-finite/pole value
     or duplicate/null id logged here is what reaches the distance-graph builder.
     """
-    lat = pd.to_numeric(pdf["latitude"], errors="coerce")
-    lon = pd.to_numeric(pdf["longitude"], errors="coerce")
+    lat = pd.to_numeric(pdf["geo_latitude"], errors="coerce")
+    lon = pd.to_numeric(pdf["geo_longitude"], errors="coerce")
     lat_nonfinite = ~np.isfinite(lat)
     lon_nonfinite = ~np.isfinite(lon)
     at_pole = lat.abs() >= 90
@@ -124,25 +124,25 @@ def _log_coord_finiteness(
         f"lat[min={lat.min()}, max={lat.max()}] lon[min={lon.min()}, max={lon.max()}] "
         f"nonfinite_lat={int(lat_nonfinite.sum())} nonfinite_lon={int(lon_nonfinite.sum())} "
         f"at_pole={int(at_pole.sum())} "
-        f"null_id={int(pdf['school_id_giga'].isna().sum())} "
-        f"dup_id={int(pdf['school_id_giga'].duplicated().sum())}"
+        f"null_id={int(pdf['facility_id_giga'].isna().sum())} "
+        f"dup_id={int(pdf['facility_id_giga'].duplicated().sum())}"
     )
     if dump_offending:
         offending = pdf[lat_nonfinite | lon_nonfinite | at_pole]
         logger.error(
             f"{check_name}: offending coordinate rows ({len(offending)}): "
-            f"{offending[['school_id_giga', 'latitude', 'longitude']].head(20).to_dict('records')}"
+            f"{offending[['facility_id_giga', 'geo_latitude', 'geo_longitude']].head(20).to_dict('records')}"
         )
 
 
 def _points_to_gdf(points: pd.DataFrame, logger, check_name: str):
-    """Sanitised GeoDataFrame of POIs, indexed by school_id_giga.
+    """Sanitised GeoDataFrame of POIs, indexed by facility_id_giga.
 
     Returns None when nothing usable is left.
     """
     pdf = points.copy()
-    pdf["latitude"] = pd.to_numeric(pdf["latitude"], errors="coerce")
-    pdf["longitude"] = pd.to_numeric(pdf["longitude"], errors="coerce")
+    pdf["geo_latitude"] = pd.to_numeric(pdf["geo_latitude"], errors="coerce")
+    pdf["geo_longitude"] = pd.to_numeric(pdf["geo_longitude"], errors="coerce")
     pdf = _prepare_poi_points(
         pdf[_get_valid_coords_mask(pdf)].copy(), logger, check_name
     )
@@ -151,8 +151,8 @@ def _points_to_gdf(points: pd.DataFrame, logger, check_name: str):
         return None
 
     return gpd.GeoDataFrame(
-        {"poi_id": pdf["school_id_giga"].astype(str)},
-        geometry=gpd.points_from_xy(pdf["longitude"], pdf["latitude"]),
+        {"poi_id": pdf["facility_id_giga"].astype(str)},
+        geometry=gpd.points_from_xy(pdf["geo_longitude"], pdf["geo_latitude"]),
         crs="EPSG:4326",
     ).set_index("poi_id")
 
@@ -160,20 +160,20 @@ def _points_to_gdf(points: pd.DataFrame, logger, check_name: str):
 def _prepare_poi_points(
     pdf_valid: pd.DataFrame, logger, check_name: str
 ) -> pd.DataFrame:
-    """Drop null and duplicate ``school_id_giga`` rows so it can be used as a unique
+    """Drop null and duplicate ``facility_id_giga`` rows so it can be used as a unique
     ``poi_id_column``.
 
-    Deduping is safe: ``school_id_giga`` is a deterministic hash of the coordinates
+    Deduping is safe: ``facility_id_giga`` is a deterministic hash of the coordinates
     (among other fields), so rows sharing an id share coordinates and therefore the
     same mapped result. Results are joined back onto the full DataFrame by
-    ``school_id_giga``, which fans the single computed value out to every row that
+    ``facility_id_giga``, which fans the single computed value out to every row that
     shares the id; rows with a null id can never be mapped and stay null.
     """
     before = len(pdf_valid)
-    prepared = pdf_valid[pdf_valid["school_id_giga"].notna()].drop_duplicates(
-        subset="school_id_giga", keep="first"
+    prepared = pdf_valid[pdf_valid["facility_id_giga"].notna()].drop_duplicates(
+        subset="facility_id_giga", keep="first"
     )
-    null_ids = before - int(pdf_valid["school_id_giga"].notna().sum())
+    null_ids = before - int(pdf_valid["facility_id_giga"].notna().sum())
     logger.info(
         f"{check_name}: poi points {before} -> {len(prepared)} "
         f"(dropped {null_ids} null-id, {before - null_ids - len(prepared)} duplicate-id rows)"
@@ -186,10 +186,10 @@ def _null_guard_int(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     df = df.withColumn(
         col_name,
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col(col_name)),
     )
@@ -201,10 +201,10 @@ def _null_guard_long(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     df = df.withColumn(
         col_name,
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("long"),
         ).otherwise(f.col(col_name)),
     )
@@ -216,10 +216,10 @@ def _null_guard_string(df: sql.DataFrame, col_name: str) -> sql.DataFrame:
     return df.withColumn(
         col_name,
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("string"),
         ).otherwise(f.col(col_name)),
     )
@@ -263,7 +263,7 @@ class POIContextEnricher(PoiViewGenerator):
         # add_duplicate_groups; used to build the duplicates report, separately from
         # self.view which only ever carries the upload's own rows.
         self.duplicate_group_members = pd.DataFrame(
-            columns=["school_id_giga", "group_id", "count", "source"]
+            columns=["facility_id_giga", "group_id", "count", "source"]
         )
 
     @property
@@ -381,11 +381,11 @@ class POIContextEnricher(PoiViewGenerator):
             f"Duplicate groups: graph nodes={G.number_of_nodes()}, edges={G.number_of_edges()}"
         )
 
-        groups = assign_proximity_groups(G).set_index("school_id_giga")
+        groups = assign_proximity_groups(G).set_index("facility_id_giga")
 
         members = groups[groups["flag"] == 1].reset_index()
         members["source"] = (
-            members["school_id_giga"]
+            members["facility_id_giga"]
             .astype(str)
             .map(lambda i: "file" if i in upload_ids else "master")
         )
@@ -394,7 +394,7 @@ class POIContextEnricher(PoiViewGenerator):
         uploaded_group_ids = members.loc[members["source"] == "file", "group_id"]
         members = members[members["group_id"].isin(uploaded_group_ids)]
         self.duplicate_group_members = members[
-            ["school_id_giga", "group_id", "count", "source"]
+            ["facility_id_giga", "group_id", "count", "source"]
         ]
 
         view = self.view.copy()
@@ -557,7 +557,7 @@ def _geospatial_result_schema() -> StructType:
         {c: LongType() for c in GEOSPATIAL_INT_COLUMNS + GEOSPATIAL_LONG_COLUMNS}
     )
     return StructType(
-        [StructField("school_id_giga", StringType(), True)]
+        [StructField("facility_id_giga", StringType(), True)]
         + [StructField(c, types[c], True) for c in GEOSPATIAL_COLUMNS]
     )
 
@@ -584,7 +584,7 @@ def build_proximity_graph(
     threshold_m: int = PROXIMITY_DUPLICATE_THRESHOLD_M,
     context: OpExecutionContext = None,
 ):
-    """Distance graph over ``points`` (school_id_giga, latitude, longitude)."""
+    """Distance graph over ``points`` (facility_id_giga, geo_latitude, geo_longitude)."""
     logger = get_context_with_fallback_logger(context)
 
     gdf = _points_to_gdf(points, logger, "Proximity graph")
@@ -600,8 +600,8 @@ def build_proximity_graph(
 
 
 _IDENTITY_COLUMNS = [
-    "school_id_giga",
-    "school_id_govt",
+    "facility_id_giga",
+    "facility_id_govt",
     *DUPLICATE_REPORT_DISPLAY_COLUMNS,
 ]
 
@@ -612,7 +612,7 @@ def _build_duplicate_50m_members(
     spark: sql.SparkSession,
     reference_points: pd.DataFrame = None,
 ) -> sql.DataFrame:
-    """Attach school_id_govt/latitude/longitude to 50m duplicate group members.
+    """Attach facility_id_govt/geo_latitude/geo_longitude to 50m duplicate group members.
 
     ``members`` (from ``POIContextEnricher.duplicate_group_members``) only has ids —
     file-side identities come from ``file_points`` (already-materialized pandas
@@ -626,27 +626,27 @@ def _build_duplicate_50m_members(
         return spark.createDataFrame([], schema)
 
     identity_columns_with_row_num = [*_IDENTITY_COLUMNS, "row_num"]
-    file_ids = set(members.loc[members["source"] == "file", "school_id_giga"])
+    file_ids = set(members.loc[members["source"] == "file", "facility_id_giga"])
     if file_ids:
         file_identities = file_points[
-            file_points["school_id_giga"].astype(str).isin(file_ids)
+            file_points["facility_id_giga"].astype(str).isin(file_ids)
         ][identity_columns_with_row_num]
     else:
         file_identities = pd.DataFrame(columns=identity_columns_with_row_num)
 
     if reference_points is not None:
-        master_ids = set(members.loc[members["source"] == "master", "school_id_giga"])
+        master_ids = set(members.loc[members["source"] == "master", "facility_id_giga"])
         master_identities = reference_points[
-            reference_points["school_id_giga"].astype(str).isin(master_ids)
+            reference_points["facility_id_giga"].astype(str).isin(master_ids)
         ][_IDENTITY_COLUMNS].copy()
         master_identities["row_num"] = MASTER_ROW_NUM
     else:
         master_identities = pd.DataFrame(columns=identity_columns_with_row_num)
 
     identities = pd.concat([file_identities, master_identities], ignore_index=True)
-    identities["school_id_giga"] = identities["school_id_giga"].astype(str)
+    identities["facility_id_giga"] = identities["facility_id_giga"].astype(str)
 
-    result = members.merge(identities, on="school_id_giga", how="inner").rename(
+    result = members.merge(identities, on="facility_id_giga", how="inner").rename(
         columns={
             "group_id": "duplicate_group_id_50m",
             "count": "duplicate_group_count_50m",
@@ -655,7 +655,7 @@ def _build_duplicate_50m_members(
     result_pdf = to_spark_safe(
         result[
             [
-                "school_id_govt",
+                "facility_id_govt",
                 *DUPLICATE_REPORT_DISPLAY_COLUMNS,
                 "source",
                 "row_num",
@@ -701,7 +701,7 @@ def run_geospatial_checks(
     logger.info(f"Starting geospatial checks for country={country_code_iso3}...")
     logger.info(f"GIGASPATIAL_ROOT_DATA_DIR={settings.GIGASPATIAL_ROOT_DATA_DIR}")
 
-    required_columns = {"school_id_giga", "latitude", "longitude"}
+    required_columns = {"facility_id_giga", "geo_latitude", "geo_longitude"}
     if not required_columns.issubset(df.columns):
         logger.info(
             "Skipping geospatial checks — missing columns: "
@@ -730,7 +730,7 @@ def run_geospatial_checks(
         enricher = POIContextEnricher(
             points=poi_points,
             country_code_iso3=country_code_iso3,
-            poi_id_column="school_id_giga",
+            poi_id_column="facility_id_giga",
             data_store=_get_data_store(),
             logger=logger,
             reference_points=reference_points,
@@ -757,7 +757,7 @@ def run_geospatial_checks(
     )
 
     view = enricher.view
-    result_pdf = pd.DataFrame({"school_id_giga": view["poi_id"]})
+    result_pdf = pd.DataFrame({"facility_id_giga": view["poi_id"]})
     _apply_column_mapping(result_pdf, view, GEOSPATIAL_COLUMN_MAPPING)
 
     _log_non_null_counts(logger, "Geospatial checks", result_pdf, GEOSPATIAL_COLUMNS)

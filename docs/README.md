@@ -19,6 +19,7 @@ distributed compute.
 5. [Support](support.md)
 6. [Facility geolocation contracts](facility-geolocation-contracts.md)
 7. [Facility cutover: school_master and connectivity](facility-cutover-school-master-and-connectivity.md)
+8. [Facility schema rename and NocoDB DQ checks](facility-schema-rename-and-nocodb-dq.md)
 
 ## Jump to other platform services
 

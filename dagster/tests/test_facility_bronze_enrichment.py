@@ -77,7 +77,7 @@ def test_prepare_facility_bronze_sets_connectivity_govt_timestamp(monkeypatch):
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_admin_columns",
-        lambda df, country_code, admin_level: df,
+        lambda df, country_code, admin_level, **kwargs: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_disputed_region_column",
@@ -143,7 +143,7 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_admin_columns",
-        lambda df, country_code, admin_level: df,
+        lambda df, country_code, admin_level, **kwargs: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_disputed_region_column",
@@ -211,3 +211,42 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
         spark=spark,
     )
     assert calls["school"] == 1
+
+
+def test_enrich_admin_from_geo_uses_geo_columns_without_aliasing(monkeypatch):
+    from src.data_quality_checks import facility
+
+    spark = _session()
+    calls = []
+
+    def fake_add_admin(df, country_code, admin_level, **kwargs):
+        calls.append((admin_level, kwargs))
+        return df
+
+    monkeypatch.setattr(facility, "add_admin_columns", fake_add_admin)
+    monkeypatch.setattr(facility, "add_disputed_region_column", lambda df: df)
+    df = spark.createDataFrame(
+        [Row(facility_id_govt="A1", geo_latitude=0.1, geo_longitude=32.1)]
+    )
+
+    result = facility._enrich_admin_from_geo(df, "UGA")
+
+    assert result.columns == df.columns
+    assert [level for level, _ in calls] == ["admin1", "admin2", "admin3", "admin4"]
+    assert all(
+        kwargs
+        == {"latitude_column": "geo_latitude", "longitude_column": "geo_longitude"}
+        for _, kwargs in calls
+    )
+
+
+def test_facility_check_alias_layer_is_removed():
+    from src.data_quality_checks import facility
+
+    for name in (
+        "add_check_compatibility_columns",
+        "_dq_column_aliases",
+        "_rename_facility_dq_columns",
+        "_CHECK_ALIASES",
+    ):
+        assert not hasattr(facility, name)

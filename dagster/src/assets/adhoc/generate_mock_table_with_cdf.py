@@ -38,7 +38,7 @@ def adhoc__copy_original(
     (
         DeltaTable.forName(spark.spark_session, ZCDF_TABLE_NAME)
         .alias("source")
-        .merge(original.alias("new"), "source.school_id_giga = new.school_id_giga")
+        .merge(original.alias("new"), "source.facility_id_giga = new.facility_id_giga")
         .whenNotMatchedInsertAll()
         .execute()
     )
@@ -59,7 +59,7 @@ def adhoc__generate_v2(spark: PySparkResource):
         .alias("master")
         .merge(
             updates.alias("updates"),
-            "master.school_id_giga = updates.school_id_giga",
+            "master.facility_id_giga = updates.facility_id_giga",
         )
         .whenMatchedUpdateAll()
         .whenNotMatchedBySourceDelete()
@@ -82,7 +82,7 @@ def adhoc__generate_v3(spark: PySparkResource):
         .alias("master")
         .merge(
             updates.alias("updates"),
-            "master.school_id_giga = updates.school_id_giga",
+            "master.facility_id_giga = updates.facility_id_giga",
         )
         .whenMatchedUpdateAll()
         .whenNotMatchedBySourceDelete()

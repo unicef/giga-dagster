@@ -418,7 +418,7 @@ def geolocation_data_quality_results(
     # dq_has_critical_error and failure_reason remain as top-level columns because
     # they are used for row-level filtering throughout the pipeline.
     # In Trino the map is queryable as: dq_results['is_null_optional-latitude']
-    # String-valued dq_ columns (e.g. dq_school_density_group_id, dq_duplicate_location_rows_id,
+    # String-valued dq_ columns (e.g. dq_facility_density_group_id, dq_duplicate_location_rows_id,
     # both md5 hashes) cannot
     # live in a map<string, int> and stay top-level.
     dq_flag_cols = [

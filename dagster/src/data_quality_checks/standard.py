@@ -1,12 +1,12 @@
 from typing import Any
 
-from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import (
     Window,
     functions as f,
 )
 
+from dagster import OpExecutionContext
 from src.data_quality_checks.config import (
     CONFIG_NONEMPTY_COLUMNS,
     CONFIG_UNIQUE_COLUMNS,
@@ -54,10 +54,10 @@ def completeness_checks(
     # optional columns
     for column in df.columns:
         if column not in config_column_list and column not in dq_columns:
-            # for latitude and longitude we need to check if isnan too because they are "double" columns
+            # for geo_latitude and geo_longitude we need to check if isnan too because they are "double" columns
             null_check = (
                 (f.isnull(f.col(column)) | f.isnan(f.col(column)))
-                if column in ("latitude", "longitude")
+                if column in ("geo_latitude", "geo_longitude")
                 else f.isnull(f.col(column))
             )
             column_actions[f"dq_is_null_optional-{column}"] = f.when(
@@ -166,8 +166,8 @@ def format_validation_checks(df, context: OpExecutionContext = None):
                 )
                 .otherwise(f.lit(1))
             )
-        # special format validation for school_id_giga
-        if column in df.columns and column == "school_id_giga":
+        # special format validation for facility_id_giga
+        if column in df.columns and column == "facility_id_giga":
             column_actions[f"dq_is_not_36_character_hash-{column}"] = (
                 f.when(f.col(column).isNull(), f.lit(0))
                 .when(
@@ -199,7 +199,7 @@ def is_string_more_than_255_characters_check(
     column_actions = {}
     for column in df.columns:
         if (
-            column != "school_name"
+            column != "facility_name"
             and not column.startswith("dq")
             and column not in non_string_cols
         ):

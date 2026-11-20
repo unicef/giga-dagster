@@ -15,7 +15,7 @@ def coverage_column_filter(df: sql.DataFrame, config_columns_to_keep: list[str])
 
 
 def coverage_row_filter(df: sql.DataFrame):
-    df = df.filter(f.col("school_id_giga").isNotNull())
+    df = df.filter(f.col("facility_id_giga").isNotNull())
     return df
 
 
@@ -75,16 +75,16 @@ def fb_transforms(fb: sql.DataFrame):
 def fb_coverage_merge(fb: sql.DataFrame, cov: sql.DataFrame):
     # add suffixes
     for col in fb.columns:
-        if col != "school_id_giga":  # add suffix except join key
+        if col != "facility_id_giga":  # add suffix except join key
             fb = fb.withColumnRenamed(col, col + "_fb")
 
     # left join, scoped to uploaded schools
-    cov_stg = fb.join(cov, on="school_id_giga", how="left")
+    cov_stg = fb.join(cov, on="facility_id_giga", how="left")
 
     # coalesce with updated values
     for col in cov.columns:
         if (
-            col not in config.COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
+            col not in config.COV_COLUMN_MERGE_LOGIC and col != "facility_id_giga"
         ):  # coverage availability and type are merged differently
             cov_stg = cov_stg.withColumn(col, f.coalesce(col + "_fb", col))
             cov_stg = cov_stg.drop(col + "_fb")
@@ -191,16 +191,16 @@ def itu_transforms(itu: sql.DataFrame):
 def itu_coverage_merge(itu: sql.DataFrame, cov: sql.DataFrame):
     # add suffixes
     for col in itu.columns:
-        if col != "school_id_giga":  # add suffix except join key
+        if col != "facility_id_giga":  # add suffix except join key
             itu = itu.withColumnRenamed(col, col + "_itu")
 
     # left join, scoped to uploaded schools
-    cov_stg = itu.join(cov, on="school_id_giga", how="left")
+    cov_stg = itu.join(cov, on="facility_id_giga", how="left")
 
     # coalesce with updated values
     for col in cov.columns:
         if (
-            col not in config.COV_COLUMN_MERGE_LOGIC and col != "school_id_giga"
+            col not in config.COV_COLUMN_MERGE_LOGIC and col != "facility_id_giga"
         ):  # coverage availability and type are merged differently
             cov_stg = cov_stg.withColumn(col, f.coalesce(col + "_itu", col))
             cov_stg = cov_stg.drop(col + "_itu")
@@ -250,7 +250,7 @@ if __name__ == "__main__":
 
         # itu.show()
         ## CONFORM TEST FILES TO PROPER SCHEMA
-        cov = cov.withColumnRenamed("giga_id_school", "school_id_giga")
+        cov = cov.withColumnRenamed("giga_id_school", "facility_id_giga")
         cov = cov.withColumnRenamed(
             "coverage_availability", "cellular_coverage_availability"
         )
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         cov = cov.withColumn("nearest_NR_id", f.lit(None))
         cov = cov.withColumn("nearest_NR_distance", f.lit(None))
         cov_columns = [
-            "school_id_giga",
+            "facility_id_giga",
             "cellular_coverage_availability",
             "cellular_coverage_type",
             "fiber_node_distance",
@@ -283,8 +283,8 @@ if __name__ == "__main__":
         ]
         cov = cov.select(cov_columns)
         # itu.show()
-        fb = fb.withColumnRenamed("giga_id_school", "school_id_giga")
-        fb = fb.select("school_id_giga", "percent_2G", "percent_3G", "percent_4G")
+        fb = fb.withColumnRenamed("giga_id_school", "facility_id_giga")
+        fb = fb.select("facility_id_giga", "percent_2G", "percent_3G", "percent_4G")
         fb.show()
         # df = row_level_checks(
         #     fb,
@@ -301,12 +301,12 @@ if __name__ == "__main__":
 
         # ## filter to one entry for testing
         fb = fb.filter(
-            f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3"
+            f.col("facility_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3"
         )
         fb.show()
-        # itu = itu.filter(f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
+        # itu = itu.filter(f.col("facility_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3")
         cov = cov.filter(
-            f.col("school_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3"
+            f.col("facility_id_giga") == "a8b4968c-fcb2-31fd-83b1-01b2c48625f3"
         )
         cov.show()
 

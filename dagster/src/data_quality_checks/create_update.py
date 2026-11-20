@@ -1,7 +1,7 @@
-from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import functions as f
 
+from dagster import OpExecutionContext
 from src.utils.logger import get_context_with_fallback_logger
 
 
@@ -17,9 +17,9 @@ def add_is_new_entity(
     logger.info(f"Deriving {output_column} from current dataset join...")
 
     existing_id = f"_existing_{govt_id_column}"
-    silver_ids = silver.select(
-        f.col(govt_id_column).alias(existing_id)
-    ).dropDuplicates([existing_id])
+    silver_ids = silver.select(f.col(govt_id_column).alias(existing_id)).dropDuplicates(
+        [existing_id]
+    )
     joined = bronze.alias("bronze").join(
         silver_ids,
         f.col(f"bronze.{govt_id_column}") == f.col(existing_id),
@@ -35,7 +35,11 @@ def add_is_new_school(
     silver: sql.DataFrame,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
-    """Backward-compatible school wrapper around ``add_is_new_entity``."""
+    """Backward-compatible school wrapper around ``add_is_new_entity``.
+
+    Kept on ``school_id_govt`` for the legacy school geolocation path until that
+    asset pack is removed. Facility bronze uses ``add_is_new_entity`` directly.
+    """
     return add_is_new_entity(
         bronze,
         silver,
@@ -100,12 +104,8 @@ def enrich_with_silver_values(
 ) -> sql.DataFrame:
     """Fill gaps in bronze with silver values for existing schools.
 
-    For each row where school_id_govt matches silver:
-    - Prioritises silver's school_id_giga (authoritative)
-    - Coalesces each common column: bronze value first, silver as fallback
-
-    New schools (no silver match) are returned unchanged.
-    Does not produce any DQ flags.
+    Legacy school-geolocation wrapper: still keyed on ``school_id_*``. Facility
+    bronze/DQ call ``enrich_with_current_values`` with facility column names.
     """
     return enrich_with_current_values(
         bronze,

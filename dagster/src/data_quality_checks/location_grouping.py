@@ -30,10 +30,10 @@ GROUP_COUNT_COLUMN = "_group_count"
 
 # Non-key value columns of a duplicate-group-member frame, in report column order.
 DUPLICATE_REPORT_DISPLAY_COLUMNS = [
-    "school_name",
-    "education_level_govt",
-    "latitude",
-    "longitude",
+    "facility_name",
+    "facility_level_govt",
+    "geo_latitude",
+    "geo_longitude",
     "admin1",
     "admin2",
 ]
@@ -41,12 +41,12 @@ DUPLICATE_REPORT_DISPLAY_COLUMNS = [
 # Shared identity columns for every duplicate-group-member frame in the duplicates
 # report; each check type appends its own group id/count columns to this prefix.
 MEMBER_IDENTITY_SCHEMA = (
-    "school_id_govt string, school_name string, education_level_govt string, "
-    "latitude double, longitude double, admin1 string, admin2 string, source string, "
+    "facility_id_govt string, facility_name string, facility_level_govt string, "
+    "geo_latitude double, geo_longitude double, admin1 string, admin2 string, source string, "
     "row_num int"
 )
 
-# Master is always a single row/source per school_id_govt — no need to
+# Master is always a single row/source per facility_id_govt — no need to
 # disambiguate, unlike file rows which may have physical dupes.
 MASTER_ROW_NUM = 1
 
@@ -58,10 +58,10 @@ LOCATION_MEMBERS_SCHEMA = (
 
 def null_coordinates(df: sql.DataFrame) -> sql.Column:
     return (
-        f.col("latitude").isNull()
-        | f.isnan(f.col("latitude"))
-        | f.col("longitude").isNull()
-        | f.isnan(f.col("longitude"))
+        f.col("geo_latitude").isNull()
+        | f.isnan(f.col("geo_latitude"))
+        | f.col("geo_longitude").isNull()
+        | f.isnan(f.col("geo_longitude"))
     )
 
 
@@ -103,8 +103,8 @@ def location_id_column() -> sql.Column:
     """
     return f.concat_ws(
         "_",
-        f.col("longitude").cast("string"),
-        f.col("latitude").cast("string"),
+        f.col("geo_longitude").cast("string"),
+        f.col("geo_latitude").cast("string"),
     )
 
 
@@ -164,12 +164,12 @@ def join_pandas_result_to_spark(
     result_columns: list[str],
     schema: StructType = None,
 ) -> sql.DataFrame:
-    """Left-join a Pandas result onto ``df`` by school_id_giga."""
-    result_keyed = result_pdf[["school_id_giga"] + result_columns].drop_duplicates(
-        subset="school_id_giga", keep="first"
+    """Left-join a Pandas result onto ``df`` by facility_id_giga."""
+    result_keyed = result_pdf[["facility_id_giga"] + result_columns].drop_duplicates(
+        subset="facility_id_giga", keep="first"
     )
     result_sdf = df.sparkSession.createDataFrame(result_keyed, schema=schema)
-    return df.join(result_sdf, on="school_id_giga", how="left")
+    return df.join(result_sdf, on="facility_id_giga", how="left")
 
 
 def group_key(columns: list[str]) -> sql.Column:
@@ -190,13 +190,13 @@ def build_reference_frame(
 ) -> sql.DataFrame:
     """Silver rows that group alongside ``upload``.
 
-    Silver rows whose ``school_id_govt`` is in the upload are excluded — the upload
+    Silver rows whose ``facility_id_govt`` is in the upload are excluded — the upload
     carries their new version, so keeping both makes every updated school a
     duplicate of itself.
     """
     logger = get_context_with_fallback_logger(context)
 
-    if silver is None or "school_id_govt" not in silver.columns:
+    if silver is None or "facility_id_govt" not in silver.columns:
         return None
 
     missing = [column for column in columns if column not in silver.columns]
@@ -204,10 +204,10 @@ def build_reference_frame(
         logger.info(f"No location reference frame — silver is missing {missing}")
         return None
 
-    upload_ids = upload.select("school_id_govt").distinct()
+    upload_ids = upload.select("facility_id_govt").distinct()
     return (
         silver.where(~null_coordinates(silver))
-        .join(upload_ids, on="school_id_govt", how="left_anti")
+        .join(upload_ids, on="facility_id_govt", how="left_anti")
         .select(*columns)
     )
 
@@ -259,7 +259,7 @@ def materialize_location_duplicate_members(
         "location_id", location_id_column()
     )
     file_members = flagged.select(
-        "school_id_govt",
+        "facility_id_govt",
         *DUPLICATE_REPORT_DISPLAY_COLUMNS,
         f.lit("file").alias("source"),
         f.col("dq_duplicate_location_rows_id").alias("duplicate_location_rows_id"),
@@ -281,7 +281,7 @@ def materialize_location_duplicate_members(
         reference.withColumn("location_id", location_id_column())
         .join(group_counts, on="location_id", how="inner")
         .select(
-            "school_id_govt",
+            "facility_id_govt",
             *DUPLICATE_REPORT_DISPLAY_COLUMNS,
             f.lit("master").alias("source"),
             hash_id_column(f.col("location_id")).alias("duplicate_location_rows_id"),
@@ -299,11 +299,11 @@ def combine_duplicate_members(
 ) -> sql.DataFrame:
     """One row per physical file/master row in either duplicate group.
 
-    Joined on school_id_govt + source + row_num, not school_id_govt alone — a
+    Joined on facility_id_govt + source + row_num, not facility_id_govt alone — a
     school with multiple physical duplicate rows in the file would otherwise fan
     out into a cross product between the two member frames.
     """
-    join_key = ["school_id_govt", "source", "row_num"]
+    join_key = ["facility_id_govt", "source", "row_num"]
     exact_location = location_members.select(
         *join_key,
         *[
@@ -320,7 +320,7 @@ def combine_duplicate_members(
         "duplicate_group_count_50m",
     )
     return exact_location.join(fifty_m, on=join_key, how="full_outer").select(
-        "school_id_govt",
+        "facility_id_govt",
         "source",
         *[
             f.coalesce(f.col(f"_exact_location_{c}"), f.col(f"_fifty_m_{c}")).alias(c)
@@ -357,9 +357,7 @@ def _human_readable_column_names(
     dq_config_table: str = "SchoolGeolocationMasterDQChecks",
 ) -> dict[str, str]:
     """dq_ check column (sans prefix) -> NocoDB "Human Readable Name"."""
-    table_id = get_nocodb_table_id_from_name(
-        table_name=dq_config_table
-    )
+    table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
     table = get_nocodb_table_as_pandas_dataframe(table_id=table_id)
     names = table.set_index("DQ Table Column Name")["Human Readable Name"].to_dict()
     return {
@@ -393,20 +391,20 @@ def finalize_duplicates_report(
 def attach_approval_status(
     duplicates_report: sql.DataFrame,
     dq_results: sql.DataFrame,
-    dq_id_column: str = "school_id_govt",
+    dq_id_column: str = "facility_id_govt",
 ) -> sql.DataFrame:
     """approval_status is only meaningful for "file" rows — master rows have no DQ
     run of their own for this upload, so they stay NULL."""
-    relevant_ids = duplicates_report.select("school_id_govt").distinct()
+    relevant_ids = duplicates_report.select("facility_id_govt").distinct()
     approval_source = dq_results
-    if dq_id_column != "school_id_govt":
+    if dq_id_column != "facility_id_govt":
         approval_source = approval_source.withColumn(
-            "school_id_govt", f.col(dq_id_column)
+            "facility_id_govt", f.col(dq_id_column)
         )
     approval = (
-        approval_source.join(relevant_ids, on="school_id_govt", how="inner")
-        .select("school_id_govt", "dq_has_critical_error")
-        .dropDuplicates(["school_id_govt"])
+        approval_source.join(relevant_ids, on="facility_id_govt", how="inner")
+        .select("facility_id_govt", "dq_has_critical_error")
+        .dropDuplicates(["facility_id_govt"])
         .withColumn(
             "approval_status",
             f.when(f.col("dq_has_critical_error") == 1, "rejected").otherwise(
@@ -415,7 +413,7 @@ def attach_approval_status(
         )
         .drop("dq_has_critical_error")
     )
-    return duplicates_report.join(approval, on="school_id_govt", how="left")
+    return duplicates_report.join(approval, on="facility_id_govt", how="left")
 
 
 def _partition_graph_by_max_cliques(graph: nx.Graph) -> list:
@@ -476,7 +474,7 @@ def assign_proximity_groups(graph: nx.Graph) -> pd.DataFrame:
     counts = [graph.degree(node) + 1 for node in nodes]
     return pd.DataFrame(
         {
-            "school_id_giga": nodes,
+            "facility_id_giga": nodes,
             "flag": [1 if node in duplicate_map else 0 for node in nodes],
             "group_id": [duplicate_map.get(node) for node in nodes],
             "count": [c if c > 1 else None for c in counts],

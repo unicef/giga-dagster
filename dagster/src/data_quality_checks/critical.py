@@ -1,7 +1,7 @@
-from dagster import OpExecutionContext
 from pyspark import sql
 from pyspark.sql import functions as f
 
+from dagster import OpExecutionContext
 from src.utils.data_quality_descriptions import (
     handle_rename_dq_has_critical_error_column,
 )
@@ -20,9 +20,7 @@ def _build_geolocation_critical_exprs(
     check_column_aliases: dict[str, str],
 ) -> tuple[list, list]:
     """Build critical error expressions for geolocation/master datasets from NocoDB config."""
-    noco_table_id = get_nocodb_table_id_from_name(
-        table_name=dq_config_table
-    )
+    noco_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
     noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
 
     critical_rows = noco_table[
@@ -44,8 +42,7 @@ def _build_geolocation_critical_exprs(
             continue
         critical_exprs.append(
             f.when(
-                f.isnan(f.col(dataframe_column))
-                | f.col(dataframe_column).isNull(),
+                f.isnan(f.col(dataframe_column)) | f.col(dataframe_column).isNull(),
                 f.lit(0),
             ).otherwise(f.col(dataframe_column))
         )
@@ -84,7 +81,10 @@ def _build_master_location_exprs(
     """Add mandatory lat/lng checks for master datasets if not already in NocoDB config."""
     critical_exprs = []
     failure_exprs = []
-    for c in ["dq_is_null_mandatory-latitude", "dq_is_null_mandatory-longitude"]:
+    for c in [
+        "dq_is_null_mandatory-geo_latitude",
+        "dq_is_null_mandatory-geo_longitude",
+    ]:
         if c not in df.columns or c in already_covered:
             continue
         critical_exprs.append(
@@ -108,9 +108,9 @@ def _build_other_dataset_exprs(
     ]
 
     if dataset_type in ["reference", "coverage", "coverage_fb", "coverage_itu"]:
-        critical_column_dq_checks.append("dq_duplicate-school_id_giga")
+        critical_column_dq_checks.append("dq_duplicate-facility_id_giga")
     elif dataset_type == "qos":
-        critical_column_dq_checks.extend(["dq_duplicate-school_id_giga"])
+        critical_column_dq_checks.extend(["dq_duplicate-facility_id_giga"])
 
     critical_exprs = [
         f.when(f.isnan(f.col(c)) | f.col(c).isNull(), f.lit(0)).otherwise(f.col(c))
@@ -150,9 +150,7 @@ def critical_error_checks(
             check_column_aliases or {},
         )
         if dataset_type == "master":
-            noco_table_id = get_nocodb_table_id_from_name(
-                table_name=dq_config_table
-            )
+            noco_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
             noco_table = get_nocodb_table_as_pandas_dataframe(table_id=noco_table_id)
             critical_rows = noco_table[
                 noco_table["Critical For"].isin(["always", "create_only"])
@@ -176,14 +174,14 @@ def critical_error_checks(
     )
 
     rest_columns = df.columns
-    dataset_has_school_id_giga = "school_id_giga" in rest_columns
-    dataset_has_school_id_govt = "school_id_govt" in rest_columns
+    dataset_has_facility_id_giga = "facility_id_giga" in rest_columns
+    dataset_has_facility_id_govt = "facility_id_govt" in rest_columns
 
     for col in [
         "dq_has_critical_error",
         "failure_reason",
-        "school_id_giga",
-        "school_id_govt",
+        "facility_id_giga",
+        "facility_id_govt",
     ]:
         if col in rest_columns:
             idx = rest_columns.index(col)
@@ -191,12 +189,12 @@ def critical_error_checks(
 
     ordered_columns = []
     order_by_columns = []
-    if dataset_has_school_id_govt:
-        ordered_columns.append("school_id_govt")
-        order_by_columns.append("school_id_govt")
-    if dataset_has_school_id_giga:
-        ordered_columns.append("school_id_giga")
-        order_by_columns.append("school_id_giga")
+    if dataset_has_facility_id_govt:
+        ordered_columns.append("facility_id_govt")
+        order_by_columns.append("facility_id_govt")
+    if dataset_has_facility_id_giga:
+        ordered_columns.append("facility_id_giga")
+        order_by_columns.append("facility_id_giga")
 
     ordered_columns.extend(["dq_has_critical_error", "failure_reason", *rest_columns])
     df = df.select(*ordered_columns).orderBy(

@@ -29,7 +29,12 @@ def duplicate_name_level_110_check(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate level within 110m checks...")
 
-    required_columns = {"latitude", "longitude", "school_name", "education_level"}
+    required_columns = {
+        "geo_latitude",
+        "geo_longitude",
+        "facility_name",
+        "facility_level",
+    }
     if not required_columns.issubset(df.columns):
         logger.info(
             "Skipping duplicate name level within 110m check — missing columns: "
@@ -39,11 +44,11 @@ def duplicate_name_level_110_check(
 
     df_columns = df.columns
 
-    df = df.withColumn("lat_110", f.floor(f.col("latitude") * 1000) / 1000)
-    df = df.withColumn("long_110", f.floor(f.col("longitude") * 1000) / 1000)
+    df = df.withColumn("lat_110", f.floor(f.col("geo_latitude") * 1000) / 1000)
+    df = df.withColumn("long_110", f.floor(f.col("geo_longitude") * 1000) / 1000)
     window_spec1 = Window.partitionBy(
-        "school_name",
-        "education_level",
+        "facility_name",
+        "facility_level",
         "lat_110",
         "long_110",
     )
@@ -58,10 +63,10 @@ def duplicate_name_level_110_check(
     df = df.withColumn(
         "dq_duplicate_name_level_within_110m_radius",
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_name_level_within_110m_radius")),
     )
@@ -77,7 +82,12 @@ def similar_name_level_within_110_check(
     logger = get_context_with_fallback_logger(context)
     logger.info(f"Running {__test_name__} checks...")
 
-    required_columns = {"latitude", "longitude", "education_level", "school_name"}
+    required_columns = {
+        "geo_latitude",
+        "geo_longitude",
+        "facility_level",
+        "facility_name",
+    }
     if not required_columns.issubset(df.columns):
         logger.info(
             f"Skipping {__test_name__} check — missing columns: "
@@ -89,13 +99,13 @@ def similar_name_level_within_110_check(
 
     # Generate Lat 110, Long 110
     column_actions = {
-        "lat_110": f.floor(f.col("latitude") * 1000) / 1000,
-        "long_110": f.floor(f.col("longitude") * 1000) / 1000,
+        "lat_110": f.floor(f.col("geo_latitude") * 1000) / 1000,
+        "long_110": f.floor(f.col("geo_longitude") * 1000) / 1000,
     }
     df = df.withColumns(column_actions)
 
     # Get duplicates across education level, lat 110, long 110
-    window_spec2 = Window.partitionBy("education_level", "lat_110", "long_110")
+    window_spec2 = Window.partitionBy("facility_level", "lat_110", "long_110")
     df = df.withColumn(
         "duplicate_level_within_110m_radius",
         f.when(
@@ -108,61 +118,61 @@ def similar_name_level_within_110_check(
     # IMPORTANT: Filter out invalid coordinates (NULL, NaN, or 0,0) BEFORE grouping
     # to prevent O(N²) explosion when many schools have missing coordinates
     valid_coords_filter = (
-        f.col("latitude").isNotNull()
-        & f.col("longitude").isNotNull()
-        & ~f.isnan(f.col("latitude"))
-        & ~f.isnan(f.col("longitude"))
-        & ~((f.col("latitude") == 0) & (f.col("longitude") == 0))
+        f.col("geo_latitude").isNotNull()
+        & f.col("geo_longitude").isNotNull()
+        & ~f.isnan(f.col("geo_latitude"))
+        & ~f.isnan(f.col("geo_longitude"))
+        & ~((f.col("geo_latitude") == 0) & (f.col("geo_longitude") == 0))
     )
 
-    school_names_grouped = (
+    facility_names_grouped = (
         df.filter((df["duplicate_level_within_110m_radius"] == 1) & valid_coords_filter)
-        .groupBy("education_level", "lat_110", "long_110")
-        .agg(f.collect_set("school_name").alias("school_names"))
+        .groupBy("facility_level", "lat_110", "long_110")
+        .agg(f.collect_set("facility_name").alias("facility_names"))
     )
 
     # Find similar names within each group using vectorized comparison
-    school_names_grouped = school_names_grouped.withColumn(
-        "similar_names_list", find_similar_names_in_group_udf(f.col("school_names"))
+    facility_names_grouped = facility_names_grouped.withColumn(
+        "similar_names_list", find_similar_names_in_group_udf(f.col("facility_names"))
     )
 
     # Explode the list of similar names to get individual rows
-    df_similar = school_names_grouped.select(
-        "education_level",
+    df_similar = facility_names_grouped.select(
+        "facility_level",
         "lat_110",
         "long_110",
-        f.explode("similar_names_list").alias("school_name_similar"),
+        f.explode("similar_names_list").alias("facility_name_similar"),
     )
 
     # Join to original dataset and tag entries with similar names
     # Use aliases to avoid duplicate column names from the join
     df = df.alias("left_df").join(
         df_similar.alias("right_df"),
-        (f.col("left_df.school_name") == f.col("right_df.school_name_similar"))
-        & (f.col("left_df.education_level") == f.col("right_df.education_level"))
+        (f.col("left_df.facility_name") == f.col("right_df.facility_name_similar"))
+        & (f.col("left_df.facility_level") == f.col("right_df.facility_level"))
         & (f.col("left_df.lat_110") == f.col("right_df.lat_110"))
         & (f.col("left_df.long_110") == f.col("right_df.long_110")),
         how="left",
     )
 
-    # Select only the left side columns plus school_name_similar from right side
+    # Select only the left side columns plus facility_name_similar from right side
     # This avoids duplicate column names that would cause ambiguous references later
     columns_to_select = [f.col(f"left_df.{col}") for col in df_columns]
-    columns_to_select.append(f.col("right_df.school_name_similar"))
+    columns_to_select.append(f.col("right_df.facility_name_similar"))
     df = df.select(*columns_to_select)
 
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
-        f.when(f.col("school_name_similar").isNull(), 0).otherwise(1),
+        f.when(f.col("facility_name_similar").isNull(), 0).otherwise(1),
     )
 
     df = df.withColumn(
         "dq_duplicate_similar_name_same_level_within_110m_radius",
         f.when(
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude")),
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude")),
             f.lit(None).cast("int"),
         ).otherwise(f.col("dq_duplicate_similar_name_same_level_within_110m_radius")),
     )
@@ -171,23 +181,23 @@ def similar_name_level_within_110_check(
         "lat_110",
         "long_110",
         "duplicate_level_within_110m_radius",
-        "school_name_similar",
+        "facility_name_similar",
     ]
     columns_to_drop = [col for col in added_columns if col not in df_columns]
 
     return df.drop(*columns_to_drop)
 
 
-def school_density_check(
+def facility_density_check(
     df: sql.DataFrame,
     context: OpExecutionContext = None,
     reference: sql.DataFrame = None,
 ):
-    __test_name__ = "school density"
+    __test_name__ = "facility density"
     logger = ContextLoggerWithLoguruFallback(context, __test_name__)
     logger.log.info(f"Running {__test_name__} checks...")
 
-    required_columns = {"latitude", "longitude", "school_id_giga"}
+    required_columns = {"geo_latitude", "geo_longitude", "facility_id_giga"}
     if not required_columns.issubset(df.columns):
         logger.log.info(
             f"Skipping {__test_name__} check — missing columns: "
@@ -196,7 +206,8 @@ def school_density_check(
         return df
 
     hex8 = h3_geo_to_h3_udf(
-        f.col("latitude").cast(FloatType()), f.col("longitude").cast(FloatType())
+        f.col("geo_latitude").cast(FloatType()),
+        f.col("geo_longitude").cast(FloatType()),
     )
     df = df.withColumn("hex8", hex8)
 
@@ -206,38 +217,40 @@ def school_density_check(
         df,
         reference.withColumn("hex8", hex8) if reference is not None else None,
         ["hex8"],
-        count_column="school_id_giga",
-    ).withColumnRenamed(GROUP_COUNT_COLUMN, "school_density")
+        count_column="facility_id_giga",
+    ).withColumnRenamed(GROUP_COUNT_COLUMN, "facility_density")
 
     null_coords = null_coordinates(df)
 
     df = df.withColumn(
-        "dq_is_school_density_greater_than_5",
+        "dq_is_facility_density_greater_than_5",
         f.when(
             # only set to 1 if lat/lon exist
-            f.col("school_density") > 5,
+            f.col("facility_density") > 5,
             1,
         ).otherwise(0),
     )
 
     df = df.withColumn(
-        "dq_is_school_density_greater_than_5",
+        "dq_is_facility_density_greater_than_5",
         f.when(null_coords, f.lit(None).cast("int")).otherwise(
-            f.col("dq_is_school_density_greater_than_5")
+            f.col("dq_is_facility_density_greater_than_5")
         ),
     )
 
     df = df.withColumn(
-        "dq_school_density_count",
-        f.when(null_coords, f.lit(None).cast("int")).otherwise(f.col("school_density")),
+        "dq_facility_density_count",
+        f.when(null_coords, f.lit(None).cast("int")).otherwise(
+            f.col("facility_density")
+        ),
     )
 
     df = df.withColumn(
-        "dq_school_density_group_id",
+        "dq_facility_density_group_id",
         f.when(null_coords, f.lit(None)).otherwise(hash_id_column(f.col("hex8"))),
     )
 
-    return df.drop("hex8", "school_density")
+    return df.drop("hex8", "facility_density")
 
 
 if __name__ == "__main__":
@@ -263,12 +276,12 @@ if __name__ == "__main__":
     # df = df.limit(1)
     df = df.select(
         [
-            "school_id_giga",
-            "school_id_govt",
-            "school_name",
-            "education_level",
-            "latitude",
-            "longitude",
+            "facility_id_giga",
+            "facility_id_govt",
+            "facility_name",
+            "facility_level",
+            "geo_latitude",
+            "geo_longitude",
         ],
     )
     df.show()
@@ -278,13 +291,13 @@ if __name__ == "__main__":
     df.show()
     print(df.count())
 
-    # school_names = df.select(f.col("school_name")).filter(df["dq_duplicate_similar_name_same_level_within_110m_radius"] == 1).distinct()
-    # print(school_names.count())
-    # distinct_names = school_names.select(f.col("school_name").alias("distinct_names")).distinct()
-    # df_l = school_names.crossJoin(distinct_names)
+    # facility_names = df.select(f.col("facility_name")).filter(df["dq_duplicate_similar_name_same_level_within_110m_radius"] == 1).distinct()
+    # print(facility_names.count())
+    # distinct_names = facility_names.select(f.col("facility_name").alias("distinct_names")).distinct()
+    # df_l = facility_names.crossJoin(distinct_names)
 
     # df_l = df_l.withColumn(
-    #     "dq_has_similar_name", has_similar_name_check_udf(f.col("school_name"), f.col("distinct_names"))
+    #     "dq_has_similar_name", has_similar_name_check_udf(f.col("facility_name"), f.col("distinct_names"))
     # )
     # df_l.show()
 
@@ -292,7 +305,7 @@ if __name__ == "__main__":
     # df_l.show(20)
     # print(df_l.count())
 
-    # df_l = df_l.select(f.col("school_name")).distinct()
+    # df_l = df_l.select(f.col("facility_name")).distinct()
     # df_l.show(20)
     # print(df_l.count())
 
@@ -302,10 +315,10 @@ if __name__ == "__main__":
     # current_partitions = df.rdd.getNumPartitions()
     # print("Current number of partitions:", current_partitions)
 
-    # df = df.withColumn("latitude", f.lit(6.1671))  # outside boundary <= 150km
-    # df = df.withColumn("longitude", f.lit(60.7832)) # outside boundary <= 150km
-    # df = df.withColumn("latitude", f.col("latitude").cast("double"))
-    # df = df.withColumn("longitude", f.col("longitude").cast("double"))
+    # df = df.withColumn("geo_latitude", f.lit(6.1671))  # outside boundary <= 150km
+    # df = df.withColumn("geo_longitude", f.lit(60.7832)) # outside boundary <= 150km
+    # df = df.withColumn("geo_latitude", f.col("geo_latitude").cast("double"))
+    # df = df.withColumn("geo_longitude", f.col("geo_longitude").cast("double"))
 
     # dq_test = is_not_within_country(df, "BRA")
     # dq_test.show()

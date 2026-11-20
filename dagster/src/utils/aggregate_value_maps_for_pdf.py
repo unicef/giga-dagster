@@ -12,7 +12,7 @@ from src.utils.nocodb.get_nocodb_data import get_nocodb_table_rows
 
 # Govt schema columns (values in column_to_schema_mapping) → PDF section keys.
 PDF_VALUE_MAP_SECTIONS: dict[str, str] = {
-    "education_level_govt": "education",
+    "facility_level_govt": "education",
     "electricity_availability": "electricity",
     "electricity_type_govt": "electricity",
     "connectivity_govt": "connectivity",
@@ -21,7 +21,7 @@ PDF_VALUE_MAP_SECTIONS: dict[str, str] = {
 
 # When multiple govt columns map to the same PDF section, prefer this order.
 _SECTION_COLUMN_PRIORITY: dict[str, list[str]] = {
-    "education": ["education_level_govt"],
+    "education": ["facility_level_govt"],
     "electricity": ["electricity_availability", "electricity_type_govt"],
     "connectivity": ["connectivity_govt", "connectivity_type_govt"],
 }

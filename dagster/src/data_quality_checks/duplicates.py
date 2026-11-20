@@ -30,7 +30,7 @@ def duplicate_set_checks(
     logger = get_context_with_fallback_logger(context)
     logger.info("Running duplicate set checks...")
 
-    has_lat_long = {"latitude", "longitude"}.issubset(df.columns)
+    has_lat_long = {"geo_latitude", "geo_longitude"}.issubset(df.columns)
 
     if has_lat_long:
         df = df.withColumn("location_id", location_id_column())
@@ -115,12 +115,12 @@ def duplicate_all_except_checks(
 
     count_expr = f.count("*").over(Window.partitionBy(existing_columns)) > 1
 
-    if "latitude" in existing_columns and "longitude" in existing_columns:
+    if "geo_latitude" in existing_columns and "geo_longitude" in existing_columns:
         null_guard = (
-            f.col("latitude").isNull()
-            | f.isnan(f.col("latitude"))
-            | f.col("longitude").isNull()
-            | f.isnan(f.col("longitude"))
+            f.col("geo_latitude").isNull()
+            | f.isnan(f.col("geo_latitude"))
+            | f.col("geo_longitude").isNull()
+            | f.isnan(f.col("geo_longitude"))
         )
         result_expr = (
             f.when(null_guard, f.lit(None).cast("int")).when(count_expr, 1).otherwise(0)
@@ -128,6 +128,6 @@ def duplicate_all_except_checks(
     else:
         result_expr = f.when(count_expr, 1).otherwise(0)
 
-    df = df.withColumn("dq_duplicate_all_except_school_code", result_expr)
+    df = df.withColumn("dq_duplicate_all_except_facility_code", result_expr)
 
     return df
