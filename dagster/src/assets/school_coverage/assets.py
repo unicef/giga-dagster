@@ -212,6 +212,8 @@ async def coverage_data_quality_results_summary(
         s,
         coverage_data_quality_results,
         df_raw,
+        entity="schools",
+        dataset_type=f"coverage_{config.filename_components.source}",
     )
 
     value_maps = aggregate_value_maps_for_pdf(

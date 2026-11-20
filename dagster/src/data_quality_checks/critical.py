@@ -86,13 +86,10 @@ def _build_master_location_exprs(
     return critical_exprs, failure_exprs
 
 
-def _build_other_dataset_exprs(
-    df: sql.DataFrame,
-    dataset_type: str,
-    config_column_list: list[str],
-    full_human_readable_mapping: dict,
-) -> tuple[list, list]:
-    """Build critical error expressions for non-geolocation datasets."""
+def get_other_dataset_critical_checks(
+    dataset_type: str, config_column_list: list[str]
+) -> list[str]:
+    """dq_-prefixed critical checks of the non-geolocation datasets."""
     critical_column_dq_checks = [
         f"dq_is_null_mandatory-{column}" for column in config_column_list
     ]
@@ -103,6 +100,19 @@ def _build_other_dataset_exprs(
         )
     elif dataset_type == "qos":
         critical_column_dq_checks.extend(["dq_duplicate-school_id_giga"])
+    return critical_column_dq_checks
+
+
+def _build_other_dataset_exprs(
+    df: sql.DataFrame,
+    dataset_type: str,
+    config_column_list: list[str],
+    full_human_readable_mapping: dict,
+) -> tuple[list, list]:
+    """Build critical error expressions for non-geolocation datasets."""
+    critical_column_dq_checks = get_other_dataset_critical_checks(
+        dataset_type, config_column_list
+    )
 
     critical_exprs = [
         f.when(f.isnan(f.col(c)) | f.col(c).isNull(), f.lit(0)).otherwise(f.col(c))
