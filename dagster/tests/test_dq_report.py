@@ -39,82 +39,136 @@ SCHEMA = StructType(
     ]
 )
 
-CHECKS_COLUMNS = [
-    "DQ Table Column Name",
-    "DQR Row",
-    "DQR Row Text",
-    "DQR Group",
-    "DQR Group Text",
-    "DQR Priority",
-    "DQR Order",
-]
+RELATION = "column_relation_checks"
+STUDENTS = f"{RELATION}-num_students_num_students_girls_num_students_boys"
+TEACHERS = f"{RELATION}-num_teachers_num_teachers_female_num_teachers_male"
 
-SCHOOLS_TABLE = pd.DataFrame(
+# Same configuration as SchoolGeolocationMasterDQChecks in dev/stg:
+# (check, category, critical for, DQR warnings,
+#  row, row text, group, group text, priority, order, optional)
+NOCODB_ROWS = [
+    ("is_null_optional-school_name", "critical checks", "create_only", None,
+     "missing_names", "Schools with missing names", "other", "Other", "High", 50, None),
+    ("is_null_mandatory-school_id_govt", "critical checks", "always", None,
+     "missing_id", "Schools with missing ID", "ids", "School IDs", "High", 30, None),
+    ("is_null_optional-education_level_govt", "critical checks", "create_only", None,
+     "missing_education_level", "Schools with missing educational level", "other",
+     None, "High", 60, None),
+    ("is_null_optional-latitude", "critical checks", "create_only", None,
+     "missing_coordinates", "Schools with missing coordinates", "coordinates",
+     "Coordinates", "High", 10, None),
+    ("is_null_optional-longitude", "critical checks", "create_only", None,
+     "missing_coordinates", None, "coordinates", None, "High", 10, None),
+    ("duplicate-school_id_govt", "critical checks", "always", None,
+     "duplicate_ids", "Schools with duplicate school IDs", "ids", None, "High", 40,
+     None),
+    ("is_not_within_country", "critical checks", "always", None,
+     "outside_country", "Schools with coordinates outside the country's limits",
+     "coordinates", None, "High", 20, None),
+    ("is_invalid_range-latitude", "critical checks", "always", None,
+     None, None, None, None, None, None, None),
+    ("duplicate_location_rows_flag", "location checks", None, "Yes",
+     "same_location", "Schools with the same exact location", "duplicates",
+     "Duplicates", "Medium", 100, None),
+    ("duplicate_location_rows_id", "location checks", None, "Yes",
+     "duplicate_location_groups",
+     "Number of groups with {count} or more schools sharing exact location",
+     "duplicates", None, None, 110, None),
+    ("duplicate_set-school_name_education_level_location_id", "location checks",
+     None, "Yes", "same_name_level_location",
+     "Schools with the same name, educational level, and location", "duplicates",
+     None, "Medium", 120, None),
+    ("precision-latitude", "precision checks", None, "Yes",
+     "low_precision", "Schools with low precision coordinates (less than 5 digits)",
+     "accuracy", "Accuracy", "Medium", 200, None),
+    ("precision-longitude", "precision checks", None, "Yes",
+     "low_precision", None, "accuracy", None, "Medium", 200, None),
+    ("is_in_uninhabited_area", "location checks", None, "Yes",
+     "not_inhabited_area", "Schools not in an inhabited area", "accuracy", None,
+     "Medium", 210, None),
+    ("is_suspect_location", "location_checks", None, None,
+     "not_near_built_environment", "Schools not near a built environment",
+     "accuracy", None, "Low", 220, None),
+    ("duplicate_group_flag_50m", "location checks", None, "Yes",
+     "within_50m", "Schools within 50m of another school", "other", "Other", "Low",
+     300, None),
+    ("is_school_density_greater_than_5", "location checks", None, "Yes",
+     "high_density", "High Density (more than 5 schools within 500m)", "other",
+     None, "Low", 330, None),
+    (STUDENTS, "consistency checks", None, "Yes",
+     "students_vs_gender",
+     "Schools where the number of students doesn't match the sum of girls and boys",
+     "consistency", "Consistency", "Low", 400, "Yes"),
+    (TEACHERS, "consistency checks", None, "Yes",
+     "teachers_vs_gender",
+     "Schools where the number of teachers doesn't match the sum of female and "
+     "male teachers", "consistency", None, "Low", 410, "Yes"),
+    ("is_null_optional-school_address", "missing value checks", None, None,
+     None, None, None, None, None, None, None),
+]  # fmt: skip
+
+NOCODB_TABLE = pd.DataFrame(
     [
-        (
-            "dq_is_null_optional-latitude",
-            "missing_coordinates",
-            "Schools with missing coordinates",
-            "coordinates",
-            "Coordinates",
-            "High",
-            1,
-        ),
-        (
-            "dq_is_null_optional-longitude",
-            "missing_coordinates",
-            None,
-            None,
-            None,
-            None,
-            1,
-        ),
-        (
-            "dq_is_not_within_country",
-            "outside_country",
-            "Schools with coordinates outside the country's limits",
-            "coordinates",
-            None,
-            "high",
-            2,
-        ),
-        (
-            "dq_duplicate_location_rows_flag",
-            "same_location",
-            "Schools with the same exact location",
-            "duplicates",
-            "Duplicates",
-            "Medium",
-            10,
-        ),
-        (
-            "dq_duplicate_location_rows_id",
-            "duplicate_location_groups",
-            "Number of groups with {count} or more schools sharing exact location",
-            "duplicates",
-            None,
-            None,
-            11,
-        ),
-        (
-            "dq_column_relation_checks-num_students_num_students_girls_num_students_boys",
-            "students_vs_gender",
-            "Schools where the number of students doesn't match the sum of girls and boys",
-            "consistency",
-            "Consistency",
-            "Low",
-            30,
-        ),
-        ("dq_is_null_optional-school_address", None, None, None, None, None, None),
-    ],
-    columns=CHECKS_COLUMNS,
+        {
+            "DQ Table Column Name": f"dq_{check}",
+            "DQ Check Category": category,
+            "Human Readable Name": check,
+            "Critical For": critical_for,
+            "DQR Warnings": warning,
+            "UI Error Description": None,
+            "DQR Row": row,
+            "DQR Row Text": text,
+            "DQR Group": group,
+            "DQR Group Text": group_text,
+            "DQR Priority": priority,
+            "DQR Order": order,
+            "DQR Optional": optional,
+        }
+        for (
+            check,
+            category,
+            critical_for,
+            warning,
+            row,
+            text,
+            group,
+            group_text,
+            priority,
+            order,
+            optional,
+        ) in NOCODB_ROWS
+    ]
 )
 
-ALWAYS = {"is_not_within_country", "duplicate-school_id_govt"}
-CREATE_ONLY = {"is_null_optional-latitude", "is_null_optional-longitude"}
-SUMMARY = {
-    "count_duplicate_location_groups": 2,
-    "duplicate_location_group_min_size": 3,
+CRITICAL = {
+    "is_null_optional-school_name",
+    "is_null_mandatory-school_id_govt",
+    "is_null_optional-education_level_govt",
+    "is_null_optional-latitude",
+    "is_null_optional-longitude",
+    "duplicate-school_id_govt",
+    "is_not_within_country",
+    "is_invalid_range-latitude",
+}
+
+BASE_RESULTS = {
+    "is_null_optional-school_name": 0,
+    "is_null_mandatory-school_id_govt": 0,
+    "is_null_optional-latitude": 0,
+    "is_null_optional-longitude": 0,
+    "duplicate-school_id_govt": 0,
+    "is_not_within_country": 0,
+    "is_invalid_range-latitude": 0,
+    "duplicate_location_rows_flag": 0,
+    "duplicate_set-school_name_education_level_location_id": 0,
+    "precision-latitude": 0,
+    "precision-longitude": 0,
+    "is_in_uninhabited_area": 0,
+    "is_suspect_location": 0,
+    "duplicate_group_flag_50m": 0,
+    "is_school_density_greater_than_5": 0,
+    STUDENTS: 0,
+    "is_null_optional-school_address": 0,
 }
 
 
@@ -131,166 +185,47 @@ def _df(spark, rows: list[dict]):
 
 
 def _geolocation_df(spark):
-    base = {
-        "is_null_optional-latitude": 0,
-        "is_null_optional-longitude": 0,
-        "is_not_within_country": 0,
-        "duplicate-school_id_govt": 0,
-        "duplicate_location_rows_flag": 0,
-        "is_null_optional-school_address": 0,
-    }
+    def failing(*keys, **row):
+        return {**row, "dq_results": {**BASE_RESULTS, **dict.fromkeys(keys, 1)}}
+
     return _df(
         spark,
         [
-            # New school missing both coordinates: one row, not two.
-            {
-                "dq_has_critical_error": 1,
-                "dq_results": {
-                    **base,
-                    "is_null_optional-latitude": 1,
-                    "is_null_optional-longitude": 1,
-                },
-            },
+            # New school missing both coordinates.
+            failing(
+                "is_null_optional-latitude",
+                "is_null_optional-longitude",
+                dq_has_critical_error=1,
+            ),
             # New school missing longitude only.
-            {
-                "dq_has_critical_error": 1,
-                "dq_results": {**base, "is_null_optional-longitude": 1},
-            },
-            # Update missing latitude: create_only, so not rejected.
-            {
-                "is_new_school": False,
-                "dq_results": {**base, "is_null_optional-latitude": 1},
-            },
-            # Rejected for outside country and duplicated location.
-            {
-                "dq_has_critical_error": 1,
-                "dq_results": {
-                    **base,
-                    "is_not_within_country": 1,
-                    "duplicate_location_rows_flag": 1,
-                },
-            },
-            # Rejected for a duplicate ID, which has no configured row.
-            {
-                "dq_has_critical_error": 1,
-                "dq_results": {**base, "duplicate-school_id_govt": 1},
-            },
-            # Approved, duplicated location: the only warning that counts.
-            {"dq_results": {**base, "duplicate_location_rows_flag": 1}},
+            failing("is_null_optional-longitude", dq_has_critical_error=1),
+            # Updates missing create_only values: approved, but in the counts.
+            failing("is_null_optional-latitude", is_new_school=False),
+            failing("is_null_optional-latitude", is_new_school=False),
+            failing("is_null_optional-school_name", is_new_school=False),
+            # Rejected, outside country and duplicated location.
+            failing(
+                "is_not_within_country",
+                "duplicate_location_rows_flag",
+                dq_has_critical_error=1,
+            ),
+            # Rejected for a duplicate ID and a range check without a report row.
+            failing(
+                "duplicate-school_id_govt",
+                "is_invalid_range-latitude",
+                dq_has_critical_error=1,
+            ),
+            # Approved warnings.
+            failing("duplicate_location_rows_flag", "precision-latitude"),
+            failing("precision-latitude", "precision-longitude", "is_suspect_location"),
+            failing("is_in_uninhabited_area", STUDENTS),
+            failing("is_null_optional-school_address"),
         ],
     )
 
 
-def _report(spark, df=None, table=SCHOOLS_TABLE, summary=SUMMARY, labels=None):
-    return build_dq_report(
-        df if df is not None else _geolocation_df(spark),
-        table,
-        "schools",
-        (ALWAYS, CREATE_ONLY),
-        summary,
-        labels or {"dq_duplicate-school_id_govt": "school_id_govt has a duplicate"},
-    )
-
-
-def _rows(report, outcome):
-    return {
-        row["key"]: {**row, "group": group["key"]}
-        for group in report[outcome]
-        for row in group["rows"]
-    }
-
-
-def test_no_nocodb_configuration_returns_none(spark):
-    table = SCHOOLS_TABLE.drop(columns=["DQR Row"])
-    assert _report(spark, table=table) is None
-
-
-def test_envelope(spark):
-    report = _report(spark)
-    assert report["version"] == 1
-    assert report["entity"] == "schools"
-
-
-def test_rejected_counts_union_with_create_only_for_new_schools(spark):
-    rejected = _rows(_report(spark), "rejected")
-    missing = rejected["missing_coordinates"]
-    assert missing["count"] == 2
-    assert missing["checks"] == [
-        "is_null_optional-latitude",
-        "is_null_optional-longitude",
-    ]
-    assert missing["label"] == "Schools with missing coordinates"
-    assert missing["priority"] == "High"
-    assert missing["kind"] == "rows"
-    assert rejected["outside_country"]["count"] == 1
-    assert rejected["outside_country"]["priority"] == "High"
-
-
-def test_warnings_count_approved_rows_only(spark):
-    warnings = _rows(_report(spark), "warnings")
-    assert warnings["same_location"]["count"] == 1
-    assert warnings["same_location"]["priority"] == "Medium"
-
-
-def test_unconfigured_critical_check_gets_fallback_row(spark):
-    rejected = _rows(_report(spark), "rejected")
-    fallback = rejected["duplicate-school_id_govt"]
-    assert fallback["count"] == 1
-    assert fallback["group"] == "other"
-    assert fallback["label"] == "school_id_govt has a duplicate"
-    assert fallback["priority"] == "High"
-
-
-def test_group_row_uses_summary_tally(spark):
-    groups = _rows(_report(spark), "warnings")["duplicate_location_groups"]
-    assert groups["kind"] == "groups"
-    assert groups["count"] == 2
-    assert groups["params"] == {"count": 3}
-    assert (
-        groups["label"]
-        == "Number of groups with 3 or more schools sharing exact location"
-    )
-    assert groups["priority"] == "Low"
-
-
-def test_group_row_omitted_without_summary_tally(spark):
-    report = _report(spark, summary={})
-    assert "duplicate_location_groups" not in _rows(report, "warnings")
-
-
-def test_rows_whose_checks_did_not_run_are_omitted(spark):
-    report = _report(spark)
-    assert "students_vs_gender" not in _rows(report, "warnings")
-
-
-def test_checks_without_dqr_row_are_left_out(spark):
-    report = _report(spark)
-    all_checks = {
-        check
-        for outcome in ("rejected", "warnings")
-        for row in _rows(report, outcome).values()
-        for check in row["checks"]
-    }
-    assert "is_null_optional-school_address" not in all_checks
-
-
-def test_groups_and_rows_follow_dqr_order(spark):
-    report = _report(spark)
-    assert [group["key"] for group in report["rejected"]] == ["coordinates", "other"]
-    assert [row["key"] for row in report["rejected"][0]["rows"]] == [
-        "missing_coordinates",
-        "outside_country",
-    ]
-    assert report["rejected"][0]["label"] == "Coordinates"
-    assert report["rejected"][1]["label"] == "Other"
-    assert [row["key"] for row in report["warnings"][0]["rows"]] == [
-        "same_location",
-        "duplicate_location_groups",
-    ]
-
-
-def test_flat_dq_columns_for_coverage(spark):
-    df = spark.createDataFrame(
+def _coverage_df(spark):
+    return spark.createDataFrame(
         [
             ("a", 1, 1, 0, 0),
             ("b", 1, 0, 1, 1),
@@ -302,29 +237,210 @@ def test_flat_dq_columns_for_coverage(spark):
             "`dq_duplicate-school_id_giga` int, dq_school_not_in_school_master int"
         ),
     )
-    report = build_dq_report(
-        df,
-        SCHOOLS_TABLE,
-        "schools",
-        (
-            {
-                "is_null_mandatory-school_id_giga",
-                "duplicate-school_id_giga",
-                "school_not_in_school_master",
-            },
-            set(),
+
+
+def _mock_nocodb(monkeypatch, table: pd.DataFrame):
+    for module in (utils, critical):
+        monkeypatch.setattr(module, "get_nocodb_table_id_from_name", lambda **_: "t")
+        monkeypatch.setattr(
+            module, "get_nocodb_table_as_pandas_dataframe", lambda **_: table.copy()
+        )
+
+
+def _summary(spark, monkeypatch, df=None, table=NOCODB_TABLE, **kwargs):
+    _mock_nocodb(monkeypatch, table)
+    df = df if df is not None else _geolocation_df(spark)
+    return utils.build_dq_summary_statistics(spark, df, df, **kwargs)
+
+
+def _rows(report, outcome):
+    return {
+        row["key"]: {**row, "group": group["key"]}
+        for group in report[outcome]
+        for row in group["rows"]
+    }
+
+
+def _counts(report):
+    return {
+        key: row["count"]
+        for outcome in ("rejected", "warnings")
+        for key, row in _rows(report, outcome).items()
+    }
+
+
+def _ui_counts(dq_summary: dict) -> dict[str, int]:
+    """The counts Giga Sync computes today from the dq_summary sections
+    (ui/src/constants/dqReportSections.ts, email/src/lib/pdf-generator.ts)."""
+
+    def failed(section: str, assertion: str, column: str | None = None) -> int:
+        for check in dq_summary.get(section, []):
+            if check["assertion"] == assertion and (
+                column is None or check["column"] == column
+            ):
+                return int(check["count_failed"])
+        return 0
+
+    summary = dq_summary["summary"]
+    counts = {
+        "missing_coordinates": max(
+            failed("critical_checks", "is_null_optional", "latitude"),
+            failed("critical_checks", "is_null_optional", "longitude"),
         ),
-        {},
-        {"dq_school_not_in_school_master": "school does not exist in school master"},
+        "outside_country": failed("critical_checks", "is_not_within_country"),
+        "missing_id": failed("critical_checks", "is_null_mandatory", "school_id_govt"),
+        "duplicate_ids": summary["count_duplicate_school_id"],
+        "missing_names": failed("critical_checks", "is_null_optional", "school_name"),
+        "missing_education_level": failed(
+            "critical_checks", "is_null_optional", "education_level_govt"
+        ),
+        "same_location": failed(
+            "location_checks", "duplicate_location_rows", "location_id"
+        ),
+        "same_name_level_location": failed(
+            "location_checks",
+            "duplicate_set",
+            "school_name_education_level_location_id",
+        ),
+        "low_precision": summary["count_schools_low_precision_coordinates"],
+        "not_inhabited_area": failed("location_checks", "is_in_uninhabited_area"),
+        "not_near_built_environment": failed("location_checks", "is_suspect_location"),
+        "within_50m": failed("location_checks", "duplicate_group_flag_50m"),
+        "high_density": failed("location_checks", "is_school_density_greater_than_5"),
+    }
+    # Optional rows: shown only when the check is in the report.
+    consistency = dq_summary.get("consistency_checks", [])
+    for key, check_key in (
+        ("students_vs_gender", STUDENTS),
+        ("teachers_vs_gender", TEACHERS),
+    ):
+        column = check_key.split("-", 1)[1]
+        if any(check["column"] == column for check in consistency):
+            counts[key] = failed("consistency_checks", RELATION, column)
+    return counts
+
+
+def test_geolocation_matches_current_giga_sync_tables(spark, monkeypatch):
+    result = _summary(spark, monkeypatch, entity="schools", dataset_type="geolocation")
+    assert _counts(result["dq_report"]) == _ui_counts(result)
+    assert _counts(result["dq_report"]) == {
+        "missing_coordinates": 3,
+        "outside_country": 1,
+        "missing_id": 0,
+        "duplicate_ids": 1,
+        "missing_names": 1,
+        "missing_education_level": 0,
+        "same_location": 1,
+        "same_name_level_location": 0,
+        "low_precision": 2,
+        "not_inhabited_area": 1,
+        "not_near_built_environment": 1,
+        "within_50m": 0,
+        "high_density": 0,
+        "students_vs_gender": 1,
+    }
+
+
+def test_geolocation_layout(spark, monkeypatch):
+    report = _summary(spark, monkeypatch, entity="schools", dataset_type="geolocation")[
+        "dq_report"
+    ]
+    assert report["version"] == 1
+    assert report["entity"] == "schools"
+    assert [
+        (group["key"], group["label"], [row["key"] for row in group["rows"]])
+        for group in report["rejected"]
+    ] == [
+        ("coordinates", "Coordinates", ["missing_coordinates", "outside_country"]),
+        ("ids", "School IDs", ["missing_id", "duplicate_ids"]),
+        ("other", "Other", ["missing_names", "missing_education_level"]),
+    ]
+    assert [
+        (group["key"], [row["key"] for row in group["rows"]])
+        for group in report["warnings"]
+    ] == [
+        ("duplicates", ["same_location", "same_name_level_location"]),
+        (
+            "accuracy",
+            ["low_precision", "not_inhabited_area", "not_near_built_environment"],
+        ),
+        ("other", ["within_50m", "high_density"]),
+        ("consistency", ["students_vs_gender"]),
+    ]
+    missing = _rows(report, "rejected")["missing_coordinates"]
+    assert missing["label"] == "Schools with missing coordinates"
+    assert missing["priority"] == "High"
+    assert missing["checks"] == [
+        "is_null_optional-latitude",
+        "is_null_optional-longitude",
+    ]
+
+
+def test_unconfigured_checks_stay_out_of_geolocation(spark, monkeypatch):
+    report = _summary(spark, monkeypatch, entity="schools", dataset_type="geolocation")[
+        "dq_report"
+    ]
+    checks = {
+        check
+        for outcome in ("rejected", "warnings")
+        for row in _rows(report, outcome).values()
+        for check in row["checks"]
+    }
+    assert "is_invalid_range-latitude" not in checks
+    assert "is_null_optional-school_address" not in checks
+
+
+def test_row_whose_check_did_not_run_shows_zero_unless_optional(spark):
+    df = _df(spark, [{"dq_results": {"is_null_optional-latitude": 0}}])
+    report = build_dq_report(df, NOCODB_TABLE, "schools", CRITICAL, {}, True)
+    counts = _counts(report)
+    assert counts["outside_country"] == 0
+    assert counts["same_location"] == 0
+    assert "students_vs_gender" not in counts
+    assert "teachers_vs_gender" not in counts
+
+
+def test_group_tally_rows(spark):
+    df = _df(spark, [{"dq_results": BASE_RESULTS}])
+    summary = {
+        "count_duplicate_location_groups": 2,
+        "duplicate_location_group_min_size": 3,
+    }
+    report = build_dq_report(df, NOCODB_TABLE, "schools", CRITICAL, summary, True)
+    groups = _rows(report, "warnings")["duplicate_location_groups"]
+    assert groups["kind"] == "groups"
+    assert groups["count"] == 2
+    assert groups["params"] == {"count": 3}
+    assert (
+        groups["label"]
+        == "Number of groups with 3 or more schools sharing exact location"
     )
-    rejected = _rows(report, "rejected")
-    assert {key: row["count"] for key, row in rejected.items()} == {
+    report = build_dq_report(df, NOCODB_TABLE, "schools", CRITICAL, {}, True)
+    assert "duplicate_location_groups" not in _rows(report, "warnings")
+
+
+def test_no_nocodb_configuration_returns_none(spark):
+    df = _df(spark, [{"dq_results": BASE_RESULTS}])
+    table = NOCODB_TABLE.drop(columns=["DQR Row"])
+    assert build_dq_report(df, table, "schools", CRITICAL, {}, True) is None
+
+
+def test_coverage_gets_its_own_critical_checks(spark, monkeypatch):
+    report = _summary(
+        spark,
+        monkeypatch,
+        df=_coverage_df(spark),
+        entity="schools",
+        dataset_type="coverage_fb",
+    )["dq_report"]
+    assert _counts(report) == {
         "duplicate-school_id_giga": 1,
         "is_null_mandatory-school_id_giga": 1,
         "school_not_in_school_master": 1,
     }
+    assert [group["key"] for group in report["rejected"]] == ["other"]
     assert (
-        rejected["school_not_in_school_master"]["label"]
+        _rows(report, "rejected")["school_not_in_school_master"]["label"]
         == "school does not exist in school master"
     )
     assert report["warnings"] == []
@@ -352,76 +468,11 @@ def test_critical_keys_for_geolocation_come_from_nocodb(monkeypatch):
     )
 
 
-def _full_table() -> pd.DataFrame:
-    table = SCHOOLS_TABLE.copy()
-    table["DQ Check Category"] = [
-        "critical checks",
-        "critical checks",
-        "critical checks",
-        "location checks",
-        "location checks",
-        "column relation checks",
-        "missing value checks",
-    ]
-    table["Human Readable Name"] = table["DQ Table Column Name"]
-    table["Critical For"] = [
-        "create_only",
-        "create_only",
-        "always",
-        None,
-        None,
-        None,
-        None,
-    ]
-    table["DQR Warnings"] = [None, None, None, "Yes", "Yes", "Yes", None]
-    table["UI Error Description"] = None
-    duplicate_id = pd.DataFrame(
-        [
-            {
-                "DQ Table Column Name": "dq_duplicate-school_id_govt",
-                "DQ Check Category": "critical checks",
-                "Human Readable Name": "Duplicate school ID",
-                "Critical For": "always",
-            }
-        ]
-    )
-    return pd.concat([table, duplicate_id], ignore_index=True)
-
-
-def _mock_nocodb(monkeypatch, table: pd.DataFrame):
-    for module in (utils, critical):
-        monkeypatch.setattr(module, "get_nocodb_table_id_from_name", lambda **_: "t")
-        monkeypatch.setattr(
-            module, "get_nocodb_table_as_pandas_dataframe", lambda **_: table.copy()
-        )
-
-
-def test_summary_carries_dq_report_for_schools(spark, monkeypatch):
-    _mock_nocodb(monkeypatch, _full_table())
-    df = _geolocation_df(spark)
-    result = utils.build_dq_summary_statistics(
-        spark, df, df, entity="schools", dataset_type="geolocation"
-    )
-    assert {"summary", "critical_checks", "location_checks", "dq_report"} <= set(result)
-    rejected = _rows(result["dq_report"], "rejected")
-    assert rejected["missing_coordinates"]["count"] == 2
-    assert rejected["duplicate-school_id_govt"]["label"] == (
-        "school_id_govt has a duplicate"
-    )
-    assert _rows(result["dq_report"], "warnings")["same_location"]["count"] == 1
-
-
 def test_summary_without_entity_has_no_dq_report(spark, monkeypatch):
-    _mock_nocodb(monkeypatch, _full_table())
-    df = _geolocation_df(spark)
-    result = utils.build_dq_summary_statistics(spark, df, df)
-    assert "dq_report" not in result
+    assert "dq_report" not in _summary(spark, monkeypatch)
 
 
 def test_summary_survives_all_empty_nocodb_columns(spark, monkeypatch):
-    table = _full_table()
+    table = NOCODB_TABLE.copy()
     table["DQR Unused"] = None
-    _mock_nocodb(monkeypatch, table)
-    df = _geolocation_df(spark)
-    result = utils.build_dq_summary_statistics(spark, df, df)
-    assert "critical_checks" in result
+    assert "critical_checks" in _summary(spark, monkeypatch, table=table)

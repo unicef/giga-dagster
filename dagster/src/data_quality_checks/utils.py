@@ -610,6 +610,7 @@ _DQR_ROW_COLUMN = "DQR Row"
 _DQR_GROUP_COLUMN = "DQR Group"
 _DQR_PRIORITY_COLUMN = "DQR Priority"
 _DQR_ORDER_COLUMN = "DQR Order"
+_DQR_OPTIONAL_COLUMN = "DQR Optional"
 _DQR_PRIORITIES = ("High", "Medium", "Low")
 _DQR_DEFAULT_GROUP = "other"
 _DQR_DEFAULT_PRIORITY = {"rejected": "High", "warnings": "Low"}
@@ -627,10 +628,14 @@ _DQR_GROUP_ID_KEYS = {
 }
 
 
+# Datasets whose checks are configured in the NocoDB checks table.
+_NOCODB_CHECKS_DATASETS = ("geolocation", "master")
+
+
 def get_critical_check_keys(dataset_type: str) -> tuple[set[str], set[str]]:
     """(always, create_only) critical check keys of a dataset, without dq_ prefix,
     as critical_error_checks applies them."""
-    if dataset_type in ("geolocation", "master"):
+    if dataset_type in _NOCODB_CHECKS_DATASETS:
         always, create_only = get_critical_check_columns()
     else:
         always = get_other_dataset_critical_checks(
@@ -671,16 +676,12 @@ def _present_check_keys(df: sql.DataFrame) -> set[str]:
     return {col[len("dq_") :] for col in df.columns if col.startswith("dq_")}
 
 
-def _report_failed_expr(
-    df: sql.DataFrame, check_key: str, create_only_keys: set[str]
-) -> Column:
-    has_is_new_school = "is_new_school" in df.columns
+def _report_failed_expr(df: sql.DataFrame, check_key: str) -> Column:
     if "dq_results" in df.columns:
-        return _check_failed_expr(check_key, create_only_keys, has_is_new_school)
-    failed = f.coalesce(f.col(f"dq_{check_key}").cast("int") == 1, f.lit(False))
-    if check_key in create_only_keys and has_is_new_school:
-        failed = failed & f.coalesce(f.col("is_new_school"), f.lit(False))
-    return failed
+        return f.coalesce(
+            f.element_at(f.col("dq_results"), f.lit(check_key)) == 1, f.lit(False)
+        )
+    return f.coalesce(f.col(f"dq_{check_key}").cast("int") == 1, f.lit(False))
 
 
 def _configured_report_rows(
@@ -705,10 +706,14 @@ def _configured_report_rows(
                 "label": "",
                 "priority": "",
                 "order": float("inf"),
+                "optional": False,
             },
         )
         spec["checks"].append(check_column.removeprefix("dq_"))
         spec["order"] = min(spec["order"], _nocodb_order(record.get(_DQR_ORDER_COLUMN)))
+        spec["optional"] = spec["optional"] or (
+            _nocodb_text(record.get(_DQR_OPTIONAL_COLUMN)).lower() == "yes"
+        )
         for field, column in (
             ("group", _DQR_GROUP_COLUMN),
             ("group_label", entity.group_text_column),
@@ -717,6 +722,24 @@ def _configured_report_rows(
         ):
             spec[field] = spec[field] or _nocodb_text(record.get(column))
     return rows
+
+
+def _fallback_report_rows(
+    check_keys: set[str], labels: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """One row per critical check, for datasets with no configured row."""
+    return {
+        key: {
+            "checks": [key],
+            "group": _DQR_DEFAULT_GROUP,
+            "group_label": "",
+            "label": labels.get(f"dq_{key}", key),
+            "priority": "",
+            "order": float("inf"),
+            "optional": False,
+        }
+        for key in sorted(check_keys)
+    }
 
 
 def _group_tally_row(
@@ -739,91 +762,93 @@ def _group_tally_row(
     }
 
 
+def _row_count_exprs(
+    df: sql.DataFrame, prefix: str, outcome: str, checks: list[str]
+) -> list[Column]:
+    """Rejected: one count per check over every row (the row shows the largest).
+    Warnings: one count of approved rows failing any of the checks."""
+    if not checks:
+        return []
+    if outcome == "rejected":
+        return [
+            f.count(f.when(_report_failed_expr(df, key), 1)).alias(f"{prefix}_{i}")
+            for i, key in enumerate(checks)
+        ]
+    is_approved = (
+        f.col("dq_has_critical_error") == 0
+        if "dq_has_critical_error" in df.columns
+        else f.lit(True)
+    )
+    failed = reduce(operator.or_, (_report_failed_expr(df, key) for key in checks))
+    return [f.count(f.when(failed & is_approved, 1)).alias(f"{prefix}_0")]
+
+
 def build_dq_report(
     df: sql.DataFrame,
     checks_table: pd.DataFrame,
     entity_name: str,
-    critical_keys: tuple[set[str], set[str]],
+    critical_keys: set[str],
     summary: dict[str, Any],
+    checks_from_nocodb: bool,
     fallback_labels: dict[str, str] | None = None,
 ) -> dict[str, Any] | None:
     """Rejected and Warnings tables of the DQ report, ready to render.
 
     Rows come from the NocoDB checks table ("DQR Row" and related columns). A row is
     rejected if one of its checks is critical for the dataset, a warning otherwise.
-    count is the number of rows failing any of its checks: over every uploaded row
-    for rejected (create_only checks fail new schools only, as in critical.py), over
-    approved rows for warnings. Group-id rows report the duplicate group tallies of
-    the summary instead.
+    Counts match the critical_checks / approved-only sections of the summary:
+    rejected rows count every uploaded row and show the largest count of their
+    checks; warning rows count approved rows failing any of their checks. Group-id
+    rows report the duplicate group tallies of the summary.
 
-    Rows whose checks did not run are left out, so a check missing from an upload is
-    not shown as 0. Critical checks without a configured row get one of their own,
-    so every rejection is accounted for. Returns None if NocoDB has no report
-    configuration yet.
+    For datasets configured in NocoDB (checks_from_nocodb), a row whose checks did
+    not run shows 0, unless "DQR Optional" is Yes. Other datasets only show rows
+    whose checks ran and, with none configured, one row per critical check that
+    ran. Returns None if NocoDB has no report configuration yet.
     """
-    entity = DQ_REPORT_ENTITIES[entity_name]
     if _DQR_ROW_COLUMN not in checks_table.columns:
         return None
-    always_keys, create_only_keys = critical_keys
-    critical = always_keys | create_only_keys
     present = _present_check_keys(df)
-    fallback_labels = fallback_labels or {}
-
-    specs = _configured_report_rows(checks_table, entity)
-    configured_checks = {key for spec in specs.values() for key in spec["checks"]}
-    for check_key in sorted((critical & present) - configured_checks):
-        specs[check_key] = {
-            "checks": [check_key],
-            "group": _DQR_DEFAULT_GROUP,
-            "group_label": "",
-            "label": fallback_labels.get(f"dq_{check_key}", check_key),
-            "priority": "",
-            "order": float("inf"),
-        }
-
-    is_approved = (
-        f.col("dq_has_critical_error") == 0
-        if "dq_has_critical_error" in df.columns
-        else f.lit(True)
-    )
+    specs = _configured_report_rows(checks_table, DQ_REPORT_ENTITIES[entity_name])
+    if not checks_from_nocodb and not any(
+        present.intersection(spec["checks"]) for spec in specs.values()
+    ):
+        specs = _fallback_report_rows(critical_keys & present, fallback_labels or {})
 
     rows: list[dict[str, Any]] = []
-    agg_exprs = []
+    agg_exprs: list[Column] = []
     for index, (row_key, spec) in enumerate(specs.items()):
         if any(key in _DQR_GROUP_ID_KEYS for key in spec["checks"]):
             tally_row = _group_tally_row(row_key, spec, summary)
             if tally_row is not None:
                 rows.append(tally_row)
             continue
-
-        checks = [key for key in spec["checks"] if key in present]
-        if not checks:
+        checks_run = [key for key in spec["checks"] if key in present]
+        if not checks_run and (spec["optional"] or not checks_from_nocodb):
             continue
-        outcome = "rejected" if any(key in critical for key in checks) else "warnings"
-
-        failed = reduce(
-            operator.or_,
-            (_report_failed_expr(df, key, create_only_keys) for key in checks),
+        outcome = (
+            "rejected"
+            if any(key in critical_keys for key in spec["checks"])
+            else "warnings"
         )
-        if outcome == "warnings":
-            failed = failed & is_approved
-        alias = f"r{index}"
-        agg_exprs.append(f.count(f.when(failed, 1)).alias(alias))
+        exprs = _row_count_exprs(df, f"r{index}", outcome, checks_run)
+        agg_exprs.extend(exprs)
         rows.append(
             {
                 **spec,
                 "key": row_key,
                 "kind": "rows",
                 "outcome": outcome,
-                "checks": checks,
-                "alias": alias,
+                "aliases": [f"r{index}_{i}" for i in range(len(exprs))],
             }
         )
 
     counts = df.select(*agg_exprs).first() if agg_exprs else None
     for row in rows:
         if row["kind"] == "rows":
-            row["count"] = int(counts[row["alias"]])
+            row["count"] = max(
+                (int(counts[alias]) for alias in row["aliases"]), default=0
+            )
 
     return {
         "version": DQ_REPORT_VERSION,
@@ -881,13 +906,15 @@ def _dq_report_for_dataset(
             table_name=DQ_REPORT_ENTITIES[entity].checks_table
         )
     )
+    always_keys, create_only_keys = get_critical_check_keys(dataset_type)
     return build_dq_report(
         df,
         checks_table,
         entity,
-        get_critical_check_keys(dataset_type),
+        always_keys | create_only_keys,
         summary,
-        handle_rename_dq_has_critical_error_column(
+        checks_from_nocodb=dataset_type in _NOCODB_CHECKS_DATASETS,
+        fallback_labels=handle_rename_dq_has_critical_error_column(
             CONFIG_NONEMPTY_COLUMNS.get(dataset_type, [])
         ),
     )
