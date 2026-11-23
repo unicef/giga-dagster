@@ -1,0 +1,49 @@
+# One-off, read-only retest of the Ceibal Zabbix API via the Giga VPN proxy.
+# Deployed by azure/azure-pipelines-ury-retest.yaml. Credentials: Secret ceibal-zabbix-secrets (from Key Vault).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ury-zabbix-retest
+  namespace: ictd-ooi-data-analysis-dev
+  labels:
+    app: ury-zabbix
+    component: retest
+spec:
+  backoffLimit: 0               # no automatic retries: protects Ceibal's Zabbix server
+  activeDeadlineSeconds: 900    # kill after 15 min
+  ttlSecondsAfterFinished: 86400  # keep the pod (and logs) for 24 h, then clean up
+  template:
+    metadata:
+      labels:
+        app: ury-zabbix
+        component: retest
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: retest
+          image: ury-zabbix-retest  # set via kustomization.yaml images
+          args: ["--codicen"]
+          env:
+            - name: ZABBIX_URL
+              value: http://giga-vpn-proxy.ictd-ooi-giga-devops-dev:8080
+            - name: ZABBIX_USER
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_USER}
+            - name: ZABBIX_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PASSWORD}
+            - name: ZABBIX_PROXY_USER
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PROXY_USER, optional: true}
+            - name: ZABBIX_PROXY_PASS
+              valueFrom:
+                secretKeyRef: {name: ceibal-zabbix-secrets, key: ZABBIX_PROXY_PASS, optional: true}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
