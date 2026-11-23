@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import pytest
-
 from src.utils.schema_resolver import (
     combine_schema_columns,
     primary_key_name,
@@ -16,7 +15,7 @@ def _column(name: str, *, primary_key: bool | None = None, data_type: str = "str
         data_type=data_type,
         is_nullable=True,
         primary_key=primary_key,
-        partition_order=None,
+        column_group=None,
     )
 
 
@@ -47,7 +46,9 @@ class InMemorySchemaRegistry:
         )
         self.datasets[key] = dataset
         self.versions[dataset_id] = [
-            SimpleNamespace(id=version_id, dataset_id=dataset_id, version=current_version)
+            SimpleNamespace(
+                id=version_id, dataset_id=dataset_id, version=current_version
+            )
         ]
         self.columns[version_id] = columns
         return dataset

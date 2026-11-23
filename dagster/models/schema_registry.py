@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, VARCHAR
+from sqlalchemy import VARCHAR, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base_database import BaseModel
@@ -50,7 +50,7 @@ class SchemaVersionColumn(BaseModel):
     is_system_generated: Mapped[bool | None] = mapped_column(Boolean(), nullable=True)
     description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     primary_key: Mapped[bool | None] = mapped_column(Boolean(), nullable=True)
-    partition_order: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    column_group: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
     license: Mapped[str | None] = mapped_column(Text(), nullable=True)
     units: Mapped[str | None] = mapped_column(VARCHAR(100), nullable=True)
     hint: Mapped[str | None] = mapped_column(Text(), nullable=True)

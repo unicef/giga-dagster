@@ -237,21 +237,6 @@ def get_primary_key_for_config(
     return get_primary_key_for_upload(spark, fallback_schema_name, file_upload)
 
 
-def get_partition_columns(spark: SparkSession, schema_name: str) -> list[str]:
-    del spark
-    return [
-        column.name
-        for column in sorted(
-            (
-                column
-                for column in get_resolved_schema_columns(schema_name)
-                if column.partition_order is not None and column.partition_order > 0
-            ),
-            key=lambda column: column.partition_order,
-        )
-    ]
-
-
 def construct_schema_name_for_tier(schema_name: str, tier: DataTier = None) -> str:
     if tier is not None and tier in [
         DataTier.SILVER,

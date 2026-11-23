@@ -16,7 +16,6 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import (
     construct_full_table_name,
     construct_schema_name_for_tier,
-    get_partition_columns,
     get_primary_key,
     get_schema_columns,
 )
@@ -139,7 +138,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             partition_columns = []
         else:
             columns = get_schema_columns(spark, columns_schema_name)
-            partition_columns = get_partition_columns(spark, columns_schema_name)
+            partition_columns = []
 
         query = (
             DeltaTable.createIfNotExists(spark)

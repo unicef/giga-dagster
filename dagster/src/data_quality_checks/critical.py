@@ -18,6 +18,7 @@ def _build_geolocation_critical_exprs(
     dq_config_table: str,
     is_new_column: str,
     check_column_aliases: dict[str, str],
+    logger,
 ) -> tuple[list, list]:
     """Build critical error expressions for geolocation/master datasets from NocoDB config."""
     noco_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
@@ -32,6 +33,17 @@ def _build_geolocation_critical_exprs(
     create_only_checks = critical_rows[critical_rows["Critical For"] == "create_only"][
         "DQ Table Column Name"
     ].tolist()
+
+    missing_checks = [
+        c
+        for c in always_checks + create_only_checks
+        if check_column_aliases.get(c, c) not in df.columns
+    ]
+    if missing_checks:
+        logger.warning(
+            f"{dq_config_table}: critical checks not found in DQ output, "
+            f"skipped: {missing_checks}"
+        )
 
     critical_exprs = []
     failure_exprs = []
@@ -148,6 +160,7 @@ def critical_error_checks(
             dq_config_table,
             is_new_column,
             check_column_aliases or {},
+            logger,
         )
         if dataset_type == "master":
             noco_table_id = get_nocodb_table_id_from_name(table_name=dq_config_table)
@@ -166,9 +179,19 @@ def critical_error_checks(
             df, dataset_type, config_column_list, full_human_readable_mapping
         )
 
+    if not critical_exprs:
+        raise ValueError(
+            f"No critical DQ checks from {dq_config_table} match the DQ output "
+            f"columns for dataset_type={dataset_type}; check the NocoDB "
+            "'DQ Table Column Name' values"
+        )
+    has_critical_error = (
+        critical_exprs[0] if len(critical_exprs) == 1 else f.greatest(*critical_exprs)
+    )
+
     df = df.withColumns(
         {
-            "dq_has_critical_error": f.greatest(*critical_exprs).cast("int"),
+            "dq_has_critical_error": has_critical_error.cast("int"),
             "failure_reason": f.concat_ws(", ", *failure_exprs),
         }
     )
