@@ -674,7 +674,11 @@ def add_admin_columns(
     ).drop(result_col)
 
 
-def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
+def add_disputed_region_column(
+    df: sql.DataFrame,
+    latitude_column: str = "latitude",
+    longitude_column: str = "longitude",
+) -> sql.DataFrame:
     try:
         service = get_blob_service_client()
         filename = "disputed_areas_admin0.geojson"
@@ -707,7 +711,7 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
     else:
         df = df.withColumn(
             "disputed_region",
-            get_disputed_region_udf(df["latitude"], df["longitude"]),
+            get_disputed_region_udf(df[latitude_column], df[longitude_column]),
         )
 
     return df

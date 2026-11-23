@@ -48,7 +48,9 @@ def _enrich_admin_from_geo(df: sql.DataFrame, country_code: str) -> sql.DataFram
                 latitude_column="geo_latitude",
                 longitude_column="geo_longitude",
             )
-        df = add_disputed_region_column(df)
+        df = add_disputed_region_column(
+            df, latitude_column="geo_latitude", longitude_column="geo_longitude"
+        )
     return df
 
 

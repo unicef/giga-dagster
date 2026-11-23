@@ -81,7 +81,7 @@ def test_prepare_facility_bronze_sets_connectivity_govt_timestamp(monkeypatch):
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_disputed_region_column",
-        lambda df: df,
+        lambda df, **kwargs: df,
     )
 
     schema = T.StructType(
@@ -147,7 +147,7 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_disputed_region_column",
-        lambda df: df,
+        lambda df, **kwargs: df,
     )
 
     def fake_registration(df, uploaded_columns):
@@ -224,7 +224,12 @@ def test_enrich_admin_from_geo_uses_geo_columns_without_aliasing(monkeypatch):
         return df
 
     monkeypatch.setattr(facility, "add_admin_columns", fake_add_admin)
-    monkeypatch.setattr(facility, "add_disputed_region_column", lambda df: df)
+
+    def fake_add_disputed(df, **kwargs):
+        calls.append(("disputed_region", kwargs))
+        return df
+
+    monkeypatch.setattr(facility, "add_disputed_region_column", fake_add_disputed)
     df = spark.createDataFrame(
         [Row(facility_id_govt="A1", geo_latitude=0.1, geo_longitude=32.1)]
     )
@@ -232,7 +237,13 @@ def test_enrich_admin_from_geo_uses_geo_columns_without_aliasing(monkeypatch):
     result = facility._enrich_admin_from_geo(df, "UGA")
 
     assert result.columns == df.columns
-    assert [level for level, _ in calls] == ["admin1", "admin2", "admin3", "admin4"]
+    assert [level for level, _ in calls] == [
+        "admin1",
+        "admin2",
+        "admin3",
+        "admin4",
+        "disputed_region",
+    ]
     assert all(
         kwargs
         == {"latitude_column": "geo_latitude", "longitude_column": "geo_longitude"}
