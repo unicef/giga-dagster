@@ -59,7 +59,8 @@ class EmitDatasetAssertionResults:
         dq_results.pop("summary")
         self.dq_summary_statistics = []
         for value in dq_results.values():
-            self.dq_summary_statistics.extend(value)
+            if isinstance(value, list):
+                self.dq_summary_statistics.extend(value)
         self.logger.info(json.dumps(self.emitter.test_connection(), indent=2))
 
     def __call__(self) -> None:
