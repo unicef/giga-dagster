@@ -152,31 +152,74 @@ def _govt_lookup_map(mapping: dict[str, str]) -> sql.Column:
 
 
 def map_govt_to_giga_columns(
-    df: sql.DataFrame, uploaded_columns: list[str]
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    context: OpExecutionContext = None,
 ) -> sql.DataFrame:
+    log = get_context_with_fallback_logger(context)
+    log.info(
+        "Govt->giga mapping: reading NocoDB name-mappings "
+        f"url={settings.NOCODB_BASE_URL} "
+        f"table_id={settings.NOCODB_NAME_MAPPINGS_TABLE_ID}"
+    )
     rows = get_nocodb_table_rows(
         settings.NOCODB_NAME_MAPPINGS_TABLE_ID,
         where="(column_name,notblank)",
-        fields="column_name,target_column,table_id",
+        fields="table_name,column_name,target_column,table_id",
     )
+    log.info(f"Govt->giga mapping: fetched {len(rows)} name-mapping rows")
+    if not rows:
+        log.warning(
+            "Govt->giga mapping: no name-mapping rows found; "
+            "no govt->giga mappings will be applied"
+        )
+    for row in rows:
+        log.info(
+            f"Govt->giga mapping row: table_name={row.get('table_name')} "
+            f"{row.get('column_name')} -> {row.get('target_column')} "
+            f"table_id={row.get('table_id')}"
+        )
 
+    uploaded_govt_columns = [c for c in uploaded_columns if c.endswith("_govt")]
+    log.info(f"Govt->giga mapping: uploaded *_govt columns {uploaded_govt_columns}")
+
+    mapped_sources = set()
+    created_targets = []
     for row in rows:
         source_col = row.get("column_name", "")
         target_col = row.get("target_column", "")
         table_id = row.get("table_id", "")
 
-        if not (source_col and target_col and table_id):
-            continue
         if source_col not in uploaded_columns:
             continue
+        mapped_sources.add(source_col)
+        if not (source_col and target_col and table_id):
+            log.info(
+                f"Govt->giga mapping: skipping {source_col} — row is missing "
+                f"target_column or table_id (target_column={target_col!r}, "
+                f"table_id={table_id!r})"
+            )
+            continue
         if source_col == "connectivity_type_govt":
-            # Handled separately by add_connectivity_type_columns.
+            log.info(
+                "Govt->giga mapping: skipping connectivity_type_govt — handled by "
+                "add_connectivity_type_columns"
+            )
             continue
 
         mapping = get_nocodb_table_as_key_value_mapping(table_id=table_id)
         if not mapping:
+            log.warning(
+                f"Govt->giga mapping: value table {row.get('table_name')} "
+                f"(table_id={table_id}) is empty; {target_col} will be all 'Unknown'"
+            )
             df = df.withColumn(target_col, f.lit("Unknown"))
+            created_targets.append(target_col)
             continue
+        log.info(
+            f"Govt->giga mapping: applying {source_col} -> {target_col} using "
+            f"{row.get('table_name')} (table_id={table_id}, {len(mapping)} values)"
+        )
 
         govt_casing_map = _govt_lookup_map({k: k for k in mapping})
         govt_to_giga_map = _govt_lookup_map(mapping)
@@ -192,7 +235,15 @@ def map_govt_to_giga_columns(
                 govt_to_giga_map[f.lower(f.trim(f.col(source_col)))], f.lit("Unknown")
             ),
         )
+        created_targets.append(target_col)
 
+    log.info(f"Govt->giga mapping: created target columns {created_targets}")
+    unmapped = [c for c in uploaded_govt_columns if c not in mapped_sources]
+    if unmapped:
+        log.info(
+            f"Govt->giga mapping: uploaded *_govt columns with no name-mapping row: "
+            f"{unmapped}"
+        )
     return df
 
 
@@ -246,7 +297,9 @@ def standardize_internet_speed(df: sql.DataFrame) -> sql.DataFrame:
 
 
 def add_connectivity_type_columns(
-    df: sql.DataFrame, uploaded_columns: list[str]
+    df: sql.DataFrame,
+    uploaded_columns: list[str],
+    context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     """Derive connectivity_type and connectivity_type_root from connectivity_type_govt
     via the NocoDB ConnectivityTypeMapping table (keyed on connectivity_type_govt).
@@ -259,6 +312,7 @@ def add_connectivity_type_columns(
     if "connectivity_type_govt" not in uploaded_columns:
         return df
 
+    log = get_context_with_fallback_logger(context)
     table_id = get_nocodb_table_id_from_name("ConnectivityTypeMapping")
     mappings = get_nocodb_table_as_multi_value_mapping(
         table_id=table_id,
@@ -267,7 +321,15 @@ def add_connectivity_type_columns(
     )
     type_mapping = mappings["Giga"]
     root_mapping = mappings["Root"]
+    log.info(
+        f"Connectivity type mapping: ConnectivityTypeMapping table_id={table_id} "
+        f"({len(type_mapping)} Giga values, {len(root_mapping)} Root values)"
+    )
     if not (type_mapping and root_mapping):
+        log.warning(
+            "Connectivity type mapping: Giga or Root mapping is empty; "
+            "connectivity_type and connectivity_type_root will be null"
+        )
         return df.withColumn(
             "connectivity_type", f.lit(None).cast(StringType())
         ).withColumn("connectivity_type_root", f.lit(None).cast(StringType()))

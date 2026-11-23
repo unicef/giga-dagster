@@ -247,6 +247,10 @@ class POIContextEnricher(PoiViewGenerator):
         duplicate_threshold_m: int = PROXIMITY_DUPLICATE_THRESHOLD_M,
         reference_points: pd.DataFrame = None,
     ):
+        # giga-spatial only auto-detects keyword-named coordinate columns.
+        points = points.rename(
+            columns={"geo_latitude": "latitude", "geo_longitude": "longitude"}
+        )
         super().__init__(
             points=points,
             poi_id_column=poi_id_column,

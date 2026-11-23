@@ -30,6 +30,7 @@ from src.spark.transform_functions import (
     map_govt_to_giga_columns,
     merge_connectivity_to_master,
 )
+from src.utils.logger import get_context_with_fallback_logger
 from src.utils.school_registrations.common import (
     set_school_registration_verification_status,
 )
@@ -99,13 +100,23 @@ def prepare_facility_bronze(
     connectivity_govt ingestion timestamps. School registration verification is
     gated to schools only.
     """
+    logger = get_context_with_fallback_logger(context)
     uploaded_columns = list(uploaded_columns or df.columns)
+    logger.info(
+        f"Preparing {spec.facility_type} bronze for {country_code}; "
+        f"uploaded columns {uploaded_columns}"
+    )
     df = normalize_missing_value_strings(df)
     if spec.country_column not in df.columns:
         df = df.withColumn(spec.country_column, f.lit(country_code))
 
-    df = map_govt_to_giga_columns(df, uploaded_columns)
-    df = add_connectivity_type_columns(df, uploaded_columns)
+    columns_before_mapping = set(df.columns)
+    df = map_govt_to_giga_columns(df, uploaded_columns, context)
+    df = add_connectivity_type_columns(df, uploaded_columns, context)
+    logger.info(
+        "NocoDB mapping added columns "
+        f"{[c for c in df.columns if c not in columns_before_mapping]}"
+    )
 
     current_ids = (
         current

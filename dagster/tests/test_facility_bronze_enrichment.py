@@ -69,11 +69,11 @@ def test_prepare_facility_bronze_sets_connectivity_govt_timestamp(monkeypatch):
     spark = _session()
     monkeypatch.setattr(
         "src.data_quality_checks.facility.map_govt_to_giga_columns",
-        lambda df, uploaded_columns: df,
+        lambda df, uploaded_columns, context=None: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_connectivity_type_columns",
-        lambda df, uploaded_columns: df,
+        lambda df, uploaded_columns, context=None: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_admin_columns",
@@ -135,11 +135,11 @@ def test_prepare_facility_bronze_registration_only_for_school_gigameter(monkeypa
 
     monkeypatch.setattr(
         "src.data_quality_checks.facility.map_govt_to_giga_columns",
-        lambda df, uploaded_columns: df,
+        lambda df, uploaded_columns, context=None: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_connectivity_type_columns",
-        lambda df, uploaded_columns: df,
+        lambda df, uploaded_columns, context=None: df,
     )
     monkeypatch.setattr(
         "src.data_quality_checks.facility.add_admin_columns",
