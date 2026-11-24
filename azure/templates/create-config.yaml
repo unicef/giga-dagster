@@ -92,6 +92,7 @@ jobs:
                     MAWINGU_ZABBIX_API_URL: "$(mawinguZabbixApiUrl)"
                     MAWINGU_ZABBIX_TOKEN: "$(mawinguZabbixToken)"
                     MONGOLIA_DEVICE_BEARER_TOKEN: "$(mongoliaDeviceBearerToken)"
+                    SLACK_MONGOLIA_QOS_WEBHOOK: "$(slackMongoliaQosWebhook)"
                     SPARK_DRIVER_CORES: "$(sparkDriverCores)"
                     SPARK_DRIVER_MEMORY_MB: "$(sparkDriverMemoryMB)"
                     GITHUB_ACCESS_TOKEN: "$(githubAccessToken)"

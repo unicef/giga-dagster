@@ -5,12 +5,12 @@ ported - see schema.py)."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import date
 
 import pandas as pd
 import requests
-import sentry_sdk
 from pyspark.sql import (
     SparkSession,
     functions as F,
@@ -21,6 +21,7 @@ from src.custom.qos.mongolia.constants import (
 )
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
+from src.utils.slack.send_slack_base import send_slack_base
 
 from dagster import OpExecutionContext
 
@@ -74,7 +75,13 @@ def fetch_device_snapshots(
             f"Last error: {last_error}"
         )
         context.log.error(message)
-        sentry_sdk.capture_message(message, level="error")
+        asyncio.run(
+            send_slack_base(
+                f":warning: {message}",
+                context,
+                webhook_url=settings.SLACK_MONGOLIA_QOS_WEBHOOK,
+            )
+        )
 
 
 def _load_school_lookup(
