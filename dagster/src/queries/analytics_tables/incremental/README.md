@@ -84,66 +84,33 @@ sizing and stop-point reasoning.
 
 ### Schema changes on incremental tables
 
-`create/` never re-runs on an existing table (`assets.py` `_run_incremental` only
-picks `create/` when `information_schema.tables` has no row). There is no schema
-diffing. Editing `create/` therefore has **no effect on prod** until the table is
-dropped, which we do not do (see below).
+`create/` only runs when the table doesn't exist (`_run_incremental` in `assets.py`
+checks `information_schema.tables`), so editing it doesn't change a live table.
+`update/` for Steps 1-4 is a positional `INSERT INTO <table> SELECT ...` with no column
+list. So:
 
-Steps 1–4 `update/` scripts are positional `INSERT INTO <table> SELECT …` with
-**no column list**. New columns must be appended **last** in both `create/` and
-`update/`, in the same order, and the live table must be `ALTER TABLE … ADD
-COLUMN`’d **in the same paused window as the code deploy** (Phase 1 below). Either way round,
-the next hourly INSERT fails on column count. A failure is harmless — the id
-watermark self-heals — but avoid it.
+- Add new columns last, in the same order in `create/` and `update/`.
+- Run `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on the live table in the same paused
+  window as the deploy. If the code and the table are out of step, the next hourly INSERT
+  fails on column count. The id watermark self-heals, but avoid it.
+- Steps 1 and 2 must stay column-aligned (`m1.* UNION ALL m2.*` in
+  `all_gigameter_valid_test_checker`, the `measure` CTE in `all_gigameter_measurement_data`,
+  and daily `all_gigameter_measurement_data_tb_physical`). Alter them back to back. Step 2
+  gets typed `CAST(NULL AS ...)` for GigaMeter-only fields.
+- Don't drop and rebuild to change a schema. The runner doesn't delete the ADLS folder
+  (`delete_adls_data_on_drop=False`), bootstrap caps take days to catch up, and Step 4's
+  shared `MAX(measurement_id)` watermark can skip rows.
 
-Steps 1 and 2 (`all_gmeter_only_measurements`, `all_mlab_only_measurements`)
-must stay column-aligned. Three sites do a positional `m1.* UNION ALL m2.*`:
-`all_gigameter_valid_test_checker`, the `measure` CTE in
-`all_gigameter_measurement_data`, and daily `all_gigameter_measurement_data_tb_physical`.
-Alter both tables back-to-back. Step 2 gets typed `CAST(NULL AS …)` when the
-source field is GigaMeter-only.
+Window: after the hh:15 run. Avoid 00:15 to ~01:30 (Spark `OPTIMIZE` at 00:45) and ~04:00
+(daily). Pause `analytics_tables_incremental_schedule`, confirm nothing is running, ALTER,
+`DESCRIBE`, deploy, unpause, materialise one incremental run and check the new rows.
 
-**Do not rebuild** an incremental table to change its schema. The incremental
-runner does not delete the ADLS folder (`delete_adls_data_on_drop=False`), so a
-Trino `DROP` leaves `warehouse/<table>/_delta_log` behind and the next `CREATE
-TABLE … WITH (location=…)` fails or reattaches the old log. Bootstrap caps
-(`LIMIT 200000` / `40000`) then take days to catch up, and Step 4’s shared
-`MAX(measurement_id)` watermark across GigaMeter and MLab can skip rows for
-good. `ADD COLUMN` is metadata-only.
+Backfilling old rows is separate from the deploy: idempotent `MERGE`s
+(`IS DISTINCT FROM`), chunked by country and `measurement_id`, run with the schedule paused
+or between hourly runs. Widening the lookback doesn't backfill, it duplicates rows.
 
-**Runbook** (two phases: schema first, backfill later and separately)
-
-*Phase 1 — schema and code (one short window, ~30–60 min)*
-
-1. Trino pre-checks (column exposure, snapshot coverage, `columnMapping`). ALTERs:
-   `../migrations/add_measurement_columns_wifi_latency.sql`.
-2. Merge the PR and **hold the deploy**.
-3. Window: after the hh:15 incremental run. Avoid 00:15–~01:30 (Spark
-   `OPTIMIZE` at 00:45 is not covered by the overlap lock) and ~04:00 (daily).
-   Pause `analytics_tables_incremental_schedule` (and the daily one if near
-   04:00). Confirm nothing is running.
-4. `ALTER TABLE … ADD COLUMN IF NOT EXISTS` on the affected tables, new
-   columns last, Steps 1 and 2 together. `DESCRIBE` each table: 68, 68 and 85.
-   Steps 1 and 2 end with the same 5 columns (`wifi_unavailable_reason`,
-   `ssid_source`, `device_type`, `device_info`, `device_context`). Step 4 has
-   those, then `loaded_latency_download_ms` and `idle_latency_download_ms`.
-5. Deploy. Unpause. Materialise one incremental run by hand and check that new
-   rows are populated. New rows are then filled by the pipeline from here on.
-6. Next daily run (04:00) rebuilds `tb_physical` / weekly. Superset: sync
-   columns on every dataset (including language copies of Insights).
-
-*Phase 2 — backfill of existing rows (separate PR / one-off, only if needed)*
-
-Only after Phase 1 has run cleanly for a while. Use idempotent `MERGE`s
-(`IS DISTINCT FROM` guard), chunked by country / `measurement_id` range, either
-with the schedule paused or between hourly runs (a MERGE racing the hourly
-INSERT on the same Delta table can conflict). Widening the incremental lookback
-does **not** backfill — it inserts duplicates. Fields that only exist from a
-given app version onward need no backfill if Phase 1 is deployed before that
-version ships.
-
-Rollback: revert the SQL and leave the new columns NULL. `DROP COLUMN` likely
-needs Delta column mapping mode `name`; these tables do not have it.
+Rollback: revert the SQL; the extra columns stay NULL. `DROP COLUMN` needs Delta column
+mapping, which these tables don't have.
 
 ---
 
@@ -151,10 +118,10 @@ needs Delta column mapping mode `name`; these tables do not have it.
 
 | Script | Cadence | Creates Table | Purpose | Depends On |
 |---|---|---|---|---|
-| `all_gmeter_only_measurements.sql` | Hourly | `default.all_gmeter_only_measurements` | GigaMeter app raw measurements — incremental Step 1. Wifi / device_type / device_info / device_context columns last (TECH-11604) | `gigameter_production_db` |
-| `all_mlab_only_measurements.sql` | Hourly | `default.all_mlab_only_measurements` | MLab network test measurements — incremental Step 2. Same 5 extra columns as Step 1, as typed NULLs | `gigameter_production_db` |
+| `all_gmeter_only_measurements.sql` | Hourly | `default.all_gmeter_only_measurements` | GigaMeter app raw measurements — incremental Step 1. Device / Wi-Fi columns last (TECH-11604) | `gigameter_production_db` |
+| `all_mlab_only_measurements.sql` | Hourly | `default.all_mlab_only_measurements` | MLab network test measurements — incremental Step 2. Same 5 extra columns, always NULL | `gigameter_production_db` |
 | `all_gigameter_valid_test_checker.sql` | Hourly | `default.all_gigameter_valid_test_checker` | Per-measurement quality validation — incremental Step 3 | Steps 1 & 2 incremental |
-| `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4. Passes through the Step 1/2 columns and adds loaded / idle download latency (TECH-11791) | Steps 1, 2, & 3 incremental |
+| `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4. Adds the 5 device / Wi-Fi columns and loaded / idle download latency (TECH-11791) | Steps 1, 2, & 3 incremental |
 | `all_ping_hourly.sql` | Hourly | `default.all_ping_hourly` | Hourly ping/uptime aggregation per device-school (`MERGE`, not `INSERT` — see above) | `gigameter_production_db.connectivity_ping_checks` |
 | `all_ping_daily.sql` | Hourly (appends complete past days only) | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
 | `all_gigameter_school_daily_troubleshooting.sql` | Hourly | `default.all_gigameter_school_daily_troubleshooting` | School+day summary for Superset T0 troubleshooting (`MERGE`, delta-combine) | Step 4 |

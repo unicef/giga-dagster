@@ -353,12 +353,8 @@ select
             - CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.StartTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE)), 0)
         / 1e6 AS REAL), 2)                                                                                                     AS ndt5_download_speed_alt,
 
-    -- -------------------------------------------------------------------------
-    -- Device context / Wi-Fi diagnostics: typed NULLs so this table stays
-    -- column-aligned with all_gmeter_only_measurements for the three
-    -- positional m1.* UNION ALL m2.* sites. MLab ingest never fills these.
-    -- MUST stay LAST (positional INSERT + ALTER TABLE ADD COLUMN).
-    -- -------------------------------------------------------------------------
+    -- Device / Wi-Fi columns: always NULL for MLab, kept so the schema matches
+    -- all_gmeter_only_measurements (m1.* UNION ALL m2.*). Keep last (positional INSERT).
     CAST(NULL AS VARCHAR)                                                                            AS wifi_unavailable_reason,
     CAST(NULL AS VARCHAR)                                                                            AS ssid_source,
     CAST(NULL AS VARCHAR)                                                                            AS device_type,
