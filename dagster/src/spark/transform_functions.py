@@ -573,7 +573,10 @@ def add_admin_columns(
         boundaries = broadcasted_admin_boundaries.value
         gdf_points = gpd.GeoDataFrame(
             {"orig_index": range(len(latitude))},
-            geometry=gpd.points_from_xy(longitude, latitude),
+            geometry=gpd.points_from_xy(
+                pd.to_numeric(longitude, errors="coerce"),
+                pd.to_numeric(latitude, errors="coerce"),
+            ),
             crs="epsg:4326",
         )
         joined = gpd.sjoin(gdf_points, boundaries, how="left", predicate="within")
@@ -627,6 +630,8 @@ def add_disputed_region_column(df: sql.DataFrame) -> sql.DataFrame:
 
     def get_disputed_region(latitude, longitude) -> str | None:
         point = get_point(longitude=longitude, latitude=latitude)
+        if point is None:
+            return None
         for _, row in broadcasted_admin_boundaries.value.iterrows():
             if row.geometry.contains(point):
                 return row.get("name")
