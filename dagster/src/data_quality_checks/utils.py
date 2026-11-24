@@ -18,7 +18,10 @@ from src.data_quality_checks.config import (
     CONFIG_COLUMNS_EXCEPT_SCHOOL_ID,
     CONFIG_NONEMPTY_COLUMNS,
 )
-from src.data_quality_checks.coverage import fb_percent_sum_to_100_check
+from src.data_quality_checks.coverage import (
+    fb_percent_sum_to_100_check,
+    school_exists_in_master_check,
+)
 from src.data_quality_checks.critical import critical_error_checks
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.duplicates import (
@@ -850,9 +853,11 @@ def run_reference_checks(
 def run_coverage_checks(
     df: sql.DataFrame,
     dq_context: DQContext,
+    silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     df = standard_checks(df, dq_context.dataset_type, context)
+    df = school_exists_in_master_check(df, silver, context)
     df = column_relation_checks(df, dq_context.dataset_type, context)
     df = critical_error_checks(
         df,
@@ -866,11 +871,13 @@ def run_coverage_checks(
 def run_coverage_fb_checks(
     df: sql.DataFrame,
     dq_context: DQContext,
+    silver: sql.DataFrame = None,
     context: OpExecutionContext = None,
 ) -> sql.DataFrame:
     df = standard_checks(
         df, dq_context.dataset_type, context, domain=False, range_=False
     )
+    df = school_exists_in_master_check(df, silver, context)
     df = fb_percent_sum_to_100_check(df, context)
     df = column_relation_checks(df, dq_context.dataset_type, context)
     df = critical_error_checks(
@@ -926,9 +933,9 @@ def row_level_checks_internal(
     elif dq_context.dataset_type == "reference":
         df = run_reference_checks(df, dq_context, context)
     elif dq_context.dataset_type in ["coverage", "coverage_itu"]:
-        df = run_coverage_checks(df, dq_context, context)
+        df = run_coverage_checks(df, dq_context, silver, context)
     elif dq_context.dataset_type == "coverage_fb":
-        df = run_coverage_fb_checks(df, dq_context, context)
+        df = run_coverage_fb_checks(df, dq_context, silver, context)
     elif dq_context.dataset_type == "qos":
         df = run_qos_checks(df, dq_context, context)
 
