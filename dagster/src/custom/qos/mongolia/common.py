@@ -41,7 +41,13 @@ def fetch_device_snapshots(
     ):
         try:
             response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
             payload = json.loads(response.text)
+            if "port" not in payload:
+                raise ValueError(
+                    f"no 'port' key in response (status {response.status_code}): "
+                    f"{response.text[:200]}"
+                )
             port = payload["port"]
             if "device_id" in port and port["device_id"] != device_id:
                 raise ValueError(
