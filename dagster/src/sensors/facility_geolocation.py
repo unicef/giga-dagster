@@ -24,6 +24,12 @@ from src.utils.filename import deconstruct_facility_filename_components
 from src.utils.op_config import OpDestinationMapping, generate_run_ops
 
 
+def _staging_table_path(spec: FacilityGeolocationSpec) -> str:
+    """Warehouse path of the facility staging table shared by all countries."""
+    schema, table = spec.tables.staging_table_full_name.split(".", 1)
+    return f"{settings.SPARK_WAREHOUSE_PATH}/{schema}.db/{table}"
+
+
 def schema_key_from_upload_path(path: Path, upload_directory: str) -> str | None:
     """Extract schema_key from …/<upload_directory>/<ISO3>/<schema_key>/<file>."""
     parts = path.parts
@@ -124,10 +130,7 @@ def _automated_destinations(
         ),
         spec.assets.staging: OpDestinationMapping(
             source_filepath=dq_path,
-            destination_filepath=(
-                f"{settings.SPARK_WAREHOUSE_PATH}/"
-                f"{spec.tables.staging_schema}.db/{country_code.lower()}"
-            ),
+            destination_filepath=_staging_table_path(spec),
             metastore_schema=spec.metastore_schema,
             tier=DataTier.STAGING,
         ),
@@ -159,10 +162,7 @@ def _post_approval_destinations(
     warehouse = settings.SPARK_WAREHOUSE_PATH
     return {
         spec.assets.approved_rows: OpDestinationMapping(
-            source_filepath=(
-                f"{warehouse}/{spec.tables.staging_schema}.db/"
-                f"{country_code.lower()}"
-            ),
+            source_filepath=_staging_table_path(spec),
             destination_filepath=(
                 f"{constants.staging_folder}/approved-facility-rows/"
                 f"{spec.facility_type}/{country_code}/{path.stem}.parquet"
@@ -367,11 +367,7 @@ def _build_admin_delete_rows_sensor(
                 {
                     delete_asset: OpDestinationMapping(
                         source_filepath=str(path),
-                        destination_filepath=(
-                            f"{settings.SPARK_WAREHOUSE_PATH}/"
-                            f"{spec.tables.staging_schema}.db/"
-                            f"{components.country_code.lower()}"
-                        ),
+                        destination_filepath=_staging_table_path(spec),
                         metastore_schema=spec.metastore_schema,
                         tier=DataTier.STAGING,
                     )

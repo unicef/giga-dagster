@@ -1,10 +1,8 @@
-from dagster import AssetIn, AssetKey, OpExecutionContext, Output, asset
 from dagster_pyspark import PySparkResource
 from delta import DeltaTable
 from pyspark import sql
 from pyspark.sql import functions as f
 from pyspark.sql.types import StructType
-
 from src.assets.common.assets import (
     _approval_reset_values,
     _update_approval_request,
@@ -26,18 +24,23 @@ from src.utils.op_config import FileConfig
 from src.utils.schema import construct_full_table_name, get_schema_columns
 from src.utils.spark import transform_types
 
+from dagster import AssetIn, AssetKey, OpExecutionContext, Output, asset
+
 
 def _approval_parts(payload: dict) -> tuple[str, list, list, str | None]:
     upload_id = payload.get("upload_id", "")
     approved_ids = payload.get("approved_change_ids", [])
     rejected_ids = payload.get("rejected_change_ids", [])
     approval_log_id = payload.get("approval_request_log_id")
-    if not upload_id or not approval_log_id:
-        raise ValueError(
-            "Approval payload requires upload_id and approval_request_log_id"
-        )
+    if not upload_id:
+        raise ValueError("Approval payload requires upload_id")
     if not isinstance(approved_ids, list) or not isinstance(rejected_ids, list):
         raise ValueError("Approved and rejected change IDs must be lists")
+    # The portal writes a log id only when at least one row is approved.
+    if approved_ids and not approval_log_id:
+        raise ValueError(
+            "Approval payload requires approval_request_log_id when rows are approved"
+        )
     if len(approved_ids) != len(set(approved_ids)) or len(rejected_ids) != len(
         set(rejected_ids)
     ):
@@ -49,6 +52,17 @@ def _approval_parts(payload: dict) -> tuple[str, list, list, str | None]:
     if set(approved_ids).intersection(rejected_ids):
         raise ValueError("Approved and rejected change IDs must be disjoint")
     return upload_id, approved_ids, rejected_ids, approval_log_id
+
+
+def _in_country(country_code: str):
+    return f.col("country_code") == country_code
+
+
+def _skipped_publish_output(config: FileConfig) -> Output[None]:
+    return Output(
+        None,
+        metadata={**get_output_metadata(config), "skipped": True, "row_count": 0},
+    )
 
 
 def _resolve_ids(rows: sql.DataFrame, ids: list) -> sql.DataFrame:
@@ -135,14 +149,12 @@ def build_facility_publish_assets(  # noqa: C901
     ) -> Output[sql.DataFrame]:
         payload = adls_file_client.download_json(config.filepath)
         upload_id, approved_ids, _, _ = _approval_parts(payload)
-        staging_table = construct_full_table_name(
-            spec.tables.staging_schema,
-            config.country_code,
-        )
+        staging_table = spec.tables.staging_table_full_name
         spark.spark_session.catalog.refreshTable(staging_table)
         staging = DeltaTable.forName(spark.spark_session, staging_table).toDF()
         pending = staging.filter(
-            (f.col("upload_id") == upload_id)
+            _in_country(config.country_code)
+            & (f.col("upload_id") == upload_id)
             & (f.col("change_type") != StagingChangeType.UNCHANGED)
             & (f.col("status") == StagingStatus.PENDING)
         )
@@ -173,13 +185,11 @@ def build_facility_publish_assets(  # noqa: C901
         del approved
         payload = adls_file_client.download_json(config.filepath)
         upload_id, _, rejected_ids, _ = _approval_parts(payload)
-        staging_table = construct_full_table_name(
-            spec.tables.staging_schema,
-            config.country_code,
-        )
+        staging_table = spec.tables.staging_table_full_name
         staging = DeltaTable.forName(spark.spark_session, staging_table).toDF()
         upload_rows = staging.filter(
-            (f.col("upload_id") == upload_id)
+            _in_country(config.country_code)
+            & (f.col("upload_id") == upload_id)
             & (f.col("change_type") != StagingChangeType.UNCHANGED)
         )
         _validate_ids(upload_rows, rejected_ids)
@@ -187,7 +197,8 @@ def build_facility_publish_assets(  # noqa: C901
         rejected = _resolve_ids(pending, rejected_ids)
         if rejected_ids:
             condition = (
-                (f.col("upload_id") == upload_id)
+                _in_country(config.country_code)
+                & (f.col("upload_id") == upload_id)
                 & (f.col("status") == StagingStatus.PENDING)
             )
             if rejected_ids != ["__all__"]:
@@ -222,17 +233,21 @@ def build_facility_publish_assets(  # noqa: C901
         ins={"approved": AssetIn(key=AssetKey(approved_name))},
     )
     def facility_silver(
+        context: OpExecutionContext,
         approved: sql.DataFrame,
         config: FileConfig,
         spark: PySparkResource,
-    ) -> Output[sql.DataFrame]:
-        schema_columns = get_schema_columns(
-            spark.spark_session,
-            spec.metastore_schema,
-        )
+    ):
+        if approved.isEmpty():
+            context.log.info("No approved rows; leaving the silver table unread.")
+            return _skipped_publish_output(config)
         silver_table = construct_full_table_name(
             spec.tables.silver_schema,
             config.country_code,
+        )
+        schema_columns = get_schema_columns(
+            spark.spark_session,
+            spec.metastore_schema,
         )
         current = _load_or_empty(
             spark.spark_session,
@@ -257,23 +272,23 @@ def build_facility_publish_assets(  # noqa: C901
         name=spec.assets.core,
         group_name=spec.group_name,
         io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-        ins={
-            "approved": AssetIn(key=AssetKey(approved_name)),
-            "published_silver": AssetIn(key=AssetKey(spec.assets.silver)),
-        },
+        deps=[AssetKey(spec.assets.silver)],
+        ins={"approved": AssetIn(key=AssetKey(approved_name))},
     )
     def facility_core(
+        context: OpExecutionContext,
         approved: sql.DataFrame,
-        published_silver: sql.DataFrame,
         config: FileConfig,
         spark: PySparkResource,
-    ) -> Output[sql.DataFrame]:
-        del published_silver
-        projected = split_approved_facilities(approved, spec, allow_missing=True)
+    ):
+        if approved.isEmpty():
+            context.log.info("No approved rows; leaving the core table unread.")
+            return _skipped_publish_output(config)
         core_table = construct_full_table_name(
             spec.tables.core_schema,
             config.country_code,
         )
+        projected = split_approved_facilities(approved, spec, allow_missing=True)
         extension_table = construct_full_table_name(
             spec.tables.extension_schema,
             config.country_code,
@@ -316,29 +331,34 @@ def build_facility_publish_assets(  # noqa: C901
         name=spec.assets.extension,
         group_name=spec.group_name,
         io_manager_key=ResourceKey.ADLS_DELTA_IO_MANAGER.value,
-        ins={
-            "approved": AssetIn(key=AssetKey(approved_name)),
-            "published_core": AssetIn(key=AssetKey(spec.assets.core)),
-        },
+        deps=[AssetKey(spec.assets.core)],
+        ins={"approved": AssetIn(key=AssetKey(approved_name))},
     )
     def facility_extension(
+        context: OpExecutionContext,
         approved: sql.DataFrame,
-        published_core: sql.DataFrame,
         config: FileConfig,
         spark: PySparkResource,
-    ) -> Output[sql.DataFrame]:
-        projected = split_approved_facilities(approved, spec, allow_missing=True)
+    ):
+        if approved.isEmpty():
+            context.log.info("No approved rows; leaving the extension table unread.")
+            return _skipped_publish_output(config)
         extension_table = construct_full_table_name(
             spec.tables.extension_schema,
             config.country_code,
         )
+        # The core step has written this approval. Read that table back and recompute
+        # only the extension side, then validate the pair.
+        published_core = DeltaTable.forName(
+            spark.spark_session,
+            construct_full_table_name(spec.tables.core_schema, config.country_code),
+        ).toDF()
+        projected = split_approved_facilities(approved, spec, allow_missing=True)
         current_extension = _load_or_empty(
             spark.spark_session,
             extension_table,
             projected.extension.schema,
         )
-        # The core output has already incorporated this approval. Recompute only the
-        # extension side against its current table and then validate the pair.
         result = merge_approved_facilities(
             published_core,
             current_extension,
@@ -371,39 +391,32 @@ def build_facility_publish_assets(  # noqa: C901
     @asset(
         name=completion_name,
         group_name=spec.group_name,
-        ins={
-            "silver": AssetIn(key=AssetKey(spec.assets.silver)),
-            "core": AssetIn(key=AssetKey(spec.assets.core)),
-            "extension": AssetIn(key=AssetKey(spec.assets.extension)),
-            "rejected": AssetIn(key=AssetKey(rejected_name)),
-        },
+        deps=[
+            AssetKey(spec.assets.silver),
+            AssetKey(spec.assets.core),
+            AssetKey(spec.assets.extension),
+            AssetKey(rejected_name),
+        ],
     )
     def facility_publish_complete(
         context: OpExecutionContext,
-        silver: sql.DataFrame,
-        core: sql.DataFrame,
-        extension: sql.DataFrame,
-        rejected: sql.DataFrame,
         config: FileConfig,
         spark: PySparkResource,
         adls_file_client: ADLSFileClient,
     ) -> Output[None]:
-        del silver, core, extension, rejected
         payload = adls_file_client.download_json(config.filepath)
         upload_id, approved_ids, _, approval_log_id = _approval_parts(payload)
-        staging_table = construct_full_table_name(
-            spec.tables.staging_schema,
-            config.country_code,
-        )
+        staging_table = spec.tables.staging_table_full_name
+        in_upload = _in_country(config.country_code) & (f.col("upload_id") == upload_id)
         if approved_ids == ["__all__"]:
             approved_condition = (
-                (f.col("upload_id") == upload_id)
+                in_upload
                 & (f.col("change_type") != StagingChangeType.UNCHANGED)
                 & (f.col("status") == StagingStatus.PENDING)
             )
         elif approved_ids:
             approved_condition = (
-                (f.col("upload_id") == upload_id)
+                in_upload
                 & f.col("change_id").isin(approved_ids)
                 & (f.col("status") == StagingStatus.PENDING)
             )
@@ -415,23 +428,25 @@ def build_facility_publish_assets(  # noqa: C901
             set={
                 "status": f.lit(StagingStatus.PROCESSED),
                 "processed_at": f.current_timestamp(),
-                "approval_request_log_id": f.lit(approval_log_id),
+                "approval_request_log_id": f.lit(approval_log_id).cast("string"),
             },
         )
         _update_approval_request(
             context,
             config.country_code,
             spec.approval_label,
-            _approval_reset_values(spark.spark_session, staging_table),
+            _approval_reset_values(
+                spark.spark_session, staging_table, country_code=config.country_code
+            ),
         )
         table.update(
-            condition=(f.col("upload_id") == upload_id)
+            condition=in_upload
             & (f.col("change_type") == StagingChangeType.UNCHANGED)
             & (f.col("status") == StagingStatus.PENDING),
             set={
                 "status": f.lit(StagingStatus.PROCESSED_UNCHANGED),
                 "processed_at": f.current_timestamp(),
-                "approval_request_log_id": f.lit(approval_log_id),
+                "approval_request_log_id": f.lit(approval_log_id).cast("string"),
             },
         )
         context.log.info(

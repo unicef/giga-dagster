@@ -10,6 +10,8 @@ from src.assets.facility_geolocation.assets import (
 from src.facilities import HEALTH_SPEC, SCHOOL_SPEC, generate_facility_id
 from src.sensors.facility_geolocation import schema_key_from_upload_path
 
+from dagster import AssetKey
+
 
 def test_school_spec_preserves_existing_runtime_contracts():
     assert SCHOOL_SPEC.assets.raw == "geolocation_raw"
@@ -31,6 +33,25 @@ def test_school_spec_preserves_existing_runtime_contracts():
     assert {"geo_latitude", "geo_longitude"}.issubset(SCHOOL_SPEC.columns.core)
     assert "computer_lab_availability" in SCHOOL_SPEC.columns.extension
     assert "students_num" in SCHOOL_SPEC.columns.extension
+
+
+def test_facility_staging_and_error_tables_are_shared_across_countries():
+    assert (
+        SCHOOL_SPEC.tables.error_table_full_name
+        == "pipeline_tables.school_facility_geolocation_error_table"
+    )
+    assert (
+        HEALTH_SPEC.tables.error_table_full_name
+        == "pipeline_tables.health_facility_geolocation_error_table"
+    )
+    assert (
+        SCHOOL_SPEC.tables.staging_table_full_name
+        == "pipeline_tables.school_facility_geolocation_staging"
+    )
+    assert (
+        HEALTH_SPEC.tables.staging_table_full_name
+        == "pipeline_tables.health_facility_geolocation_staging"
+    )
 
 
 def test_health_spec_uses_shared_core_and_health_extension():
@@ -184,3 +205,52 @@ def test_facility_approval_contract_rejects_ambiguous_payloads():
                 "rejected_change_ids": ["change-1"],
             }
         )
+
+
+def test_approval_parts_allows_reject_only_without_log_id():
+    assert publish_factory._approval_parts(
+        {
+            "upload_id": "upload-1",
+            "approved_change_ids": [],
+            "rejected_change_ids": ["change-2"],
+        }
+    ) == ("upload-1", [], ["change-2"], None)
+
+
+def test_approval_parts_requires_log_id_when_rows_are_approved():
+    with pytest.raises(ValueError, match="approval_request_log_id"):
+        publish_factory._approval_parts(
+            {
+                "upload_id": "upload-1",
+                "approved_change_ids": ["change-1"],
+                "rejected_change_ids": [],
+            }
+        )
+
+
+def test_publish_steps_wait_for_upstream_tables_without_loading_them():
+    assets = {
+        asset.key.to_user_string(): asset
+        for asset in publish_factory.build_facility_publish_assets(SCHOOL_SPEC)
+    }
+    core = assets["school_facility_core"]
+    extension = assets["school_facility_details"]
+    complete = assets["geolocation_publish_complete"]
+
+    assert set(core.dependency_keys) == {
+        AssetKey("school_facility_manual_review_passed_rows"),
+        AssetKey("school_geolocation_silver"),
+    }
+    assert list(core.keys_by_input_name) == ["approved"]
+    assert set(extension.dependency_keys) == {
+        AssetKey("school_facility_manual_review_passed_rows"),
+        AssetKey("school_facility_core"),
+    }
+    assert list(extension.keys_by_input_name) == ["approved"]
+    assert set(complete.dependency_keys) == {
+        AssetKey("school_geolocation_silver"),
+        AssetKey("school_facility_core"),
+        AssetKey("school_facility_details"),
+        AssetKey("school_facility_manual_review_failed_rows"),
+    }
+    assert complete.keys_by_input_name == {}

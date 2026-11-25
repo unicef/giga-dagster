@@ -32,6 +32,7 @@ from src.data_quality_checks.utils import (
     normalize_dq_results_map,
 )
 from src.facilities import FacilityGeolocationSpec
+from src.facilities.specs import FACILITY_PIPELINE_TABLES_SCHEMA
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
@@ -540,23 +541,23 @@ def build_facility_geolocation_assets(  # noqa: C901
         config: FileConfig,
     ) -> Output[None]:
         upload_id = config.filename_components.id
-        full_table_name = construct_full_table_name(
-            f"{spec.metastore_schema}_error_table",
-            config.country_code,
-        )
-        create_schema(failed.sparkSession, f"{spec.metastore_schema}_error_table")
+        full_table_name = spec.tables.error_table_full_name
+        create_schema(failed.sparkSession, FACILITY_PIPELINE_TABLES_SCHEMA)
         if failed.sparkSession.catalog.tableExists(full_table_name):
             DeltaTable.forName(failed.sparkSession, full_table_name).delete(
-                f.col("upload_id") == upload_id
+                (f.col("country_code") == config.country_code)
+                & (f.col("upload_id") == upload_id)
             )
         if failed.isEmpty():
             return Output(None, metadata=get_output_metadata(config))
         (
             failed.withColumn("upload_id", f.lit(upload_id))
+            .withColumn("country_code", f.lit(config.country_code))
             .withColumn("created_at", f.current_timestamp())
             .write.format("delta")
             .mode("append")
             .option("mergeSchema", "true")
+            .partitionBy("country_code")
             .saveAsTable(full_table_name)
         )
         return Output(None, metadata=get_output_metadata(config))
@@ -582,6 +583,7 @@ def build_facility_geolocation_assets(  # noqa: C901
             spark.spark_session,
             StagingMode.UPDATE,
             match_key=spec.govt_id_column,
+            shared_staging_table=spec.tables.staging_table_full_name,
         )
         pending = step(passed)
         return Output(
@@ -604,6 +606,7 @@ def build_facility_geolocation_assets(  # noqa: C901
             adls_file_client,
             spark.spark_session,
             StagingMode.DELETE,
+            shared_staging_table=spec.tables.staging_table_full_name,
         )
         pending = step(delete_ids, id_type=payload.get("id_type", spec.giga_id_column))
         return Output(

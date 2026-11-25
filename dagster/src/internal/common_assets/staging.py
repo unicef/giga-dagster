@@ -1,7 +1,9 @@
 import enum
 
-from dagster import OpExecutionContext
 from delta import DeltaTable
+from models.approval_requests import ApprovalRequest
+from models.deletion_requests import DeletionRequest
+from models.file_upload import FileUpload
 from pyspark import sql
 from pyspark.sql import (
     SparkSession,
@@ -16,9 +18,7 @@ from pyspark.sql.types import (
 )
 from sqlalchemy import select, update
 
-from models.approval_requests import ApprovalRequest
-from models.deletion_requests import DeletionRequest
-from models.file_upload import FileUpload
+from dagster import OpExecutionContext
 from src.constants import DataTier, StagingChangeType, StagingStatus
 from src.schemas.file_upload import FileUploadConfig
 from src.spark.transform_functions import add_missing_columns
@@ -71,7 +71,10 @@ class StagingStep:
         spark: SparkSession,
         change_type: StagingMode,
         match_key: str | None = None,
+        shared_staging_table: str | None = None,
     ):
+        """``shared_staging_table`` ("<schema>.<table>") stages every country into
+        one table, scoped by ``country_code``, instead of one table per country."""
         self.context = context
         self.config = config
         self.adls_file_client = adls_file_client
@@ -97,10 +100,23 @@ class StagingStep:
         self.silver_table_name = construct_full_table_name(
             self.silver_tier_schema_name, self.country_code
         )
+        self.is_shared_staging = shared_staging_table is not None
+        if self.is_shared_staging:
+            self.staging_tier_schema_name, self.staging_table_key = (
+                shared_staging_table.split(".", 1)
+            )
+        else:
+            self.staging_table_key = self.country_code
         self.staging_table_name = construct_full_table_name(
             self.staging_tier_schema_name,
-            self.country_code,
+            self.staging_table_key,
         )
+
+    def _staging_scope(self, condition):
+        """Restrict a staging-table condition to this country when the table is shared."""
+        if self.is_shared_staging:
+            return condition & (f.col("country_code") == self.country_code)
+        return condition
 
     @property
     def approval_dataset_label(self) -> str:
@@ -317,22 +333,31 @@ class StagingStep:
             StructField("approval_request_log_id", StringType(), nullable=True),
             StructField("master_version", LongType(), nullable=True),
         ]
+        schema_column_names = {field.name for field in self.schema_columns}
+        if self.is_shared_staging and "country_code" not in schema_column_names:
+            pending_extra_fields.append(
+                StructField("country_code", StringType(), nullable=False)
+            )
         pending_schema = list(self.schema_columns) + pending_extra_fields
+        if self.is_shared_staging:
+            pending = pending.withColumn("country_code", f.lit(self.country_code))
 
         if not self.spark.catalog.tableExists(self.staging_table_name):
             create_delta_table(
                 self.spark,
                 self.staging_tier_schema_name,
-                self.country_code,
+                self.staging_table_key,
                 pending_schema,
                 self.context,
                 replace=True,
-                partition_by=["upload_id"],
+                partition_by=["country_code"]
+                if self.is_shared_staging
+                else ["upload_id"],
             )
         else:
             upload_id = self.config.filename_components.id
             DeltaTable.forName(self.spark, self.staging_table_name).delete(
-                f.col("upload_id") == upload_id
+                self._staging_scope(f.col("upload_id") == upload_id)
             )
             self.context.log.info(
                 f"Deleted existing staging rows for upload_id={upload_id}"
@@ -384,8 +409,10 @@ class StagingStep:
             DeltaTable.forName(self.spark, self.staging_table_name)
             .toDF()
             .filter(
-                (f.col("status") == StagingStatus.PENDING)
-                & (f.col("change_type") != StagingChangeType.UNCHANGED)
+                self._staging_scope(
+                    (f.col("status") == StagingStatus.PENDING)
+                    & (f.col("change_type") != StagingChangeType.UNCHANGED)
+                )
             )
             .count()
         )
@@ -591,6 +618,8 @@ class StagingStep:
 
     @property
     def staging_table_exists(self) -> bool:
+        if self.is_shared_staging:
+            return self.spark.catalog.tableExists(self.staging_table_name)
         return check_table_exists(
             self.spark, self.schema_name, self.country_code, DataTier.STAGING
         )

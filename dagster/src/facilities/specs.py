@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 
 FACILITY_ID_COLUMN = "facility_id_giga"
 
+# Schema holding the cross-country facility staging and error tables; rows in
+# those tables are distinguished by ``country_code``.
+FACILITY_PIPELINE_TABLES_SCHEMA = "pipeline_tables"
+
 # Upload/govt geospatial fields from the shared facilities core schema.
 SHARED_GEO_UPLOAD_COLUMNS = (
     "geo_latitude",
@@ -64,13 +68,22 @@ class FacilityTableNames:
     core_table: str
     extension_schema: str
     extension_table: str
-    staging_schema: str
+    staging_table: str
     silver_schema: str
     rejected_schema: str
+    error_table: str
 
     def __post_init__(self) -> None:
         for field_name in self.__dataclass_fields__:
             _validate_name(getattr(self, field_name), field_name)
+
+    @property
+    def staging_table_full_name(self) -> str:
+        return f"{FACILITY_PIPELINE_TABLES_SCHEMA}.{self.staging_table}"
+
+    @property
+    def error_table_full_name(self) -> str:
+        return f"{FACILITY_PIPELINE_TABLES_SCHEMA}.{self.error_table}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,9 +335,10 @@ SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
         core_table="facility_core",
         extension_schema="school_facility_details",
         extension_table="school_facility_details",
-        staging_schema="school_geolocation_staging",
+        staging_table="school_facility_geolocation_staging",
         silver_schema="school_geolocation_silver",
         rejected_schema="school_geolocation_rejected",
+        error_table="school_facility_geolocation_error_table",
     ),
     paths=FacilityPathNames(
         upload_directory="facility-geolocation",
@@ -410,9 +424,10 @@ HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
         core_table="facility_core",
         extension_schema="health_facility_details",
         extension_table="health_facility_details",
-        staging_schema="health_facility_geolocation_staging",
+        staging_table="health_facility_geolocation_staging",
         silver_schema="health_facility_geolocation_silver",
         rejected_schema="health_facility_geolocation_rejected",
+        error_table="health_facility_geolocation_error_table",
     ),
     paths=FacilityPathNames(
         upload_directory="facility-geolocation",

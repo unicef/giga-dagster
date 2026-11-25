@@ -256,16 +256,20 @@ def _build_processed_condition(approved_change_ids: list, upload_id: str):
     )
 
 
-def _approval_reset_values(spark: SparkSession, staging_table_name: str) -> dict:
-    """ApprovalRequest update values; `enabled` only clears once no pending rows remain."""
+def _approval_reset_values(
+    spark: SparkSession, staging_table_name: str, country_code: str | None = None
+) -> dict:
+    """ApprovalRequest update values; `enabled` only clears once no pending rows remain.
+
+    Pass ``country_code`` for staging tables shared across countries.
+    """
+    pending = (f.col("status") == StagingStatus.PENDING) & (
+        f.col("change_type") != StagingChangeType.UNCHANGED
+    )
+    if country_code is not None:
+        pending &= f.col("country_code") == country_code
     remaining_pending = (
-        DeltaTable.forName(spark, staging_table_name)
-        .toDF()
-        .filter(
-            (f.col("status") == StagingStatus.PENDING)
-            & (f.col("change_type") != StagingChangeType.UNCHANGED)
-        )
-        .count()
+        DeltaTable.forName(spark, staging_table_name).toDF().filter(pending).count()
     )
     update_values: dict = {ApprovalRequest.is_merge_processing: False}
     if remaining_pending == 0:
