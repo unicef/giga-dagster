@@ -2,7 +2,7 @@
 
 SQL pipeline scripts for the **Giga school connectivity monitoring platform**. Scripts run on **Trino** against production databases and are orchestrated by **Dagster**.
 
-Scripts are organised into three folders based on their execution model:
+Scripts are organised into four folders based on their execution model:
 
 ---
 
@@ -15,6 +15,9 @@ Some of the remaining scripts are planned for conversion to the incremental mode
 
 ### [`incremental/`](incremental/README.md)
 Scripts that run on an **hourly cadence** using incremental patterns — only new records are processed rather than the full history being re-scanned (id-watermark appends, `MERGE`s, and for `all_gigameter_registered_schools` an hourly `MERGE` of a cheap join on top of an incremental accumulator, flagging departed schools as `is_deleted`). Currently covers the 4 core measurement pipeline steps (Steps 1–4), the ping tables, `all_gigameter_school_daily_troubleshooting`, `all_gigameter_school_measurement_stats` and `all_gigameter_registered_schools`. Additional scripts (registration, regional) will be added in future iterations.
+
+### [`lookups/`](lookups/README.md)
+Reference tables (`country_geography`, `country_timezones`) defined as explicit `VALUES`. Not Dagster assets: run manually when a lookup changes, then rebuild the daily tables that read them.
 
 ### [`testing/`](testing/README.md)
 Non-production scripts not integrated into the Dagster pipeline. Used for one-off analysis or validating new logic before promoting to `daily/` or `incremental/`.
