@@ -5,7 +5,6 @@ ported - see schema.py)."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import date
 
@@ -26,7 +25,7 @@ from src.utils.slack.send_slack_base import send_slack_base
 from dagster import OpExecutionContext
 
 
-def fetch_device_snapshots(
+async def fetch_device_snapshots(
     adls_file_client: ADLSFileClient, run_timestamp, context: OpExecutionContext
 ) -> None:
     """Polls every whitelisted device and uploads its raw JSON response to ADLS.
@@ -75,12 +74,10 @@ def fetch_device_snapshots(
             f"Last error: {last_error}"
         )
         context.log.error(message)
-        asyncio.run(
-            send_slack_base(
-                f":warning: {message}",
-                context,
-                webhook_url=settings.SLACK_MONGOLIA_QOS_WEBHOOK,
-            )
+        await send_slack_base(
+            f":warning: {message}",
+            context,
+            webhook_url=settings.SLACK_MONGOLIA_QOS_WEBHOOK,
         )
 
 
