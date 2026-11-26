@@ -296,7 +296,20 @@ SELECT
     -- Validation Flags - Upload
     -- -------------------------------------------------------------------------
     CAST(mf.pass_fail_upload AS VARCHAR) AS pass_fail_upload,
-    CAST(mf.reasons_failed_upload AS VARCHAR) AS reasons_failed_upload
+    CAST(mf.reasons_failed_upload AS VARCHAR) AS reasons_failed_upload,
+
+    -- Device / Wi-Fi columns (TECH-11604). NULL for MLab and app versions before 2.0.4.
+    -- New columns go last: the INSERT is positional.
+    CAST(m.wifi_unavailable_reason AS VARCHAR) AS wifi_unavailable_reason,
+    CAST(m.ssid_source AS VARCHAR) AS ssid_source,
+    CAST(m.device_type AS VARCHAR) AS device_type,
+    CAST(m.device_info AS VARCHAR) AS device_info,
+    CAST(m.device_context AS VARCHAR) AS device_context,
+
+    -- Loaded / idle download latency (TECH-11791): s2c_FinalSnapshot TCPInfo RTT and
+    -- MinRTT, µs to ms. NULL when there is no snapshot (ndt5, MLab).
+    CAST(ROUND(CAST(json_extract_scalar(m.s2c_FinalSnapshot, '$.TCPInfo.RTT') AS DOUBLE) / 1000, 1) AS DOUBLE) AS loaded_latency_download_ms,
+    CAST(ROUND(CAST(json_extract_scalar(m.s2c_FinalSnapshot, '$.TCPInfo.MinRTT') AS DOUBLE) / 1000, 1) AS DOUBLE) AS idle_latency_download_ms
 FROM
   measure m
 LEFT JOIN
@@ -306,6 +319,7 @@ on
 -- JOIN: ISP/ASN canonical mapping -- see isp_asn_country_mapping.sql
 LEFT JOIN default.isp_asn_country_mapping map
   ON  map.iso3_code    = m.iso3_code
+  AND map.country      = m.country     -- partition key of the mapping table: lets Trino prune to the batch's countries
   AND map.isp_name_raw = m.detected_isp_raw
   AND map.isp_asn_raw  = m.detected_isp_asn
 -- JOIN: Bosnia canton mapping (country-specific enrichment)

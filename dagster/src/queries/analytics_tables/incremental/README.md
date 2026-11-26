@@ -82,16 +82,46 @@ window — a fix for a production `EXCEEDED_LOCAL_MEMORY_LIMIT` failure when the
 history was aggregated in one `GROUP BY`. See the header comment in that file for the chunk
 sizing and stop-point reasoning.
 
+### Schema changes on incremental tables
+
+`create/` only runs when the table doesn't exist (`_run_incremental` in `assets.py`
+checks `information_schema.tables`), so editing it doesn't change a live table.
+`update/` for Steps 1-4 is a positional `INSERT INTO <table> SELECT ...` with no column
+list. So:
+
+- Add new columns last, in the same order in `create/` and `update/`.
+- Run `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` on the live table in the same paused
+  window as the deploy. If the code and the table are out of step, the next hourly INSERT
+  fails on column count. The id watermark self-heals, but avoid it.
+- Steps 1 and 2 must stay column-aligned (`m1.* UNION ALL m2.*` in
+  `all_gigameter_valid_test_checker`, the `measure` CTE in `all_gigameter_measurement_data`,
+  and daily `all_gigameter_measurement_data_tb_physical`). Alter them back to back. Step 2
+  gets typed `CAST(NULL AS ...)` for GigaMeter-only fields.
+- Don't drop and rebuild to change a schema. The runner doesn't delete the ADLS folder
+  (`delete_adls_data_on_drop=False`), bootstrap caps take days to catch up, and Step 4's
+  shared `MAX(measurement_id)` watermark can skip rows.
+
+Window: after the hh:15 run. Avoid 00:15 to ~01:30 (Spark `OPTIMIZE` at 00:45) and ~04:00
+(daily). Pause `analytics_tables_incremental_schedule`, confirm nothing is running, ALTER,
+`DESCRIBE`, deploy, unpause, materialise one incremental run and check the new rows.
+
+Backfilling old rows is separate from the deploy: idempotent `MERGE`s
+(`IS DISTINCT FROM`), chunked by country and `measurement_id`, run with the schedule paused
+or between hourly runs. Widening the lookback doesn't backfill, it duplicates rows.
+
+Rollback: revert the SQL; the extra columns stay NULL. `DROP COLUMN` needs Delta column
+mapping, which these tables don't have.
+
 ---
 
 ## Scripts
 
 | Script | Cadence | Creates Table | Purpose | Depends On |
 |---|---|---|---|---|
-| `all_gmeter_only_measurements.sql` | Hourly | `default.all_gmeter_only_measurements` | GigaMeter app raw measurements — incremental Step 1 | `gigameter_production_db` |
-| `all_mlab_only_measurements.sql` | Hourly | `default.all_mlab_only_measurements` | MLab network test measurements — incremental Step 2 | `gigameter_production_db` |
+| `all_gmeter_only_measurements.sql` | Hourly | `default.all_gmeter_only_measurements` | GigaMeter app raw measurements — incremental Step 1. Device / Wi-Fi columns last (TECH-11604) | `gigameter_production_db` |
+| `all_mlab_only_measurements.sql` | Hourly | `default.all_mlab_only_measurements` | MLab network test measurements — incremental Step 2. Same 5 extra columns, always NULL | `gigameter_production_db` |
 | `all_gigameter_valid_test_checker.sql` | Hourly | `default.all_gigameter_valid_test_checker` | Per-measurement quality validation — incremental Step 3 | Steps 1 & 2 incremental |
-| `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4 | Steps 1, 2, & 3 incremental |
+| `all_gigameter_measurement_data.sql` | Hourly | `default.all_gigameter_measurement_data` | Consolidated validated measurements — incremental Step 4. Adds the 5 device / Wi-Fi columns and loaded / idle download latency (TECH-11791) | Steps 1, 2, & 3 incremental |
 | `all_ping_hourly.sql` | Hourly | `default.all_ping_hourly` | Hourly ping/uptime aggregation per device-school (`MERGE`, not `INSERT` — see above) | `gigameter_production_db.connectivity_ping_checks` |
 | `all_ping_daily.sql` | Hourly (appends complete past days only) | `default.all_ping_daily` | Daily ping aggregation | `all_ping_hourly` |
 | `all_gigameter_school_daily_troubleshooting.sql` | Hourly | `default.all_gigameter_school_daily_troubleshooting` | School+day summary for Superset T0 troubleshooting (`MERGE`, delta-combine) | Step 4 |
@@ -106,6 +136,35 @@ each `@asset` still keeps the Dagster `AssetKey` distinct from any same-named da
 
 Run each chain in order; each step depends on the previous within its own chain. The ping chain
 is independent of the measurement chain (Steps 1–4) — neither depends on the other.
+
+---
+
+## Partitioning
+
+7 of 10 incremental tables are partitioned, all by `country`. Partitioning is declared only in
+`create/<name>.sql`. `update/` scripts that `INSERT` or `MERGE` write into the existing table and
+inherit its layout, so changing `partitioned_by` in `create/` only affects a table once it is
+dropped and re-bootstrapped. The exception is `all_gigameter_registered_schools`, whose
+`update/` script runs `CREATE OR REPLACE TABLE` and declares `partitioned_by` again, so the two
+scripts must match. See [the root README](../README.md#partitioning) for the convention.
+
+| Table (`delta_lake.default.`) | `create/` | `update/` | Partitioned | Partitioned by |
+|---|---|---|---|---|
+| `all_gigameter_measurement_data` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_gigameter_registered_schools` | `CREATE TABLE … AS` | `CREATE OR REPLACE TABLE` | **Yes** | `country` |
+| `all_gigameter_school_daily_troubleshooting` | `CREATE TABLE … AS` | `MERGE INTO` | **Yes** | `country` |
+| `all_gigameter_school_measurement_stats` | `CREATE TABLE … AS` | `MERGE INTO` | No | — |
+| `all_gigameter_valid_test_checker` | `CREATE TABLE … AS` | `INSERT INTO` | No | — |
+| `all_gmeter_only_measurements` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_mlab_only_measurements` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_ping_daily` | `CREATE TABLE … AS` | `INSERT INTO` | **Yes** | `country` |
+| `all_ping_hourly` | `CREATE TABLE … AS` + chunked `INSERT`s | `MERGE INTO` | **Yes** | `country` |
+| `superset_activity_logs` | `CREATE TABLE … AS` | `INSERT INTO` | No in `create/` ¹ | — |
+
+¹ The live table is partitioned by `log_date`. It was created with a `partitioned_by` that
+`create/superset_activity_logs.sql` doesn't have (checked 2026-10-16 from the data file paths).
+`INSERT INTO` keeps the live layout, but a re-bootstrap from `create/` would drop it. Add
+`partitioned_by = ARRAY['log_date']` to `create/` if the partitioning should be kept.
 
 ---
 

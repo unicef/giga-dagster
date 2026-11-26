@@ -351,7 +351,15 @@ select
     ROUND(CAST(8 * CAST(JSON_EXTRACT_SCALAR(results, '$["TCPInfo.BytesAcked"]') AS DOUBLE)
         / NULLIF((CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.EndTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE)
             - CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.StartTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE)), 0)
-        / 1e6 AS REAL), 2)                                                                                                     AS ndt5_download_speed_alt
+        / 1e6 AS REAL), 2)                                                                                                     AS ndt5_download_speed_alt,
+
+    -- Device / Wi-Fi columns: always NULL for MLab, kept so the schema matches
+    -- all_gmeter_only_measurements (m1.* UNION ALL m2.*). Keep last (positional INSERT).
+    CAST(NULL AS VARCHAR)                                                                            AS wifi_unavailable_reason,
+    CAST(NULL AS VARCHAR)                                                                            AS ssid_source,
+    CAST(NULL AS VARCHAR)                                                                            AS device_type,
+    CAST(NULL AS VARCHAR)                                                                            AS device_info,
+    CAST(NULL AS VARCHAR)                                                                            AS device_context
 
 FROM
   measurements_enriched
