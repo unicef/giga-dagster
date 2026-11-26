@@ -13,10 +13,6 @@ from src.facilities.identity import (
 )
 from src.facilities.specs import (
     FACILITY_ID_COLUMN,
-    HEALTH_FACILITY_SPEC,
-    HEALTH_SPEC,
-    SCHOOL_FACILITY_SPEC,
-    SCHOOL_SPEC,
     FacilityAssetNames,
     FacilityColumnOwnership,
     FacilityGeolocationSpec,
@@ -58,6 +54,12 @@ __all__ = [
 ]
 
 _LAZY_EXPORTS = {
+    # Specs load from ADLS + schema registry; keep lazy so Spark workers can
+    # import identity helpers without pulling profiles.
+    "HEALTH_FACILITY_SPEC": ("src.facilities.specs", "HEALTH_FACILITY_SPEC"),
+    "HEALTH_SPEC": ("src.facilities.specs", "HEALTH_SPEC"),
+    "SCHOOL_FACILITY_SPEC": ("src.facilities.specs", "SCHOOL_FACILITY_SPEC"),
+    "SCHOOL_SPEC": ("src.facilities.specs", "SCHOOL_SPEC"),
     "FacilityIntegrityError": ("src.facilities.validation", "FacilityIntegrityError"),
     "FacilityProjections": ("src.facilities.projection", "FacilityProjections"),
     "FacilityPublishResult": ("src.facilities.publish", "FacilityPublishResult"),

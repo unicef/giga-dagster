@@ -335,11 +335,16 @@ def transform_types(
     schema_name: str,
     context: OpExecutionContext | OutputContext = None,
     table_name: str = None,
+    columns: list | None = None,
 ) -> sql.DataFrame:
     """
-    Retuns a dataframe with columns casted to use types in provided schema.
+    Returns a dataframe with columns cast to the types in the schema.
+
+    ``columns`` is the already resolved schema, including a pinned core and
+    member schema. When it is omitted, the current schema is looked up by name.
     """
-    columns = _resolve_schema_columns(df, schema_name, table_name, context)
+    if columns is None:
+        columns = _resolve_schema_columns(df, schema_name, table_name, context)
     if columns is None:
         return df
 

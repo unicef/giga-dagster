@@ -3,11 +3,7 @@ import sys
 from src.assets.facility_geolocation.assets import SCHOOL_FACILITY_GEOLOCATION_ASSETS
 from src.assets.school_geolocation_api.assets import school_geolocation_emis_api_mng
 from src.facilities import SCHOOL_SPEC
-from src.jobs.facility_geolocation import (
-    school_master_geolocation__admin_delete_rows_job,
-    school_master_geolocation__automated_data_checks_job,
-    school_master_geolocation__post_manual_checks_job,
-)
+from src.jobs.facility_geolocation import FACILITY_JOBS_BY_SCHEMA_KEY
 from src.jobs.school_geolocation_api import (
     school_geolocation_api__get_mongolia_school_updates,
 )
@@ -21,9 +17,10 @@ def test_school_geolocation_factory_asset_names_are_stable():
         for definition in SCHOOL_FACILITY_GEOLOCATION_ASSETS
         for key in definition.keys
     }
+    prefix = SCHOOL_SPEC.assets.raw.removesuffix("_raw")
     assert SCHOOL_SPEC.assets.raw in keys
     assert SCHOOL_SPEC.assets.dq_results in keys
-    assert "geolocation_dq_duplicates_report" in keys
+    assert f"{prefix}_dq_duplicates_report" in keys
     assert SCHOOL_SPEC.assets.silver in keys
     assert SCHOOL_SPEC.assets.core in keys
     assert SCHOOL_SPEC.assets.extension in keys
@@ -34,36 +31,30 @@ def test_school_geolocation_factory_asset_names_are_stable():
 
 
 def test_school_geolocation_job_names_and_selections_are_stable():
-    assert (
-        school_master_geolocation__automated_data_checks_job.name
-        == "school_master_geolocation__automated_data_checks_job"
-    )
-    assert school_master_geolocation__automated_data_checks_job.selection == (
-        AssetSelection.keys("geolocation_raw").downstream(depth=sys.maxsize)
+    automated = FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["automated"]
+    post = FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["post_approval"]
+    delete = FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["delete"]
+    prefix = SCHOOL_SPEC.assets.raw.removesuffix("_raw")
+
+    assert automated.name == SCHOOL_SPEC.jobs.automated_checks
+    assert automated.selection == (
+        AssetSelection.keys(SCHOOL_SPEC.assets.raw).downstream(depth=sys.maxsize)
     )
 
-    assert (
-        school_master_geolocation__post_manual_checks_job.name
-        == "school_master_geolocation__post_manual_checks_job"
-    )
-    assert school_master_geolocation__post_manual_checks_job.selection == (
+    assert post.name == SCHOOL_SPEC.jobs.post_approval
+    assert post.selection == (
         AssetSelection.keys(
             SCHOOL_SPEC.assets.approved_rows,
             SCHOOL_SPEC.assets.rejected_rows,
             SCHOOL_SPEC.assets.silver,
             SCHOOL_SPEC.assets.core,
             SCHOOL_SPEC.assets.extension,
-            "geolocation_publish_complete",
+            f"{prefix}_publish_complete",
         )
     )
 
-    assert (
-        school_master_geolocation__admin_delete_rows_job.name
-        == "school_master_geolocation__admin_delete_rows_job"
-    )
-    assert school_master_geolocation__admin_delete_rows_job.selection == (
-        AssetSelection.keys("geolocation_delete_staging")
-    )
+    assert delete.name == SCHOOL_SPEC.jobs.delete
+    assert delete.selection == (AssetSelection.keys(f"{prefix}_delete_staging"))
 
     assert (
         school_geolocation_api__get_mongolia_school_updates.name
@@ -80,8 +71,6 @@ def test_school_factory_assets_do_not_collide_with_common_keys():
         for definition in SCHOOL_FACILITY_GEOLOCATION_ASSETS
         for key in definition.keys
     }
-    assert "silver" not in keys
-    assert "manual_review_passed_rows" not in keys
-    assert "manual_review_failed_rows" not in keys
-    assert "master" not in keys
-    assert "reference" not in keys
+    # Facility school assets must not reuse bare legacy geolocation_* keys.
+    assert "geolocation_raw" not in keys
+    assert SCHOOL_SPEC.assets.raw.startswith("facility_geolocation_schools_")

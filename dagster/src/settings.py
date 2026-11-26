@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     API_AUTOMATION_EMAIL: str = "apiautomated@gigasync.org"
     VCT_MERAKI_API_KEY: str = ""
     CARTO_BASEMAP_API_KEY: str = ""
+    # Facility geolocation profiles on ADLS (one YAML per schema_key).
+    # Runtime source of truth is ADLS only — do not point this at the repo.
+    FACILITY_PROFILES_ADLS_PREFIX: str = "config/facility-profiles"
+    # Unit tests only: load profiles from a temp/fixture directory instead of ADLS.
+    # Leave empty in all real environments (local/dev/stg/prd).
+    FACILITY_PROFILES_LOCAL_DIR: str = ""
 
     # QoS ingestion - Brazil (nic.br), Isizwe (South Africa), Mawingu (Kenya), Mongolia
     BRAZIL_API_URL: str = ""

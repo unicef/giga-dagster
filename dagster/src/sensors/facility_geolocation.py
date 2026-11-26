@@ -9,15 +9,9 @@ from dagster import (
     sensor,
 )
 from src.constants import DataTier, constants
-from src.facilities import HEALTH_SPEC, SCHOOL_SPEC, FacilityGeolocationSpec
-from src.jobs.facility_geolocation import (
-    health_facility_geolocation__admin_delete_rows_job,
-    health_facility_geolocation__automated_data_checks_job,
-    health_facility_geolocation__post_manual_checks_job,
-    school_master_geolocation__admin_delete_rows_job,
-    school_master_geolocation__automated_data_checks_job,
-    school_master_geolocation__post_manual_checks_job,
-)
+from src.facilities import FacilityGeolocationSpec
+from src.facility_profiles import load_all_facility_specs
+from src.jobs.facility_geolocation import FACILITY_JOBS_BY_SCHEMA_KEY
 from src.settings import settings
 from src.utils.adls import ADLSFileClient
 from src.utils.filename import deconstruct_facility_filename_components
@@ -159,59 +153,57 @@ def _post_approval_destinations(
     country_code: str,
 ) -> dict[str, OpDestinationMapping]:
     prefix = spec.assets.raw.removesuffix("_raw")
-    warehouse = settings.SPARK_WAREHOUSE_PATH
     return {
         spec.assets.approved_rows: OpDestinationMapping(
-            source_filepath=_staging_table_path(spec),
+            source_filepath=str(path),
             destination_filepath=(
-                f"{constants.staging_folder}/approved-facility-rows/"
+                f"{constants.silver_folder}/manual-review/approved/"
                 f"{spec.facility_type}/{country_code}/{path.stem}.parquet"
             ),
             metastore_schema=spec.metastore_schema,
-            tier=DataTier.STAGING,
+            tier=DataTier.SILVER,
         ),
         spec.assets.rejected_rows: OpDestinationMapping(
             source_filepath=str(path),
             destination_filepath=(
-                f"{warehouse}/{spec.tables.rejected_schema}.db/"
-                f"{country_code.lower()}"
+                f"{constants.silver_folder}/manual-review/rejected/"
+                f"{spec.facility_type}/{country_code}/{path.stem}.parquet"
             ),
             metastore_schema=spec.metastore_schema,
-            tier=DataTier.MANUAL_REJECTED,
+            tier=DataTier.SILVER,
         ),
         spec.assets.silver: OpDestinationMapping(
             source_filepath=str(path),
             destination_filepath=(
-                f"{warehouse}/{spec.tables.silver_schema}.db/" f"{country_code.lower()}"
+                f"{constants.silver_folder}/{spec.tables.silver_schema}/"
+                f"{country_code}"
             ),
             metastore_schema=spec.metastore_schema,
             tier=DataTier.SILVER,
-            table_name=country_code.lower(),
         ),
         spec.assets.core: OpDestinationMapping(
             source_filepath=str(path),
             destination_filepath=(
-                f"{warehouse}/{spec.tables.core_schema}.db/{country_code.lower()}"
+                f"{constants.silver_folder}/{spec.tables.core_schema}/"
+                f"{country_code}"
             ),
-            metastore_schema=spec.tables.core_schema,
-            tier=DataTier.GOLD,
-            table_name=country_code.lower(),
+            metastore_schema=spec.metastore_schema,
+            tier=DataTier.SILVER,
         ),
         spec.assets.extension: OpDestinationMapping(
             source_filepath=str(path),
             destination_filepath=(
-                f"{warehouse}/{spec.tables.extension_schema}.db/"
-                f"{country_code.lower()}"
+                f"{constants.silver_folder}/{spec.tables.extension_schema}/"
+                f"{country_code}"
             ),
-            metastore_schema=spec.tables.extension_schema,
-            tier=DataTier.GOLD,
-            table_name=country_code.lower(),
+            metastore_schema=spec.metastore_schema,
+            tier=DataTier.SILVER,
         ),
         f"{prefix}_publish_complete": OpDestinationMapping(
             source_filepath=str(path),
             destination_filepath="",
             metastore_schema=spec.metastore_schema,
-            tier=DataTier.GOLD,
+            tier=DataTier.SILVER,
         ),
     }
 
@@ -330,7 +322,7 @@ def _build_post_manual_checks_sensor(
             )
             count += 1
         if count == 0:
-            yield SkipReason(f"No approvals detected in {source}")
+            yield SkipReason(f"No approval files detected in {source}")
 
     return _post_manual_checks_sensor
 
@@ -350,7 +342,9 @@ def _build_admin_delete_rows_sensor(
         context: SensorEvaluationContext,
         adls_file_client: ADLSFileClient,
     ):
-        source = f"{constants.staging_folder}/{spec.paths.delete_directory}"
+        source = f"{constants.UPLOAD_PATH_PREFIX}/{spec.paths.delete_directory}"
+        prefix = spec.assets.raw.removesuffix("_raw")
+        delete_asset = f"{prefix}_delete_staging"
         count = 0
         for file_data in adls_file_client.list_paths_generator(source, recursive=True):
             if file_data.is_directory:
@@ -359,10 +353,9 @@ def _build_admin_delete_rows_sensor(
             try:
                 components = deconstruct_facility_filename_components(str(path))
             except Exception as exc:
-                context.log.error(f"Invalid deletion filename {path}: {exc}")
+                context.log.error(f"Invalid delete filename {path}: {exc}")
                 continue
             metadata = adls_file_client.fetch_metadata_for_blob(str(path)) or {}
-            delete_asset = f"{spec.assets.raw.removesuffix('_raw')}_delete_staging"
             run_ops = generate_run_ops(
                 {
                     delete_asset: OpDestinationMapping(
@@ -370,7 +363,7 @@ def _build_admin_delete_rows_sensor(
                         destination_filepath=_staging_table_path(spec),
                         metastore_schema=spec.metastore_schema,
                         tier=DataTier.STAGING,
-                    )
+                    ),
                 },
                 dataset_type=spec.dataset_type,
                 metadata={
@@ -397,36 +390,33 @@ def _build_admin_delete_rows_sensor(
     return _admin_delete_rows_sensor
 
 
-school_master_geolocation__raw_file_uploads_sensor = _build_raw_uploads_sensor(
-    name="school_master_geolocation__raw_file_uploads_sensor",
-    spec=SCHOOL_SPEC,
-    job=school_master_geolocation__automated_data_checks_job,
-)
-school_master_geolocation__post_manual_checks_sensor = _build_post_manual_checks_sensor(
-    name="school_master_geolocation__post_manual_checks_sensor",
-    spec=SCHOOL_SPEC,
-    job=school_master_geolocation__post_manual_checks_job,
-)
-school_master_geolocation__admin_delete_rows_sensor = _build_admin_delete_rows_sensor(
-    name="school_master_geolocation__admin_delete_rows_sensor",
-    spec=SCHOOL_SPEC,
-    job=school_master_geolocation__admin_delete_rows_job,
-)
+# Discovered by load_sensors_from_package_module via this list. Do not also assign
+# per-profile SensorDefinition aliases at module level — that duplicates
+# registration and can leave None attrs when a profile is absent.
+FACILITY_GEOLOCATION_SENSORS: list[SensorDefinition] = []
+FACILITY_SENSORS_BY_SCHEMA_KEY: dict[str, dict[str, SensorDefinition]] = {}
 
-health_facility_geolocation__raw_file_uploads_sensor = _build_raw_uploads_sensor(
-    name="health_facility_geolocation__raw_file_uploads_sensor",
-    spec=HEALTH_SPEC,
-    job=health_facility_geolocation__automated_data_checks_job,
-)
-health_facility_geolocation__post_manual_checks_sensor = (
-    _build_post_manual_checks_sensor(
-        name="health_facility_geolocation__post_manual_checks_sensor",
-        spec=HEALTH_SPEC,
-        job=health_facility_geolocation__post_manual_checks_job,
+for _schema_key, _spec in load_all_facility_specs().items():
+    jobs = FACILITY_JOBS_BY_SCHEMA_KEY[_schema_key]
+    prefix = f"facility_geolocation_{_schema_key}"
+    raw_sensor = _build_raw_uploads_sensor(
+        name=f"{prefix}__raw_file_uploads_sensor",
+        spec=_spec,
+        job=jobs["automated"],
     )
-)
-health_facility_geolocation__admin_delete_rows_sensor = _build_admin_delete_rows_sensor(
-    name="health_facility_geolocation__admin_delete_rows_sensor",
-    spec=HEALTH_SPEC,
-    job=health_facility_geolocation__admin_delete_rows_job,
-)
+    post_sensor = _build_post_manual_checks_sensor(
+        name=f"{prefix}__post_manual_checks_sensor",
+        spec=_spec,
+        job=jobs["post_approval"],
+    )
+    delete_sensor = _build_admin_delete_rows_sensor(
+        name=f"{prefix}__admin_delete_rows_sensor",
+        spec=_spec,
+        job=jobs["delete"],
+    )
+    FACILITY_GEOLOCATION_SENSORS.extend([raw_sensor, post_sensor, delete_sensor])
+    FACILITY_SENSORS_BY_SCHEMA_KEY[_schema_key] = {
+        "raw": raw_sensor,
+        "post_approval": post_sensor,
+        "delete": delete_sensor,
+    }

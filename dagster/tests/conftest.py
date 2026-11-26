@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -17,6 +18,10 @@ _REQUIRED_SETTINGS = {
     "INGESTION_POSTGRESQL_USERNAME": "test",
     "INGESTION_POSTGRESQL_PASSWORD": "test",
     "INGESTION_POSTGRESQL_DATABASE": "test",
+    # Unit tests only: fixture YAMLs. Runtime always uses ADLS.
+    "FACILITY_PROFILES_LOCAL_DIR": str(
+        Path(__file__).resolve().parent / "fixtures" / "facility-profiles"
+    ),
 }
 
 for name, value in _REQUIRED_SETTINGS.items():

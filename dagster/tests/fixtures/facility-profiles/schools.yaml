@@ -1,0 +1,37 @@
+facility_type: school
+dataset_type: geolocation
+
+identity:
+  govt_id_column: facility_id_govt
+  giga_id_column: facility_id_giga
+  name_column: facility_name
+  level_column: facility_level
+  country_column: country_code
+
+paths:
+  upload_directory: facility-geolocation
+  dq_directory: school-geolocation
+  approval_directory: approved-row-ids/school-geolocation
+  delete_directory: delete-row-ids/school-geolocation
+
+tables:
+  core_schema: facility_core
+  core_table: facility_core
+  extension_schema: school_facility_details
+  extension_table: school_facility_details
+  staging_table: school_facility_geolocation_staging
+  silver_schema: school_geolocation_silver
+  rejected_schema: school_geolocation_rejected
+  error_table: school_facility_geolocation_error_table
+
+portal:
+  approval_label: School Geolocation
+  approval_domain: school
+
+dagster:
+  domain: school
+  group_name: school_geolocation_data
+  dq_config_table: SchoolGeolocationMasterDQChecks
+  metastore_schema_name: null
+  enable_connectivity: true
+  enable_registration_updates: true

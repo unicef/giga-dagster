@@ -25,6 +25,7 @@ pandas = "<3.0"
 sqlparse = "^0.5.5"
 google-cloud-bigquery = "^3.45.2"
 db-dtypes = "^1.7.1"
+pyyaml = "^6.0"
 
 [tool.poetry.group.dagster.dependencies]
 dagster-webserver = "^1.6.0"

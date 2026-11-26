@@ -317,78 +317,6 @@ _SHARED_DQ_RANGES = (
     ("connectivity_down_speed_contracted", 1, 500),
 )
 
-SCHOOL_FACILITY_SPEC = FacilityGeolocationSpec(
-    facility_type="school",
-    domain="school",
-    dataset_type="geolocation",
-    govt_id_column="facility_id_govt",
-    giga_id_column="facility_id_giga",
-    name_column="facility_name",
-    level_column="facility_level",
-    country_column="country_code",
-    columns=FacilityColumnOwnership(
-        core=COMMON_CORE_COLUMNS,
-        extension=SCHOOL_EXTENSION_COLUMNS,
-    ),
-    tables=FacilityTableNames(
-        core_schema="facility_core",
-        core_table="facility_core",
-        extension_schema="school_facility_details",
-        extension_table="school_facility_details",
-        staging_table="school_facility_geolocation_staging",
-        silver_schema="school_geolocation_silver",
-        rejected_schema="school_geolocation_rejected",
-        error_table="school_facility_geolocation_error_table",
-    ),
-    paths=FacilityPathNames(
-        upload_directory="facility-geolocation",
-        dq_directory="school-geolocation",
-        approval_directory="approved-row-ids/school-geolocation",
-        delete_directory="delete-row-ids/school-geolocation",
-        schema_keys=("schools",),
-    ),
-    jobs=FacilityJobNames(
-        automated_checks="school_master_geolocation__automated_data_checks_job",
-        post_approval="school_master_geolocation__post_manual_checks_job",
-        delete="school_master_geolocation__admin_delete_rows_job",
-    ),
-    assets=FacilityAssetNames(
-        raw="geolocation_raw",
-        bronze="geolocation_bronze",
-        dq_results="geolocation_data_quality_results",
-        staging="geolocation_staging",
-        # Unique keys so these do not collide with coverage's common assets.
-        approved_rows="school_facility_manual_review_passed_rows",
-        silver="school_geolocation_silver",
-        core="school_facility_core",
-        extension="school_facility_details",
-        rejected_rows="school_facility_manual_review_failed_rows",
-    ),
-    dq_config_table="SchoolGeolocationMasterDQChecks",
-    approval_label="School Geolocation",
-    group_name="school_geolocation_data",
-    enable_connectivity=True,
-    enable_registration_updates=True,
-    dq_domains=_SHARED_DQ_DOMAINS
-    + (
-        ("computer_lab_availability", ("yes", "no")),
-        ("device_availability", ("yes", "no")),
-        ("device_computers_availability", ("yes", "no")),
-        (
-            "facility_ownership_type",
-            ("public", "private", "charitable", "others"),
-        ),
-    ),
-    dq_ranges=_SHARED_DQ_RANGES
-    + (
-        ("device_computers_num", 0, 500),
-        ("device_tablets_num", 0, 500),
-        ("students_num", 0, 10_000),
-        ("facility_rooms_num", 0, 2_000),
-        ("facility_area_sqm", 0, 1_000_000),
-    ),
-)
-
 HEALTH_EXTENSION_COLUMNS = (
     "facility_id_2_govt",
     "facility_id_2_type_govt",
@@ -406,69 +334,19 @@ HEALTH_EXTENSION_COLUMNS = (
     "pop_catchment_govt",
 )
 
-HEALTH_FACILITY_SPEC = FacilityGeolocationSpec(
-    facility_type="health",
-    domain="health-facility",
-    dataset_type="geolocation",
-    govt_id_column="facility_id_govt",
-    giga_id_column="facility_id_giga",
-    name_column="facility_name",
-    level_column="facility_level",
-    country_column="country_code",
-    columns=FacilityColumnOwnership(
-        core=COMMON_CORE_COLUMNS,
-        extension=HEALTH_EXTENSION_COLUMNS,
-    ),
-    tables=FacilityTableNames(
-        core_schema="facility_core",
-        core_table="facility_core",
-        extension_schema="health_facility_details",
-        extension_table="health_facility_details",
-        staging_table="health_facility_geolocation_staging",
-        silver_schema="health_facility_geolocation_silver",
-        rejected_schema="health_facility_geolocation_rejected",
-        error_table="health_facility_geolocation_error_table",
-    ),
-    paths=FacilityPathNames(
-        upload_directory="facility-geolocation",
-        dq_directory="health-facility-geolocation",
-        approval_directory="approved-row-ids/health-facility-geolocation",
-        delete_directory="delete-row-ids/health-facility-geolocation",
-        schema_keys=("health_facilities",),
-    ),
-    jobs=FacilityJobNames(
-        automated_checks="health_facility_geolocation__automated_data_checks_job",
-        post_approval="health_facility_geolocation__post_manual_checks_job",
-        delete="health_facility_geolocation__admin_delete_rows_job",
-    ),
-    assets=FacilityAssetNames(
-        raw="health_facility_geolocation_raw",
-        bronze="health_facility_geolocation_bronze",
-        dq_results="health_facility_geolocation_data_quality_results",
-        staging="health_facility_geolocation_staging",
-        approved_rows="health_facility_manual_review_passed_rows",
-        silver="health_facility_geolocation_silver",
-        core="health_facility_core",
-        extension="health_facility_details",
-        rejected_rows="health_facility_manual_review_failed_rows",
-    ),
-    dq_config_table="HealthFacilityGeolocationDQChecks",
-    approval_label="Health Facility Geolocation",
-    group_name="health_facility_geolocation_data",
-    metastore_schema_name="health_facility_geolocation",
-    dq_domains=_SHARED_DQ_DOMAINS
-    + (
-        ("system_hmis", ("yes", "no")),
-        ("system_emr", ("yes", "no")),
-    ),
-    dq_ranges=_SHARED_DQ_RANGES
-    + (
-        ("outpatients_avg", 0, 1_000_000),
-        ("inpatients_avg", 0, 1_000_000),
-        ("pop_catchment_govt", 0, 10_000_000),
-    ),
-)
+# Routing values (paths, tables, jobs, assets) load from ADLS facility profiles.
+# Column ownership and DQ domains/ranges load from the schema registry.
 
-# Short names are convenient for factories while the explicit names remain discoverable.
-SCHOOL_SPEC = SCHOOL_FACILITY_SPEC
-HEALTH_SPEC = HEALTH_FACILITY_SPEC
+
+def _spec_for_schema_key(schema_key: str) -> FacilityGeolocationSpec:
+    from src.facility_profiles import build_spec_for_schema_key
+
+    return build_spec_for_schema_key(schema_key)
+
+
+def __getattr__(name: str):
+    if name in {"SCHOOL_SPEC", "SCHOOL_FACILITY_SPEC"}:
+        return _spec_for_schema_key("schools")
+    if name in {"HEALTH_SPEC", "HEALTH_FACILITY_SPEC"}:
+        return _spec_for_schema_key("health_facilities")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,5 +1,5 @@
 from dagster import AssetSelection, define_asset_job
-from src.facilities import HEALTH_SPEC, SCHOOL_SPEC
+from src.facility_profiles import load_all_facility_specs
 from src.hooks.school_master import (
     school_dq_checks_location_db_update_hook,
     school_dq_overall_location_db_update_hook,
@@ -48,10 +48,19 @@ def _delete_job(spec):
     )
 
 
-school_master_geolocation__automated_data_checks_job = _automated_job(SCHOOL_SPEC)
-school_master_geolocation__post_manual_checks_job = _post_approval_job(SCHOOL_SPEC)
-school_master_geolocation__admin_delete_rows_job = _delete_job(SCHOOL_SPEC)
+# Discovered by load_jobs_from_package_module via this list. Do not also assign
+# per-profile JobDefinition aliases at module level — that duplicates registration
+# and can leave None attrs when a profile is absent.
+FACILITY_GEOLOCATION_JOBS = []
+FACILITY_JOBS_BY_SCHEMA_KEY: dict[str, dict[str, object]] = {}
 
-health_facility_geolocation__automated_data_checks_job = _automated_job(HEALTH_SPEC)
-health_facility_geolocation__post_manual_checks_job = _post_approval_job(HEALTH_SPEC)
-health_facility_geolocation__admin_delete_rows_job = _delete_job(HEALTH_SPEC)
+for _schema_key, _spec in load_all_facility_specs().items():
+    automated = _automated_job(_spec)
+    post = _post_approval_job(_spec)
+    delete = _delete_job(_spec)
+    FACILITY_GEOLOCATION_JOBS.extend([automated, post, delete])
+    FACILITY_JOBS_BY_SCHEMA_KEY[_schema_key] = {
+        "automated": automated,
+        "post_approval": post,
+        "delete": delete,
+    }

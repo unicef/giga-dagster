@@ -2,19 +2,21 @@ from src.assets.facility_geolocation.factory import build_facility_geolocation_a
 from src.assets.facility_geolocation.publish_factory import (
     build_facility_publish_assets,
 )
-from src.facilities import HEALTH_SPEC, SCHOOL_SPEC
+from src.facility_profiles import load_all_facility_specs
 
-SCHOOL_FACILITY_GEOLOCATION_ASSETS = [
-    *build_facility_geolocation_assets(SCHOOL_SPEC),
-    *build_facility_publish_assets(SCHOOL_SPEC),
-]
+_SPECS = load_all_facility_specs()
 
-HEALTH_FACILITY_GEOLOCATION_ASSETS = [
-    *build_facility_geolocation_assets(HEALTH_SPEC),
-    *build_facility_publish_assets(HEALTH_SPEC),
-]
+FACILITY_GEOLOCATION_ASSETS = []
+SCHOOL_FACILITY_GEOLOCATION_ASSETS = []
+HEALTH_FACILITY_GEOLOCATION_ASSETS = []
 
-FACILITY_GEOLOCATION_ASSETS = [
-    *SCHOOL_FACILITY_GEOLOCATION_ASSETS,
-    *HEALTH_FACILITY_GEOLOCATION_ASSETS,
-]
+for _schema_key, _spec in _SPECS.items():
+    built = [
+        *build_facility_geolocation_assets(_spec),
+        *build_facility_publish_assets(_spec),
+    ]
+    FACILITY_GEOLOCATION_ASSETS.extend(built)
+    if _schema_key == "schools":
+        SCHOOL_FACILITY_GEOLOCATION_ASSETS.extend(built)
+    elif _schema_key == "health_facilities":
+        HEALTH_FACILITY_GEOLOCATION_ASSETS.extend(built)

@@ -1,0 +1,37 @@
+facility_type: health
+dataset_type: geolocation
+
+identity:
+  govt_id_column: facility_id_govt
+  giga_id_column: facility_id_giga
+  name_column: facility_name
+  level_column: facility_level
+  country_column: country_code
+
+paths:
+  upload_directory: facility-geolocation
+  dq_directory: health-facility-geolocation
+  approval_directory: approved-row-ids/health-facility-geolocation
+  delete_directory: delete-row-ids/health-facility-geolocation
+
+tables:
+  core_schema: facility_core
+  core_table: facility_core
+  extension_schema: health_facility_details
+  extension_table: health_facility_details
+  staging_table: health_facility_geolocation_staging
+  silver_schema: health_facility_geolocation_silver
+  rejected_schema: health_facility_geolocation_rejected
+  error_table: health_facility_geolocation_error_table
+
+portal:
+  approval_label: Health Facility Geolocation
+  approval_domain: health-facility
+
+dagster:
+  domain: health-facility
+  group_name: health_facility_geolocation_data
+  dq_config_table: HealthFacilityGeolocationDQChecks
+  metastore_schema_name: health_facility_geolocation
+  enable_connectivity: false
+  enable_registration_updates: false

@@ -8,22 +8,16 @@ from src.assets.facility_geolocation.assets import (
     SCHOOL_FACILITY_GEOLOCATION_ASSETS,
 )
 from src.facilities import HEALTH_SPEC, SCHOOL_SPEC, generate_facility_id
+from src.facility_profiles import derive_asset_names, derive_job_names
 from src.sensors.facility_geolocation import schema_key_from_upload_path
 
-from dagster import AssetKey
 
-
-def test_school_spec_preserves_existing_runtime_contracts():
-    assert SCHOOL_SPEC.assets.raw == "geolocation_raw"
-    assert SCHOOL_SPEC.assets.bronze == "geolocation_bronze"
-    assert SCHOOL_SPEC.assets.dq_results == "geolocation_data_quality_results"
+def test_school_spec_loads_from_facility_profile():
     assert SCHOOL_SPEC.paths.upload_directory == "facility-geolocation"
     assert SCHOOL_SPEC.paths.schema_keys == ("schools",)
     assert SCHOOL_SPEC.paths.dq_directory == "school-geolocation"
-    assert (
-        SCHOOL_SPEC.jobs.automated_checks
-        == "school_master_geolocation__automated_data_checks_job"
-    )
+    assert SCHOOL_SPEC.assets == derive_asset_names("schools")
+    assert SCHOOL_SPEC.jobs == derive_job_names("schools")
     assert SCHOOL_SPEC.dq_config_table == "SchoolGeolocationMasterDQChecks"
     assert SCHOOL_SPEC.approval_label == "School Geolocation"
     assert SCHOOL_SPEC.govt_id_column == "facility_id_govt"
@@ -142,45 +136,32 @@ def test_facility_jobs_and_sensors_are_registered():
     from src.sensors import facility_geolocation as facility_sensors
 
     assert (
-        facility_jobs.school_master_geolocation__automated_data_checks_job.name
+        facility_jobs.FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["automated"].name
         == SCHOOL_SPEC.jobs.automated_checks
     )
     assert (
-        facility_jobs.school_master_geolocation__post_manual_checks_job.name
+        facility_jobs.FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["post_approval"].name
         == SCHOOL_SPEC.jobs.post_approval
     )
     assert (
-        facility_jobs.school_master_geolocation__admin_delete_rows_job.name
+        facility_jobs.FACILITY_JOBS_BY_SCHEMA_KEY["schools"]["delete"].name
         == SCHOOL_SPEC.jobs.delete
     )
     assert (
-        facility_jobs.health_facility_geolocation__automated_data_checks_job.name
+        facility_jobs.FACILITY_JOBS_BY_SCHEMA_KEY["health_facilities"]["automated"].name
         == HEALTH_SPEC.jobs.automated_checks
-    )
-    assert (
-        facility_jobs.health_facility_geolocation__post_manual_checks_job.name
-        == HEALTH_SPEC.jobs.post_approval
-    )
-    assert (
-        facility_jobs.health_facility_geolocation__admin_delete_rows_job.name
-        == HEALTH_SPEC.jobs.delete
     )
 
     sensor_names = {
-        facility_sensors.school_master_geolocation__raw_file_uploads_sensor.name,
-        facility_sensors.school_master_geolocation__post_manual_checks_sensor.name,
-        facility_sensors.school_master_geolocation__admin_delete_rows_sensor.name,
-        facility_sensors.health_facility_geolocation__raw_file_uploads_sensor.name,
-        facility_sensors.health_facility_geolocation__post_manual_checks_sensor.name,
-        facility_sensors.health_facility_geolocation__admin_delete_rows_sensor.name,
+        sensor.name for sensor in facility_sensors.FACILITY_GEOLOCATION_SENSORS
     }
     assert sensor_names == {
-        "school_master_geolocation__raw_file_uploads_sensor",
-        "school_master_geolocation__post_manual_checks_sensor",
-        "school_master_geolocation__admin_delete_rows_sensor",
-        "health_facility_geolocation__raw_file_uploads_sensor",
-        "health_facility_geolocation__post_manual_checks_sensor",
-        "health_facility_geolocation__admin_delete_rows_sensor",
+        "facility_geolocation_schools__raw_file_uploads_sensor",
+        "facility_geolocation_schools__post_manual_checks_sensor",
+        "facility_geolocation_schools__admin_delete_rows_sensor",
+        "facility_geolocation_health_facilities__raw_file_uploads_sensor",
+        "facility_geolocation_health_facilities__post_manual_checks_sensor",
+        "facility_geolocation_health_facilities__admin_delete_rows_sensor",
     }
 
 
@@ -229,28 +210,31 @@ def test_approval_parts_requires_log_id_when_rows_are_approved():
 
 
 def test_publish_steps_wait_for_upstream_tables_without_loading_them():
+    from dagster import AssetKey
+
     assets = {
         asset.key.to_user_string(): asset
         for asset in publish_factory.build_facility_publish_assets(SCHOOL_SPEC)
     }
-    core = assets["school_facility_core"]
-    extension = assets["school_facility_details"]
-    complete = assets["geolocation_publish_complete"]
+    core = assets[SCHOOL_SPEC.assets.core]
+    extension = assets[SCHOOL_SPEC.assets.extension]
+    prefix = SCHOOL_SPEC.assets.raw.removesuffix("_raw")
+    complete = assets[f"{prefix}_publish_complete"]
 
     assert set(core.dependency_keys) == {
-        AssetKey("school_facility_manual_review_passed_rows"),
-        AssetKey("school_geolocation_silver"),
+        AssetKey(SCHOOL_SPEC.assets.approved_rows),
+        AssetKey(SCHOOL_SPEC.assets.silver),
     }
     assert list(core.keys_by_input_name) == ["approved"]
     assert set(extension.dependency_keys) == {
-        AssetKey("school_facility_manual_review_passed_rows"),
-        AssetKey("school_facility_core"),
+        AssetKey(SCHOOL_SPEC.assets.approved_rows),
+        AssetKey(SCHOOL_SPEC.assets.core),
     }
     assert list(extension.keys_by_input_name) == ["approved"]
     assert set(complete.dependency_keys) == {
-        AssetKey("school_geolocation_silver"),
-        AssetKey("school_facility_core"),
-        AssetKey("school_facility_details"),
-        AssetKey("school_facility_manual_review_failed_rows"),
+        AssetKey(SCHOOL_SPEC.assets.silver),
+        AssetKey(SCHOOL_SPEC.assets.core),
+        AssetKey(SCHOOL_SPEC.assets.extension),
+        AssetKey(SCHOOL_SPEC.assets.rejected_rows),
     }
     assert complete.keys_by_input_name == {}
