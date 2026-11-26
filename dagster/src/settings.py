@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     MAWINGU_ZABBIX_API_URL: str = ""
     MAWINGU_ZABBIX_TOKEN: str = ""
     MONGOLIA_DEVICE_BEARER_TOKEN: str = ""
+    SLACK_MONGOLIA_QOS_WEBHOOK: str = ""
     # base64-encoded service-account JSON: avoids the raw JSON's embedded quotes
     # breaking the "$(var)" macro substitution into azure/templates/create-config.yaml
     MLAB_BIGQUERY_SERVICE_ACCOUNT_JSON_B64: str = ""

@@ -48,6 +48,7 @@ variables:
   mawinguZabbixApiUrl: $(MAWINGU_ZABBIX_API_URL)
   mawinguZabbixToken: $(MAWINGU_ZABBIX_TOKEN)
   mongoliaDeviceBearerToken: $(MONGOLIA_DEVICE_BEARER_TOKEN)
+  slackMongoliaQosWebhook: $(SLACK_MONGOLIA_QOS_WEBHOOK)
   deployEnv: $(DEPLOY_ENV)
   dagsterSentryDsn: $(DAGSTER_SENTRY_DSN)
   ingressHost: $(INGRESS_HOST)
