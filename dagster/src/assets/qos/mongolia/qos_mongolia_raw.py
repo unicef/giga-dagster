@@ -2,11 +2,13 @@ import datetime as dt
 
 from src.custom.qos.mongolia.common import fetch_device_snapshots
 from src.utils.adls import ADLSFileClient
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import OpExecutionContext, Output, asset
 
 
 @asset
+@capture_op_exceptions
 def mongolia_qos_raw_json(
     context: OpExecutionContext, adls_file_client: ADLSFileClient
 ) -> Output:

@@ -10,6 +10,7 @@ from datetime import date
 
 import pandas as pd
 import requests
+import sentry_sdk
 from pyspark.sql import (
     SparkSession,
     functions as F,
@@ -35,13 +36,21 @@ def fetch_device_snapshots(
     headers = {"Authorization": f"Bearer {settings.MONGOLIA_DEVICE_BEARER_TOKEN}"}
     stamp = run_timestamp.strftime("%Y-%m-%d_%H-%M-%S")
     date_prefix = run_timestamp.date().isoformat()
+    failure_count = 0
+    last_error = ""
 
     for device_id, url in zip(
         devices_df["device_id"], devices_df["fetch_url"], strict=False
     ):
         try:
             response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
             payload = json.loads(response.text)
+            if "port" not in payload:
+                raise ValueError(
+                    f"no 'port' key in response (status {response.status_code}): "
+                    f"{response.text[:200]}"
+                )
             port = payload["port"]
             if "device_id" in port and port["device_id"] != device_id:
                 raise ValueError(
@@ -55,7 +64,17 @@ def fetch_device_snapshots(
             )
             ADLSFileClient.upload_raw(None, response.content, filepath)
         except Exception as exc:
+            failure_count += 1
+            last_error = f"{type(exc).__name__}: {exc}"
             context.log.error(f"Error getting data for device {device_id}: {exc}")
+
+    if len(devices_df) > 0 and failure_count * 3 >= len(devices_df):
+        message = (
+            f"Mongolia QoS: {failure_count} of {len(devices_df)} device fetches failed. "
+            f"Last error: {last_error}"
+        )
+        context.log.error(message)
+        sentry_sdk.capture_message(message, level="error")
 
 
 def _load_school_lookup(

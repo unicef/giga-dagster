@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
 from src.spark import spark
 from src.utils.schema import construct_full_table_name
+from src.utils.sentry import capture_op_exceptions
 
 from dagster import asset
 
@@ -9,6 +10,7 @@ from dagster import asset
     group_name="maintenance",
     description="Optimizes all school_geolocation_error_table.* tables using Z-Ordering on giga_sync_file_id.",
 )
+@capture_op_exceptions
 def optimize_geolocation_error_table(context) -> None:
     """
     Discovers all per-country upload_errors tables and runs OPTIMIZE + ZORDER BY

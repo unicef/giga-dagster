@@ -9,20 +9,28 @@ least one checked value in every group.
 """
 
 import json
+from urllib.parse import quote
 
 import folium
 import pandas as pd
 from jinja2 import BaseLoader, Environment
 
 from dagster import OpExecutionContext
+from src.settings import settings
 
 PASSED_COLOR = "#1e7e34"
 WARNING_COLOR = "#fd7e14"
 FAILED_COLOR = "#dc3545"
 OUTSIDE_BOUNDARY_COLOR = "#343a40"
 
-# Light, low-saturation basemap so status colors stand out (no green terrain).
-BASEMAP_TILES = "CartoDB Positron"
+# Light, low-saturation basemap (CARTO Positron) so status colors stand out.
+BASEMAP_TILES_URL = (
+    "https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png"
+)
+BASEMAP_ATTRIBUTION = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
+    'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+)
 
 _OUTSIDE_BOUNDARY_COL = "dq_is_not_within_country"
 _WARNING_COL = "dq_has_warning"
@@ -66,6 +74,13 @@ _FILTER_GROUP_TITLES = {
     "habitability": "Habitability",
     "boundary": "Country Boundary",
 }
+
+
+def _basemap_tiles_url(api_key: str) -> str:
+    """Return the CARTO tile URL; without a key CARTO serves watermarked tiles."""
+    if not api_key:
+        return BASEMAP_TILES_URL
+    return f"{BASEMAP_TILES_URL}?key={quote(api_key, safe='')}"
 
 
 def _filter_rows_with_valid_coordinates(df: pd.DataFrame) -> pd.DataFrame:
@@ -446,10 +461,16 @@ def generate_school_map_html(
     ]
     center_lat, center_lon, bounds = _calculate_coordinate_bounds(bounds_df)
 
+    if not settings.CARTO_BASEMAP_API_KEY:
+        context.log.warning(
+            "CARTO_BASEMAP_API_KEY is not set; map basemap will be watermarked."
+        )
+
     m = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=6,
-        tiles=BASEMAP_TILES,
+        tiles=_basemap_tiles_url(settings.CARTO_BASEMAP_API_KEY),
+        attr=BASEMAP_ATTRIBUTION,
         control_scale=True,
         prefer_canvas=True,
     )

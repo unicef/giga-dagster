@@ -62,14 +62,9 @@ def get_country_geometry(country_code_iso3):
 
 def get_point(longitude, latitude):
     try:
-        point = Point(longitude, latitude)
-    except ValueError as e:
-        if str(e) == "Must be a coordinate pair or Point":
-            point = None
-        else:
-            raise e
-
-    return point
+        return Point(longitude, latitude)
+    except (ValueError, TypeError):
+        return None
 
 
 # Inside based on GADM admin boundaries data
