@@ -2,7 +2,7 @@
 
 SQL pipeline scripts for the **Giga school connectivity monitoring platform**. Scripts run on **Trino** against production databases and are orchestrated by **Dagster**.
 
-Scripts are organised into three folders based on their execution model:
+Scripts are organised into four folders based on their execution model:
 
 ---
 
@@ -15,6 +15,9 @@ Some of the remaining scripts are planned for conversion to the incremental mode
 
 ### [`incremental/`](incremental/README.md)
 Scripts that run on an **hourly cadence** using incremental patterns — only new records are processed rather than the full history being re-scanned (id-watermark appends, `MERGE`s, and for `all_gigameter_registered_schools` an hourly `MERGE` of a cheap join on top of an incremental accumulator, flagging departed schools as `is_deleted`). Currently covers the 4 core measurement pipeline steps (Steps 1–4), the ping tables, `all_gigameter_school_daily_troubleshooting`, `all_gigameter_school_measurement_stats` and `all_gigameter_registered_schools`. Additional scripts (registration, regional) will be added in future iterations.
+
+### [`lookups/`](lookups/README.md)
+Reference tables (`country_geography`, `country_timezones`) defined as explicit `VALUES`. Not Dagster assets: run manually when a lookup changes, then rebuild the daily tables that read them.
 
 ### [`testing/`](testing/README.md)
 Non-production scripts not integrated into the Dagster pipeline. Used for one-off analysis or validating new logic before promoting to `daily/` or `incremental/`.
@@ -41,6 +44,41 @@ Non-production scripts not integrated into the Dagster pipeline. Used for one-of
   Output tables in delta_lake.default.*
   Consumed by: Superset dashboards, Giga Maps, country reports
 ```
+
+## Partitioning
+
+Partitioning is declared in the same `WITH (...)` clause as the table location, and every
+partitioned table here uses the same single key:
+
+```sql
+CREATE TABLE default.<table_name>
+WITH (
+    location = '{AZURE_BLOB_CONNECTION_URI}/warehouse/<table_name>',
+    partitioned_by = ARRAY['country']
+)
+AS ( ... );
+```
+
+In the scripts, nothing is partitioned by date or by any other column. Current status (13 of 30 tables partitioned in code):
+
+| Folder | Tables | Partitioned (`country`) | Not partitioned | Detail |
+|---|---|---|---|---|
+| `daily/` | 19 | 6 | 13 | [daily/README.md → Partitioning](daily/README.md#partitioning) |
+| `incremental/` | 10 | 7 (+1 live-only, see note) | 3 | [incremental/README.md → Partitioning](incremental/README.md#partitioning) |
+| `testing/` | 1 | 0 | 1 | [testing/README.md → Partitioning](testing/README.md#partitioning) |
+
+Live check (2026-10-16): every table matches its script except `superset_activity_logs`, which is
+partitioned by `log_date` in prod even though its `create/` script has no `partitioned_by`.
+
+Changing a table's partitioning:
+
+- **Daily:** add or remove `partitioned_by` in the script. The table is dropped and recreated
+  every run, so the change takes effect on the next run.
+- **Incremental:** add or remove `partitioned_by` in `create/<name>.sql`. Delta fixes partitioning
+  when a table is created, and `update/` scripts that `INSERT` or `MERGE` inherit it, so an
+  existing table **keeps its old layout** until it is dropped and re-bootstrapped. Plan that as a
+  one-off rebuild. The exception is `all_gigameter_registered_schools`: its `update/` script runs
+  `CREATE OR REPLACE TABLE` and declares `partitioned_by` itself, so keep the two scripts in sync.
 
 ## Trino Session Configuration
 
