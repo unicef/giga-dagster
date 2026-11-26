@@ -1,5 +1,8 @@
+import operator
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import reduce
 from typing import Any, Optional
 
 import pandas as pd
@@ -22,7 +25,11 @@ from src.data_quality_checks.coverage import (
     fb_percent_sum_to_100_check,
     school_exists_in_master_check,
 )
-from src.data_quality_checks.critical import critical_error_checks
+from src.data_quality_checks.critical import (
+    critical_error_checks,
+    get_critical_check_columns,
+    get_other_dataset_critical_checks,
+)
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.duplicates import (
     duplicate_all_except_checks,
@@ -45,6 +52,9 @@ from src.data_quality_checks.location_grouping import (
 from src.data_quality_checks.precision import precision_check
 from src.data_quality_checks.standard import standard_checks
 from src.spark.config_expectations import config
+from src.utils.data_quality_descriptions import (
+    handle_rename_dq_has_critical_error_column,
+)
 from src.utils.logger import get_context_with_fallback_logger
 from src.utils.nocodb.get_nocodb_data import (
     get_nocodb_table_as_pandas_dataframe,
@@ -73,6 +83,16 @@ METADATA_CHECK_KEYS = frozenset(
 )
 
 CRITICAL_CHECK_TYPE = "critical_checks"
+
+# dq_results keys without the "<assertion>-<column>" shape. Shared by the dq_summary
+# sections (aggregate_report_spark_df) and column_pass_summary so both read keys
+# the same way.
+# Checks on the coordinates as a pair, not on one column.
+COORDINATE_PAIR_CHECK_KEYS = frozenset(
+    {"is_in_uninhabited_area", "is_suspect_location", "duplicate_group_flag_50m"}
+)
+# Prefix of the exact-location duplicate keys, also used as their assertion.
+LOCATION_DUPLICATE_ASSERTION = "duplicate_location_rows"
 
 
 def normalize_check_category(value: object) -> str:
@@ -190,10 +210,8 @@ def aggregate_report_spark_df(
 
     # Processing for Human Readable Report
     # Most check keys are "<assertion>-<column>"; hyphen-less checks get explicit values.
-    is_location_rows_check = f.col("check_key").startswith("duplicate_location_rows")
-    is_geospatial_check = f.col("check_key").isin(
-        "is_in_uninhabited_area", "is_suspect_location", "duplicate_group_flag_50m"
-    )
+    is_location_rows_check = f.col("check_key").startswith(LOCATION_DUPLICATE_ASSERTION)
+    is_geospatial_check = f.col("check_key").isin(*sorted(COORDINATE_PAIR_CHECK_KEYS))
 
     agg_df = agg_df.withColumn("dq_column", f.col("check_key"))
     agg_df = agg_df.withColumn(
@@ -204,7 +222,7 @@ def aggregate_report_spark_df(
     )
     agg_df = agg_df.withColumn(
         "assertion",
-        f.when(is_location_rows_check, f.lit("duplicate_location_rows"))
+        f.when(is_location_rows_check, f.lit(LOCATION_DUPLICATE_ASSERTION))
         .when(is_geospatial_check, f.col("check_key"))
         .otherwise(f.split(f.col("check_key"), "-").getItem(0)),
     )
@@ -226,10 +244,13 @@ def aggregate_report_spark_df(
     dq_column_name_table["type"] = dq_column_name_table["type"].map(
         normalize_check_category
     )
-    dq_column_name_df = spark.createDataFrame(dq_column_name_table)
+    # Only these columns: Spark cannot infer the type of an all-empty NocoDB column.
+    dq_column_name_df = spark.createDataFrame(
+        dq_column_name_table[["type", "description", "merge_col"]]
+    )
 
     report = agg_df.join(
-        dq_column_name_df.select(*["type", "description", "merge_col"]),
+        dq_column_name_df,
         agg_df["dq_column"] == dq_column_name_df["merge_col"],
         how="inner",
     )
@@ -417,8 +438,14 @@ def build_dq_summary_statistics(
     spark: SparkSession,
     df_data_quality_checks: sql.DataFrame,
     df_bronze: sql.DataFrame,
+    entity: str | None = None,
+    dataset_type: str | None = None,
 ) -> dict:
-    """DQ summary with warning counts limited to approved (non-critical) rows."""
+    """DQ summary with warning counts limited to approved (non-critical) rows.
+
+    With an entity of DQ_REPORT_ENTITIES and the dataset_type, it also carries the
+    "dq_report" tables (see build_dq_report).
+    """
     df_data_quality_checks = df_data_quality_checks.cache()
     try:
         df_aggregated, df_aggregated_approved_only = aggregate_report_spark_df(
@@ -430,9 +457,467 @@ def build_dq_summary_statistics(
             df_bronze=df_bronze,
             df_data_quality_checks=df_data_quality_checks,
             df_aggregated_approved_only=df_aggregated_approved_only,
+            entity=entity,
+            dataset_type=dataset_type,
         )
     finally:
         df_data_quality_checks.unpersist()
+
+
+_LOCATION_COLUMNS = ("latitude", "longitude")
+_MULTI_COLUMN_ASSERTIONS = frozenset({"column_relation_checks"})
+
+
+def _check_key_columns(check_key: str) -> tuple[str, list[str]] | None:
+    """(assertion, columns) a dq_results key reports on, or None if it reports on
+    no single uploaded column.
+
+    Uses the same "<assertion>-<column>" split as aggregate_report_spark_df, so the
+    column matches the "column" field of the dq_summary sections. The exact-location
+    duplicate flag is attributed to latitude and longitude, as the UI shows it.
+    """
+    if check_key in METADATA_CHECK_KEYS or check_key in COORDINATE_PAIR_CHECK_KEYS:
+        return None
+    if check_key.startswith(LOCATION_DUPLICATE_ASSERTION):
+        return LOCATION_DUPLICATE_ASSERTION, list(_LOCATION_COLUMNS)
+    if "-" not in check_key:
+        return None
+    parts = check_key.split("-")
+    assertion, column = parts[0], parts[1]
+    if assertion in _MULTI_COLUMN_ASSERTIONS or not column:
+        return None
+    return assertion, [column]
+
+
+def _check_failed_expr(
+    check_key: str, create_only_keys: set[str], has_is_new_school: bool
+) -> Column:
+    failed = f.coalesce(
+        f.element_at(f.col("dq_results"), f.lit(check_key)) == 1, f.lit(False)
+    )
+    if check_key in create_only_keys and has_is_new_school:
+        failed = failed & f.coalesce(f.col("is_new_school"), f.lit(False))
+    return failed
+
+
+def build_column_pass_summary(
+    df: sql.DataFrame, create_only_keys: set[str] | None = None
+) -> dict[str, dict[str, Any]]:
+    """Per uploaded column, how many rows pass every check on that column.
+
+    All counts share one base: every uploaded row, approved or rejected. "passed"
+    rows fail no check of the column, so passed + failed == total. "checks" holds
+    the failed rows per assertion, on the same base. A key missing from a row's
+    dq_results map counts as not failed.
+
+    Only the keys already present in dq_results count, i.e. the checks NocoDB keeps
+    for this upload (see dq_geolocation_extract_relevant_columns). Metadata keys,
+    coordinate-pair checks and multi-column checks are left out.
+    """
+    if "dq_results" not in df.columns:
+        return {}
+    create_only_keys = create_only_keys or set()
+    has_is_new_school = "is_new_school" in df.columns
+
+    check_keys = sorted(
+        row.check_key
+        for row in df.select(
+            f.explode(f.map_keys(f.col("dq_results"))).alias("check_key")
+        )
+        .distinct()
+        .collect()
+    )
+
+    # column -> assertion -> check keys
+    keys_by_column: dict[str, dict[str, list[str]]] = {}
+    for check_key in check_keys:
+        target = _check_key_columns(check_key)
+        if target is None:
+            continue
+        assertion, columns = target
+        for column in columns:
+            if column not in df.columns:
+                continue
+            keys_by_column.setdefault(column, {}).setdefault(assertion, []).append(
+                check_key
+            )
+    if not keys_by_column:
+        return {}
+
+    def any_failed(keys: list[str]) -> Column:
+        return reduce(
+            operator.or_,
+            (
+                _check_failed_expr(key, create_only_keys, has_is_new_school)
+                for key in keys
+            ),
+        )
+
+    agg_exprs = [f.count("*").alias("total")]
+    aliases: dict[str, tuple[str, dict[str, str]]] = {}
+    for col_index, (column, assertions) in enumerate(sorted(keys_by_column.items())):
+        column_alias = f"c{col_index}"
+        all_keys = [key for keys in assertions.values() for key in keys]
+        agg_exprs.append(f.count(f.when(any_failed(all_keys), 1)).alias(column_alias))
+        assertion_aliases = {}
+        for assertion_index, (assertion, keys) in enumerate(sorted(assertions.items())):
+            assertion_alias = f"{column_alias}_a{assertion_index}"
+            agg_exprs.append(
+                f.count(f.when(any_failed(keys), 1)).alias(assertion_alias)
+            )
+            assertion_aliases[assertion] = assertion_alias
+        aliases[column] = (column_alias, assertion_aliases)
+
+    counts = df.select(*agg_exprs).first()
+    total = int(counts["total"])
+    return {
+        column: {
+            "total": total,
+            "passed": total - int(counts[column_alias]),
+            "failed": int(counts[column_alias]),
+            "checks": {
+                assertion: int(counts[alias])
+                for assertion, alias in assertion_aliases.items()
+            },
+        }
+        for column, (column_alias, assertion_aliases) in aliases.items()
+    }
+
+
+@dataclass(frozen=True)
+class DQReportEntity:
+    """Where the Rejected/Warnings tables of one entity are configured.
+
+    Row keys, groups, priorities and order are shared columns of the NocoDB checks
+    table; the texts shown to users are per entity.
+    """
+
+    checks_table: str
+    row_text_column: str
+    group_text_column: str
+
+
+DQ_REPORT_ENTITIES = {
+    "schools": DQReportEntity(
+        checks_table="SchoolGeolocationMasterDQChecks",
+        row_text_column="DQR Row Text",
+        group_text_column="DQR Group Text",
+    ),
+}
+
+DQ_REPORT_VERSION = 1
+_DQR_ROW_COLUMN = "DQR Row"
+_DQR_GROUP_COLUMN = "DQR Group"
+_DQR_PRIORITY_COLUMN = "DQR Priority"
+_DQR_ORDER_COLUMN = "DQR Order"
+_DQR_OPTIONAL_COLUMN = "DQR Optional"
+_DQR_PRIORITIES = ("High", "Medium", "Low")
+_DQR_DEFAULT_GROUP = "other"
+_DQR_DEFAULT_PRIORITY = {"rejected": "High", "warnings": "Low"}
+
+# Group id metadata key -> (summary count field, summary min size field).
+_DQR_GROUP_ID_KEYS = {
+    "duplicate_location_rows_id": (
+        "count_duplicate_location_groups",
+        "duplicate_location_group_min_size",
+    ),
+    "duplicate_group_id_50m": (
+        "count_proximity_50m_groups",
+        "proximity_50m_group_min_size",
+    ),
+}
+
+
+# Datasets whose checks are configured in the NocoDB checks table.
+_NOCODB_CHECKS_DATASETS = ("geolocation", "master")
+
+
+def get_critical_check_keys(dataset_type: str) -> tuple[set[str], set[str]]:
+    """(always, create_only) critical check keys of a dataset, without dq_ prefix,
+    as critical_error_checks applies them."""
+    if dataset_type in _NOCODB_CHECKS_DATASETS:
+        always, create_only = get_critical_check_columns()
+    else:
+        always = get_other_dataset_critical_checks(
+            dataset_type, CONFIG_NONEMPTY_COLUMNS.get(dataset_type, [])
+        )
+        create_only = []
+
+    def strip(names: list) -> set[str]:
+        return {str(name).removeprefix("dq_") for name in names if name}
+
+    return strip(always), strip(create_only)
+
+
+def _nocodb_text(value: object) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    return str(value).strip()
+
+
+def _nocodb_order(value: object) -> float:
+    try:
+        order = float(value)
+    except (TypeError, ValueError):
+        return float("inf")
+    return float("inf") if pd.isna(order) else order
+
+
+def _present_check_keys(df: sql.DataFrame) -> set[str]:
+    if "dq_results" in df.columns:
+        return {
+            row.check_key
+            for row in df.select(
+                f.explode(f.map_keys(f.col("dq_results"))).alias("check_key")
+            )
+            .distinct()
+            .collect()
+        }
+    return {col[len("dq_") :] for col in df.columns if col.startswith("dq_")}
+
+
+def _report_failed_expr(df: sql.DataFrame, check_key: str) -> Column:
+    if "dq_results" in df.columns:
+        return f.coalesce(
+            f.element_at(f.col("dq_results"), f.lit(check_key)) == 1, f.lit(False)
+        )
+    return f.coalesce(f.col(f"dq_{check_key}").cast("int") == 1, f.lit(False))
+
+
+def _configured_report_rows(
+    checks_table: pd.DataFrame, entity: DQReportEntity
+) -> dict[str, dict[str, Any]]:
+    """Row key -> spec, from the NocoDB rows that set "DQR Row". Checks sharing a
+    row key are combined; the first non-empty value (by "DQR Order") wins."""
+    records = checks_table.to_dict(orient="records")
+    records.sort(key=lambda record: _nocodb_order(record.get(_DQR_ORDER_COLUMN)))
+    rows: dict[str, dict[str, Any]] = {}
+    for record in records:
+        row_key = _nocodb_text(record.get(_DQR_ROW_COLUMN))
+        check_column = _nocodb_text(record.get("DQ Table Column Name"))
+        if not row_key or not check_column.startswith("dq_"):
+            continue
+        spec = rows.setdefault(
+            row_key,
+            {
+                "checks": [],
+                "group": "",
+                "group_label": "",
+                "label": "",
+                "priority": "",
+                "order": float("inf"),
+                "optional": False,
+            },
+        )
+        spec["checks"].append(check_column.removeprefix("dq_"))
+        spec["order"] = min(spec["order"], _nocodb_order(record.get(_DQR_ORDER_COLUMN)))
+        spec["optional"] = spec["optional"] or (
+            _nocodb_text(record.get(_DQR_OPTIONAL_COLUMN)).lower() == "yes"
+        )
+        for field, column in (
+            ("group", _DQR_GROUP_COLUMN),
+            ("group_label", entity.group_text_column),
+            ("label", entity.row_text_column),
+            ("priority", _DQR_PRIORITY_COLUMN),
+        ):
+            spec[field] = spec[field] or _nocodb_text(record.get(column))
+    return rows
+
+
+def _fallback_report_rows(
+    check_keys: set[str], labels: dict[str, str]
+) -> dict[str, dict[str, Any]]:
+    """One row per critical check, for datasets with no configured row."""
+    return {
+        key: {
+            "checks": [key],
+            "group": _DQR_DEFAULT_GROUP,
+            "group_label": "",
+            "label": labels.get(f"dq_{key}", key),
+            "priority": "",
+            "order": float("inf"),
+            "optional": False,
+        }
+        for key in sorted(check_keys)
+    }
+
+
+def _group_tally_row(
+    row_key: str, spec: dict[str, Any], summary: dict[str, Any]
+) -> dict[str, Any] | None:
+    group_ids = [key for key in spec["checks"] if key in _DQR_GROUP_ID_KEYS]
+    count_field, size_field = _DQR_GROUP_ID_KEYS[group_ids[0]]
+    if summary.get(count_field) is None or summary.get(size_field) is None:
+        return None
+    min_size = summary[size_field]
+    return {
+        **spec,
+        "key": row_key,
+        "kind": "groups",
+        "outcome": "warnings",
+        "checks": group_ids,
+        "count": int(summary[count_field]),
+        "params": {"count": min_size},
+        "label": (spec["label"] or row_key).replace("{count}", str(min_size)),
+    }
+
+
+def _row_count_exprs(
+    df: sql.DataFrame, prefix: str, outcome: str, checks: list[str]
+) -> list[Column]:
+    """Rejected: one count per check over every row (the row shows the largest).
+    Warnings: one count of approved rows failing any of the checks."""
+    if not checks:
+        return []
+    if outcome == "rejected":
+        return [
+            f.count(f.when(_report_failed_expr(df, key), 1)).alias(f"{prefix}_{i}")
+            for i, key in enumerate(checks)
+        ]
+    is_approved = (
+        f.col("dq_has_critical_error") == 0
+        if "dq_has_critical_error" in df.columns
+        else f.lit(True)
+    )
+    failed = reduce(operator.or_, (_report_failed_expr(df, key) for key in checks))
+    return [f.count(f.when(failed & is_approved, 1)).alias(f"{prefix}_0")]
+
+
+def build_dq_report(
+    df: sql.DataFrame,
+    checks_table: pd.DataFrame,
+    entity_name: str,
+    critical_keys: set[str],
+    summary: dict[str, Any],
+    checks_from_nocodb: bool,
+    fallback_labels: dict[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """Rejected and Warnings tables of the DQ report, ready to render.
+
+    Rows come from the NocoDB checks table ("DQR Row" and related columns). A row is
+    rejected if one of its checks is critical for the dataset, a warning otherwise.
+    Counts match the critical_checks / approved-only sections of the summary:
+    rejected rows count every uploaded row and show the largest count of their
+    checks; warning rows count approved rows failing any of their checks. Group-id
+    rows report the duplicate group tallies of the summary.
+
+    For datasets configured in NocoDB (checks_from_nocodb), a row whose checks did
+    not run shows 0, unless "DQR Optional" is Yes. Other datasets only show rows
+    whose checks ran and, with none configured, one row per critical check that
+    ran. Returns None if NocoDB has no report configuration yet.
+    """
+    if _DQR_ROW_COLUMN not in checks_table.columns:
+        return None
+    present = _present_check_keys(df)
+    specs = _configured_report_rows(checks_table, DQ_REPORT_ENTITIES[entity_name])
+    if not checks_from_nocodb and not any(
+        present.intersection(spec["checks"]) for spec in specs.values()
+    ):
+        specs = _fallback_report_rows(critical_keys & present, fallback_labels or {})
+
+    rows: list[dict[str, Any]] = []
+    agg_exprs: list[Column] = []
+    for index, (row_key, spec) in enumerate(specs.items()):
+        if any(key in _DQR_GROUP_ID_KEYS for key in spec["checks"]):
+            tally_row = _group_tally_row(row_key, spec, summary)
+            if tally_row is not None:
+                rows.append(tally_row)
+            continue
+        checks_run = [key for key in spec["checks"] if key in present]
+        if not checks_run and (spec["optional"] or not checks_from_nocodb):
+            continue
+        outcome = (
+            "rejected"
+            if any(key in critical_keys for key in spec["checks"])
+            else "warnings"
+        )
+        exprs = _row_count_exprs(df, f"r{index}", outcome, checks_run)
+        agg_exprs.extend(exprs)
+        rows.append(
+            {
+                **spec,
+                "key": row_key,
+                "kind": "rows",
+                "outcome": outcome,
+                "aliases": [f"r{index}_{i}" for i in range(len(exprs))],
+            }
+        )
+
+    counts = df.select(*agg_exprs).first() if agg_exprs else None
+    for row in rows:
+        if row["kind"] == "rows":
+            row["count"] = max(
+                (int(counts[alias]) for alias in row["aliases"]), default=0
+            )
+
+    return {
+        "version": DQ_REPORT_VERSION,
+        "entity": entity_name,
+        "rejected": _group_report_rows(rows, "rejected"),
+        "warnings": _group_report_rows(rows, "warnings"),
+    }
+
+
+def _group_report_rows(rows: list[dict[str, Any]], outcome: str) -> list[dict]:
+    """Rows of one outcome, grouped and sorted by "DQR Order"; a group takes the
+    place of its first row."""
+    groups: dict[str, dict[str, Any]] = {}
+    outcome_rows = sorted(
+        (row for row in rows if row["outcome"] == outcome),
+        key=lambda row: (row["order"], row["key"]),
+    )
+    for row in outcome_rows:
+        group_key = row["group"] or _DQR_DEFAULT_GROUP
+        group = groups.setdefault(
+            group_key, {"key": group_key, "label": "", "rows": []}
+        )
+        group["label"] = group["label"] or row["group_label"]
+        priority = row["priority"].capitalize()
+        entry = {
+            "key": row["key"],
+            "kind": row["kind"],
+            "label": row["label"] or row["key"],
+            "priority": (
+                priority
+                if priority in _DQR_PRIORITIES
+                else _DQR_DEFAULT_PRIORITY[outcome]
+            ),
+            "count": row["count"],
+            "checks": row["checks"],
+        }
+        if row["kind"] == "groups":
+            entry["params"] = row["params"]
+        group["rows"].append(entry)
+    for group in groups.values():
+        group["label"] = group["label"] or group["key"].replace("_", " ").capitalize()
+    return list(groups.values())
+
+
+def _dq_report_for_dataset(
+    df: sql.DataFrame,
+    entity: str | None,
+    dataset_type: str | None,
+    summary: dict[str, Any],
+) -> dict[str, Any] | None:
+    if entity not in DQ_REPORT_ENTITIES or not dataset_type:
+        return None
+    checks_table = get_nocodb_table_as_pandas_dataframe(
+        table_id=get_nocodb_table_id_from_name(
+            table_name=DQ_REPORT_ENTITIES[entity].checks_table
+        )
+    )
+    always_keys, create_only_keys = get_critical_check_keys(dataset_type)
+    return build_dq_report(
+        df,
+        checks_table,
+        entity,
+        always_keys | create_only_keys,
+        summary,
+        checks_from_nocodb=dataset_type in _NOCODB_CHECKS_DATASETS,
+        fallback_labels=handle_rename_dq_has_critical_error_column(
+            CONFIG_NONEMPTY_COLUMNS.get(dataset_type, [])
+        ),
+    )
 
 
 def aggregate_report_json(
@@ -440,6 +925,8 @@ def aggregate_report_json(
     df_bronze: sql.DataFrame,
     df_data_quality_checks: sql.DataFrame,
     df_aggregated_approved_only: sql.DataFrame | None = None,
+    entity: str | None = None,
+    dataset_type: str | None = None,
 ):
     """Build the dq-summary.json dict from aggregated + row-level DQ results.
 
@@ -564,6 +1051,27 @@ def aggregate_report_json(
     # Initialize an empty dictionary for the transformed data
     agg_array = df_aggregated.toPandas().to_dict(orient="records")
     transformed_data = {"summary": summary, "critical_checks": critical_checks_summary}
+
+    # Geolocation only (dq_results map). The sections above mix bases (critical
+    # checks over all rows, the rest over approved rows), so per-column pass
+    # counts are reported here on a single base: every uploaded row.
+    # create_only checks only fail new schools, as in critical.py.
+    if "dq_results" in df_data_quality_checks.columns:
+        _, create_only_columns = get_critical_check_columns()
+        create_only_keys = {
+            str(name).removeprefix("dq_") for name in create_only_columns if name
+        }
+        column_pass_summary = build_column_pass_summary(
+            df_data_quality_checks, create_only_keys
+        )
+        if column_pass_summary:
+            transformed_data["column_pass_summary"] = column_pass_summary
+
+    dq_report = _dq_report_for_dataset(
+        df_data_quality_checks, entity, dataset_type, summary
+    )
+    if dq_report is not None:
+        transformed_data["dq_report"] = dq_report
 
     # Iterate through each JSON line
     for agg in agg_array:

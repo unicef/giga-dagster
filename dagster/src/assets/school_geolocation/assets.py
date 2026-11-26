@@ -644,6 +644,8 @@ async def geolocation_data_quality_results_summary(
         spark.spark_session,
         dq_results,
         geolocation_bronze,
+        entity="schools",
+        dataset_type="geolocation",
     )
 
     value_maps = aggregate_value_maps_for_pdf(
