@@ -152,9 +152,13 @@ def test_facility_jobs_and_sensors_are_registered():
         == HEALTH_SPEC.jobs.automated_checks
     )
 
-    sensor_names = {
+    sensor_names = [
         sensor.name for sensor in facility_sensors.FACILITY_GEOLOCATION_SENSORS
-    }
+    ]
+    assert len(sensor_names) == len(set(sensor_names))
+    assert not hasattr(facility_sensors, "delete_sensor")
+    assert not hasattr(facility_jobs, "delete")
+    sensor_names = set(sensor_names)
     assert sensor_names == {
         "facility_geolocation_schools__raw_file_uploads_sensor",
         "facility_geolocation_schools__post_manual_checks_sensor",

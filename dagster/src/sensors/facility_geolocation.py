@@ -396,27 +396,32 @@ def _build_admin_delete_rows_sensor(
 FACILITY_GEOLOCATION_SENSORS: list[SensorDefinition] = []
 FACILITY_SENSORS_BY_SCHEMA_KEY: dict[str, dict[str, SensorDefinition]] = {}
 
-for _schema_key, _spec in load_all_facility_specs().items():
-    jobs = FACILITY_JOBS_BY_SCHEMA_KEY[_schema_key]
-    prefix = f"facility_geolocation_{_schema_key}"
-    raw_sensor = _build_raw_uploads_sensor(
-        name=f"{prefix}__raw_file_uploads_sensor",
-        spec=_spec,
-        job=jobs["automated"],
-    )
-    post_sensor = _build_post_manual_checks_sensor(
-        name=f"{prefix}__post_manual_checks_sensor",
-        spec=_spec,
-        job=jobs["post_approval"],
-    )
-    delete_sensor = _build_admin_delete_rows_sensor(
-        name=f"{prefix}__admin_delete_rows_sensor",
-        spec=_spec,
-        job=jobs["delete"],
-    )
-    FACILITY_GEOLOCATION_SENSORS.extend([raw_sensor, post_sensor, delete_sensor])
-    FACILITY_SENSORS_BY_SCHEMA_KEY[_schema_key] = {
-        "raw": raw_sensor,
-        "post_approval": post_sensor,
-        "delete": delete_sensor,
-    }
+
+def _register_facility_sensors() -> None:
+    for schema_key, spec in load_all_facility_specs().items():
+        jobs = FACILITY_JOBS_BY_SCHEMA_KEY[schema_key]
+        prefix = f"facility_geolocation_{schema_key}"
+        raw_sensor = _build_raw_uploads_sensor(
+            name=f"{prefix}__raw_file_uploads_sensor",
+            spec=spec,
+            job=jobs["automated"],
+        )
+        post_sensor = _build_post_manual_checks_sensor(
+            name=f"{prefix}__post_manual_checks_sensor",
+            spec=spec,
+            job=jobs["post_approval"],
+        )
+        delete_sensor = _build_admin_delete_rows_sensor(
+            name=f"{prefix}__admin_delete_rows_sensor",
+            spec=spec,
+            job=jobs["delete"],
+        )
+        FACILITY_GEOLOCATION_SENSORS.extend([raw_sensor, post_sensor, delete_sensor])
+        FACILITY_SENSORS_BY_SCHEMA_KEY[schema_key] = {
+            "raw": raw_sensor,
+            "post_approval": post_sensor,
+            "delete": delete_sensor,
+        }
+
+
+_register_facility_sensors()

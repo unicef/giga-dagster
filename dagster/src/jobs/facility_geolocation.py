@@ -54,13 +54,18 @@ def _delete_job(spec):
 FACILITY_GEOLOCATION_JOBS = []
 FACILITY_JOBS_BY_SCHEMA_KEY: dict[str, dict[str, object]] = {}
 
-for _schema_key, _spec in load_all_facility_specs().items():
-    automated = _automated_job(_spec)
-    post = _post_approval_job(_spec)
-    delete = _delete_job(_spec)
-    FACILITY_GEOLOCATION_JOBS.extend([automated, post, delete])
-    FACILITY_JOBS_BY_SCHEMA_KEY[_schema_key] = {
-        "automated": automated,
-        "post_approval": post,
-        "delete": delete,
-    }
+
+def _register_facility_jobs() -> None:
+    for schema_key, spec in load_all_facility_specs().items():
+        automated = _automated_job(spec)
+        post = _post_approval_job(spec)
+        delete = _delete_job(spec)
+        FACILITY_GEOLOCATION_JOBS.extend([automated, post, delete])
+        FACILITY_JOBS_BY_SCHEMA_KEY[schema_key] = {
+            "automated": automated,
+            "post_approval": post,
+            "delete": delete,
+        }
+
+
+_register_facility_jobs()

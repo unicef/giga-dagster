@@ -14,7 +14,7 @@ def load_sensors_from_package_module(
     sensors: Sequence[SensorDefinition] = []
     for module in find_modules_in_package(package_module):
         for sensor in _find_definition_in_module(module, SensorDefinition):
-            if sensor_id := id(sensor) not in sensor_ids:
+            if (sensor_id := id(sensor)) not in sensor_ids:
                 sensor_ids.add(sensor_id)
                 sensors.append(sensor)
     return sensors

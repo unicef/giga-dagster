@@ -22,7 +22,7 @@ def load_schedules_from_package_module(
             module,
             (ScheduleDefinition, UnresolvedPartitionedAssetScheduleDefinition),
         ):
-            if schedule_id := id(schedule) not in schedule_ids:
+            if (schedule_id := id(schedule)) not in schedule_ids:
                 schedule_ids.add(schedule_id)
                 schedules.append(schedule)
     return schedules

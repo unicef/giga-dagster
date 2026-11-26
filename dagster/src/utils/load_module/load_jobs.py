@@ -20,7 +20,7 @@ def load_jobs_from_package_module(
             module,
             (JobDefinition, UnresolvedAssetJobDefinition),
         ):
-            if job_id := id(job) not in job_ids:
+            if (job_id := id(job)) not in job_ids:
                 job_ids.add(job_id)
                 jobs.append(job)
     return jobs
