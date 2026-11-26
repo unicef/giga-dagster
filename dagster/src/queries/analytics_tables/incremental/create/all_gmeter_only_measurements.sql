@@ -80,7 +80,16 @@ measurements_base AS (
         detected_longitude,
         detected_location_is_flagged,
         detected_location_distance,
-        detected_location_accuracy
+        detected_location_accuracy,
+        -- Device / Wi-Fi columns (backend migration 20260807120000); filled from app 2.0.4.
+        wifi_unavailable_reason,
+        ssid_source,
+        device_type,
+        os_version,
+        device_model,
+        device_manufacturer,
+        app_build_number,
+        device_context
     FROM
         gigameter_production_db.public.measurements
     WHERE
@@ -132,7 +141,15 @@ measurements_base AS (
       m.detected_longitude,
       m.detected_location_is_flagged,
       m.detected_location_distance,
-      m.detected_location_accuracy
+      m.detected_location_accuracy,
+      m.wifi_unavailable_reason,
+      m.ssid_source,
+      m.device_type,
+      m.os_version,
+      m.device_model,
+      m.device_manufacturer,
+      m.app_build_number,
+      m.device_context
   FROM
       measurements_base m
   LEFT JOIN
@@ -322,7 +339,32 @@ select
     ROUND(CAST(8 * CAST(JSON_EXTRACT_SCALAR(results, '$["TCPInfo.BytesAcked"]') AS DOUBLE)
         / NULLIF((CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.EndTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE)
             - CAST(regexp_extract(JSON_EXTRACT_SCALAR(results, '$["NDTResult.S2C.StartTime"]'), 'm=\+([0-9.]+)', 1) AS DOUBLE)), 0)
-        / 1e6 AS REAL), 2)                                                                                                     AS ndt5_download_speed_alt
+        / 1e6 AS REAL), 2)                                                                                                     AS ndt5_download_speed_alt,
+
+    -- Device / Wi-Fi columns (TECH-11604). Keep last: the INSERT is positional.
+    -- wifi_unavailable_reason: no_adapter | wlan_service_off | location_disabled | unknown
+    -- ssid_source: wlan | nlm
+    -- device_info: JSON of os_version, device_model, device_manufacturer, app_build_number
+    --   (no hostname); NULL if all four are NULL.
+    -- device_context: raw JSON as VARCHAR; JSON null / {} becomes NULL.
+    CAST(wifi_unavailable_reason AS VARCHAR)                                                         AS wifi_unavailable_reason,
+    CAST(ssid_source AS VARCHAR)                                                                     AS ssid_source,
+    CAST(device_type AS VARCHAR)                                                                     AS device_type,
+    CASE
+        WHEN os_version IS NULL AND device_model IS NULL
+             AND device_manufacturer IS NULL AND app_build_number IS NULL
+        THEN CAST(NULL AS VARCHAR)
+        ELSE CAST(json_format(CAST(MAP(
+                ARRAY['os_version', 'device_model', 'device_manufacturer', 'app_build_number'],
+                ARRAY[os_version, device_model, device_manufacturer, app_build_number]
+             ) AS JSON)) AS VARCHAR)
+    END                                                                                              AS device_info,
+    CASE
+        WHEN device_context IS NULL
+             OR json_format(CAST(device_context AS JSON)) IN ('null', '{}')
+        THEN CAST(NULL AS VARCHAR)
+        ELSE CAST(json_format(CAST(device_context AS JSON)) AS VARCHAR)
+    END                                                                                              AS device_context
 
 FROM
   measurements_enriched
