@@ -19,7 +19,7 @@ from src.data_quality_checks.create_update import (
     enrich_with_current_values,
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
-from src.data_quality_checks.utils import row_level_checks
+from src.data_quality_checks.utils import retain_passed_row_columns, row_level_checks
 from src.facilities import STABLE_FACILITY_ID_CONTRACT, FacilityGeolocationSpec
 from src.settings import DeploymentEnvironment, settings
 from src.spark.transform_functions import (
@@ -216,10 +216,17 @@ def run_facility_geolocation_checks(
 
 def split_facility_dq_rows(
     df: sql.DataFrame,
+    schema_columns: list | None = None,
 ) -> tuple[sql.DataFrame, sql.DataFrame]:
-    """Return passing and failing facility rows without applying a school schema."""
+    """Return passing and failing facility rows.
+
+    Passed rows drop ``dq_*`` columns and ``failure_reason`` unless the schema
+    registers them. Failed rows keep the data-quality columns for the error table.
+    """
     passed = df.filter(f.col("dq_has_critical_error") == 0)
     failed = df.filter(f.col("dq_has_critical_error") == 1)
+    if schema_columns is not None:
+        passed = retain_passed_row_columns(passed, schema_columns)
     return passed, failed
 
 

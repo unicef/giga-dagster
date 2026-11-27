@@ -14,10 +14,9 @@ from pyspark.sql import (
 )
 from pyspark.sql.types import StringType, StructField, StructType
 from sqlalchemy import select, update
-from src.constants import DataTier
 from src.data_quality_checks.create_update import (
-    add_is_new_school,
-    enrich_with_silver_values,
+    add_is_new_entity,
+    enrich_with_current_values,
 )
 from src.data_quality_checks.dq_context import DQContext, DQMode
 from src.data_quality_checks.location_grouping import (
@@ -35,6 +34,7 @@ from src.data_quality_checks.utils import (
     normalize_dq_results_map,
     row_level_checks,
 )
+from src.facilities import SCHOOL_SPEC
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
@@ -52,7 +52,7 @@ from src.utils.datahub.emit_dataset_metadata import (
     datahub_emit_metadata_with_exception_catcher,
 )
 from src.utils.db.primary import get_db_context
-from src.utils.delta import check_table_exists, create_delta_table, create_schema
+from src.utils.delta import create_delta_table, create_schema
 from src.utils.metadata import (
     get_output_metadata,
     get_staging_change_type_metadata,
@@ -62,7 +62,6 @@ from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
 from src.utils.schema import (
     construct_full_table_name,
-    construct_schema_name_for_tier,
     get_schema_columns,
     get_schema_columns_datahub_for_config,
     get_schema_columns_for_upload,
@@ -216,7 +215,7 @@ def geolocation_bronze(
     string_col_mapping = {
         column_name: str
         for column_name, schema_name in column_to_schema_mapping.items()
-        if schema_name in ("school_id_govt", "latitude", "longitude")
+        if schema_name in ("facility_id_govt", "geo_latitude", "geo_longitude")
     }
 
     t0 = time.time()
@@ -252,30 +251,20 @@ def geolocation_bronze(
     uploaded_columns = df.columns
     context.log.info(f"createDataFrame completed in {time.time() - t1:.2f}s")
 
-    df = df.withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
+    df = df.withColumn("facility_id_govt", f.col("facility_id_govt").cast(StringType()))
 
-    # Derive is_new_school by joining against silver (school_id_govt only)
-    schema_name = config.metastore_schema
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
-        silver_tier_schema_name = construct_schema_name_for_tier(
-            "school_geolocation", DataTier.SILVER
-        )
-        silver_table_name = construct_full_table_name(
-            silver_tier_schema_name, country_code
-        )
-        s.catalog.refreshTable(silver_table_name)
-        silver_ids = (
-            DeltaTable.forName(s, silver_table_name)
-            .toDF()
-            .select("school_id_govt")
-            .withColumn("school_id_govt", f.col("school_id_govt").cast(StringType()))
-        )
-    else:
-        silver_ids = s.createDataFrame(
-            [], StructType([StructField("school_id_govt", StringType(), True)])
-        )
-
-    df = add_is_new_school(df, silver_ids, context)
+    # A school is new when its government id is absent from this facility
+    # type's silver table.
+    silver_ids = _load_school_dq_silver(s, country_code).select(
+        f.col("facility_id_govt").cast(StringType())
+    )
+    df = add_is_new_entity(
+        df,
+        silver_ids,
+        govt_id_column="facility_id_govt",
+        output_column="is_new_school",
+        context=context,
+    )
 
     df = create_bronze_layer_columns_updated(
         df, uploaded_columns, country_code, file_upload.source, s
@@ -315,6 +304,25 @@ _DUPLICATES_REPORT_SCHEMA = (
 )
 
 
+def _load_school_dq_silver(
+    spark: SparkSession,
+    country_code: str,
+) -> sql.DataFrame:
+    """Current schools from the shared facility silver table, for this country."""
+    empty = spark.createDataFrame([], "facility_id_govt string")
+    table_name = SCHOOL_SPEC.tables.silver_full_name
+    if not spark.catalog.tableExists(table_name):
+        return empty
+
+    spark.catalog.refreshTable(table_name)
+    silver = DeltaTable.forName(spark, table_name).toDF()
+    if "facility_id_govt" not in silver.columns:
+        return empty
+    if "country_code" in silver.columns:
+        silver = silver.filter(f.col("country_code") == country_code)
+    return silver
+
+
 def _get_or_empty(
     extra_outputs: dict, key: str, spark: SparkSession, schema: str
 ) -> sql.DataFrame:
@@ -344,40 +352,28 @@ def geolocation_data_quality_results(
     schema_name = config.metastore_schema
     id = config.filename_components.id
     dataset_type = "geolocation"
-    with get_db_context() as db:
-        file_upload = db.scalar(select(FileUpload).where(FileUpload.id == id))
-        if file_upload is None:
-            raise FileNotFoundError(
-                f"Database entry for FileUpload with id `{id}` was not found"
-            )
-        file_upload = FileUploadConfig.from_orm(file_upload)
-
     current_timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
 
-    columns = get_schema_columns_for_upload(s, schema_name, file_upload)
-    schema = StructType(columns)
-
-    if check_table_exists(s, schema_name, country_code, DataTier.SILVER):
-        silver_table_name = construct_full_table_name(
-            construct_schema_name_for_tier("school_geolocation", DataTier.SILVER),
-            country_code,
-        )
-        s.catalog.refreshTable(silver_table_name)
-        silver = DeltaTable.forName(s, silver_table_name).alias("silver").toDF()
-    else:
-        silver = s.createDataFrame(s.sparkContext.emptyRDD(), schema=schema)
-
+    silver = _load_school_dq_silver(s, country_code)
     casted_silver = silver.withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
+        "facility_id_govt", f.col("facility_id_govt").cast(StringType())
     )
     casted_bronze = normalize_missing_value_strings(geolocation_bronze).withColumn(
-        "school_id_govt", f.col("school_id_govt").cast(StringType())
+        "facility_id_govt", f.col("facility_id_govt").cast(StringType())
     )
 
     renamed_bronze = casted_bronze.withColumnRenamed("signature", "dq_signature")
 
-    # Enrich bronze with silver values for existing schools (fills gaps via coalesce)
-    enriched_bronze = enrich_with_silver_values(renamed_bronze, casted_silver, context)
+    # Fill gaps from the current silver row. Match on facility_id_govt and keep
+    # the silver facility_id_giga for a school that already exists.
+    enriched_bronze = enrich_with_current_values(
+        renamed_bronze,
+        casted_silver,
+        govt_id_column="facility_id_govt",
+        giga_id_column="facility_id_giga",
+        is_new_column="is_new_school",
+        context=context,
+    )
 
     # Fill aggregates the file did not carry (e.g. computer_availability from
     # num_computers). Runs after the silver enrichment so a partial upload can
@@ -652,8 +648,7 @@ async def geolocation_data_quality_results_summary(
         spark.spark_session,
         dq_results,
         geolocation_bronze,
-        # Legacy school geolocation path (pre-facility rename).
-        govt_id_column="school_id_govt",
+        govt_id_column="facility_id_govt",
     )
 
     value_maps = aggregate_value_maps_for_pdf(

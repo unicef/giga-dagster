@@ -31,69 +31,75 @@ class TestSumDerivation:
     def test_fills_target_when_null(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, "40", "50")],
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert _single(result, "num_students") == "90"
+        assert _single(result, "students_num") == "90"
 
     def test_keeps_supplied_value_even_when_it_contradicts(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [("100", "40", "50")],
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert _single(result, "num_students") == "100"
+        assert _single(result, "students_num") == "100"
 
     def test_sums_when_one_component_is_null(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, "40", None)],
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert _single(result, "num_students") == "40"
+        assert _single(result, "students_num") == "40"
 
     def test_stays_null_when_every_component_is_null(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, None, None)],
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert _single(result, "num_students") is None
+        assert _single(result, "students_num") is None
 
     def test_zero_components_derive_zero_not_null(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, "0", "0")],
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert _single(result, "num_students") == "0"
+        assert _single(result, "students_num") == "0"
 
 
 class TestAvailabilityDerivation:
     def test_yes_when_counter_is_positive(self, spark):
-        df = _df(spark, ["computer_availability", "num_computers"], [(None, "3")])
+        df = _df(
+            spark, ["computer_availability", "device_computers_num"], [(None, "3")]
+        )
         result = derive_aggregate_columns(df, "geolocation")
         assert _single(result, "computer_availability") == "Yes"
 
     def test_no_when_counter_is_zero(self, spark):
-        df = _df(spark, ["computer_availability", "num_computers"], [(None, "0")])
+        df = _df(
+            spark, ["computer_availability", "device_computers_num"], [(None, "0")]
+        )
         result = derive_aggregate_columns(df, "geolocation")
         assert _single(result, "computer_availability") == "No"
 
     def test_null_when_counter_is_null(self, spark):
-        df = _df(spark, ["computer_availability", "num_computers"], [(None, None)])
+        df = _df(
+            spark, ["computer_availability", "device_computers_num"], [(None, None)]
+        )
         result = derive_aggregate_columns(df, "geolocation")
         assert _single(result, "computer_availability") is None
 
     def test_device_availability_sums_both_counters(self, spark):
         df = _df(
             spark,
-            ["device_availability", "num_computers", "num_tablets"],
+            ["device_availability", "device_computers_num", "num_tablets"],
             [(None, "0", "5")],
         )
         result = derive_aggregate_columns(df, "geolocation")
@@ -102,50 +108,52 @@ class TestAvailabilityDerivation:
     def test_device_availability_no_when_both_counters_are_zero(self, spark):
         df = _df(
             spark,
-            ["device_availability", "num_computers", "num_tablets"],
+            ["device_availability", "device_computers_num", "num_tablets"],
             [(None, "0", "0")],
         )
         result = derive_aggregate_columns(df, "geolocation")
         assert _single(result, "device_availability") == "No"
 
     def test_keeps_supplied_value(self, spark):
-        df = _df(spark, ["computer_availability", "num_computers"], [("No", "3")])
+        df = _df(
+            spark, ["computer_availability", "device_computers_num"], [("No", "3")]
+        )
         result = derive_aggregate_columns(df, "geolocation")
         assert _single(result, "computer_availability") == "No"
 
 
 class TestGuards:
     def test_no_op_when_no_component_column_exists(self, spark):
-        df = _df(spark, ["num_students", "school_id_govt"], [(None, "abc")])
+        df = _df(spark, ["students_num", "facility_id_govt"], [(None, "abc")])
         result = derive_aggregate_columns(df, "geolocation")
         assert result.columns == df.columns
-        assert _single(result, "num_students") is None
+        assert _single(result, "students_num") is None
 
     def test_no_op_when_target_column_is_absent(self, spark):
         # Deriving a column outside the schema would be dropped by staging.
-        df = _df(spark, ["num_students_girls", "num_students_boys"], [("40", "50")])
+        df = _df(spark, ["students_female_num", "students_male_num"], [("40", "50")])
         result = derive_aggregate_columns(df, "geolocation")
-        assert "num_students" not in result.columns
+        assert "students_num" not in result.columns
 
     def test_no_op_for_unconfigured_dataset_type(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, "40", "50")],
         )
         result = derive_aggregate_columns(df, "qos")
-        assert _single(result, "num_students") is None
+        assert _single(result, "students_num") is None
 
     def test_preserves_target_column_type(self, spark):
         df = _df(
             spark,
-            ["num_students", "num_students_girls", "num_students_boys"],
+            ["students_num", "students_female_num", "students_male_num"],
             [(None, 40, 50)],
             data_type=IntegerType(),
         )
         result = derive_aggregate_columns(df, "geolocation")
-        assert isinstance(result.schema["num_students"].dataType, IntegerType)
-        assert _single(result, "num_students") == 90
+        assert isinstance(result.schema["students_num"].dataType, IntegerType)
+        assert _single(result, "students_num") == 90
 
 
 class TestExpressionHelpers:
@@ -170,14 +178,16 @@ class TestExpressionHelpers:
 class TestRuleConfiguration:
     def test_ticket_rules_are_configured(self):
         rules = {target: parts for target, parts, _ in aggregate_rules("geolocation")}
-        assert rules["num_students"] == ["num_students_girls", "num_students_boys"]
+        assert rules["students_num"] == ["students_female_num", "students_male_num"]
         assert rules["num_teachers"] == ["num_teachers_female", "num_teachers_male"]
-        assert "num_computers" not in rules  # counters are components, not targets
-        assert rules["computer_availability"] == ["num_computers"]
-        assert rules["device_availability"] == ["num_computers", "num_tablets"]
+        assert "device_computers_num" not in rules
+        assert rules["computer_availability"] == ["device_computers_num"]
+        assert rules["device_availability"] == ["device_computers_num", "num_tablets"]
 
-    def test_master_and_geolocation_share_the_same_rules(self):
-        assert aggregate_rules("master") == aggregate_rules("geolocation")
+    def test_master_keeps_the_previous_column_names(self):
+        rules = {target: parts for target, parts, _ in aggregate_rules("master")}
+        assert rules["num_students"] == ["num_students_girls", "num_students_boys"]
+        assert rules["computer_availability"] == ["num_computers"]
 
     @pytest.mark.parametrize("dataset_type", ["coverage", "qos", "reference"])
     def test_other_dataset_types_have_no_rules(self, dataset_type):

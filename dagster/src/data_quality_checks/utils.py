@@ -615,13 +615,17 @@ def aggregate_report_json(
     return transformed_data
 
 
-def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
-    schema_name = f"school_{dataset_type}"
-    schema_columns = get_schema_columns(df.sparkSession, schema_name)
-    schema_columns_by_name = {col.name: col for col in schema_columns}
+def retain_passed_row_columns(
+    df: sql.DataFrame,
+    schema_columns: list,
+) -> sql.DataFrame:
+    """Keep schema columns and non-DQ fields. Drop the DQ map and its flags.
 
-    # Pull registered checks back out of dq_results before the dq_ filter below
-    # drops it. See DQ_RESULTS_MASTER_COLUMNS for the flag-vs-count distinction.
+    Checks folded into ``dq_results`` are copied back first when the schema
+    registers that column. ``failure_reason`` is dropped unless it is a schema
+    column. Master and reference datasets select the schema columns only.
+    """
+    schema_columns_by_name = {column.name: column for column in schema_columns}
     if "dq_results" in df.columns:
         rescued_columns = {}
         for target_col, (map_key, is_flag) in DQ_RESULTS_MASTER_COLUMNS.items():
@@ -637,18 +641,22 @@ def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
         if rescued_columns:
             df = df.withColumns(rescued_columns)
 
-    if dataset_type in ["master", "reference"]:
-        columns = [col.name for col in schema_columns]
-    else:
-        columns = [
-            col
-            for col in df.columns
-            if col in schema_columns_by_name
-            or not (col.startswith("dq_") or col == "failure_reason")
-        ]
+    columns = [
+        column
+        for column in df.columns
+        if column in schema_columns_by_name
+        or not (column.startswith("dq_") or column == "failure_reason")
+    ]
+    return df.select(*columns)
 
+
+def dq_split_passed_rows(df: sql.DataFrame, dataset_type: str):
+    schema_name = f"school_{dataset_type}"
+    schema_columns = get_schema_columns(df.sparkSession, schema_name)
     df = df.filter(df.dq_has_critical_error == 0)
-    df = df.select(*columns)
+    df = retain_passed_row_columns(df, schema_columns)
+    if dataset_type in ["master", "reference"]:
+        return df.select(*[column.name for column in schema_columns])
     return df
 
 
@@ -1100,7 +1108,6 @@ if __name__ == "__main__":
     # df_bronze.show()
     # print(df_bronze.count())
     # df_bronze = df_bronze.sort("facility_name").limit(30)
-    # df_bronze = df_bronze.withColumnRenamed("school_id_gov", "facility_id_govt")
     # df_bronze = df_bronze.withColumnRenamed("num_classroom", "num_classrooms")
     # df_bronze.show()
     # df = create_giga_school_id(df_bronze)
@@ -1151,27 +1158,27 @@ if __name__ == "__main__":
     # pas.show()
     # fail.show()
     # df_bronze = df_bronze.withColumn("connectivity_RT", f.lit("yes"))
-    # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "download_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
+    # df_bronze = df_bronze.select(*["connectivity", "connectivity_RT", "connectivity_govt", "connectivity_down_speed_contracted", "connectivity_RT_datasource","connectivity_RT_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["connectivity_govt", "connectivity_govt_ingestion_timestamp"])
     # df_bronze = df_bronze.select(*["nearest_NR_id", "nearest_NR_distance","nearest_LTE_id", "nearest_LTE_distance","nearest_UMTS_id", "nearest_UMTS_distance","nearest_GSM_id", "nearest_GSM_distance"])
-    # df_bronze = df_bronze.select(*["electricity_availability", "electricity_type"])
+    # df_bronze = df_bronze.select(*["electricity_availability", "electricity_type_govt"])
     # df_bronze.show()
     # df = standard_checks(df_bronze, 'master')
     # df_bronze = df_bronze.withColumn("facility_id_giga", f.lit("9663bb61-6ad9-3d91-9a16-90e8c40448142"))
     # df = format_validation_checks(df_bronze)
     # df = column_relation_checks(df_bronze, 'coverage')
     # transforms = {}
-    # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_download_speed_contracted"] = f.when(
+    # transforms["dq_column_relation_checks-connectivity_connectivity_RT_connectivity_govt_connectivity_down_speed_contracted"] = f.when(
     #             (f.lower(f.col("connectivity")) == "yes") & (
     #                 (f.lower(f.col("connectivity_RT")) == "yes") |
     #                 (f.lower(f.col("connectivity_govt")) == "yes") |
-    #                 (f.col("download_speed_contracted").isNotNull())
+    #                 (f.col("connectivity_down_speed_contracted").isNotNull())
     #                 ), 0,
     #         ).when(
     #             (f.lower(f.col("connectivity")) == "no") & (
     #                 ((f.lower(f.col("connectivity_RT")) == "no") | f.col("connectivity_RT").isNull()) &
     #                 ((f.lower(f.col("connectivity_govt")) == "no") | f.col("connectivity_govt").isNull()) &
-    #                 (f.col("download_speed_contracted").isNull())
+    #                 (f.col("connectivity_down_speed_contracted").isNull())
     #                 ), 0,
     #         ).otherwise(1)
     # print(transforms)

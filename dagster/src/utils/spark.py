@@ -424,17 +424,35 @@ def transform_qos_bra_types(
     return df
 
 
+def _signature_value(field: types.StructField):
+    """A string concat_ws can hash. Complex values become JSON."""
+    column = f.col(field.name)
+    if isinstance(field.dataType, types.MapType | types.StructType | types.ArrayType):
+        return f.to_json(column)
+    return column.cast(types.StringType())
+
+
 def compute_row_hash(
     df: sql.DataFrame,
     context: OpExecutionContext = None,
+    *,
+    columns: list[str] | None = None,
 ) -> sql.DataFrame:
     logger = get_context_with_fallback_logger(context)
 
-    # Exclude previous row hash if it is present
-    columns = df.columns
-    if "signature" in columns:
-        columns.remove("signature")
+    # ``columns`` is the silver column set. Columns that only exist on the DQ
+    # frame, such as dq_results, stay out of the signature. Every hashed value
+    # is a string before concat_ws, which rejects maps, structs, and arrays.
+    present = {field.name: field for field in df.schema.fields}
+    names = df.columns if columns is None else columns
+    fields = [present[name] for name in sorted(names) if name in present]
+    fields = [field for field in fields if field.name != "signature"]
+    hashed = (
+        sha2(concat_ws("|", *[_signature_value(field) for field in fields]), 256)
+        if fields
+        else f.lit(None).cast(types.StringType())
+    )
 
-    out = df.withColumn("signature", sha2(concat_ws("|", *sorted(columns)), 256))
+    out = df.withColumn("signature", hashed)
     logger.info(f"Calculated SHA256 signature for {out.count()} rows")
     return out

@@ -130,8 +130,8 @@ def human_readable_geolocation_checks() -> dict[str, str]:
     }
 
     column_relation_checks_desc = {
-        "dq_column_relation_checks-electricity_availability_electricity_type": "Are the column relationship between the following columns [connectivity_govt, download_speed_contracted] as excpected",
-        "dq_column_relation_checks-connectivity_govt_download_speed_contracted": "Are the column relationship between the following columns [connectivity_govt, download_speed_contracted] as excpected",
+        "dq_column_relation_checks-electricity_availability_electricity_type_govt": "Are the column relationship between the following columns [electricity_availability, electricity_type_govt] as expected",
+        "dq_column_relation_checks-connectivity_govt_connectivity_down_speed_contracted": "Are the column relationship between the following columns [connectivity_govt, connectivity_down_speed_contracted] as expected",
     }
 
     aggregate_relation_checks_desc = _aggregate_relation_descriptions("geolocation")

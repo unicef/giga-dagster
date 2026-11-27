@@ -176,21 +176,19 @@ def column_relation_checks(
         ).otherwise(0)
 
     elif dataset_type == "geolocation":
-        # connectivity_govt = yes download speed not null
         transforms[
-            "dq_column_relation_checks-connectivity_govt_download_speed_contracted"
+            "dq_column_relation_checks-connectivity_govt_connectivity_down_speed_contracted"
         ] = f.when(
-            (_col_if_exists(df, "download_speed_contracted").isNotNull())
-            & (_col_if_exists(df, "connectivity_govt").isNull()),
+            _col_if_exists(df, "connectivity_down_speed_contracted").isNotNull()
+            & _col_if_exists(df, "connectivity_govt").isNull(),
             1,
         ).otherwise(0)
 
-        # electricity_availability -- electricity_type if Electricity_availability yes, electricity_type isnotnull
         transforms[
-            "dq_column_relation_checks-electricity_availability_electricity_type"
+            "dq_column_relation_checks-electricity_availability_electricity_type_govt"
         ] = f.when(
             (f.lower(_col_if_exists(df, "electricity_availability")) == "yes")
-            & (_col_if_exists(df, "electricity_type").isNull()),
+            & (_col_if_exists(df, "electricity_type_govt").isNull()),
             1,
         ).otherwise(0)
 

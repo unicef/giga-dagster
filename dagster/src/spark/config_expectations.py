@@ -354,18 +354,18 @@ class Config(BaseSettings):
             "coaxial",
             "unknown",
         ],
-        "school_area_type": ["urban", "rural"],
-        "computer_lab": ["yes", "no"],
+        "facility_area_type_govt": ["urban", "rural"],
+        "computer_lab_availability": ["yes", "no"],
         "electricity_availability": ["yes", "no"],
-        "electricity_type": [
+        "electricity_type_govt": [
             "electrical grid",
             "diesel generator",
             "solar power station",
             "other",
         ],
-        "water_availability": ["yes", "no"],
+        "facility_water_availability": ["yes", "no"],
         "school_data_collection_modality": ["online", "in-person", "phone", "other"],
-        "school_funding_type": ["public", "private", "charitable", "others"],
+        "facility_ownership_type": ["public", "private", "charitable", "others"],
         "rurban_detected": ["Urban", "Rural"],
     }
 
@@ -427,15 +427,15 @@ class Config(BaseSettings):
     @property
     def VALUES_RANGE_GEOLOCATION(self) -> dict[str, dict[str, int]]:
         return {
-            "school_establishment_year": {"min": 1000, "max": self.current_year},
+            "facility_establishment_year": {"min": 1000, "max": self.current_year},
             "geo_latitude": {"min": -90, "max": 90},
             "geo_longitude": {"min": -180, "max": 180},
-            "download_speed_contracted": {"min": 1, "max": 500},
-            "num_computers": {"min": 0, "max": 500},
+            "connectivity_down_speed_contracted": {"min": 1, "max": 500},
+            "device_computers_num": {"min": 0, "max": 500},
             "num_computers_desired": {"min": 0, "max": 1000},
             "num_teachers": {"min": 0, "max": 200},
             "num_adm_personnel": {"min": 0, "max": 200},
-            "num_students": {"min": 0, "max": 10000},
+            "students_num": {"min": 0, "max": 10000},
             "num_classrooms": {"min": 0, "max": 200},
             "num_latrines": {"min": 0, "max": 200},
             "school_data_collection_year": {"min": 1000, "max": self.current_year},
@@ -517,6 +517,17 @@ class Config(BaseSettings):
         "device_availability": ["num_computers", "num_tablets"],
     }
 
+    # Geolocation uses the facility column names. Master keeps the dicts above.
+    AGGREGATE_SUM_COLUMNS_GEOLOCATION: dict[str, list[str]] = {
+        "students_num": ["students_female_num", "students_male_num"],
+        "num_teachers": ["num_teachers_female", "num_teachers_male"],
+    }
+
+    AVAILABILITY_FROM_COUNT_COLUMNS_GEOLOCATION: dict[str, list[str]] = {
+        "computer_availability": ["device_computers_num"],
+        "device_availability": ["device_computers_num", "num_tablets"],
+    }
+
     # Coverage Column Configs
 
     # Lower Columns
@@ -579,7 +590,7 @@ class Config(BaseSettings):
         # "facility_id_giga",
         # "facility_id_govt",
         "facility_name",
-        "school_establishment_year",
+        "facility_establishment_year",
         "geo_latitude",
         "geo_longitude",
         "facility_level",
@@ -588,28 +599,28 @@ class Config(BaseSettings):
         "connectivity_govt_ingestion_timestamp",
         "connectivity_govt_collection_year",
         "download_speed_govt",
-        "download_speed_contracted",
+        "connectivity_down_speed_contracted",
         "connectivity_type_govt",
         "admin1",
         "admin2",
-        "school_area_type",
-        "school_funding_type",
-        "num_computers",
+        "facility_area_type_govt",
+        "facility_ownership_type",
+        "device_computers_num",
         "num_computers_desired",
         "num_teachers",
         "num_adm_personnel",
-        "num_students",
+        "students_num",
         "num_classrooms",
         "num_latrines",
-        "computer_lab",
+        "computer_lab_availability",
         "electricity_availability",
-        "electricity_type",
-        "water_availability",
-        "school_data_source",
+        "electricity_type_govt",
+        "facility_water_availability",
+        "facility_data_source",
         "school_data_collection_year",
         "school_data_collection_modality",
         "facility_id_type_govt",
-        "school_address",
+        "facility_address",
         "is_school_open",
         "school_location_ingestion_timestamp",
         "rurban_detected",

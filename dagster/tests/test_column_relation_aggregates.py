@@ -74,13 +74,13 @@ class TestAggregateRelationChecks:
         self, spark, target, parts, is_availability
     ):
         check = aggregate_relation_check_name(target, parts)
-        assert _flag(spark, {"school_id_govt": "abc"}, check) == 0
+        assert _flag(spark, {"facility_id_govt": "abc"}, check) == 0
 
     def test_check_is_always_emitted(self, spark, target, parts, is_availability):
         # The column must exist even when it cannot be evaluated, so the
         # dq_results map has a stable set of keys across uploads.
         result = column_relation_checks(
-            _df(spark, {"school_id_govt": "abc"}), "geolocation"
+            _df(spark, {"facility_id_govt": "abc"}), "geolocation"
         )
         assert aggregate_relation_check_name(target, parts) in result.columns
 
@@ -88,44 +88,46 @@ class TestAggregateRelationChecks:
 class TestAvailabilitySpellings:
     """Countries spell yes/no in several ways; agreement must not depend on it."""
 
-    CHECK = aggregate_relation_check_name("computer_availability", ["num_computers"])
+    CHECK = aggregate_relation_check_name(
+        "computer_availability", ["device_computers_num"]
+    )
 
     @pytest.mark.parametrize(
         "supplied", ["yes", "YES", "Yes", " Yes ", "true", "TRUE", "Y", "1"]
     )
     def test_truthy_spellings_agree_with_a_positive_count(self, spark, supplied):
-        values = {"computer_availability": supplied, "num_computers": "3"}
+        values = {"computer_availability": supplied, "device_computers_num": "3"}
         assert _flag(spark, values, self.CHECK) == 0
 
     @pytest.mark.parametrize(
         "supplied", ["no", "NO", "No", "false", "FALSE", "False", "N", "0"]
     )
     def test_falsy_spellings_agree_with_a_zero_count(self, spark, supplied):
-        values = {"computer_availability": supplied, "num_computers": "0"}
+        values = {"computer_availability": supplied, "device_computers_num": "0"}
         assert _flag(spark, values, self.CHECK) == 0
 
     @pytest.mark.parametrize("supplied", ["false", "FALSE", "N", "0"])
     def test_falsy_spellings_still_contradict_a_positive_count(self, spark, supplied):
-        values = {"computer_availability": supplied, "num_computers": "5"}
+        values = {"computer_availability": supplied, "device_computers_num": "5"}
         assert _flag(spark, values, self.CHECK) == 1
 
     @pytest.mark.parametrize("supplied", ["Unknown", "n/a", "maybe"])
     def test_unrecognised_values_are_left_to_the_domain_checks(self, spark, supplied):
-        values = {"computer_availability": supplied, "num_computers": "5"}
+        values = {"computer_availability": supplied, "device_computers_num": "5"}
         assert _flag(spark, values, self.CHECK) == 0
 
     def test_decimal_counts_from_pandas_are_understood(self, spark):
         # pandas turns an int column with blanks into float64, so bronze carries
         # "5.0" rather than "5".
-        values = {"computer_availability": "No", "num_computers": "5.0"}
+        values = {"computer_availability": "No", "device_computers_num": "5.0"}
         assert _flag(spark, values, self.CHECK) == 1
 
 
 class TestExistingChecksAreUntouched:
     def test_electricity_relation_still_present(self, spark):
-        values = {"electricity_availability": "Yes", "electricity_type": None}
+        values = {"electricity_availability": "Yes", "electricity_type_govt": None}
         result = column_relation_checks(_df(spark, values), "geolocation")
         flag = result.select(
-            "dq_column_relation_checks-electricity_availability_electricity_type"
+            "dq_column_relation_checks-electricity_availability_electricity_type_govt"
         ).collect()[0][0]
         assert flag == 1

@@ -50,7 +50,7 @@ from src.utils.metadata import (
 )
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import get_schema_columns
+from src.utils.schema import get_schema_columns, get_schema_columns_for_config
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.spark import normalize_missing_value_strings
 
@@ -70,6 +70,25 @@ FACILITY_GEOLOCATION_METADATA_SCHEMA_SOURCE = "school_geolocation_metadata"
 
 def _asset_key(name: str) -> AssetKey:
     return AssetKey(name)
+
+
+def _load_facility_type_silver(
+    spark: SparkSession,
+    spec: FacilityGeolocationSpec,
+    country_code: str,
+) -> sql.DataFrame:
+    """Rows already published in this facility type's silver table."""
+    empty = spark.createDataFrame([], f"{spec.govt_id_column} string")
+    table_name = spec.tables.silver_full_name
+    if not spark.catalog.tableExists(table_name):
+        return empty
+    spark.catalog.refreshTable(table_name)
+    frame = DeltaTable.forName(spark, table_name).toDF()
+    if spec.govt_id_column not in frame.columns:
+        return empty
+    if "country_code" in frame.columns:
+        frame = frame.filter(f.col("country_code") == country_code)
+    return frame
 
 
 def _load_current_facilities(
@@ -302,11 +321,10 @@ def build_facility_geolocation_assets(  # noqa: C901
                 spec.country_column, f.lit(config.country_code)
             )
         uploaded_columns = list(dataframe.columns)
-        current = _load_current_facilities(
+        current = _load_facility_type_silver(
             session,
             spec,
             config.country_code,
-            dataframe.schema,
         )
         dataframe = prepare_facility_bronze(
             dataframe,
@@ -512,7 +530,12 @@ def build_facility_geolocation_assets(  # noqa: C901
         dq_results: sql.DataFrame,
         config: FileConfig,
     ) -> Output[sql.DataFrame]:
-        passed, _ = split_facility_dq_rows(dq_results)
+        schema_columns = get_schema_columns_for_config(
+            dq_results.sparkSession,
+            config.metastore_schema,
+            config,
+        )
+        passed, _ = split_facility_dq_rows(dq_results, schema_columns)
         return Output(passed, metadata=get_output_metadata(config))
 
     @asset(
@@ -629,13 +652,6 @@ def build_facility_geolocation_assets(  # noqa: C901
 
         frame = normalize_dq_results_map(dq_results)
         frame = build_dq_warning_columns(frame, spec.dq_config_table)
-        # Map generator still expects latitude/longitude column names.
-        for public_col, map_col in (
-            ("geo_latitude", "latitude"),
-            ("geo_longitude", "longitude"),
-        ):
-            if public_col in frame.columns and map_col not in frame.columns:
-                frame = frame.withColumn(map_col, f.col(public_col))
         passed = frame.filter(f.col("dq_has_critical_error") == 0).toPandas()
         failed = frame.filter(f.col("dq_has_critical_error") == 1).toPandas()
         html = generate_school_map_html(
@@ -648,6 +664,8 @@ def build_facility_geolocation_assets(  # noqa: C901
             giga_id_column=spec.giga_id_column,
             govt_id_column=spec.govt_id_column,
             level_column=spec.level_column,
+            latitude_column="geo_latitude",
+            longitude_column="geo_longitude",
         )
         return Output(html, metadata=get_output_metadata(config))
 

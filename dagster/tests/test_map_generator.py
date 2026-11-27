@@ -26,9 +26,9 @@ from src.utils import map_generator  # noqa: E402
 def schools():
     return pd.DataFrame(
         {
-            "school_id_giga": ["a", "b"],
-            "latitude": [-1.29, -1.30],
-            "longitude": [36.82, 36.83],
+            "facility_id_giga": ["a", "b"],
+            "geo_latitude": [-1.29, -1.30],
+            "geo_longitude": [36.82, 36.83],
         }
     )
 

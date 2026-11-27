@@ -167,7 +167,7 @@ class StagingStep:
         if not self.silver_table_exists:
             # No silver table yet — every row is an INSERT
             df = self._fill_not_null_columns(df)
-            df = compute_row_hash(df)
+            df = self._row_hash(df)
             df = self._select_schema_cols(df)
             df = (
                 df.withColumn("change_type", f.lit(StagingChangeType.INSERT))
@@ -209,8 +209,8 @@ class StagingStep:
         # For every schema column: use the Bronze value when it is non-null;
         # otherwise fall back to the Silver value for existing rows.
         # This handles uploaded columns, columns derived from uploaded columns
-        # (e.g. education_level from education_level_govt, admin columns from
-        # lat/lon), and columns absent from the file — all with one rule.
+        # (e.g. facility_level from facility_level_govt, admin columns from
+        # coordinates), and columns absent from the file — all with one rule.
         row_in_silver = f.col(f"_s_{self.match_key}").isNotNull()
         joined_types = {field.name: field.dataType for field in joined.schema.fields}
         for col_name in schema_col_names:
@@ -235,12 +235,15 @@ class StagingStep:
         # above and permanently mask the silver value.
         joined = self._fill_not_null_columns(joined)
 
-        # Compute hash over the fully-merged row (same column set as when silver was written)
-        joined = compute_row_hash(joined)
+        # Hash the row that would be written, and hash the current silver row
+        # over the same columns. The comparison is the data, not a signature
+        # that may have included data-quality columns.
+        joined = self._row_hash(joined)
+        silver_hashed = self._row_hash(silver_df)
 
         # Join with silver signatures to determine INSERT / UPDATE / UNCHANGED
         # (must happen before _select_schema_cols so that 'signature' is still present)
-        silver_sigs = silver_df.select(
+        silver_sigs = silver_hashed.select(
             f.col(self.match_key).alias("_sig_key"),
             f.col("signature").alias("_silver_sig"),
         )
@@ -596,6 +599,14 @@ class StagingStep:
             df = df.withColumns(unknown_fills)
         return df
 
+    def _row_hash(self, df: sql.DataFrame) -> sql.DataFrame:
+        """Signature over the silver schema columns present on this frame."""
+        return compute_row_hash(
+            df,
+            self.context,
+            columns=[column.name for column in self.schema_columns],
+        )
+
     def _select_schema_cols(self, df: sql.DataFrame) -> sql.DataFrame:
         """Select only schema columns from df, dropping any extra bronze columns."""
         schema_col_names = [c.name for c in self.schema_columns]
@@ -606,7 +617,7 @@ class StagingStep:
         """Backward-compatible wrapper used by other pipelines."""
         df = self._prepare_df(df)
         df = self._fill_not_null_columns(df)
-        return compute_row_hash(df)
+        return self._row_hash(df)
 
     def _emit_lineage(self) -> None:
         with get_db_context() as db:

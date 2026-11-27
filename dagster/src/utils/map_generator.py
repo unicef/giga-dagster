@@ -83,42 +83,48 @@ def _basemap_tiles_url(api_key: str) -> str:
     return f"{BASEMAP_TILES_URL}?key={quote(api_key, safe='')}"
 
 
-def _filter_rows_with_valid_coordinates(df: pd.DataFrame) -> pd.DataFrame:
-    """Return rows with numeric latitude/longitude inside valid coordinate ranges."""
+def _filter_rows_with_valid_coordinates(
+    df: pd.DataFrame,
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
+) -> pd.DataFrame:
+    """Return rows whose coordinates are numeric and inside the valid ranges."""
     if df.empty:
         return df.copy()
 
-    if not {"latitude", "longitude"}.issubset(df.columns):
+    if not {latitude_column, longitude_column}.issubset(df.columns):
         return df.iloc[0:0].copy()
 
-    lat = pd.to_numeric(df["latitude"], errors="coerce")
-    lon = pd.to_numeric(df["longitude"], errors="coerce")
+    lat = pd.to_numeric(df[latitude_column], errors="coerce")
+    lon = pd.to_numeric(df[longitude_column], errors="coerce")
 
     valid_coordinate_mask = (
         lat.notna() & lon.notna() & lat.between(-90, 90) & lon.between(-180, 180)
     )
 
     filtered_df = df[valid_coordinate_mask].copy()
-    filtered_df["latitude"] = lat[valid_coordinate_mask]
-    filtered_df["longitude"] = lon[valid_coordinate_mask]
+    filtered_df[latitude_column] = lat[valid_coordinate_mask]
+    filtered_df[longitude_column] = lon[valid_coordinate_mask]
     return filtered_df
 
 
 def _calculate_coordinate_bounds(
-    school_coordinates_df: pd.DataFrame,
+    coordinates_df: pd.DataFrame,
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
 ) -> tuple[float, float, list[list[float]]]:
-    """Calculate map center and bounds from valid school latitude/longitude rows."""
+    """Calculate map center and bounds from valid coordinate rows."""
     return (
-        school_coordinates_df["latitude"].mean(),
-        school_coordinates_df["longitude"].mean(),
+        coordinates_df[latitude_column].mean(),
+        coordinates_df[longitude_column].mean(),
         [
             [
-                school_coordinates_df["latitude"].min(),
-                school_coordinates_df["longitude"].min(),
+                coordinates_df[latitude_column].min(),
+                coordinates_df[longitude_column].min(),
             ],
             [
-                school_coordinates_df["latitude"].max(),
-                school_coordinates_df["longitude"].max(),
+                coordinates_df[latitude_column].max(),
+                coordinates_df[longitude_column].max(),
             ],
         ],
     )
@@ -148,10 +154,12 @@ def _render_school_popup_html(
     row: dict,
     status: str,
     include_failure_reason: bool,
-    name_column: str = "school_name",
-    giga_id_column: str = "school_id_giga",
-    govt_id_column: str = "school_id_govt",
-    level_column: str = "education_level",
+    name_column: str = "facility_name",
+    giga_id_column: str = "facility_id_giga",
+    govt_id_column: str = "facility_id_govt",
+    level_column: str = "facility_level",
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
 ) -> str:
     """Render popup content using configurable facility identity columns."""
     admin1 = _format_popup_value(row.get("admin1"))
@@ -166,8 +174,8 @@ def _render_school_popup_html(
         (name_column, _format_popup_value(row.get(name_column))),
         (giga_id_column, _format_popup_value(row.get(giga_id_column))),
         (govt_id_column, _format_popup_value(row.get(govt_id_column))),
-        ("latitude", _format_popup_value(row.get("latitude"))),
-        ("longitude", _format_popup_value(row.get("longitude"))),
+        (latitude_column, _format_popup_value(row.get(latitude_column))),
+        (longitude_column, _format_popup_value(row.get(longitude_column))),
         (level_column, _format_popup_value(row.get(level_column))),
         ("admin1", f"{admin1} ({admin1_id})"),
         ("admin2", f"{admin2} ({admin2_id})"),
@@ -223,10 +231,12 @@ def _add_circle_marker(
     color: str,
     popup_html: str,
     tags: list[str],
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
 ) -> None:
-    """Add one school coordinate marker to the shared feature group."""
+    """Add one facility coordinate marker to the shared feature group."""
     folium.CircleMarker(
-        location=[row["latitude"], row["longitude"]],
+        location=[row[latitude_column], row[longitude_column]],
         radius=2,
         color=_darken_hex_color(color),
         weight=1,
@@ -289,10 +299,12 @@ def _add_school_markers(
     status_label: str,
     main_layer: folium.FeatureGroup,
     include_failure_reason: bool,
-    name_column: str = "school_name",
-    giga_id_column: str = "school_id_giga",
-    govt_id_column: str = "school_id_govt",
-    level_column: str = "education_level",
+    name_column: str = "facility_name",
+    giga_id_column: str = "facility_id_giga",
+    govt_id_column: str = "facility_id_govt",
+    level_column: str = "facility_level",
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
 ) -> None:
     """Add one tagged school marker per row to the shared layer."""
     for row in df.to_dict("records"):
@@ -304,6 +316,8 @@ def _add_school_markers(
             giga_id_column=giga_id_column,
             govt_id_column=govt_id_column,
             level_column=level_column,
+            latitude_column=latitude_column,
+            longitude_column=longitude_column,
         )
         row_status_tag, row_color = _status_tag_and_color(row, status_tag, base_color)
 
@@ -315,7 +329,15 @@ def _add_school_markers(
             "outside" if outside_boundary else "inside",
         ]
         color = OUTSIDE_BOUNDARY_COLOR if outside_boundary else row_color
-        _add_circle_marker(main_layer, row, color, popup_html, tags)
+        _add_circle_marker(
+            main_layer,
+            row,
+            color,
+            popup_html,
+            tags,
+            latitude_column,
+            longitude_column,
+        )
 
 
 def _calculate_filter_counts(
@@ -452,31 +474,39 @@ def generate_school_map_html(
     passed_df: pd.DataFrame,
     failed_df: pd.DataFrame,
     context: OpExecutionContext,
-    entity_label: str = "Schools",
-    name_column: str = "school_name",
-    giga_id_column: str = "school_id_giga",
-    govt_id_column: str = "school_id_govt",
-    level_column: str = "education_level",
+    entity_label: str = "Facilities",
+    name_column: str = "facility_name",
+    giga_id_column: str = "facility_id_giga",
+    govt_id_column: str = "facility_id_govt",
+    level_column: str = "facility_level",
+    latitude_column: str = "geo_latitude",
+    longitude_column: str = "geo_longitude",
 ) -> str:
     """Generate an optimized interactive HTML map with grouped checkbox filters."""
     context.log.info(
         f"Map generation input: passed={len(passed_df)}, failed={len(failed_df)}"
     )
 
-    passed_filtered = _filter_rows_with_valid_coordinates(passed_df)
-    failed_filtered = _filter_rows_with_valid_coordinates(failed_df)
+    passed_filtered = _filter_rows_with_valid_coordinates(
+        passed_df, latitude_column, longitude_column
+    )
+    failed_filtered = _filter_rows_with_valid_coordinates(
+        failed_df, latitude_column, longitude_column
+    )
 
     if passed_filtered.empty and failed_filtered.empty:
         context.log.warning(
-            f"No valid latitude/longitude data available for map generation "
-            f"(country: {country_code}); skipping map."
+            f"No valid {latitude_column}/{longitude_column} data available for "
+            f"map generation (country: {country_code}); skipping map."
         )
         return ""
 
     bounds_df = pd.concat([passed_filtered, failed_filtered], ignore_index=True)[
-        ["latitude", "longitude"]
+        [latitude_column, longitude_column]
     ]
-    center_lat, center_lon, bounds = _calculate_coordinate_bounds(bounds_df)
+    center_lat, center_lon, bounds = _calculate_coordinate_bounds(
+        bounds_df, latitude_column, longitude_column
+    )
 
     if not settings.CARTO_BASEMAP_API_KEY:
         context.log.warning(
@@ -506,6 +536,8 @@ def generate_school_map_html(
         giga_id_column,
         govt_id_column,
         level_column,
+        latitude_column,
+        longitude_column,
     )
     _add_school_markers(
         failed_filtered,
@@ -518,6 +550,8 @@ def generate_school_map_html(
         giga_id_column,
         govt_id_column,
         level_column,
+        latitude_column,
+        longitude_column,
     )
     main_layer.add_to(m)
 
