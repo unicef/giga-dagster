@@ -15,18 +15,116 @@ paths:
   delete_directory: delete-row-ids/health-facility-geolocation
 
 tables:
-  core_schema: facility_core
-  core_table: facility_core
-  extension_schema: health_facility_details
-  extension_table: health_facility_details
-  staging_table: health_facility_geolocation_staging
-  silver_schema: health_facility_geolocation_silver
-  rejected_schema: health_facility_geolocation_rejected
-  error_table: health_facility_geolocation_error_table
+  core_table: core
+  extension_table: health_facilities
+  staging_table: geolocation_health_facilities
+  silver_table: geolocation_health_facilities
+  rejected_table: geolocation_health_facilities
+  error_table: geolocation_health_facilities
+  metadata_table: health_facilities
 
 portal:
   approval_label: Health Facility Geolocation
   approval_domain: health-facility
+  metadata:
+    heading: Add Metadata
+    intro:
+      - >-
+        Provide context for this health dataset: who compiled or uploaded it,
+        what period it covers, and how it was collected.
+      - >-
+        Required fields include country, health dataset description, focal
+        point, data owner, and the year the data refers to.
+    sections:
+      - title: ""
+        fields:
+          - name: country
+            label: Country
+            helper_text: ""
+            type: text
+            required: true
+          - name: description
+            label: Health dataset description
+            helper_text: e.g. indicator set, time period, collection purpose
+            type: text
+            required: true
+      - title: Information about the health dataset
+        fields:
+          - name: focal_point_name
+            label: Person uploading / focal point name
+            helper_text: Name of the person submitting or compiling this dataset
+            type: text
+            required: true
+          - name: focal_point_contact
+            label: Focal point email
+            helper_text: Email of the person responsible for this upload
+            type: email
+            required: true
+          - name: data_owner
+            label: Health data owner/s
+            helper_text: >-
+              e.g. Ministry of Health, national statistics office, implementing
+              partner
+            type: text
+            required: true
+          - name: year_of_data_collection
+            label: Year the data refers to
+            helper_text: Select year
+            type: year
+            required: true
+            min_year: 1945
+          - name: modality_of_data_collection
+            label: Modality of health data collection
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: [Online, Phone, Written, In-person, Others, Unknown]
+          - name: school_ids_type
+            label: Primary record / facility ID type
+            helper_text: How records are keyed in this file (if applicable)
+            type: enum
+            required: false
+            options: [dhis2_id, hims_id, hfml_id, Other, Unknown]
+          - name: data_quality_issues
+            label: Health data gaps / quality issues
+            helper_text: >-
+              Describe missing fields, coverage limits, known biases, or
+              linkage issues
+            type: text
+            required: false
+      - title: Information about national health data collection practices
+        fields:
+          - name: frequency_of_school_data_collection
+            label: Frequency of health data collection or update
+            helper_text: Select an option
+            type: enum
+            required: false
+            options:
+              - More than once a year
+              - Once a year
+              - Every two years
+              - In more than two years
+          - name: next_school_data_collection
+            label: Date of the next scheduled health data collection
+            helper_text: MM / YYYY
+            type: month_year
+            required: false
+          - name: emis_system
+            label: >-
+              Is there a functioning national health information system (or
+              equivalent EMR/registry)?
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: ["Yes", "No", "Unknown"]
+          - name: school_contacts
+            label: >-
+              Does the data owner have access to facility or respondent contact
+              details (e.g. phone, email)?
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: ["Yes", "No", "Unknown"]
 
 dagster:
   domain: health-facility

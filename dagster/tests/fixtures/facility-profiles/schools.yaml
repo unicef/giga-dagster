@@ -26,6 +26,105 @@ tables:
 portal:
   approval_label: School Geolocation
   approval_domain: school
+  metadata:
+    heading: Add Metadata
+    intro:
+      - >-
+        Please provide any additional context on your data by filling in the
+        metadata sheet below.
+      - >-
+        Not all metadata information is made visible on Project Connect but
+        does allow the Giga team to understand where the data has come from,
+        and how it can be best integrated into our dataset.
+    sections:
+      - title: ""
+        fields:
+          - name: country
+            label: Country
+            helper_text: ""
+            type: text
+            required: true
+          - name: description
+            label: Description about the upload
+            helper_text: e.g. change notes, additional context
+            type: text
+            required: true
+      - title: Information about the school dataset
+        fields:
+          - name: focal_point_name
+            label: Focal point name
+            helper_text: Name of the person who compiled the data
+            type: text
+            required: true
+          - name: focal_point_contact
+            label: Focal point email
+            helper_text: Email of the person who compiled the data
+            type: email
+            required: true
+          - name: data_owner
+            label: Data owner/s
+            helper_text: e.g. Ministry of Education, Office of Statistics, other
+            type: text
+            required: true
+          - name: year_of_data_collection
+            label: Year of data collection
+            helper_text: Select year
+            type: year
+            required: true
+            min_year: 1945
+          - name: modality_of_data_collection
+            label: Modality of data collection
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: [Online, Phone, Written, In-person, Others, Unknown]
+          - name: school_ids_type
+            label: School ID type
+            helper_text: Select type of school IDs provided
+            type: enum
+            required: false
+            options: [EMIS, Examination code, Others, Unknown]
+          - name: data_quality_issues
+            label: Data gaps / quality issues
+            helper_text: >-
+              Describe here if there are any gaps or issues in the school data,
+              like missing fields, lack of comprehensiveness, or inaccuracies
+              in geolocation
+            type: text
+            required: false
+      - title: Information about national school data collection practices
+        fields:
+          - name: frequency_of_school_data_collection
+            label: Frequency of data collection or update
+            helper_text: Select an option
+            type: enum
+            required: false
+            options:
+              - More than once a year
+              - Once a year
+              - Every two years
+              - In more than two years
+          - name: next_school_data_collection
+            label: Date of the next scheduled data collection
+            helper_text: MM / YYYY
+            type: month_year
+            required: false
+          - name: emis_system
+            label: >-
+              Is there a functioning Education Management Information Systems
+              (EMIS) in the country?
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: ["Yes", "No", "Unknown"]
+          - name: school_contacts
+            label: >-
+              Does the MoE or Data owner have access to school contact details
+              like phone numbers or emails?
+            helper_text: Select an option
+            type: enum
+            required: false
+            options: ["Yes", "No", "Unknown"]
 
 dagster:
   domain: school

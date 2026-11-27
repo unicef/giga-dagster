@@ -63,6 +63,49 @@ def _entity_for_dataset(
     return _entity_from_facility_type("school")
 
 
+def _metadata_fields_for_upload(
+    file_upload: FileUploadConfig,
+) -> list[dict[str, str]] | None:
+    """Load PDF metadata field defs from the facility profile when present."""
+    schema_key = file_upload.schema_key
+    if not schema_key or file_upload.dataset != "geolocation":
+        return None
+    try:
+        from src.facility_profiles import get_facility_profile
+
+        profile = get_facility_profile(schema_key)
+    except Exception:
+        return None
+    form = profile.portal.metadata
+    if form is None:
+        return None
+    fields = form.pdf_field_defs()
+    return fields or None
+
+
+def _enrich_pdf_metadata_from_file_upload(
+    metadata: dict[str, Any],
+    file_upload: FileUploadConfig,
+    facility_type: str | None,
+) -> None:
+    """Attach filename, entity labels, upload metadata, and profile field defs."""
+    if file_upload.original_filename:
+        metadata["uploadedFileName"] = file_upload.original_filename
+    metadata["entity"] = _entity_for_dataset(
+        file_upload.dataset,
+        facility_type,
+    )
+    try:
+        upload_meta = ADLSFileClient().fetch_metadata_for_blob(file_upload.upload_path)
+        if upload_meta:
+            metadata["uploadMetadata"] = {str(k): v for k, v in upload_meta.items()}
+    except Exception:
+        pass
+    metadata_fields = _metadata_fields_for_upload(file_upload)
+    if metadata_fields is not None:
+        metadata["metadataFields"] = metadata_fields
+
+
 def _make_json_safe(obj: Any) -> Any:
     """Replace float nan/inf with None so payload is JSON-serializable."""
     if isinstance(obj, dict):
@@ -280,20 +323,7 @@ async def send_email_dq_report(
         metadata["country"] = country_code
 
     if file_upload is not None:
-        if file_upload.original_filename:
-            metadata["uploadedFileName"] = file_upload.original_filename
-        metadata["entity"] = _entity_for_dataset(
-            file_upload.dataset,
-            facility_type,
-        )
-        try:
-            upload_meta = ADLSFileClient().fetch_metadata_for_blob(
-                file_upload.upload_path
-            )
-            if upload_meta:
-                metadata["uploadMetadata"] = {str(k): v for k, v in upload_meta.items()}
-        except Exception:
-            pass
+        _enrich_pdf_metadata_from_file_upload(metadata, file_upload, facility_type)
 
     # Ensure payload is JSON-serializable (replace float nan/inf with None)
     metadata = _make_json_safe(metadata)

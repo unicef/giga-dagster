@@ -36,11 +36,55 @@ class FacilityTables(BaseModel):
     metadata_table: str
 
 
+class FacilityMetadataField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    label: str
+    helper_text: str = ""
+    type: str  # text | email | year | enum | month_year
+    required: bool = False
+    options: list[str] | None = None
+    min_year: int | None = None
+
+    @field_validator("type", mode="after")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        allowed = {"text", "email", "year", "enum", "month_year"}
+        if value not in allowed:
+            raise ValueError(f"type must be one of {sorted(allowed)}")
+        return value
+
+
+class FacilityMetadataSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = ""
+    fields: list[FacilityMetadataField]
+
+
+class FacilityMetadataForm(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    heading: str = "Add Metadata"
+    intro: list[str] = Field(default_factory=list)
+    sections: list[FacilityMetadataSection]
+
+    def pdf_field_defs(self) -> list[dict[str, str]]:
+        """Flatten section fields to ``{name, label}`` rows for the DQ PDF."""
+        return [
+            {"name": field.name, "label": field.label}
+            for section in self.sections
+            for field in section.fields
+        ]
+
+
 class FacilityPortalSection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     approval_label: str
     approval_domain: str
+    metadata: FacilityMetadataForm | None = None
 
 
 class FacilityDagsterSection(BaseModel):
