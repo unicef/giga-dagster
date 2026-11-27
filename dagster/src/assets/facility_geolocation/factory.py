@@ -32,7 +32,6 @@ from src.data_quality_checks.utils import (
     normalize_dq_results_map,
 )
 from src.facilities import FacilityGeolocationSpec
-from src.facilities.specs import FACILITY_PIPELINE_TABLES_SCHEMA
 from src.internal.common_assets.staging import StagingMode, StagingStep
 from src.resources import ResourceKey
 from src.schemas.file_upload import FileUploadConfig
@@ -51,7 +50,7 @@ from src.utils.metadata import (
 )
 from src.utils.op_config import FileConfig
 from src.utils.pandas import pandas_loader
-from src.utils.schema import construct_full_table_name, get_schema_columns
+from src.utils.schema import get_schema_columns
 from src.utils.send_email_dq_report import send_email_dq_report_with_config
 from src.utils.spark import normalize_missing_value_strings
 
@@ -65,8 +64,6 @@ from dagster import (
     multi_asset,
 )
 
-FACILITY_GEOLOCATION_METADATA_TABLE = "facility_geolocation_metadata"
-FACILITY_GEOLOCATION_METADATA_SCHEMA = "pipeline_tables"
 # Column definitions currently live under the school metadata metaschema name.
 FACILITY_GEOLOCATION_METADATA_SCHEMA_SOURCE = "school_geolocation_metadata"
 
@@ -81,18 +78,20 @@ def _load_current_facilities(
     country_code: str,
     fallback_schema: StructType,
 ) -> sql.DataFrame:
-    core_table = construct_full_table_name(spec.tables.core_schema, country_code)
-    extension_table = construct_full_table_name(
-        spec.tables.extension_schema, country_code
-    )
+    core_table = spec.tables.core_full_name
+    extension_table = spec.tables.extension_full_name
     if not spark.catalog.tableExists(core_table):
         return spark.createDataFrame([], fallback_schema)
 
     core = DeltaTable.forName(spark, core_table).toDF()
+    if "country_code" in core.columns:
+        core = core.filter(f.col("country_code") == country_code)
     if "facility_type" in core.columns:
         core = core.filter(f.col("facility_type") == spec.facility_type)
     if spark.catalog.tableExists(extension_table):
         extension = DeltaTable.forName(spark, extension_table).toDF()
+        if "country_code" in extension.columns:
+            extension = extension.filter(f.col("country_code") == country_code)
         core = core.join(extension, on="facility_id_giga", how="left")
 
     # Convert canonical core columns back to the facility's ingestion vocabulary.
@@ -234,18 +233,16 @@ def build_facility_geolocation_assets(  # noqa: C901
             )
             table_columns = list(metadata_df.schema)
 
-        create_schema(session, FACILITY_GEOLOCATION_METADATA_SCHEMA)
+        full_table_name = spec.tables.metadata_full_name
+        metadata_schema, metadata_table = full_table_name.split(".", 1)
+        create_schema(session, metadata_schema)
         create_delta_table(
             session,
-            FACILITY_GEOLOCATION_METADATA_SCHEMA,
-            FACILITY_GEOLOCATION_METADATA_TABLE,
+            metadata_schema,
+            metadata_table,
             table_columns,
             context,
             if_not_exists=True,
-        )
-        full_table_name = construct_full_table_name(
-            FACILITY_GEOLOCATION_METADATA_SCHEMA,
-            FACILITY_GEOLOCATION_METADATA_TABLE,
         )
         session.catalog.refreshTable(full_table_name)
         current_metadata_table = DeltaTable.forName(session, full_table_name)
@@ -542,7 +539,8 @@ def build_facility_geolocation_assets(  # noqa: C901
     ) -> Output[None]:
         upload_id = config.filename_components.id
         full_table_name = spec.tables.error_table_full_name
-        create_schema(failed.sparkSession, FACILITY_PIPELINE_TABLES_SCHEMA)
+        error_schema = full_table_name.split(".", 1)[0]
+        create_schema(failed.sparkSession, error_schema)
         if failed.sparkSession.catalog.tableExists(full_table_name):
             DeltaTable.forName(failed.sparkSession, full_table_name).delete(
                 (f.col("country_code") == config.country_code)
@@ -584,6 +582,7 @@ def build_facility_geolocation_assets(  # noqa: C901
             StagingMode.UPDATE,
             match_key=spec.govt_id_column,
             shared_staging_table=spec.tables.staging_table_full_name,
+            silver_table=spec.tables.silver_full_name,
         )
         pending = step(passed)
         return Output(
@@ -607,6 +606,7 @@ def build_facility_geolocation_assets(  # noqa: C901
             spark.spark_session,
             StagingMode.DELETE,
             shared_staging_table=spec.tables.staging_table_full_name,
+            silver_table=spec.tables.silver_full_name,
         )
         pending = step(delete_ids, id_type=payload.get("id_type", spec.giga_id_column))
         return Output(

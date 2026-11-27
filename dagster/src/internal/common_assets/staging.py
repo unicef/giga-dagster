@@ -72,14 +72,21 @@ class StagingStep:
         change_type: StagingMode,
         match_key: str | None = None,
         shared_staging_table: str | None = None,
+        silver_table: str | None = None,
     ):
         """``shared_staging_table`` ("<schema>.<table>") stages every country into
-        one table, scoped by ``country_code``, instead of one table per country."""
+        one table, scoped by ``country_code``, instead of one table per country.
+
+        ``silver_table`` is a fully qualified shared silver table
+        (``facilities.<table>``). Rows for this country are selected with
+        ``country_code``. When omitted, silver is ``{metastore_schema}_silver.<country>``.
+        """
         self.context = context
         self.config = config
         self.adls_file_client = adls_file_client
         self.spark = spark
         self.change_type = change_type
+        self._shared_silver_table = silver_table is not None
 
         self.schema_name = config.metastore_schema
         self.country_code = config.country_code
@@ -97,8 +104,12 @@ class StagingStep:
             self.schema_name,
             DataTier.STAGING,
         )
-        self.silver_table_name = construct_full_table_name(
-            self.silver_tier_schema_name, self.country_code
+        self.silver_table_name = (
+            silver_table
+            if silver_table is not None
+            else construct_full_table_name(
+                self.silver_tier_schema_name, self.country_code
+            )
         )
         self.is_shared_staging = shared_staging_table is not None
         if self.is_shared_staging:
@@ -183,6 +194,7 @@ class StagingStep:
 
         # Silver exists: left-join and fill non-uploaded cols from silver
         silver_df = DeltaTable.forName(self.spark, self.silver_table_name).toDF()
+        silver_df = self._country_silver(silver_df)
 
         # Prefix all silver columns to avoid name conflicts
         silver_prefixed = silver_df.select(
@@ -283,7 +295,9 @@ class StagingStep:
             return None
 
         _DELETE_ALL = "__all__"
-        silver_df = DeltaTable.forName(self.spark, self.silver_table_name).toDF()
+        silver_df = self._country_silver(
+            DeltaTable.forName(self.spark, self.silver_table_name).toDF()
+        )
         if delete_ids == [_DELETE_ALL]:
             rows = silver_df
         else:
@@ -610,8 +624,16 @@ class StagingStep:
             context=self.context,
         )
 
+    def _country_silver(self, silver_df: sql.DataFrame) -> sql.DataFrame:
+        """Keep this country's rows when silver is one table for every country."""
+        if self._shared_silver_table and "country_code" in silver_df.columns:
+            return silver_df.filter(f.col("country_code") == self.country_code)
+        return silver_df
+
     @property
     def silver_table_exists(self) -> bool:
+        if self._shared_silver_table:
+            return self.spark.catalog.tableExists(self.silver_table_name)
         return check_table_exists(
             self.spark, self.schema_name, self.country_code, DataTier.SILVER
         )

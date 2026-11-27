@@ -21,7 +21,7 @@ from src.spark.transform_functions import add_missing_columns
 from src.utils.adls import ADLSFileClient
 from src.utils.metadata import get_output_metadata, get_table_preview
 from src.utils.op_config import FileConfig
-from src.utils.schema import construct_full_table_name, get_schema_columns
+from src.utils.schema import get_schema_columns
 from src.utils.spark import transform_types
 
 from dagster import AssetIn, AssetKey, OpExecutionContext, Output, asset
@@ -93,10 +93,14 @@ def _load_or_empty(
     spark,
     table_name: str,
     schema,
+    country_code: str | None = None,
 ) -> sql.DataFrame:
     if spark.catalog.tableExists(table_name):
         spark.catalog.refreshTable(table_name)
-        return DeltaTable.forName(spark, table_name).toDF()
+        frame = DeltaTable.forName(spark, table_name).toDF()
+        if country_code is not None and "country_code" in frame.columns:
+            frame = frame.filter(f.col("country_code") == country_code)
+        return frame
     return spark.createDataFrame([], schema)
 
 
@@ -241,18 +245,15 @@ def build_facility_publish_assets(  # noqa: C901
         if approved.isEmpty():
             context.log.info("No approved rows; leaving the silver table unread.")
             return _skipped_publish_output(config)
-        silver_table = construct_full_table_name(
-            spec.tables.silver_schema,
-            config.country_code,
-        )
         schema_columns = get_schema_columns(
             spark.spark_session,
             spec.metastore_schema,
         )
         current = _load_or_empty(
             spark.spark_session,
-            silver_table,
+            spec.tables.silver_full_name,
             StructType(schema_columns),
+            config.country_code,
         )
         published = _merge_combined_silver(
             current,
@@ -284,24 +285,18 @@ def build_facility_publish_assets(  # noqa: C901
         if approved.isEmpty():
             context.log.info("No approved rows; leaving the core table unread.")
             return _skipped_publish_output(config)
-        core_table = construct_full_table_name(
-            spec.tables.core_schema,
-            config.country_code,
-        )
         projected = split_approved_facilities(approved, spec, allow_missing=True)
-        extension_table = construct_full_table_name(
-            spec.tables.extension_schema,
-            config.country_code,
-        )
         current_core = _load_or_empty(
             spark.spark_session,
-            core_table,
+            spec.tables.core_full_name,
             projected.core.schema,
+            config.country_code,
         )
         current_extension = _load_or_empty(
             spark.spark_session,
-            extension_table,
+            spec.tables.extension_full_name,
             projected.extension.schema,
+            config.country_code,
         )
         result = merge_approved_facilities(
             current_core,
@@ -312,7 +307,7 @@ def build_facility_publish_assets(  # noqa: C901
         published = refresh_facility_signature(
             transform_types(
                 result.core,
-                spec.tables.core_schema,
+                spec.metastore_schema,
             ),
             "core_signature",
         )
@@ -343,21 +338,20 @@ def build_facility_publish_assets(  # noqa: C901
         if approved.isEmpty():
             context.log.info("No approved rows; leaving the extension table unread.")
             return _skipped_publish_output(config)
-        extension_table = construct_full_table_name(
-            spec.tables.extension_schema,
-            config.country_code,
-        )
         # The core step has written this approval. Read that table back and recompute
         # only the extension side, then validate the pair.
-        published_core = DeltaTable.forName(
-            spark.spark_session,
-            construct_full_table_name(spec.tables.core_schema, config.country_code),
-        ).toDF()
         projected = split_approved_facilities(approved, spec, allow_missing=True)
+        published_core = _load_or_empty(
+            spark.spark_session,
+            spec.tables.core_full_name,
+            projected.core.schema,
+            config.country_code,
+        )
         current_extension = _load_or_empty(
             spark.spark_session,
-            extension_table,
+            spec.tables.extension_full_name,
             projected.extension.schema,
+            config.country_code,
         )
         result = merge_approved_facilities(
             published_core,
@@ -368,7 +362,7 @@ def build_facility_publish_assets(  # noqa: C901
         published_extension = refresh_facility_signature(
             transform_types(
                 result.extension,
-                spec.tables.extension_schema,
+                spec.metastore_schema,
             ),
             "extension_signature",
         )

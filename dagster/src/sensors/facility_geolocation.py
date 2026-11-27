@@ -10,6 +10,11 @@ from dagster import (
 )
 from src.constants import DataTier, constants
 from src.facilities import FacilityGeolocationSpec
+from src.facilities.specs import (
+    FACILITIES_SCHEMA,
+    FACILITY_REJECTED_SCHEMA,
+    FACILITY_SILVER_SCHEMA,
+)
 from src.facility_profiles import load_all_facility_specs
 from src.jobs.facility_geolocation import FACILITY_JOBS_BY_SCHEMA_KEY
 from src.settings import settings
@@ -147,6 +152,24 @@ def _automated_destinations(
     }
 
 
+def _shared_destination(
+    spec: FacilityGeolocationSpec,
+    path: Path,
+    schema: str,
+    table: str,
+) -> OpDestinationMapping:
+    """One shared table, scoped to this country on write."""
+    return OpDestinationMapping(
+        source_filepath=str(path),
+        destination_filepath=f"{constants.silver_folder}/{schema}/{table}",
+        metastore_schema=spec.metastore_schema,
+        physical_schema=schema,
+        table_name=table,
+        country_scoped=True,
+        tier=DataTier.SILVER,
+    )
+
+
 def _post_approval_destinations(
     spec: FacilityGeolocationSpec,
     path: Path,
@@ -163,41 +186,29 @@ def _post_approval_destinations(
             metastore_schema=spec.metastore_schema,
             tier=DataTier.SILVER,
         ),
-        spec.assets.rejected_rows: OpDestinationMapping(
-            source_filepath=str(path),
-            destination_filepath=(
-                f"{constants.silver_folder}/manual-review/rejected/"
-                f"{spec.facility_type}/{country_code}/{path.stem}.parquet"
-            ),
-            metastore_schema=spec.metastore_schema,
-            tier=DataTier.SILVER,
+        spec.assets.rejected_rows: _shared_destination(
+            spec,
+            path,
+            FACILITY_REJECTED_SCHEMA,
+            spec.tables.rejected_table,
         ),
-        spec.assets.silver: OpDestinationMapping(
-            source_filepath=str(path),
-            destination_filepath=(
-                f"{constants.silver_folder}/{spec.tables.silver_schema}/"
-                f"{country_code}"
-            ),
-            metastore_schema=spec.metastore_schema,
-            tier=DataTier.SILVER,
+        spec.assets.silver: _shared_destination(
+            spec,
+            path,
+            FACILITY_SILVER_SCHEMA,
+            spec.tables.silver_table,
         ),
-        spec.assets.core: OpDestinationMapping(
-            source_filepath=str(path),
-            destination_filepath=(
-                f"{constants.silver_folder}/{spec.tables.core_schema}/"
-                f"{country_code}"
-            ),
-            metastore_schema=spec.metastore_schema,
-            tier=DataTier.SILVER,
+        spec.assets.core: _shared_destination(
+            spec,
+            path,
+            FACILITIES_SCHEMA,
+            spec.tables.core_table,
         ),
-        spec.assets.extension: OpDestinationMapping(
-            source_filepath=str(path),
-            destination_filepath=(
-                f"{constants.silver_folder}/{spec.tables.extension_schema}/"
-                f"{country_code}"
-            ),
-            metastore_schema=spec.metastore_schema,
-            tier=DataTier.SILVER,
+        spec.assets.extension: _shared_destination(
+            spec,
+            path,
+            FACILITIES_SCHEMA,
+            spec.tables.extension_table,
         ),
         f"{prefix}_publish_complete": OpDestinationMapping(
             source_filepath=str(path),

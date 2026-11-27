@@ -90,6 +90,7 @@ def build_deduped_merge_query(
     context: OpExecutionContext | OutputContext = None,
     is_partial_dataset=False,
     is_qos=False,
+    source_delete_condition: str | None = None,
 ) -> DeltaMergeBuilder | None:
     """
     Delta Lake increments the dataset version and generates a change log when performing
@@ -129,6 +130,8 @@ def build_deduped_merge_query(
         )
     else:
         master_df = master.toDF()
+        if source_delete_condition:
+            master_df = master_df.filter(source_delete_condition)
         merge_condition = f.col(f"master.{primary_key}") == f.col(
             f"incoming.{primary_key}"
         )
@@ -182,7 +185,10 @@ def build_deduped_merge_query(
     if has_insertions:
         query = query.whenNotMatchedInsertAll()
     if ic(has_deletions) and not is_partial_dataset:
-        query = query.whenNotMatchedBySourceDelete()
+        if source_delete_condition:
+            query = query.whenNotMatchedBySourceDelete(source_delete_condition)
+        else:
+            query = query.whenNotMatchedBySourceDelete()
 
     return query
 

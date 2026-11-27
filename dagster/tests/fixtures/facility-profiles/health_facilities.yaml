@@ -15,14 +15,13 @@ paths:
   delete_directory: delete-row-ids/health-facility-geolocation
 
 tables:
-  core_schema: facility_core
-  core_table: facility_core
-  extension_schema: health_facility_details
-  extension_table: health_facility_details
-  staging_table: health_facility_geolocation_staging
-  silver_schema: health_facility_geolocation_silver
-  rejected_schema: health_facility_geolocation_rejected
-  error_table: health_facility_geolocation_error_table
+  core_table: core
+  extension_table: health_facilities
+  staging_table: geolocation_health_facilities
+  silver_table: geolocation_health_facilities
+  rejected_table: geolocation_health_facilities
+  error_table: geolocation_health_facilities
+  metadata_table: health_facilities
 
 portal:
   approval_label: Health Facility Geolocation

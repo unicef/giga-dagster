@@ -27,14 +27,13 @@ class FacilityPaths(BaseModel):
 class FacilityTables(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    core_schema: str
     core_table: str
-    extension_schema: str
     extension_table: str
     staging_table: str
-    silver_schema: str
-    rejected_schema: str
+    silver_table: str
+    rejected_table: str
     error_table: str
+    metadata_table: str
 
 
 class FacilityPortalSection(BaseModel):

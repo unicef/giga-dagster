@@ -48,9 +48,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             context.log.error(f"Error in config: {e}")
             pass
         table_name, table_root_path, table_path = self._get_table_path(context)
-        schema_tier_name = construct_schema_name_for_tier(
-            config.metastore_schema, config.tier
-        )
+        schema_tier_name = self._physical_schema_name(config)
         full_table_name = f"{schema_tier_name}.{table_name}"
         context.log.info(f"Full table name: {full_table_name}")
 
@@ -80,7 +78,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )  # this is a scam -- gives the current asset step's config, not the upstream asset
         schema_name = config.metastore_schema
 
-        schema_tier_name = construct_schema_name_for_tier(schema_name, config.tier)
+        schema_tier_name = self._physical_schema_name(config)
         context.log.info(f"Schema_tier_name: {schema_tier_name}")
 
         full_table_name = construct_full_table_name(schema_tier_name, table_name)
@@ -94,6 +92,18 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
         )
 
         return dt.toDF()
+
+    @staticmethod
+    def _physical_schema_name(config: FileConfig) -> str:
+        """Hive schema of the Delta table.
+
+        ``physical_schema`` is the table's own schema. Otherwise the name is
+        the metastore schema plus the tier suffix. Column lookup stays on
+        ``metastore_schema``.
+        """
+        if config.physical_schema:
+            return config.physical_schema
+        return construct_schema_name_for_tier(config.metastore_schema, config.tier)
 
     @staticmethod
     def _get_table_path(
@@ -126,18 +136,16 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
     ):
         spark = self._get_spark_session()
         full_table_name = construct_full_table_name(schema_name_for_tier, table_name)
-        columns_schema_name = FileConfig(
-            **context.step_context.op_config
-        ).metastore_schema
+        run_config = FileConfig(**context.step_context.op_config)
 
         if _is_qos_schema(schema_name_for_tier):
             columns = data.schema.fields
             partition_columns = ["date"]
-        elif schema_name_for_tier == "custom_dataset":
+        elif schema_name_for_tier == "custom_dataset" or run_config.country_scoped:
             columns = data.schema.fields
             partition_columns = []
         else:
-            columns = get_schema_columns(spark, columns_schema_name)
+            columns = get_schema_columns(spark, run_config.metastore_schema)
             partition_columns = []
 
         query = (
@@ -193,8 +201,21 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             columns = incoming_schema.fields
             primary_key = "gigasync_id"
         else:
-            columns = get_schema_columns(spark, schema_name)
-            primary_key = get_primary_key(spark, schema_name)
+            run_config = (
+                FileConfig(**context.step_context.op_config)
+                if context is not None
+                else None
+            )
+            if run_config is not None and run_config.country_scoped:
+                columns = list(data.schema.fields)
+                primary_key = (
+                    "facility_id_giga"
+                    if "facility_id_giga" in data.columns
+                    else get_primary_key(spark, schema_name)
+                )
+            else:
+                columns = get_schema_columns(spark, schema_name)
+                primary_key = get_primary_key(spark, schema_name)
 
             updated_schema = StructType(columns)
             updated_columns = sorted(updated_schema.fieldNames())
@@ -222,6 +243,12 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
 
         update_columns = [c.name for c in columns if c.name != primary_key]
         master = DeltaTable.forName(spark, full_table_name)
+        source_delete_condition = None
+        if context is not None:
+            run_config = FileConfig(**context.step_context.op_config)
+            if run_config.country_scoped:
+                country = run_config.country_code.replace("'", "")
+                source_delete_condition = f"country_code = '{country}'"
         query = build_deduped_merge_query(
             master,
             data,
@@ -230,6 +257,7 @@ class ADLSDeltaIOManager(BaseConfigurableIOManager):
             context=context,
             is_partial_dataset=is_qos,
             is_qos=is_qos,
+            source_delete_condition=source_delete_condition,
         )
 
         if query is not None:

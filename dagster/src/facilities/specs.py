@@ -2,9 +2,14 @@ from dataclasses import dataclass, field
 
 FACILITY_ID_COLUMN = "facility_id_giga"
 
-# Schema holding the cross-country facility staging and error tables; rows in
-# those tables are distinguished by ``country_code``.
-FACILITY_PIPELINE_TABLES_SCHEMA = "pipeline_tables"
+# One Hive schema per tier. Each dataset is one table for every country,
+# distinguished by ``country_code``. The table name does not repeat "facility".
+FACILITIES_SCHEMA = "facilities"
+FACILITY_SILVER_SCHEMA = "facility_silver"
+FACILITY_REJECTED_SCHEMA = "facility_rejected"
+FACILITY_STAGING_SCHEMA = "facility_staging"
+FACILITY_ERROR_SCHEMA = "facility_error"
+FACILITY_METADATA_SCHEMA = "facility_metadata"
 
 # Upload/govt geospatial fields from the shared facilities core schema.
 SHARED_GEO_UPLOAD_COLUMNS = (
@@ -64,26 +69,49 @@ class FacilityColumnOwnership:
 
 @dataclass(frozen=True, slots=True)
 class FacilityTableNames:
-    core_schema: str
     core_table: str
-    extension_schema: str
     extension_table: str
     staging_table: str
-    silver_schema: str
-    rejected_schema: str
+    silver_table: str
+    rejected_table: str
     error_table: str
+    metadata_table: str
 
     def __post_init__(self) -> None:
         for field_name in self.__dataclass_fields__:
             _validate_name(getattr(self, field_name), field_name)
 
+    @staticmethod
+    def _qualified(schema: str, table: str) -> str:
+        return f"{schema}.{table}"
+
+    @property
+    def core_full_name(self) -> str:
+        return self._qualified(FACILITIES_SCHEMA, self.core_table)
+
+    @property
+    def extension_full_name(self) -> str:
+        return self._qualified(FACILITIES_SCHEMA, self.extension_table)
+
+    @property
+    def silver_full_name(self) -> str:
+        return self._qualified(FACILITY_SILVER_SCHEMA, self.silver_table)
+
+    @property
+    def rejected_full_name(self) -> str:
+        return self._qualified(FACILITY_REJECTED_SCHEMA, self.rejected_table)
+
     @property
     def staging_table_full_name(self) -> str:
-        return f"{FACILITY_PIPELINE_TABLES_SCHEMA}.{self.staging_table}"
+        return self._qualified(FACILITY_STAGING_SCHEMA, self.staging_table)
 
     @property
     def error_table_full_name(self) -> str:
-        return f"{FACILITY_PIPELINE_TABLES_SCHEMA}.{self.error_table}"
+        return self._qualified(FACILITY_ERROR_SCHEMA, self.error_table)
+
+    @property
+    def metadata_full_name(self) -> str:
+        return self._qualified(FACILITY_METADATA_SCHEMA, self.metadata_table)
 
 
 @dataclass(frozen=True, slots=True)

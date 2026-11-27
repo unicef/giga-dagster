@@ -15,14 +15,13 @@ paths:
   delete_directory: delete-row-ids/school-geolocation
 
 tables:
-  core_schema: facility_core
-  core_table: facility_core
-  extension_schema: school_facility_details
-  extension_table: school_facility_details
-  staging_table: school_facility_geolocation_staging
-  silver_schema: school_geolocation_silver
-  rejected_schema: school_geolocation_rejected
-  error_table: school_facility_geolocation_error_table
+  core_table: core
+  extension_table: schools
+  staging_table: geolocation_schools
+  silver_table: geolocation_schools
+  rejected_table: geolocation_schools
+  error_table: geolocation_schools
+  metadata_table: schools
 
 portal:
   approval_label: School Geolocation

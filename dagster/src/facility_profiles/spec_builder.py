@@ -156,14 +156,13 @@ def build_spec_from_profile(
         country_column=profile.identity.country_column,
         columns=columns,
         tables=FacilityTableNames(
-            core_schema=profile.tables.core_schema,
             core_table=profile.tables.core_table,
-            extension_schema=profile.tables.extension_schema,
             extension_table=profile.tables.extension_table,
             staging_table=profile.tables.staging_table,
-            silver_schema=profile.tables.silver_schema,
-            rejected_schema=profile.tables.rejected_schema,
+            silver_table=profile.tables.silver_table,
+            rejected_table=profile.tables.rejected_table,
             error_table=profile.tables.error_table,
+            metadata_table=profile.tables.metadata_table,
         ),
         paths=FacilityPathNames(
             upload_directory=profile.paths.upload_directory,

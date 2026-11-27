@@ -29,28 +29,47 @@ def test_school_spec_loads_from_facility_profile():
     assert "students_num" in SCHOOL_SPEC.columns.extension
 
 
-def test_facility_staging_and_error_tables_are_shared_across_countries():
+def test_facility_tables_use_tier_schemas():
     assert (
-        SCHOOL_SPEC.tables.error_table_full_name
-        == "pipeline_tables.school_facility_geolocation_error_table"
+        SCHOOL_SPEC.tables.error_table_full_name == "facility_error.geolocation_schools"
     )
     assert (
         HEALTH_SPEC.tables.error_table_full_name
-        == "pipeline_tables.health_facility_geolocation_error_table"
+        == "facility_error.geolocation_health_facilities"
     )
     assert (
         SCHOOL_SPEC.tables.staging_table_full_name
-        == "pipeline_tables.school_facility_geolocation_staging"
+        == "facility_staging.geolocation_schools"
     )
     assert (
         HEALTH_SPEC.tables.staging_table_full_name
-        == "pipeline_tables.health_facility_geolocation_staging"
+        == "facility_staging.geolocation_health_facilities"
+    )
+    assert SCHOOL_SPEC.tables.silver_full_name == "facility_silver.geolocation_schools"
+    assert (
+        HEALTH_SPEC.tables.silver_full_name
+        == "facility_silver.geolocation_health_facilities"
+    )
+    assert (
+        SCHOOL_SPEC.tables.rejected_full_name == "facility_rejected.geolocation_schools"
+    )
+    assert (
+        HEALTH_SPEC.tables.rejected_full_name
+        == "facility_rejected.geolocation_health_facilities"
+    )
+    assert SCHOOL_SPEC.tables.core_full_name == "facilities.core"
+    assert SCHOOL_SPEC.tables.extension_full_name == "facilities.schools"
+    assert HEALTH_SPEC.tables.core_full_name == "facilities.core"
+    assert HEALTH_SPEC.tables.extension_full_name == "facilities.health_facilities"
+    assert SCHOOL_SPEC.tables.metadata_full_name == "facility_metadata.schools"
+    assert (
+        HEALTH_SPEC.tables.metadata_full_name == "facility_metadata.health_facilities"
     )
 
 
 def test_health_spec_uses_shared_core_and_health_extension():
-    assert HEALTH_SPEC.tables.core_schema == "facility_core"
-    assert HEALTH_SPEC.tables.extension_schema == "health_facility_details"
+    assert HEALTH_SPEC.tables.core_table == "core"
+    assert HEALTH_SPEC.tables.extension_table == "health_facilities"
     assert HEALTH_SPEC.giga_id_column == "facility_id_giga"
     assert HEALTH_SPEC.govt_id_column == "facility_id_govt"
     assert HEALTH_SPEC.paths.upload_directory == "facility-geolocation"

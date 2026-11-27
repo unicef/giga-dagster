@@ -80,6 +80,21 @@ class FileConfig(Config):
         or inspect ADLS at the path `giga-dataops-{env}/warehouse/schemas.db`.
         """,
     )
+    physical_schema: str | None = Field(
+        default=None,
+        description="""
+        Hive schema of the Delta table when it differs from the tiered
+        metastore_schema name. Column and primary-key lookup still use
+        metastore_schema.
+        """,
+    )
+    country_scoped: bool = Field(
+        default=False,
+        description="""
+        The Delta table holds every country. Writes replace only this
+        country_code and leave other countries in place.
+        """,
+    )
     tier: DataTier = Field(
         description="""
         The tier of the dataset, e.g. raw, bronze, staging, silver, gold
@@ -145,7 +160,9 @@ class OpDestinationMapping(BaseModel):
     destination_filepath: str
     metastore_schema: str
     tier: DataTier
+    physical_schema: str | None = None
     table_name: str | None = None
+    country_scoped: bool = False
     output_filepaths: dict[str, str] = Field(default_factory=dict)
 
 
@@ -167,6 +184,8 @@ def generate_run_ops(
             destination_filepath=op_mapping.destination_filepath,
             output_filepaths=op_mapping.output_filepaths,
             metastore_schema=op_mapping.metastore_schema,
+            physical_schema=op_mapping.physical_schema,
+            country_scoped=op_mapping.country_scoped,
             tier=op_mapping.tier,
             table_name=op_mapping.table_name,
             dataset_type=dataset_type,
